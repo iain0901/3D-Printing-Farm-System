@@ -6,7 +6,7 @@
 
 - Multi-protocol printer connectors: OctoPrint, Moonraker/Klipper, PrusaLink, Bambu LAN, Creality, Snapmaker.
 - Batch printing and multiprint workflows.
-- Spool inventory with automatic weight deduction.
+- Spool inventory with automatic reservation and weight deduction. Basic scheduled-job reservation and completion deduction shipped in v0.1.5.
 - Shared file library with thumbnail, version, and reprint history.
 - AI or rules-based failure/anomaly detection.
 - MES/SCADA-style production cockpit with no-cloud/self-hosted positioning.
@@ -19,10 +19,13 @@
 1. Documentation and public project maturity.
 2. Printer bridge hardening with connector test harnesses.
 3. File preview and G-code visualization.
-4. Spool usage automation and material reservation.
-5. Failure, waste, and profitability analytics.
-6. Customer onboarding, tenant provisioning, and production support flows.
-7. Plugin SDK for external connectors.
+4. Failure, waste, and profitability analytics.
+5. Customer onboarding, tenant provisioning, and production support flows.
+6. Plugin SDK for external connectors.
+
+## Recently Shipped
+
+- v0.1.5: Scheduled jobs reserve matching material spools, completed jobs deduct reserved grams, failed or cancelled jobs release reservations, and the filament inventory page shows reserved and available grams.
 
 ## Definition Of Done For A Real Release
 

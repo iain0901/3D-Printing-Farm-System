@@ -9,7 +9,17 @@ Localized documentation:
 - [繁體中文授權](LICENSE.zh-TW.md)
 - [简体中文许可](LICENSE.zh-CN.md)
 
-For professional technical support or installation services, contact `support@3dstu.com`.\n\nProject links:\n\n- Website: https://farm-saas.3dstu.com\n- GitHub: https://github.com/iain0901/3D-Printing-Farm-System\n- Installation guide: docs/INSTALL.md\n- Operations runbook: docs/OPERATIONS.md\n- Product roadmap: docs/ROADMAP.md\n\n
+For professional technical support or installation services, contact `support@3dstu.com`.
+
+Project links:
+
+- Website: https://farm-saas.3dstu.com
+- GitHub: https://github.com/iain0901/3D-Printing-Farm-System
+- Installation guide: docs/INSTALL.md
+- Operations runbook: docs/OPERATIONS.md
+- Product roadmap: docs/ROADMAP.md
+
+
 ## License
 
 3DSTU FarmFlow is developed by 3DSTU as a free SaaS platform for 3DSTU farm customers. It is source-available under the [3DSTU Farm Customer Source-Available License](LICENSE.md): customers may run, modify, and use it internally to operate their own 3D printing farms and earn revenue from their own printed parts or production services, but may not sell, redistribute, rebrand, host, white-label, or commercially provide the software, modified versions, scripts, Docker images, or related services to third parties without a separate written agreement from 3DSTU.
@@ -316,4 +326,7 @@ The API uses local bearer-token sessions, password hashes, optional TOTP two-fac
 - Move long-running external slicer jobs into isolated worker containers when production farms need queued asynchronous slicing at scale.
 - Add Stripe signature verification against raw webhook bodies if the deployment exposes webhooks directly to the public internet rather than through a trusted edge proxy that injects `x-layerpilot-billing-webhook-secret`.
 - Add organization-level RBAC on the backend.
-\n## Recommended GitHub topics\n\n`print-farm`, `3d-printing`, `saas`, `self-hosted`, `manufacturing`, `production-planning`, `printer-tools`, `inventory-management`, `job-queue`, `docker`, `typescript`, `react`.\n
+
+## Recommended GitHub topics
+
+`print-farm`, `3d-printing`, `saas`, `self-hosted`, `manufacturing`, `production-planning`, `printer-tools`, `inventory-management`, `job-queue`, `docker`, `typescript`, `react`.

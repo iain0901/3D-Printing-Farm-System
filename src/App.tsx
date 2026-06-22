@@ -154,6 +154,9 @@ type QueueItem = {
   assignee: string;
   scheduledStart?: string;
   scheduleWarnings?: string[];
+  reservedSpoolId?: string;
+  reservedGrams?: number;
+  materialReservation?: Record<string, string | number | boolean | undefined>;
   time: string;
   cost: number;
   added: string;
@@ -166,6 +169,8 @@ type Spool = {
   brand: string;
   remaining: number;
   weight: number;
+  reserved?: number;
+  reservations?: Array<{ jobId: string; file?: string; grams: number; material?: string; scheduledStart?: string }>;
   location: string;
   dry: boolean;
   nfc: string;
@@ -222,13 +227,14 @@ type AutoScheduleResult = {
   strategy?: "material-color" | "load-balance" | "due-priority" | "constraint-balanced-cost" | "constraint-due-risk" | "constraint-changeover-min";
   dryRun?: boolean;
   solver?: { engine: string; objective: "balanced-cost" | "due-risk" | "changeover-min"; feasible: boolean; bounded: boolean; result: number; variables: number };
-  scheduled: Array<{ jobId: string; file: string; printerId: string; printer: string; scheduledStart: string; durationMinutes: number; changeCost: number; score: number; warnings: string[]; slot?: number; objective?: string }>;
+  scheduled: Array<{ jobId: string; file: string; printerId: string; printer: string; scheduledStart: string; durationMinutes: number; changeCost: number; score: number; warnings: string[]; slot?: number; objective?: string; materialReservation?: QueueItem["materialReservation"] | null }>;
   skipped: Array<{ jobId: string; file: string; reason: string }>;
   jobs: QueueItem[];
+  spools?: Spool[];
 };
 type OptimizeScheduleStrategy = "material-color" | "load-balance" | "due-priority";
 type ConstraintObjective = "balanced-cost" | "due-risk" | "changeover-min";
-type QueueMatchResult = { dryRun: boolean; maxActiveSlots: number; activeSlots: number; openSlots: number; matches: Array<{ jobId: string; file: string; printerId: string; printer: string; scheduledStart?: string; priority: QueueItem["priority"]; material: string; warnings: string[]; score: number }>; skipped: Array<{ jobId: string; file: string; reason: string }>; jobs: QueueItem[]; printers: Printer[]; todos: Todo[] };
+type QueueMatchResult = { dryRun: boolean; maxActiveSlots: number; activeSlots: number; openSlots: number; matches: Array<{ jobId: string; file: string; printerId: string; printer: string; scheduledStart?: string; priority: QueueItem["priority"]; material: string; warnings: string[]; score: number }>; skipped: Array<{ jobId: string; file: string; reason: string }>; jobs: QueueItem[]; printers: Printer[]; spools?: Spool[]; todos: Todo[] };
 type HotDropResult = { mode: HotDropMode; file: Partial<PrintFile>; folder: FileFolder; stlBytes: number; job?: QueueItem | null; match?: QueueMatchResult | null; files: Partial<PrintFile>[]; folders: FileFolder[]; queue: QueueItem[]; printers: Printer[]; todos: Todo[] };
 type ParametricNameplateDraft = { text: string; width: number; height: number; thickness: number; material: string; feature: "keyholes" | "magnet pockets" | "plain plate"; createPart: boolean };
 type ParametricNameplateResult = { file: PrintFile; part?: Part | null; estimates: { grams: number; minutes: number; quote: { total: number } }; stlBytes: number; files?: PrintFile[]; parts?: Part[] };
@@ -401,6 +407,9 @@ const zhTwTranslations: Record<string, string> = {
   "Filament inventory": "線材庫存",
   "Add spool": "新增線材捲",
   "Low stock": "低庫存",
+  "Low available stock": "可用庫存偏低",
+  "Reserved": "已預留",
+  "Available": "可用",
   "Dry storage": "乾燥儲存",
   "Machine profiles": "機器設定檔",
   "Process presets": "製程預設",
@@ -1501,11 +1510,12 @@ function App() {
     const localWarnings = currentJob ? getScheduleWarnings(currentJob, printer) : [];
     setQueue((items) => items.map((item) => item.id === jobId ? { ...item, printerId: printer.id, printer: printer.name, scheduledStart: item.scheduledStart || scheduledStart, scheduleWarnings: localWarnings, stage: item.stage === "needs slicing" ? "needs slicing" : "scheduled" } : item));
     try {
-      const scheduled = await apiRequest<{ job: QueueItem; warnings?: string[] }>(`/api/queue/${jobId}/schedule`, {
+      const scheduled = await apiRequest<{ job: QueueItem; warnings?: string[]; spools?: Spool[] }>(`/api/queue/${jobId}/schedule`, {
         method: "PATCH",
         body: JSON.stringify({ printerId: printer.id, scheduledStart })
       });
       setQueue((items) => items.map((item) => item.id === jobId ? scheduled.job : item));
+      if (scheduled.spools) setSpools(scheduled.spools);
       setBackendStatus("connected");
       return scheduled.warnings || scheduled.job.scheduleWarnings || [];
     } catch {
@@ -1521,6 +1531,7 @@ function App() {
         body: JSON.stringify({ includeBusyPrinters: true, respectMaterial: true, respectBuildVolume: true, startMinute: 8 * 60 })
       });
       setQueue((items) => items.map((item) => result.jobs.find((job) => job.id === item.id) || item));
+      if (result.spools) setSpools(result.spools);
       setBackendStatus("connected");
       return result;
     } catch {
@@ -1567,6 +1578,7 @@ function App() {
         body: JSON.stringify({ strategy, includeBusyPrinters: true, respectMaterial: true, respectBuildVolume: true, startMinute: 8 * 60 })
       });
       setQueue((items) => items.map((item) => result.jobs.find((job) => job.id === item.id) || item));
+      if (result.spools) setSpools(result.spools);
       setBackendStatus("connected");
       return result;
     } catch {
@@ -1604,6 +1616,7 @@ function App() {
         body: JSON.stringify({ objective, includeBusyPrinters: true, respectMaterial: true, respectBuildVolume: true, startMinute: 8 * 60, maxJobs: 80 })
       });
       setQueue((items) => items.map((item) => result.jobs.find((job) => job.id === item.id) || item));
+      if (result.spools) setSpools(result.spools);
       setBackendStatus("connected");
       return result;
     } catch {
@@ -1626,6 +1639,7 @@ function App() {
       if (!dryRun) {
         setQueue((items) => items.map((item) => result.jobs.find((job) => job.id === item.id) || item));
         setPrinters(result.printers);
+        if (result.spools) setSpools(result.spools);
       }
       setBackendStatus("connected");
       return result;
@@ -1650,11 +1664,12 @@ function App() {
   const updateQueueStatus = async (jobId: string, status: JobStatus) => {
     setQueue((items) => items.map((job) => job.id === jobId ? { ...job, status } : job));
     try {
-      const updated = await apiRequest<{ job: QueueItem }>(`/api/queue/${jobId}/status`, {
+      const updated = await apiRequest<{ job: QueueItem; spools?: Spool[] }>(`/api/queue/${jobId}/status`, {
         method: "PATCH",
         body: JSON.stringify({ status })
       });
       setQueue((items) => items.map((job) => job.id === jobId ? updated.job : job));
+      if (updated.spools) setSpools(updated.spools);
       setBackendStatus("connected");
     } catch {
       setBackendStatus("local");
@@ -3808,6 +3823,8 @@ function FilamentPage({ spools, createSpool, updateSpool, logSpoolUsage, generat
   const [scanLocation, setScanLocation] = useState("");
   const [logUsageOnScan, setLogUsageOnScan] = useState(true);
   const [lastScan, setLastScan] = useState<SpoolScanResult | null>(null);
+  const reservedGrams = (spool: Spool) => Math.round(Number(spool.reserved || 0) || (spool.reservations || []).reduce((sum, item) => sum + Number(item.grams || 0), 0));
+  const availableGrams = (spool: Spool) => Math.max(0, Math.round(Number(spool.remaining || 0) - reservedGrams(spool)));
   const addSpool = async () => {
     await createSpool({ material: "PLA", color: "#0ea5e9", brand: "Demo", remaining: 1000, weight: 1000, location: "Rack New", dry: true, nfc: "LP-NEW" });
     addToast("Spool added");
@@ -3854,7 +3871,26 @@ function FilamentPage({ spools, createSpool, updateSpool, logSpoolUsage, generat
         {lastScan && <div className={`notice ${lastScan.warnings.length ? "warning" : "success"}`}><Check size={18} /><span>{lastScan.spool.material} - {lastScan.spool.brand} matched by {lastScan.matchedBy}. Remaining {lastScan.spool.remaining}g. {lastScan.warnings.join(", ")}</span></div>}
       </section>
       <div className="spool-grid">
-        {spools.map((spool) => <div className="spool-card" key={spool.id}><div className="spool-color" style={{ background: spool.color }} /><h3>{spool.material} - {spool.brand}</h3><p>{spool.location} - {spool.nfc}</p><div className="progress"><span style={{ width: `${(spool.remaining / spool.weight) * 100}%` }} /></div><strong>{spool.remaining}g / {spool.weight}g</strong>{spool.remaining < 150 && <em className="warning-text">Low stock</em>}<label className="check-row"><input type="checkbox" checked={spool.dry} onChange={(e) => updateSpool(spool.id, { dry: e.target.checked })} />Dry storage</label><button onClick={() => logSpoolUsage(spool.id, 20).then(() => addToast("20g usage logged"))}>Log 20g usage</button></div>)}
+        {spools.map((spool) => {
+          const reserved = reservedGrams(spool);
+          const available = availableGrams(spool);
+          return (
+            <div className="spool-card" key={spool.id}>
+              <div className="spool-color" style={{ background: spool.color }} />
+              <h3>{spool.material} - {spool.brand}</h3>
+              <p>{spool.location} - {spool.nfc}</p>
+              <div className="progress"><span style={{ width: `${(spool.remaining / spool.weight) * 100}%` }} /></div>
+              <strong>{spool.remaining}g / {spool.weight}g</strong>
+              <div className="spool-stats">
+                <span>Reserved <b>{reserved}g</b></span>
+                <span>Available <b>{available}g</b></span>
+              </div>
+              {available < 150 && <em className="warning-text">{reserved > 0 ? "Low available stock" : "Low stock"}</em>}
+              <label className="check-row"><input type="checkbox" checked={spool.dry} onChange={(e) => updateSpool(spool.id, { dry: e.target.checked })} />Dry storage</label>
+              <button onClick={() => logSpoolUsage(spool.id, 20).then(() => addToast("20g usage logged"))}>Log 20g usage</button>
+            </div>
+          );
+        })}
       </div>
     </Page>
   );
@@ -4825,4 +4861,3 @@ function ToastStack({ toasts }: { toasts: Toast[] }) {
 }
 
 export default App;
-

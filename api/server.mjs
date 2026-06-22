@@ -3219,6 +3219,115 @@ function priorityWeight(priority) {
   return { Rush: 0, High: 1, Normal: 2, Low: 3 }[priority] ?? 2;
 }
 
+function materialKey(value = "") {
+  return String(value || "").trim().toLowerCase();
+}
+
+function jobEstimateGrams(data, job) {
+  const direct = Number(job.estimateGrams ?? job.estimatedGrams ?? job.usage ?? job.grams ?? 0);
+  const file = data.files?.find((item) => item.id === job.fileId);
+  const fromFile = Number(file?.estimateGrams ?? file?.usage ?? 0);
+  const fromCost = Number(job.cost || 0) > 0 ? Number(job.cost) : 0;
+  return Math.max(1, Math.round(direct || fromFile || fromCost || parseDurationMinutes(job.time) * 0.35));
+}
+
+function normalizeSpoolReservations(spool) {
+  spool.reservations = Array.isArray(spool.reservations) ? spool.reservations.filter((item) => item && item.jobId) : [];
+  spool.reserved = Math.max(0, Math.round(spool.reservations.reduce((sum, item) => sum + Number(item.grams || 0), 0)));
+  return spool.reserved;
+}
+
+function spoolAvailableGrams(spool) {
+  return Math.max(0, Number(spool.remaining || 0) - normalizeSpoolReservations(spool));
+}
+
+function jobReservationCovers(data, job) {
+  if (!job.reservedSpoolId || !job.reservedGrams) return false;
+  const spool = data.spools?.find((item) => item.id === job.reservedSpoolId);
+  return !!spool && materialKey(spool.material) === materialKey(job.material) && Number(job.reservedGrams || 0) >= jobEstimateGrams(data, job);
+}
+
+function findReservableSpool(data, job) {
+  if (!Array.isArray(data.spools) || materialKey(job.material) === "auto matched") return null;
+  const requiredGrams = jobEstimateGrams(data, job);
+  return data.spools
+    .filter((spool) => materialKey(spool.material) === materialKey(job.material) && spoolAvailableGrams(spool) >= requiredGrams)
+    .sort((a, b) => Number(b.dry === true) - Number(a.dry === true) || spoolAvailableGrams(a) - spoolAvailableGrams(b))[0] || null;
+}
+
+function hasMaterialCoverage(data, job) {
+  if (materialKey(job.material) === "auto matched") return true;
+  if (jobReservationCovers(data, job)) return true;
+  return !!findReservableSpool(data, job);
+}
+
+function releaseJobMaterialReservation(data, job) {
+  if (!job?.reservedSpoolId) return null;
+  const spool = data.spools?.find((item) => item.id === job.reservedSpoolId);
+  const released = { spoolId: job.reservedSpoolId, grams: Number(job.reservedGrams || 0), material: job.material };
+  if (spool) {
+    spool.reservations = (spool.reservations || []).filter((item) => item.jobId !== job.id);
+    normalizeSpoolReservations(spool);
+    spool.updatedAt = new Date().toISOString();
+  }
+  delete job.reservedSpoolId;
+  delete job.reservedGrams;
+  job.materialReservation = job.materialReservation ? { ...job.materialReservation, status: "released", releasedAt: new Date().toISOString() } : undefined;
+  return released;
+}
+
+function reserveJobMaterial(data, job) {
+  releaseJobMaterialReservation(data, job);
+  if (["complete", "cancelled", "failed"].includes(job.status)) return null;
+  const spool = findReservableSpool(data, job);
+  if (!spool) {
+    job.materialReservation = {
+      status: "missing",
+      material: job.material,
+      requiredGrams: jobEstimateGrams(data, job),
+      checkedAt: new Date().toISOString()
+    };
+    return null;
+  }
+  const grams = jobEstimateGrams(data, job);
+  const reservation = {
+    jobId: job.id,
+    file: job.file,
+    grams,
+    material: job.material,
+    printerId: job.printerId,
+    scheduledStart: job.scheduledStart,
+    at: new Date().toISOString()
+  };
+  spool.reservations = [...(spool.reservations || []), reservation];
+  normalizeSpoolReservations(spool);
+  spool.updatedAt = reservation.at;
+  job.reservedSpoolId = spool.id;
+  job.reservedGrams = grams;
+  job.materialReservation = { ...reservation, spoolId: spool.id, spoolLocation: spool.location, status: "reserved" };
+  return job.materialReservation;
+}
+
+function consumeJobMaterialReservation(data, job) {
+  if (!job?.reservedSpoolId) return null;
+  const spool = data.spools?.find((item) => item.id === job.reservedSpoolId);
+  const grams = Math.max(1, Math.round(Number(job.reservedGrams || 0) || jobEstimateGrams(data, job)));
+  const consumedAt = new Date().toISOString();
+  const consumed = { spoolId: job.reservedSpoolId, grams, material: job.material, consumedAt };
+  if (spool) {
+    spool.remaining = Math.max(0, Number(spool.remaining || 0) - grams);
+    spool.reservations = (spool.reservations || []).filter((item) => item.jobId !== job.id);
+    normalizeSpoolReservations(spool);
+    spool.updatedAt = consumedAt;
+    consumed.remaining = spool.remaining;
+    consumed.spoolLocation = spool.location;
+  }
+  delete job.reservedSpoolId;
+  delete job.reservedGrams;
+  job.materialReservation = { ...(job.materialReservation || {}), ...consumed, status: "consumed" };
+  return consumed;
+}
+
 export function getScheduleWarnings(data, job, printer, scheduledStart = job.scheduledStart) {
   const warnings = [];
   if (!printer) return ["Printer missing"];
@@ -3227,6 +3336,7 @@ export function getScheduleWarnings(data, job, printer, scheduledStart = job.sch
   if (printer.status === "maintenance") warnings.push("In maintenance");
   if ((printer.status === "printing" || printer.status === "paused") && job.status === "queued") warnings.push("Printer busy");
   if (hasMaterialConflict(job, printer)) warnings.push("Material conflict");
+  if (!hasMaterialCoverage(data, job)) warnings.push("Insufficient material");
   if (exceedsVolume(job.dimensions, printer.buildVolume)) warnings.push("Size mismatch");
   if (isDueRisk(job)) warnings.push("Due date risk");
   const overlap = scheduledStart
@@ -3346,6 +3456,7 @@ export function optimizeScheduleQueue(data, options = {}) {
     job.scheduledStart = scheduledStart;
     job.stage = "scheduled";
     job.optimizationStrategy = normalized.strategy;
+    const materialReservation = reserveJobMaterial(data, job);
     job.scheduleWarnings = getScheduleWarnings(data, job, selected.printer, scheduledStart);
     laneAvailability[selected.printer.id] = selected.startMinute + parseDurationMinutes(job.time);
     scheduled.push({
@@ -3359,6 +3470,7 @@ export function optimizeScheduleQueue(data, options = {}) {
       scheduledStart,
       durationMinutes: parseDurationMinutes(job.time),
       changeCost: selected.changeCost,
+      materialReservation,
       score: Math.round(selected.score),
       warnings: job.scheduleWarnings,
       alternatives: ranked.slice(0, 3).map((item) => ({
@@ -3369,7 +3481,7 @@ export function optimizeScheduleQueue(data, options = {}) {
       }))
     });
   }
-  return { strategy: normalized.strategy, scheduled, skipped, jobs: scheduled.map((item) => data.queue.find((job) => job.id === item.jobId)).filter(Boolean), diagnostics: buildScheduleDiagnostics(data), todos: deriveTodos(data) };
+  return { strategy: normalized.strategy, scheduled, skipped, jobs: scheduled.map((item) => data.queue.find((job) => job.id === item.jobId)).filter(Boolean), spools: data.spools || [], diagnostics: buildScheduleDiagnostics(data), todos: deriveTodos(data) };
 }
 
 function isSolverHardBlocked(options, warnings) {
@@ -3418,6 +3530,7 @@ export function constraintScheduleQueue(data, options = {}) {
       job.optimizationStrategy = `constraint-${normalized.objective}`;
       job.solverObjective = normalized.objective;
       job.solverSlot = assignment.slot;
+      reserveJobMaterial(data, job);
       job.scheduleWarnings = warnings;
     }
     scheduled.push({
@@ -3432,6 +3545,7 @@ export function constraintScheduleQueue(data, options = {}) {
       scheduledStart,
       durationMinutes: parseDurationMinutes(job.time),
       changeCost: assignment.candidate.changeCost,
+      materialReservation: job.materialReservation || null,
       slot: assignment.slot,
       score: Math.round(assignment.cost),
       warnings,
@@ -3451,6 +3565,7 @@ export function constraintScheduleQueue(data, options = {}) {
     scheduled,
     skipped,
     jobs: normalized.dryRun ? [] : scheduled.map((item) => data.queue.find((job) => job.id === item.jobId)).filter(Boolean),
+    spools: data.spools || [],
     diagnostics: buildScheduleDiagnostics(data),
     todos: deriveTodos(data)
   };
@@ -3517,6 +3632,7 @@ export function matchQueueNow(data, options = {}) {
       job.stage = "printing";
       job.startedAt = now;
       job.updatedAt = now;
+      reserveJobMaterial(data, job);
       job.scheduleWarnings = match.warnings;
       printer.status = "printing";
       printer.job = job.file;
@@ -3535,6 +3651,7 @@ export function matchQueueNow(data, options = {}) {
     skipped,
     jobs: matches.map((match) => data.queue.find((job) => job.id === match.jobId)).filter(Boolean),
     printers: data.printers,
+    spools: data.spools || [],
     todos: deriveTodos(data)
   };
 }
@@ -3561,6 +3678,7 @@ export function autoScheduleQueue(data, options = {}) {
     job.printer = selected.printer.name;
     job.scheduledStart = scheduledStart;
     job.stage = "scheduled";
+    const materialReservation = reserveJobMaterial(data, job);
     job.scheduleWarnings = getScheduleWarnings(data, job, selected.printer, scheduledStart);
     laneAvailability[selected.printer.id] = selected.startMinute + parseDurationMinutes(job.time);
     scheduled.push({
@@ -3571,6 +3689,7 @@ export function autoScheduleQueue(data, options = {}) {
       scheduledStart,
       durationMinutes: parseDurationMinutes(job.time),
       changeCost: selected.changeCost,
+      materialReservation,
       score: Math.round(selected.score),
       warnings: job.scheduleWarnings,
       alternatives: ranked.slice(0, 3).map((item) => ({
@@ -3581,7 +3700,7 @@ export function autoScheduleQueue(data, options = {}) {
       }))
     });
   }
-  return { scheduled, skipped, jobs: scheduled.map((item) => data.queue.find((job) => job.id === item.jobId)).filter(Boolean), diagnostics: buildScheduleDiagnostics(data), todos: deriveTodos(data) };
+  return { scheduled, skipped, jobs: scheduled.map((item) => data.queue.find((job) => job.id === item.jobId)).filter(Boolean), spools: data.spools || [], diagnostics: buildScheduleDiagnostics(data), todos: deriveTodos(data) };
 }
 
 export function buildScheduleDiagnostics(data) {
@@ -5442,14 +5561,16 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!job) return reply.code(404).send({ error: "Queue job not found" });
     const printer = database.data.printers.find((item) => item.id === parsed.data.printerId && itemInWorkspace(item, request.user.workspaceId));
     if (!printer) return reply.code(404).send({ error: "Printer not found" });
+    const scoped = workspaceScopeForUser(database.data, request.user);
     job.printerId = printer.id;
     job.printer = printer.name;
     job.scheduledStart = parsed.data.scheduledStart;
     if (job.stage !== "needs slicing") job.stage = "scheduled";
-    job.scheduleWarnings = getScheduleWarnings(workspaceScopeForUser(database.data, request.user), job, printer, parsed.data.scheduledStart);
-    database.data.events.unshift({ id: randomUUID(), workspaceId: request.user.workspaceId, type: "queue.scheduled", message: `${job.file} on ${printer.name}`, data: { workspaceId: request.user.workspaceId }, at: new Date().toISOString() });
+    const materialReservation = reserveJobMaterial(scoped, job);
+    job.scheduleWarnings = getScheduleWarnings(scoped, job, printer, parsed.data.scheduledStart);
+    database.data.events.unshift({ id: randomUUID(), workspaceId: request.user.workspaceId, type: "queue.scheduled", message: `${job.file} on ${printer.name}`, data: { workspaceId: request.user.workspaceId, materialReservation }, at: new Date().toISOString() });
     await database.write();
-    return { job, warnings: job.scheduleWarnings, todos: deriveTodos(workspaceScopeForUser(database.data, request.user)) };
+    return { job, warnings: job.scheduleWarnings, materialReservation, spools: scoped.spools, todos: deriveTodos(workspaceScopeForUser(database.data, request.user)) };
   });
 
   app.patch("/api/queue/:id/status", async (request, reply) => {
@@ -5458,13 +5579,19 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsed.success) return reply.code(400).send({ error: "Invalid queue status", issues: parsed.error.issues });
     const job = database.data.queue.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!job) return reply.code(404).send({ error: "Queue job not found" });
+    const scoped = workspaceScopeForUser(database.data, request.user);
     job.status = parsed.data.status;
     if (parsed.data.status === "printing") job.stage = "printing";
     if (parsed.data.status === "complete") job.stage = "post processing";
     if (parsed.data.status === "failed") job.stage = "blocked";
-    await dispatchEvent(database, "queue.status", `${job.file} -> ${job.status}`, { workspaceId: request.user.workspaceId, jobId: job.id, status: job.status, stage: job.stage });
+    const materialChange = parsed.data.status === "complete"
+      ? consumeJobMaterialReservation(scoped, job)
+      : ["failed", "cancelled"].includes(parsed.data.status)
+        ? releaseJobMaterialReservation(scoped, job)
+        : null;
+    await dispatchEvent(database, "queue.status", `${job.file} -> ${job.status}`, { workspaceId: request.user.workspaceId, jobId: job.id, status: job.status, stage: job.stage, materialChange });
     await database.write();
-    return { job, todos: deriveTodos(workspaceScopeForUser(database.data, request.user)) };
+    return { job, materialChange, spools: scoped.spools, todos: deriveTodos(workspaceScopeForUser(database.data, request.user)) };
   });
 
   app.patch("/api/queue/:id/priority", async (request, reply) => {

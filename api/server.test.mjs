@@ -1395,11 +1395,12 @@ endsolid s3_store`;
   });
 
   it("schedules queue jobs and updates derived todos", async () => {
-    await withApp(async ({ app }) => {
+    await withApp(async ({ app, dbPath }) => {
       const token = await login(app);
       const scheduled = await app.inject({ method: "PATCH", url: "/api/queue/q2/schedule", headers: auth(token), payload: { printerId: "p2", scheduledStart: "13:00" } });
       expect(scheduled.statusCode).toBe(200);
-      expect(scheduled.json().job).toMatchObject({ id: "q2", printerId: "p2", stage: "scheduled" });
+      expect(scheduled.json().job).toMatchObject({ id: "q2", printerId: "p2", stage: "scheduled", reservedSpoolId: "s2", reservedGrams: 42 });
+      expect(scheduled.json().materialReservation).toMatchObject({ spoolId: "s2", grams: 42, status: "reserved" });
       expect(scheduled.json().warnings).toEqual(expect.arrayContaining(["Material conflict", "Due date risk"]));
 
       const todos = await app.inject({ method: "GET", url: "/api/todos", headers: auth(token) });
@@ -1411,6 +1412,15 @@ endsolid s3_store`;
       const diagnostics = await app.inject({ method: "GET", url: "/api/schedule/diagnostics", headers: auth(token) });
       expect(diagnostics.statusCode).toBe(200);
       expect(diagnostics.json().lanes.some((lane) => lane.jobs.some((job) => job.jobId === "q2" && job.warnings.includes("Material conflict")))).toBe(true);
+
+      const completed = await app.inject({ method: "PATCH", url: "/api/queue/q2/status", headers: auth(token), payload: { status: "complete" } });
+      expect(completed.statusCode).toBe(200);
+      expect(completed.json().materialChange).toMatchObject({ spoolId: "s2", grams: 42, remaining: 276 });
+      expect(completed.json().job.materialReservation).toMatchObject({ spoolId: "s2", grams: 42, status: "consumed" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.spools.find((spool) => spool.id === "s2")).toMatchObject({ remaining: 276, reserved: 0 });
+      expect(persisted.events.some((event) => event.type === "queue.status" && event.data.materialChange?.spoolId === "s2")).toBe(true);
     });
   });
 
@@ -1429,11 +1439,12 @@ endsolid s3_store`;
       ]));
       expect(result.json().scheduled.find((item) => item.jobId === "q2").warnings).toEqual(expect.arrayContaining(["Printer busy", "Due date risk"]));
       expect(result.json().scheduled.find((item) => item.jobId === "q2").warnings).not.toContain("Material conflict");
-      expect(result.json().jobs.find((job) => job.id === "q2")).toMatchObject({ stage: "scheduled", printerId: "p3" });
+      expect(result.json().jobs.find((job) => job.id === "q2")).toMatchObject({ stage: "scheduled", printerId: "p3", reservedSpoolId: "s2", reservedGrams: 42 });
       expect(result.json().todos.some((todo) => todo.id === "q2-schedule")).toBe(false);
 
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
       expect(persisted.queue.find((job) => job.id === "q2")).toMatchObject({ stage: "scheduled", printerId: "p3", scheduledStart: "08:45" });
+      expect(persisted.spools.find((spool) => spool.id === "s2")).toMatchObject({ reserved: 42 });
     });
   });
 
