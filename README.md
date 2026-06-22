@@ -2,6 +2,15 @@
 
 3DSTU FarmFlow is an original 3D printing production operating system MVP for studios, labs, and small print farms. It focuses on structured tasks, model files, printer capability matching, scheduling, automatic todos, and exception-driven operations.
 
+Localized documentation:
+
+- [繁體中文 README](README.zh-TW.md)
+- [简体中文 README](README.zh-CN.md)
+- [繁體中文授權](LICENSE.zh-TW.md)
+- [简体中文许可](LICENSE.zh-CN.md)
+
+For professional technical support or installation services, contact `support@3dstu.com`.
+
 ## License
 
 3DSTU FarmFlow is developed by 3DSTU as a free SaaS platform for 3DSTU farm customers. It is source-available under the [3DSTU Farm Customer Source-Available License](LICENSE.md): customers may run, modify, and use it internally to operate their own 3D printing farms and earn revenue from their own printed parts or production services, but may not sell, redistribute, rebrand, host, white-label, or commercially provide the software, modified versions, scripts, Docker images, or related services to third parties without a separate written agreement from 3DSTU.
@@ -263,7 +272,7 @@ The API uses local bearer-token sessions, password hashes, optional TOTP two-fac
 
 - API-backed auth, signup, logout, TOTP two-factor enrollment/login/recovery/disable flows, user password changes, admin password resets, local bearer-token sessions, password hashing, role-based permissions, and scoped automation API keys with hashed secrets
 - Schema-versioned JSON/SQLite document persistence with automatic startup migrations, migration history, pre-migration backup files, readiness-linked data integrity checks, admin integrity reports for broken references, and configurable audit retention
-- English / Traditional Chinese language switcher with cleaned core production translations and a Vitest translation-coverage gate for visible static UI text
+- English / Traditional Chinese / Simplified Chinese language switcher with cleaned core production translations and a Vitest translation-coverage gate for visible static UI text
 - Production cockpit dashboard answering today's tasks, due risk, idle printers, printer issues, and human todos
 - Backend connection indicator with authenticated API hydration from `/api/state` when the local API is running
 - Server-sent realtime state stream from `/api/events/stream`, with backend telemetry ticks updating production progress and completion-driven todos

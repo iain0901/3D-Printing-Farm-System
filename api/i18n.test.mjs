@@ -46,4 +46,14 @@ describe("Traditional Chinese UI translations", () => {
 
     expect(missing).toEqual([]);
   });
+
+  it("offers English, Traditional Chinese, and Simplified Chinese language modes", async () => {
+    const source = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('type Language = "en" | "zh-TW" | "zh-CN"');
+    expect(source).toContain('<option value="zh-TW">繁體中文</option>');
+    expect(source).toContain('<option value="zh-CN">简体中文</option>');
+    expect(source).toContain("zhCnTranslations");
+    expect(source).toContain("document.documentElement.lang = language");
+  });
 });

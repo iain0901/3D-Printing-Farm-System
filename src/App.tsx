@@ -208,7 +208,7 @@ type ProfileDefaults = Partial<Record<Profile["kind"], string>>;
 type ProfileMatchingPolicy = { materialCompatibility: boolean; processFallback: boolean; commercialPriority: boolean; warnBeforeFallback: boolean; dueWindowHours: number; updatedAt?: string; updatedBy?: string };
 type AddonStatus = "enabled" | "disabled" | "beta" | "available";
 type Addon = { id: string; name: string; description: string; category: string; status: AddonStatus; enabled?: boolean; config?: Record<string, string | number | boolean | string[]>; createdAt?: string; updatedAt?: string; updatedBy?: string };
-type Language = "en" | "zh-TW";
+type Language = "en" | "zh-TW" | "zh-CN";
 type Todo = { id: string; title: string; owner: string; source: string; severity: "Low" | "Medium" | "High" | "Urgent"; due: string; kind: "slicing" | "scheduling" | "material" | "size" | "post" | "exception"; status?: "open" | "claimed" | "snoozed"; actionNote?: string; claimedBy?: string; snoozeUntil?: string };
 type TodoAction = { id: string; todoId: string; todoTitle: string; todoKind: Todo["kind"]; action: "claim" | "complete" | "snooze" | "reopen"; owner: string; note?: string; snoozeUntil?: string; createdBy?: string; at: string };
 type AnalyticsSummary = { jobs: number; active: number; queued: number; completed: number; failed: number; successRate: number; utilization: number; cost: number; printHours: number; materialMix: Record<string, number>; daily: Array<{ day: string; jobs: number; hours: number; success: number }> };
@@ -252,6 +252,7 @@ const zhTwTranslations: Record<string, string> = {
   "Local Demo": "本機 Demo",
   "Run a smarter print lab from one cockpit.": "用一個控制台管理更聰明的 3D 打印工作室。",
   "Original cloud management for printers, jobs, materials, teams, and automations.": "原創的打印機、任務、材料、團隊與自動化雲端管理系統。",
+  "Professional setup and technical support:": "專業安裝設定與技術支援：",
   "Dashboard": "儀表板",
   "Production cockpit": "生產控制台",
   "Printers": "打印機",
@@ -725,15 +726,55 @@ const zhTwTranslations: Record<string, string> = {
   "hour due window": "小時交期視窗"
 };
 
+const traditionalToSimplifiedPairs = [
+  ["雲端", "云端"], ["列印", "打印"], ["打印", "打印"], ["檔案", "文件"], ["資料", "数据"],
+  ["狀態", "状态"], ["佇列", "队列"], ["優先", "优先"], ["級", "级"], ["儀表板", "仪表盘"],
+  ["維護", "维护"], ["團隊", "团队"], ["擴充", "扩展"], ["設定", "设置"], ["匯入", "导入"],
+  ["匯出", "导出"], ["啟用", "启用"], ["停用", "停用"], ["儲存", "保存"], ["建立", "创建"],
+  ["新增", "新增"], ["刪除", "删除"], ["顯示", "显示"], ["資訊", "信息"], ["應用", "应用"],
+  ["異常", "异常"], ["錯誤", "错误"], ["離線", "离线"], ["閒置", "空闲"], ["線材", "耗材"],
+  ["線材捲", "料卷"], ["材料", "材料"], ["相容", "兼容"], ["衝突", "冲突"], ["尺寸", "尺寸"],
+  ["不匹配", "不匹配"], ["風險", "风险"], ["交期", "交期"], ["待辦", "待办"], ["專業", "专业"],
+  ["技術", "技术"], ["支援", "支持"], ["安裝", "安装"], ["負責", "负责"],
+  ["負載", "负载"], ["排單", "排产"], ["排程", "排程"], ["範例", "示例"], ["範本", "模板"],
+  ["組織", "组织"], ["權限", "权限"], ["驗證", "验证"], ["密鑰", "密钥"], ["金鑰", "密钥"],
+  ["帳號", "账号"], ["密碼", "密码"], ["暫停", "暂停"], ["繼續", "继续"], ["開啟", "打开"],
+  ["關閉", "关闭"], ["瀏覽", "浏览"], ["搜尋", "搜索"], ["選取", "选择"], ["選填", "选填"],
+  ["規則", "规则"], ["計畫", "计划"], ["預設", "默认"], ["預熱", "预热"], ["復原", "恢复"],
+  ["還原", "还原"], ["備份", "备份"], ["稽核", "审计"], ["紀錄", "记录"], ["歷史", "历史"],
+  ["營收", "营收"], ["幣別", "币种"], ["金額", "金额"], ["價格", "价格"], ["帳務", "账务"],
+  ["通知", "通知"], ["橋接", "桥接"], ["整合", "集成"], ["工作區", "工作区"], ["本機", "本机"],
+  ["生產", "生产"], ["製程", "工艺"], ["製作", "制作"], ["機器", "机器"], ["打印機", "打印机"],
+  ["打印農場", "打印农场"], ["打印工作室", "打印工作室"], ["雲", "云"], ["與", "与"], ["於", "于"],
+  ["為", "为"], ["會", "会"], ["後", "后"], ["將", "将"], ["這", "这"], ["個", "个"],
+  ["請", "请"], ["無", "无"], ["當", "当"], ["並", "并"], ["進", "进"], ["達", "达"],
+  ["檢查", "检查"], ["連接", "连接"], ["連線", "连接"], ["導覽", "导航"], ["產生", "生成"],
+  ["產線", "产线"], ["雜湊", "哈希"], ["標記", "标记"], ["標籤", "标签"], ["標題", "标题"],
+  ["類型", "类型"], ["數量", "数量"], ["數據", "数据"], ["轉換", "转换"], ["訊息", "消息"],
+  ["支撐", "支撑"], ["雕刻", "雕刻"], ["厚度", "厚度"], ["寬度", "宽度"], ["高度", "高度"],
+  ["分鐘", "分钟"], ["小時", "小时"], ["過去", "过去"], ["目前", "当前"], ["臨時", "临时"],
+  ["擁有者", "所有者"], ["管理員", "管理员"], ["使用者", "用户"], ["電子郵件", "电子邮件"],
+  ["英文", "英文"], ["繁體中文", "繁体中文"], ["簡體中文", "简体中文"], ["語言", "语言"]
+] as const;
+
+function toSimplifiedChinese(value: string) {
+  return traditionalToSimplifiedPairs.reduce((text, [traditional, simplified]) => text.split(traditional).join(simplified), value);
+}
+
+const zhCnTranslations: Record<string, string> = Object.fromEntries(
+  Object.entries(zhTwTranslations).map(([en, zh]) => [en, toSimplifiedChinese(zh)])
+);
+
 const enTranslations: Record<string, string> = {};
 Object.entries(zhTwTranslations).forEach(([en, zh]) => {
   enTranslations[zh] ??= en;
+  enTranslations[zhCnTranslations[en]] ??= en;
 });
 
 function localizeText(value: string, language: Language) {
   const trimmed = value.trim();
   if (!trimmed) return value;
-  const translated = language === "zh-TW" ? zhTwTranslations[trimmed] : enTranslations[trimmed];
+  const translated = language === "zh-TW" ? zhTwTranslations[trimmed] : language === "zh-CN" ? zhCnTranslations[trimmed] : enTranslations[trimmed];
   if (!translated) return value;
   const leading = value.match(/^\s*/)?.[0] ?? "";
   const trailing = value.match(/\s*$/)?.[0] ?? "";
@@ -2606,6 +2647,7 @@ function AuthScreen({ onLogin, language, setLanguage }: { onLogin: (payload: { e
         <div className="brand-lockup"><Layers /><span>3DSTU FarmFlow</span></div>
         <h1>Run a smarter print lab from one cockpit.</h1>
         <p>Original cloud management for printers, jobs, materials, teams, and automations.</p>
+        <p className="support-note">Professional setup and technical support: <a href="mailto:support@3dstu.com">support@3dstu.com</a></p>
         <div className="machine-wall">
           {initialPrinters.slice(0, 4).map((p) => <PrinterMini key={p.id} printer={p} />)}
         </div>
@@ -2686,10 +2728,11 @@ function Sidebar({ view, setView, mobileNav, setMobileNav, hotDropMode, setHotDr
 function LanguageSwitcher({ language, setLanguage, compact = false }: { language: Language; setLanguage: (language: Language) => void; compact?: boolean }) {
   return (
     <label className={`language-switcher ${compact ? "compact" : ""}`} data-i18n-ignore>
-      <span>{language === "zh-TW" ? "語言" : "Language"}</span>
-      <select value={language} onChange={(event) => setLanguage(event.target.value as Language)} aria-label={language === "zh-TW" ? "語言" : "Language"}>
+      <span>{language === "zh-TW" ? "語言" : language === "zh-CN" ? "语言" : "Language"}</span>
+      <select value={language} onChange={(event) => setLanguage(event.target.value as Language)} aria-label={language === "zh-TW" ? "語言" : language === "zh-CN" ? "语言" : "Language"}>
         <option value="en">English</option>
         <option value="zh-TW">繁體中文</option>
+        <option value="zh-CN">简体中文</option>
       </select>
     </label>
   );

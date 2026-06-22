@@ -128,6 +128,17 @@ code {
   max-width: 620px;
 }
 
+.auth-visual .support-note {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 15px;
+  margin-top: 0;
+}
+
+.support-note a {
+  color: #fff;
+  font-weight: 700;
+}
+
 .auth-panel {
   background: #f8fafc;
   display: flex;

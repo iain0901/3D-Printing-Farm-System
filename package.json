@@ -1,7 +1,28 @@
 {
   "name": "3dstu-farmflow",
   "version": "0.1.0",
+  "description": "3DSTU FarmFlow 3D printing farm production operating system",
   "private": true,
+  "author": "3DSTU <support@3dstu.com>",
+  "homepage": "https://github.com/iain0901/3D-Printing-Farm-System#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iain0901/3D-Printing-Farm-System.git"
+  },
+  "bugs": {
+    "email": "support@3dstu.com",
+    "url": "https://github.com/iain0901/3D-Printing-Farm-System/issues"
+  },
+  "keywords": [
+    "3dstu",
+    "3d-printing",
+    "print-farm",
+    "farmflow",
+    "scheduler",
+    "slicer",
+    "manufacturing",
+    "saas"
+  ],
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",

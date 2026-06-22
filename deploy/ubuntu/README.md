@@ -2,6 +2,13 @@
 
 This guide deploys 3DSTU FarmFlow on Ubuntu 22.04 or 24.04 with Docker Compose. The app runs on port `8797`; Compose binds that port to `127.0.0.1` by default so Nginx can proxy public HTTP/HTTPS traffic to it.
 
+Localized deployment guides:
+
+- [繁體中文](README.zh-TW.md)
+- [简体中文](README.zh-CN.md)
+
+For professional technical support or installation services, contact `support@3dstu.com`.
+
 ## 1. Install Server Dependencies
 
 ```bash

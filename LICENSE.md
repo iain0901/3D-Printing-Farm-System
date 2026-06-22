@@ -73,3 +73,6 @@ procurement of substitute services arising from or related to the Software.
 If you want to redistribute, resell, host, white-label, package, integrate for
 third-party resale, or commercially provide services based on the Software,
 contact 3DSTU for a separate written commercial agreement.
+
+For professional technical support or installation services, contact
+support@3dstu.com.
