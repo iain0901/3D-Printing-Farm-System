@@ -1,5 +1,5 @@
 [Unit]
-Description=Run 3DSTUXXX operations health check every 15 minutes
+Description=Run 3DSTU FarmFlow operations health check every 15 minutes
 
 [Timer]
 OnBootSec=5m

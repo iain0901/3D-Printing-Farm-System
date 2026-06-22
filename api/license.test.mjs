@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFile } from "node:fs/promises";
 
-describe("3DSTUXXX license", () => {
+describe("3DSTU FarmFlow license", () => {
   it("documents the customer-use permission and resale restrictions", async () => {
     const [license, readme, packageJson] = await Promise.all([
       readFile("LICENSE.md", "utf8"),
@@ -10,7 +10,7 @@ describe("3DSTUXXX license", () => {
     ]);
     const pkg = JSON.parse(packageJson);
 
-    expect(pkg.name).toBe("3dstuxxx");
+    expect(pkg.name).toBe("3dstu-farmflow");
     expect(pkg.license).toBe("SEE LICENSE IN LICENSE.md");
     expect(license).toContain("3DSTU Farm Customer Source-Available License");
     expect(license).toContain("source-available license, not an open source license");

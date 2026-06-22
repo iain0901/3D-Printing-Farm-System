@@ -1,5 +1,5 @@
 [Unit]
-Description=3DSTUXXX Docker volume backup
+Description=3DSTU FarmFlow Docker volume backup
 Requires=docker.service
 Wants=docker.service
 After=docker.service

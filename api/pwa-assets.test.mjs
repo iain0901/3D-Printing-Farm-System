@@ -5,12 +5,12 @@ import { describe, expect, it } from "vitest";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-describe("3DSTUXXX PWA assets", () => {
+describe("3DSTU FarmFlow PWA assets", () => {
   it("builds installable mobile console assets without caching API data", async () => {
     const manifest = JSON.parse(await readFile(path.join(root, "dist", "manifest.webmanifest"), "utf8"));
     expect(manifest).toMatchObject({
-      name: "3DSTUXXX",
-      short_name: "3DSTUXXX",
+      name: "3DSTU FarmFlow",
+      short_name: "3DSTU FarmFlow",
       start_url: "/",
       scope: "/",
       display: "standalone",

@@ -1,6 +1,6 @@
 {
-  "name": "3DSTUXXX",
-  "short_name": "3DSTUXXX",
+  "name": "3DSTU FarmFlow",
+  "short_name": "3DSTU FarmFlow",
   "description": "3D printing production cockpit for printers, queue, files, materials, todos, and operations.",
   "id": "/",
   "start_url": "/",

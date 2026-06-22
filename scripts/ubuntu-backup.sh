@@ -103,7 +103,7 @@ acquire_lock() {
   if [ -f "$LOCK_DIR/pid" ]; then
     owner="$(cat "$LOCK_DIR/pid" 2>/dev/null || printf "unknown")"
   fi
-  echo "Another 3DSTUXXX backup/restore operation appears to be running (lock: $LOCK_DIR, pid: $owner)." >&2
+  echo "Another 3DSTU FarmFlow backup/restore operation appears to be running (lock: $LOCK_DIR, pid: $owner)." >&2
   echo "If no such process exists, remove the lock directory manually and retry." >&2
   exit 1
 }
@@ -170,7 +170,7 @@ prune_backups() {
     echo "Backup retention pruning disabled."
     return 0
   fi
-  echo "Pruning 3DSTUXXX backups older than $RETENTION_DAYS day(s) from $BACKUP_DIR..."
+  echo "Pruning 3DSTU FarmFlow backups older than $RETENTION_DAYS day(s) from $BACKUP_DIR..."
   find "$BACKUP_DIR" -maxdepth 1 -type f -name 'layerpilot-data-*.tgz' -mtime +"$RETENTION_DAYS" -print -delete
   find "$BACKUP_DIR" -maxdepth 1 -type f -name 'layerpilot-pre-restore-*.tgz' -mtime +"$RETENTION_DAYS" -print -delete
 }

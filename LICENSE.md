@@ -2,7 +2,7 @@
 
 Copyright (c) 2026 3DSTU. All rights reserved.
 
-This license applies to the 3DSTUXXX software, documentation, deployment scripts,
+This license applies to the 3DSTU FarmFlow software, documentation, deployment scripts,
 and related materials in this repository (the "Software"). This is a
 source-available license, not an open source license.
 

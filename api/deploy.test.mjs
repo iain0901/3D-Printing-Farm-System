@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
-describe("3DSTUXXX deployment packaging", () => {
+describe("3DSTU FarmFlow deployment packaging", () => {
   it("runs the production image as a non-root app user with persistent data", async () => {
     const dockerfile = await readFile(new URL("../Dockerfile", import.meta.url), "utf8");
     const dockerignore = await readFile(new URL("../.dockerignore", import.meta.url), "utf8");
@@ -137,7 +137,7 @@ describe("3DSTUXXX deployment packaging", () => {
     expect(script).toContain("validate_deploy_lock_dir");
     expect(script).toContain("acquire_deploy_lock");
     expect(script).toContain("release_deploy_lock");
-    expect(script).toContain("Another 3DSTUXXX deploy/update/rollback appears to be running");
+    expect(script).toContain("Another 3DSTU FarmFlow deploy/update/rollback appears to be running");
     expect(script).toContain("write_env_line \"LAYERPILOT_DEPLOY_LOCK_DIR\"");
     expect(script).toContain("base_url=\"$(app_url)\"");
     expect(script).toContain("update_deploy");
@@ -169,7 +169,7 @@ describe("3DSTUXXX deployment packaging", () => {
     expect(backup).toContain("LAYERPILOT_BACKUP_LOCK_DIR is unsafe");
     expect(backup).toContain("acquire_lock");
     expect(backup).toContain("release_lock");
-    expect(backup).toContain("Another 3DSTUXXX backup/restore operation appears to be running");
+    expect(backup).toContain("Another 3DSTU FarmFlow backup/restore operation appears to be running");
     expect(backup).toContain("verify_archive");
     expect(backup).toContain("scripts/ubuntu-backup.sh verify");
     expect(backup).toContain("scripts/ubuntu-backup.sh restore-drill");
@@ -203,7 +203,7 @@ describe("3DSTUXXX deployment packaging", () => {
     expect(opsCheck).toContain("layerpilot-backup.timer");
     expect(opsCheck).toContain("/etc/docker/daemon.json");
     expect(opsCheck).toContain("deploy/ubuntu/docker-daemon.json");
-    expect(opsCheck).toContain("3DSTUXXX ops check passed");
+    expect(opsCheck).toContain("3DSTU FarmFlow ops check passed");
     expect(setup).toContain("install-deps");
     expect(setup).toContain("install-firewall");
     expect(setup).toContain("install-log-rotation");
@@ -378,7 +378,7 @@ describe("3DSTUXXX deployment packaging", () => {
     expect(opsTimer).toContain("OnUnitActiveSec=15m");
     expect(opsTimer).toContain("Persistent=true");
     expect(opsTimer).toContain("Unit=layerpilot-ops-check.service");
-    expect(goLive).toContain("3DSTUXXX go-live check");
+    expect(goLive).toContain("3DSTU FarmFlow go-live check");
     expect(goLive).toContain("ENV_FILE=\"${LAYERPILOT_ENV_FILE:-.env}\"");
     expect(goLive).toContain("load_env");
     expect(goLive).toContain("LAYERPILOT_GO_LIVE_DEPLOY");
@@ -386,7 +386,7 @@ describe("3DSTUXXX deployment packaging", () => {
     expect(goLive).toContain("LAYERPILOT_GO_LIVE_SUPPORT_ON_FAILURE");
     expect(goLive).toContain("check_boolean");
     expect(goLive).toContain("trap on_failure ERR");
-    expect(goLive).toContain("3DSTUXXX go-live check failed with exit code");
+    expect(goLive).toContain("3DSTU FarmFlow go-live check failed with exit code");
     expect(goLive).toContain("Creating support bundle for failed go-live check");
     expect(goLive).toContain("bash scripts/ubuntu-support-bundle.sh || true");
     expect(goLive).toContain("sed -n '1{s/^[^ ]* //;p;}'");

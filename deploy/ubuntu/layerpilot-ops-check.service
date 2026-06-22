@@ -1,5 +1,5 @@
 [Unit]
-Description=3DSTUXXX operations health check
+Description=3DSTU FarmFlow operations health check
 Requires=docker.service
 Wants=docker.service
 After=docker.service

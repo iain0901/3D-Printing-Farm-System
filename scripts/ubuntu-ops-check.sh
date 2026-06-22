@@ -146,8 +146,8 @@ check_systemd_timer
 check_docker_logs
 
 if [ "$FAILURES" -gt 0 ]; then
-  echo "3DSTUXXX ops check failed with $FAILURES failure(s) and $WARNINGS warning(s)." >&2
+  echo "3DSTU FarmFlow ops check failed with $FAILURES failure(s) and $WARNINGS warning(s)." >&2
   exit 1
 fi
 
-echo "3DSTUXXX ops check passed with $WARNINGS warning(s)."
+echo "3DSTU FarmFlow ops check passed with $WARNINGS warning(s)."

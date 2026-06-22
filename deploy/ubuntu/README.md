@@ -1,6 +1,6 @@
-# 3DSTUXXX Ubuntu Deployment
+# 3DSTU FarmFlow Ubuntu Deployment
 
-This guide deploys 3DSTUXXX on Ubuntu 22.04 or 24.04 with Docker Compose. The app runs on port `8797`; Compose binds that port to `127.0.0.1` by default so Nginx can proxy public HTTP/HTTPS traffic to it.
+This guide deploys 3DSTU FarmFlow on Ubuntu 22.04 or 24.04 with Docker Compose. The app runs on port `8797`; Compose binds that port to `127.0.0.1` by default so Nginx can proxy public HTTP/HTTPS traffic to it.
 
 ## 1. Install Server Dependencies
 
@@ -81,7 +81,7 @@ bash scripts/ubuntu-setup.sh all your-domain.example owner@example.com
 
 If you omit the email, the combined setup installs through Nginx and skips HTTPS so you can run `install-https` later.
 
-If an existing `/etc/docker/daemon.json` differs from 3DSTUXXX's sample, `install-log-rotation` stops and asks you to merge settings manually. Set `LAYERPILOT_OVERWRITE_DOCKER_DAEMON=true` only when you intentionally want the helper to back up and replace that file.
+If an existing `/etc/docker/daemon.json` differs from 3DSTU FarmFlow's sample, `install-log-rotation` stops and asks you to merge settings manually. Set `LAYERPILOT_OVERWRITE_DOCKER_DAEMON=true` only when you intentionally want the helper to back up and replace that file.
 
 Setup boolean flags such as `LAYERPILOT_OVERWRITE_DOCKER_DAEMON` and `LAYERPILOT_CERTBOT_STAGING` must be literal `true` or `false`; the preflight stops on other values so production setup does not silently choose the wrong branch.
 
@@ -213,7 +213,7 @@ scripts/ubuntu-backup.sh prune
 scripts/ubuntu-backup.sh list
 ```
 
-`backup` verifies the newly written archive before pruning old backups. `verify` runs a tar integrity check and warns if the archive does not contain a database file or local `storage/` payloads. `restore-drill` extracts an archive into a temporary Docker volume, confirms a 3DSTUXXX database file is present, then removes the temporary volume without touching production data.
+`backup` verifies the newly written archive before pruning old backups. `verify` runs a tar integrity check and warns if the archive does not contain a database file or local `storage/` payloads. `restore-drill` extracts an archive into a temporary Docker volume, confirms a 3DSTU FarmFlow database file is present, then removes the temporary volume without touching production data.
 
 The backup script reads `.env` before applying defaults, so production values such as `LAYERPILOT_BACKUP_RETENTION_DAYS`, `LAYERPILOT_BACKUP_DIR`, and `LAYERPILOT_VOLUME_NAME` can be kept with the rest of the deployment configuration. `LAYERPILOT_BACKUP_RETENTION_DAYS` defaults to `30`. Set it to another whole number before running `backup` or `prune`, or set it to `0` to disable automatic pruning. Pruning covers normal `layerpilot-data-*.tgz` archives and pre-restore safeguard backups.
 
@@ -295,7 +295,7 @@ When a production server needs troubleshooting, generate a redacted support bund
 scripts/ubuntu-deploy.sh support-bundle
 ```
 
-This calls `scripts/ubuntu-support-bundle.sh` and writes `layerpilot-support-YYYYmmdd-HHMMSS.tgz` under `/tmp/layerpilot-support` by default. The bundle includes OS details, disk usage, Docker and Compose status, recent 3DSTUXXX container logs, health/readiness responses, backup archive listings, timer status, and a redacted `.env` summary. Values whose names look secret, such as passwords, tokens, API keys, credentials, and private keys, are replaced with `REDACTED`. Review the archive before sharing it outside your organization.
+This calls `scripts/ubuntu-support-bundle.sh` and writes `layerpilot-support-YYYYmmdd-HHMMSS.tgz` under `/tmp/layerpilot-support` by default. The bundle includes OS details, disk usage, Docker and Compose status, recent 3DSTU FarmFlow container logs, health/readiness responses, backup archive listings, timer status, and a redacted `.env` summary. Values whose names look secret, such as passwords, tokens, API keys, credentials, and private keys, are replaced with `REDACTED`. Review the archive before sharing it outside your organization.
 
 Keep `.env` out of git. The production containers use `.env`, Docker named volume persistence, healthchecks, `no-new-privileges`, a 30-second graceful stop window, per-service log rotation, and a non-root Node runtime user.
 

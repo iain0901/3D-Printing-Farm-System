@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { openDatabase } from "./server.mjs";
 import { parseWorkerConfig, runWorkerCycle } from "./worker.mjs";
 
-describe("3DSTUXXX background worker", () => {
+describe("3DSTU FarmFlow background worker", () => {
   it("parses production worker environment settings", () => {
     const config = parseWorkerConfig({
       LAYERPILOT_WORKER_ID: "qc-worker",

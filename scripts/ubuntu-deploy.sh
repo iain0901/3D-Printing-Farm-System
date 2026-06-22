@@ -121,7 +121,7 @@ acquire_deploy_lock() {
   if [ -f "$DEPLOY_LOCK_DIR/pid" ]; then
     owner="$(cat "$DEPLOY_LOCK_DIR/pid" 2>/dev/null || printf "unknown")"
   fi
-  echo "Another 3DSTUXXX deploy/update/rollback appears to be running (lock: $DEPLOY_LOCK_DIR, pid: $owner)." >&2
+  echo "Another 3DSTU FarmFlow deploy/update/rollback appears to be running (lock: $DEPLOY_LOCK_DIR, pid: $owner)." >&2
   echo "If no such process exists, remove the lock directory manually and retry." >&2
   return 1
 }
@@ -351,7 +351,7 @@ write_env() {
     write_env_line "LAYERPILOT_ADMIN_EMAIL" "$LAYERPILOT_ADMIN_EMAIL"
     write_env_line "LAYERPILOT_ADMIN_PASSWORD" "$LAYERPILOT_ADMIN_PASSWORD"
     write_env_line "LAYERPILOT_ADMIN_NAME" "${LAYERPILOT_ADMIN_NAME:-Production Owner}"
-    write_env_line "LAYERPILOT_WORKSPACE_NAME" "${LAYERPILOT_WORKSPACE_NAME:-3DSTUXXX Production}"
+    write_env_line "LAYERPILOT_WORKSPACE_NAME" "${LAYERPILOT_WORKSPACE_NAME:-3DSTU FarmFlow Production}"
     write_env_line "LAYERPILOT_PUBLIC_URL" "${LAYERPILOT_PUBLIC_URL:-http://127.0.0.1:8797}"
     write_env_line "LAYERPILOT_BIND_ADDRESS" "${LAYERPILOT_BIND_ADDRESS:-127.0.0.1}"
     write_env_line "LAYERPILOT_DISABLE_DEFAULT_USERS" "true"
@@ -401,12 +401,12 @@ wait_ready() {
   echo "Waiting for $url ..."
   for _ in $(seq 1 60); do
     if curl -fsS "$url" >/dev/null 2>&1; then
-      echo "3DSTUXXX is ready."
+      echo "3DSTU FarmFlow is ready."
       return 0
     fi
     sleep 2
   done
-  echo "3DSTUXXX did not become ready in time." >&2
+  echo "3DSTU FarmFlow did not become ready in time." >&2
   compose ps
   return 1
 }
@@ -427,7 +427,7 @@ run_smoke() {
   echo "npm is not installed; running curl-only smoke checks."
   curl -fsS "${base_url%/}/api/health" >/dev/null
   curl -fsS "${base_url%/}/api/readiness" >/dev/null
-  curl -fsS "${base_url%/}/" | grep -Eq '3DSTUXXX|id="root"'
+  curl -fsS "${base_url%/}/" | grep -Eq '3DSTU FarmFlow|id="root"'
   echo "curl smoke checks passed for ${base_url}."
 }
 
@@ -475,7 +475,7 @@ rollback_deploy() {
     echo "Rollback requires an existing backup archive, or at least one layerpilot-data-*.tgz in the backup directory." >&2
     return 2
   fi
-  echo "Rolling back 3DSTUXXX data volume from: $archive"
+  echo "Rolling back 3DSTU FarmFlow data volume from: $archive"
   bash scripts/ubuntu-backup.sh verify "$archive"
   bash scripts/ubuntu-backup.sh restore "$archive"
   wait_ready

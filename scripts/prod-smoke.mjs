@@ -36,7 +36,7 @@ assert(readiness.body?.ok === true, "Readiness response did not report ok=true")
 const app = await fetch(`${baseUrl}/`);
 const html = await app.text();
 assert(app.ok, `Frontend failed with ${app.status}`);
-assert(html.includes("3DSTUXXX") || html.includes('id="root"'), "Frontend HTML does not look like 3DSTUXXX");
+assert(html.includes("3DSTU FarmFlow") || html.includes('id="root"'), "Frontend HTML does not look like 3DSTU FarmFlow");
 
 const result = {
   baseUrl,
