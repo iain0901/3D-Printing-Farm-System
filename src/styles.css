@@ -350,6 +350,9 @@ code {
 }
 
 .workspace {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
   min-width: 0;
 }
 
@@ -1464,7 +1467,6 @@ button:disabled {
   background: #f4f7fb;
   color: var(--ink);
   min-height: 100vh;
-  padding-bottom: 56px;
 }
 
 .marketing-nav {
@@ -1842,22 +1844,39 @@ button:disabled {
 }
 
 .version-badge {
-  background: rgba(15, 23, 42, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 999px;
-  bottom: 10px;
-  color: #fff;
+  align-items: center;
+  border-top: 1px solid rgba(148, 163, 184, 0.22);
+  color: #64748b;
+  display: flex;
   font-size: 12px;
   font-weight: 750;
-  padding: 7px 10px;
-  position: fixed;
-  right: 12px;
-  z-index: 80;
+  gap: 4px;
+  justify-content: center;
+  margin-top: auto;
+  padding: 22px 18px;
+  width: 100%;
 }
 
 .version-badge span {
-  color: rgba(255, 255, 255, 0.72);
-  margin-right: 4px;
+  color: #94a3b8;
+}
+
+.version-badge strong {
+  color: #475569;
+}
+
+.marketing-site > .version-badge {
+  background: #0f172a;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.marketing-site > .version-badge span {
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.marketing-site > .version-badge strong {
+  color: #fff;
 }
 
 @media (max-width: 1040px) {
@@ -1970,4 +1989,167 @@ button:disabled {
   .workflow-steps p {
     grid-column: auto;
   }
+}
+
+
+.project-section {
+  align-items: stretch;
+  display: grid;
+  gap: 22px;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  margin: 0 auto;
+  max-width: 1220px;
+  padding: 86px 32px;
+}
+
+.project-copy,
+.repo-card,
+.install-steps article,
+.signal-grid article,
+.priority-list article {
+  background: #fff;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 8px;
+}
+
+.project-copy {
+  padding: 34px;
+}
+
+.project-copy h2 {
+  font-size: 48px;
+  margin: 0 0 16px;
+}
+
+.project-copy p {
+  color: #526172;
+  font-size: 18px;
+  line-height: 1.62;
+  margin: 0;
+  max-width: 740px;
+}
+
+.project-actions,
+.doc-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 26px;
+}
+
+.project-actions a,
+.doc-links a {
+  align-items: center;
+  border: 1px solid rgba(37, 99, 235, 0.22);
+  border-radius: 8px;
+  color: var(--blue);
+  display: inline-flex;
+  font-weight: 850;
+  min-height: 42px;
+  padding: 9px 14px;
+  text-decoration: none;
+}
+
+.project-actions .primary-link {
+  background: var(--blue);
+  color: #fff;
+}
+
+.repo-card {
+  display: grid;
+  gap: 8px;
+  padding: 28px;
+}
+
+.repo-card span {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.repo-card strong {
+  color: #0f172a;
+  font-size: 19px;
+  margin-bottom: 12px;
+  word-break: break-word;
+}
+
+.install-steps {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.install-steps article {
+  min-height: 220px;
+  padding: 22px;
+}
+
+.install-steps span {
+  align-items: center;
+  background: #e0f2fe;
+  border-radius: 999px;
+  color: var(--blue);
+  display: inline-flex;
+  font-weight: 900;
+  height: 34px;
+  justify-content: center;
+  margin-bottom: 18px;
+  width: 34px;
+}
+
+.install-steps h3,
+.signal-grid h3,
+.priority-list h3 {
+  margin: 0 0 10px;
+}
+
+.install-steps p,
+.signal-grid p,
+.priority-list p {
+  color: #526172;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.signal-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.signal-grid article {
+  min-height: 220px;
+  padding: 20px;
+}
+
+.priority-kicker {
+  border-top: 1px solid rgba(148, 163, 184, 0.28);
+  margin-top: 44px;
+  padding-top: 44px;
+}
+
+.priority-list {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.priority-list article {
+  min-height: 190px;
+  padding: 22px;
+}
+
+@media (max-width: 1040px) {
+  .project-section,
+  .install-steps,
+  .signal-grid,
+  .priority-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+.auth-page + .version-badge {
+  background: #f8fafc;
 }

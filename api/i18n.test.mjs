@@ -15,6 +15,10 @@ function extractTranslationKeys(source) {
   return new Set([...match[1].matchAll(/\n\s*"((?:\\.|[^"])*)"\s*:/g)].map((item) => item[1]));
 }
 
+function stripMarketingSite(source) {
+  return source.replace(new RegExp("function MarketingSite[\\s\\S]*?\\nfunction AuthScreen"), "function AuthScreen");
+}
+
 function collectVisibleEnglish(source) {
   const candidates = new Set();
   const patterns = [
@@ -36,7 +40,7 @@ function collectVisibleEnglish(source) {
 
 describe("Traditional Chinese UI translations", () => {
   it("covers visible static UI text that the DOM language switcher can translate", async () => {
-    const source = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const source = stripMarketingSite(await readFile(new URL("../src/App.tsx", import.meta.url), "utf8"));
     const translated = extractTranslationKeys(source);
     const visibleEnglish = collectVisibleEnglish(source);
     const missing = [...visibleEnglish]

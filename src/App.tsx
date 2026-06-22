@@ -819,7 +819,55 @@ const zhTwTranslations: Record<string, string> = {
   "Professional installation, technical setup, and training are available from 3DSTU.": "3DSTU 可提供專業安裝、技術設定與訓練。",
   "Need installation, training, custom integration, or technical support?": "需要安裝、訓練、自訂整合或技術支援嗎？",
   "Contact the 3DSTU team for deployment support, farm onboarding, connector planning, and production workflow design.": "聯絡 3DSTU 團隊取得部署支援、農場導入、連接器規劃與生產流程設計。",
-  "Designed for": "適用於"
+  "Designed for": "適用於",
+  "Docs": "文檔",
+  "GitHub": "GitHub",
+  "Install": "安裝",
+  "Roadmap": "路線圖",
+  "Project home": "專案首頁",
+  "GitHub repository": "GitHub 倉庫",
+  "Source, releases, deployment scripts, issue tracking, and project documentation live in the public repository.": "原始碼、版本、部署腳本、問題追蹤與專案文檔都放在公開倉庫。",
+  "Open GitHub": "開啟 GitHub",
+  "Current version": "目前版本",
+  "Public deployment": "公開部署",
+  "Production domain": "正式網域",
+  "Documentation and install path": "文檔與安裝路徑",
+  "Run it locally, deploy it with Docker, or operate it behind Nginx and HTTPS on Ubuntu.": "可以本機執行、使用 Docker 部署，或在 Ubuntu 上搭配 Nginx 與 HTTPS 營運。",
+  "Clone": "複製",
+  "Deploy": "部署",
+  "Verify": "驗證",
+  "git clone the repository and copy .env.example to .env.": "git clone 倉庫，並將 .env.example 複製成 .env。",
+  "Set admin credentials, public URL, worker token, metrics token, and production security flags.": "設定管理員帳密、公開 URL、worker token、metrics token 與正式環境安全開關。",
+  "Start Docker Compose or run the Ubuntu deployment scripts for Nginx, HTTPS, backups, and ops checks.": "啟動 Docker Compose，或執行 Ubuntu 部署腳本設定 Nginx、HTTPS、備份與營運檢查。",
+  "Run QC, readiness, smoke checks, backup drills, and then push the versioned release to GitHub.": "執行 QC、readiness、smoke check、備份演練，然後將版本化 release 推到 GitHub。",
+  "View install guide": "查看安裝指南",
+  "View operations runbook": "查看營運手冊",
+  "Competitive roadmap": "競品吸收路線圖",
+  "What we are absorbing from the print-farm ecosystem.": "我們正在吸收 3D 打印農場生態系的優點。",
+  "FDM Monster": "FDM Monster",
+  "Multi-protocol printer connectors, batch printing, grid-based printer layout, backups, and thumbnails.": "多協議打印機連接、批量打印、網格化設備佈局、備份與縮圖。",
+  "OctoFarm": "OctoFarm",
+  "Single-pane monitoring for many OctoPrint instances and websocket-driven farm status.": "多個 OctoPrint 實例的單一面板監控與 WebSocket 農場狀態。",
+  "Spoolman": "Spoolman",
+  "Filament inventory, spool usage tracking, and automatic weight deduction through Klipper/Moonraker-style integrations.": "線材庫存、線材捲用量追蹤，以及透過 Klipper/Moonraker 類整合自動扣重。",
+  "Obico and PrintWatch": "Obico 與 PrintWatch",
+  "AI failure detection, camera-driven monitoring, anomaly alerts, and remote printer visibility.": "AI 失敗偵測、攝影機監控、異常警報與遠端設備可視化。",
+  "FilaOps, LayerlyOS, Daedalus, runsodin, PrintStream": "FilaOps、LayerlyOS、Daedalus、runsodin、PrintStream",
+  "ERP/MRP depth, no-cloud MES/SCADA positioning, profitability analytics, PWA, shared libraries, and plugin systems.": "ERP/MRP 深度、無雲端 MES/SCADA 定位、盈利分析、PWA、共享檔案庫與插件系統。",
+  "Next build priorities": "下一階段開發重點",
+  "Printer bridge hardening": "打印機橋接強化",
+  "Connector test harnesses for OctoPrint, Moonraker/Klipper, PrusaLink, Bambu LAN, Creality, and Snapmaker-style devices.": "為 OctoPrint、Moonraker/Klipper、PrusaLink、Bambu LAN、Creality 與 Snapmaker 類設備建立連接器測試框架。",
+  "Material automation": "材料自動化",
+  "Reserve spools for scheduled work, deduct usage from completed prints, and warn before a job runs out of material.": "為已排程任務預留線材，完成打印後扣除用量，並在材料不足前警告。",
+  "Failure and waste intelligence": "失敗與耗損智慧",
+  "Track failed prints, wasted filament, root causes, reprint cost, and printer-specific reliability trends.": "追蹤失敗打印、浪費線材、根因、重印成本與各設備可靠度趨勢。",
+  "File and preview depth": "檔案與預覽深度",
+  "Add richer STL/3MF previews, G-code visualization, slicing presets, and reusable production templates.": "加入更完整的 STL/3MF 預覽、G-code 視覺化、切片預設與可重用生產範本。",
+  "Docs in repository": "倉庫文檔",
+  "Installation guide": "安裝指南",
+  "Operations runbook": "營運手冊",
+  "Roadmap document": "路線圖文檔",
+  "From MVP shell toward production-grade operations.": "? MVP ????????????"
 };
 
 const traditionalToSimplifiedPairs = [
@@ -2684,7 +2732,7 @@ function App() {
     return () => source.close();
   }, [authed, authToken]);
 
-  if (!authed && showMarketing) return <MarketingSite language={language} setLanguage={setLanguage} onOpenApp={() => { window.location.hash = "app"; setShowMarketing(false); }} />;
+  if (!authed && showMarketing) return <MarketingSite onOpenApp={() => { window.location.hash = "app"; setShowMarketing(false); }} />;
 
   if (!authed) return <><AuthScreen onLogin={authenticate} language={language} setLanguage={setLanguage} /><VersionBadge /></>;
 
@@ -2712,11 +2760,11 @@ function App() {
         {view === "addons" && <AddonsPage addons={addons} updateAddon={updateAddon} addToast={addToast} costCatalog={costCatalog} saveCostCatalog={saveCostCatalog} />}
         {view === "notifications" && <NotificationsPage notifications={notifications} setNotifications={setNotifications} channels={notificationChannels} setChannels={setNotificationChannels} deliveries={notificationDeliveries} setDeliveries={setNotificationDeliveries} addToast={addToast} />}
         {view === "settings" && <SettingsPage settings={workspaceSettings} setSettings={setWorkspaceSettings} addToast={addToast} setBackendStatus={setBackendStatus} currentUser={currentUser} changeOwnPassword={changeOwnPassword} setupTwoFactor={setupTwoFactor} enableTwoFactor={enableTwoFactor} disableTwoFactor={disableTwoFactor} />}
+        <VersionBadge />
       </main>
       {selectedPrinter && <PrinterDrawer printer={selectedPrinter} onClose={() => setSelectedPrinter(null)} api={mockApi} />}
       {modal === "add-printer" && <AddPrinterModal onClose={() => setModal(null)} onAdd={async (printer) => { const created = await createPrinter(printer); setModal(null); addToast(`${created.name} added to printer fleet`); }} />}
       <ToastStack toasts={toasts} />
-      <VersionBadge />
     </div>
   );
 }
@@ -2725,7 +2773,7 @@ function VersionBadge() {
   return <div className="version-badge"><span>Version</span> <strong data-i18n-ignore>{APP_VERSION}</strong></div>;
 }
 
-function MarketingSite({ language, setLanguage, onOpenApp }: { language: Language; setLanguage: (language: Language) => void; onOpenApp: () => void }) {
+function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
   const metrics = [
     ["Today\'s queue", "48", "jobs structured by status, material, and due risk"],
     ["Printer states", "6", "idle, printing, paused, offline, error, maintenance"],
@@ -2748,18 +2796,40 @@ function MarketingSite({ language, setLanguage, onOpenApp }: { language: Languag
     ["Business layer", "Cost catalog, storage usage, billing hooks, quote assumptions, backups, restore previews, and customer-ready deployment."]
   ];
   const audiences = ["Print farms", "Service bureaus", "Makerspaces", "School labs", "Factory prototyping teams"];
+  const installSteps = [
+    ["Clone", "git clone the repository and copy .env.example to .env."],
+    ["Configure", "Set admin credentials, public URL, worker token, metrics token, and production security flags."],
+    ["Deploy", "Start Docker Compose or run the Ubuntu deployment scripts for Nginx, HTTPS, backups, and ops checks."],
+    ["Verify", "Run QC, readiness, smoke checks, backup drills, and then push the versioned release to GitHub."]
+  ];
+  const competitorSignals = [
+    ["FDM Monster", "Multi-protocol printer connectors, batch printing, grid-based printer layout, backups, and thumbnails."],
+    ["OctoFarm", "Single-pane monitoring for many OctoPrint instances and websocket-driven farm status."],
+    ["Spoolman", "Filament inventory, spool usage tracking, and automatic weight deduction through Klipper/Moonraker-style integrations."],
+    ["Obico and PrintWatch", "AI failure detection, camera-driven monitoring, anomaly alerts, and remote printer visibility."],
+    ["FilaOps, LayerlyOS, Daedalus, runsodin, PrintStream", "ERP/MRP depth, no-cloud MES/SCADA positioning, profitability analytics, PWA, shared libraries, and plugin systems."]
+  ];
+  const buildPriorities = [
+    ["Printer bridge hardening", "Connector test harnesses for OctoPrint, Moonraker/Klipper, PrusaLink, Bambu LAN, Creality, and Snapmaker-style devices."],
+    ["Material automation", "Reserve spools for scheduled work, deduct usage from completed prints, and warn before a job runs out of material."],
+    ["Failure and waste intelligence", "Track failed prints, wasted filament, root causes, reprint cost, and printer-specific reliability trends."],
+    ["File and preview depth", "Add richer STL/3MF previews, G-code visualization, slicing presets, and reusable production templates."]
+  ];
   return (
-    <div className="marketing-site">
+    <div className="marketing-site" data-i18n-ignore>
       <header className="marketing-nav">
         <a className="brand-lockup" href="#top" aria-label="3DSTU FarmFlow home"><Layers /><span>3DSTU FarmFlow</span></a>
         <nav className="marketing-links" aria-label="Website sections">
           <a href="#platform">Platform</a>
           <a href="#workflow">Workflow</a>
           <a href="#operations">Operations</a>
+          <a href="#docs">Docs</a>
+          <a href="#github">GitHub</a>
+          <a href="#roadmap">Roadmap</a>
           <a href="#support">Support</a>
         </nav>
         <div className="marketing-nav-actions">
-          <LanguageSwitcher language={language} setLanguage={setLanguage} compact />
+          <a href="https://github.com/iain0901/3D-Printing-Farm-System" target="_blank" rel="noreferrer">GitHub</a>
           <button onClick={onOpenApp}>Open App</button>
         </div>
       </header>
@@ -2852,6 +2922,55 @@ function MarketingSite({ language, setLanguage, onOpenApp }: { language: Languag
             <article><h3>Use it to run your farm</h3><p>Customers can self-host, operate production, and earn from their own printing services.</p></article>
             <article><h3>Protect the platform</h3><p>The license does not allow selling the script, modified source, clones, or hosted resale services.</p></article>
             <article><h3>Get expert setup</h3><p>Professional installation, technical setup, and training are available from 3DSTU.</p></article>
+          </div>
+        </section>
+
+        <section className="project-section" id="github">
+          <div className="project-copy">
+            <p className="eyebrow">Project home</p>
+            <h2>GitHub repository</h2>
+            <p>Source, releases, deployment scripts, issue tracking, and project documentation live in the public repository.</p>
+            <div className="project-actions">
+              <a className="primary-link" href="https://github.com/iain0901/3D-Printing-Farm-System" target="_blank" rel="noreferrer">Open GitHub</a>
+              <a href="https://github.com/iain0901/3D-Printing-Farm-System/tree/main/docs" target="_blank" rel="noreferrer">Docs in repository</a>
+            </div>
+          </div>
+          <div className="repo-card">
+            <span>Current version</span><strong data-i18n-ignore>{APP_VERSION}</strong>
+            <span>Public deployment</span><strong data-i18n-ignore>farm-saas.3dstu.com</strong>
+            <span>Production domain</span><strong data-i18n-ignore>github.com/iain0901/3D-Printing-Farm-System</strong>
+          </div>
+        </section>
+
+        <section className="marketing-section docs-section" id="docs">
+          <div className="section-kicker">
+            <p className="eyebrow">Documentation and install path</p>
+            <h2>Run it locally, deploy it with Docker, or operate it behind Nginx and HTTPS on Ubuntu.</h2>
+          </div>
+          <div className="install-steps">
+            {installSteps.map(([title, body], index) => <article key={title}><span>{index + 1}</span><h3>{title}</h3><p>{body}</p></article>)}
+          </div>
+          <div className="doc-links">
+            <a href="https://github.com/iain0901/3D-Printing-Farm-System/blob/main/docs/INSTALL.md" target="_blank" rel="noreferrer">View install guide</a>
+            <a href="https://github.com/iain0901/3D-Printing-Farm-System/blob/main/docs/OPERATIONS.md" target="_blank" rel="noreferrer">View operations runbook</a>
+            <a href="https://github.com/iain0901/3D-Printing-Farm-System/blob/main/docs/ROADMAP.md" target="_blank" rel="noreferrer">Roadmap document</a>
+          </div>
+        </section>
+
+        <section className="marketing-section roadmap-section" id="roadmap">
+          <div className="section-kicker">
+            <p className="eyebrow">Competitive roadmap</p>
+            <h2>What we are absorbing from the print-farm ecosystem.</h2>
+          </div>
+          <div className="signal-grid">
+            {competitorSignals.map(([title, body]) => <article key={title}><h3>{title}</h3><p>{body}</p></article>)}
+          </div>
+          <div className="section-kicker priority-kicker">
+            <p className="eyebrow">Next build priorities</p>
+            <h2>From MVP shell toward production-grade operations.</h2>
+          </div>
+          <div className="priority-list">
+            {buildPriorities.map(([title, body]) => <article key={title}><h3>{title}</h3><p>{body}</p></article>)}
           </div>
         </section>
 
