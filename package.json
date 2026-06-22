@@ -1,6 +1,6 @@
 {
   "name": "3dstu-farmflow",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "3DSTU FarmFlow 3D printing farm production operating system",
   "private": true,
   "author": "3DSTU <support@3dstu.com>",

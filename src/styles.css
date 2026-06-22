@@ -1241,6 +1241,58 @@ button:disabled {
   font-size: 13px;
 }
 
+.diagnostic-card {
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 16px;
+}
+
+.diagnostic-card.pass {
+  border-color: rgba(22, 163, 74, 0.32);
+}
+
+.diagnostic-card.fail {
+  border-color: rgba(220, 38, 38, 0.32);
+}
+
+.diagnostic-card > div:first-child {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  justify-content: space-between;
+}
+
+.diagnostic-card em {
+  color: var(--muted);
+  font-style: normal;
+}
+
+.diagnostic-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.diagnostic-check {
+  align-items: start;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 4px 8px;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 12px;
+}
+
+.diagnostic-check small {
+  color: var(--muted);
+  grid-column: 2;
+}
+
 .billing-feed {
   margin-top: 12px;
 }

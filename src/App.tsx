@@ -197,7 +197,9 @@ type Webhook = { id: string; name: string; url: string; events: string[]; enable
 type WebhookDelivery = { id: string; webhookId: string; webhookName: string; eventId: string; eventType: string; url: string; status: string; statusCode: number; at: string; error?: string };
 type NotificationChannel = { id: string; name: string; type: "slack" | "discord" | "custom" | "email"; url: string; events: string[]; enabled: boolean; recipients: string[]; hasToken?: boolean; lastStatus?: string; lastStatusCode?: number; lastSentAt?: string };
 type NotificationDelivery = { id: string; channelId: string; channelName: string; channelType: string; eventId: string; eventType: string; url: string; status: string; statusCode: number; at: string; error?: string };
-type Bridge = { id: string; printerId: string; kind: "octoprint" | "moonraker" | "manual"; name: string; baseUrl: string; enabled: boolean; hasApiKey?: boolean; lastStatus?: string; lastError?: string; lastSyncAt?: string };
+type BridgeDiagnosticCheck = { name: string; status: "passed" | "warning" | "failed"; detail: string; recommendation?: string };
+type BridgeDiagnostic = { ok: boolean; generatedAt: string; kind: Bridge["kind"]; baseUrl: string; latencyMs: number; status?: Partial<Printer> | null; checks: BridgeDiagnosticCheck[]; summary: string; recommendation: string };
+type Bridge = { id: string; printerId: string; kind: "octoprint" | "moonraker" | "manual"; name: string; baseUrl: string; enabled: boolean; hasApiKey?: boolean; lastStatus?: string; lastError?: string; lastSyncAt?: string; lastDiagnostics?: BridgeDiagnostic };
 type Toast = { id: string; message: string; type: "success" | "info" | "warning" };
 type Part = { id: string; name: string; fileId: string; material: string; process: string; plates: number; variants: string[]; status: "ready" | "needs profile" | "draft" };
 type SKU = { id: string; sku: string; title: string; parts: string[]; variants: string[]; price: number; stock: number; channel: string };
@@ -4382,6 +4384,7 @@ function IntegrationsPage({ apiKeys, setApiKeys, webhooks, setWebhooks, webhookD
   const [webhookDraft, setWebhookDraft] = useState({ name: "Production events", url: "https://webhook.site/layerpilot", events: "order.status,order.jobs_generated,queue.status,printer.status,spool.usage" });
   const [apiKeyDraft, setApiKeyDraft] = useState({ name: "Farm scheduler", scopes: "queue:write,files:write,orders:write" });
   const [newApiSecret, setNewApiSecret] = useState("");
+  const [bridgeDiagnostic, setBridgeDiagnostic] = useState<BridgeDiagnostic | null>(bridges.find((bridge) => bridge.lastDiagnostics)?.lastDiagnostics || null);
   const saveBridge = async () => {
     try {
       const saved = await apiRequest<Bridge>("/api/bridges", {
@@ -4396,10 +4399,11 @@ function IntegrationsPage({ apiKeys, setApiKeys, webhooks, setWebhooks, webhookD
   };
   const testBridge = async (bridge: Bridge) => {
     try {
-      const tested = await apiRequest<{ bridge: Bridge; printer: Printer }>(`/api/bridges/${bridge.id}/test`, { method: "POST" });
+      const tested = await apiRequest<{ ok: boolean; bridge: Bridge; printer: Printer; diagnostic: BridgeDiagnostic }>(`/api/bridges/${bridge.id}/test`, { method: "POST" });
       setBridges((items) => items.map((item) => item.id === bridge.id ? tested.bridge : item));
       setPrinters((items) => items.map((item) => item.id === tested.printer.id ? tested.printer : item));
-      addToast(`${bridge.name} connected`, "success");
+      setBridgeDiagnostic(tested.diagnostic);
+      addToast(tested.ok ? `${bridge.name} connected` : `${bridge.name} diagnostic failed`, tested.ok ? "success" : "warning");
     } catch {
       setBridges((items) => items.map((item) => item.id === bridge.id ? { ...item, lastStatus: "error" } : item));
       addToast(`${bridge.name} connection failed`, "warning");
@@ -4489,6 +4493,20 @@ function IntegrationsPage({ apiKeys, setApiKeys, webhooks, setWebhooks, webhookD
         <DataTable headers={["Bridge", "Printer", "Kind", "URL", "Key", "Last status", "Last sync", "Actions"]}>
           {bridges.map((bridge) => <tr key={bridge.id}><td><b>{bridge.name}</b></td><td>{printers.find((printer) => printer.id === bridge.printerId)?.name || bridge.printerId}</td><td><StatusPill status={bridge.kind} /></td><td><code>{bridge.baseUrl}</code></td><td>{bridge.hasApiKey ? "Stored" : "None"}</td><td><StatusPill status={bridge.lastStatus || "not tested"} /></td><td>{bridge.lastSyncAt ? new Date(bridge.lastSyncAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Never"}</td><td><button onClick={() => testBridge(bridge)}><RefreshCw size={14} />Test sync</button></td></tr>)}
         </DataTable>
+        {bridgeDiagnostic && <div className={`diagnostic-card ${bridgeDiagnostic.ok ? "pass" : "fail"}`}>
+          <div>
+            <b>{bridgeDiagnostic.summary}</b>
+            <span>{bridgeDiagnostic.kind} - {bridgeDiagnostic.baseUrl} - {bridgeDiagnostic.latencyMs}ms</span>
+          </div>
+          <em>{bridgeDiagnostic.recommendation}</em>
+          <div className="diagnostic-grid">
+            {bridgeDiagnostic.checks.map((check) => <div key={`${check.name}-${check.detail}`} className={`diagnostic-check ${check.status}`}>
+              <StatusDot status={check.status === "passed" ? "complete" : check.status === "warning" ? "queued" : "failed"} />
+              <span><b>{check.name}</b>{check.detail}</span>
+              {check.recommendation && <small>{check.recommendation}</small>}
+            </div>)}
+          </div>
+        </div>}
       </section>
       <div className="split">
         <section className="panel">

@@ -16,7 +16,7 @@ import { Low } from "lowdb";
 import mqtt from "mqtt";
 import { z } from "zod";
 import Stripe from "stripe";
-import { fetchBridgeStatus, sendBridgeCommand } from "./hardware-bridge.mjs";
+import { diagnoseBridge, fetchBridgeStatus, sendBridgeCommand } from "./hardware-bridge.mjs";
 import { formatBytes, parseModelMetadata } from "./model-metadata.mjs";
 import { createObjectStorage, defaultStorageRoot } from "./object-storage.mjs";
 import { createPersistenceAdapter } from "./persistence.mjs";
@@ -5716,22 +5716,22 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!bridge) return reply.code(404).send({ error: "Bridge not found" });
     const printer = database.data.printers.find((item) => item.id === bridge.printerId && itemInWorkspace(item, request.user.workspaceId));
     if (!printer) return reply.code(404).send({ error: "Printer not found" });
-    try {
-      const status = await fetchBridgeStatus(bridge);
-      applyBridgeStatus(printer, status);
+    const diagnostic = await diagnoseBridge(bridge);
+    bridge.lastDiagnostics = diagnostic;
+    bridge.lastSyncAt = diagnostic.generatedAt;
+    if (diagnostic.ok) {
+      if (diagnostic.status) applyBridgeStatus(printer, diagnostic.status);
       bridge.lastStatus = "connected";
-      bridge.lastSyncAt = new Date().toISOString();
-      database.data.events.unshift({ id: randomUUID(), workspaceId: request.user.workspaceId, type: "bridge.connected", message: `${bridge.name} connected`, data: { workspaceId: request.user.workspaceId }, at: bridge.lastSyncAt });
-      await database.write();
-      return { bridge: sanitizeBridge(bridge), printer, status };
-    } catch (error) {
+      bridge.lastError = "";
+      database.data.events.unshift({ id: randomUUID(), workspaceId: request.user.workspaceId, type: "bridge.connected", message: `${bridge.name} connected`, data: { workspaceId: request.user.workspaceId, diagnostic: { ok: true, latencyMs: diagnostic.latencyMs } }, at: bridge.lastSyncAt });
+    } else {
       bridge.lastStatus = "error";
-      bridge.lastError = error instanceof Error ? error.message : "Bridge test failed";
-      bridge.lastSyncAt = new Date().toISOString();
-      if (printer) printer.status = "offline";
-      await database.write();
-      return reply.code(502).send({ error: bridge.lastError, bridge: sanitizeBridge(bridge), printer });
+      bridge.lastError = diagnostic.summary || "Bridge test failed";
+      printer.status = "offline";
+      database.data.events.unshift({ id: randomUUID(), workspaceId: request.user.workspaceId, type: "bridge.diagnostic_failed", message: `${bridge.name} diagnostic failed`, data: { workspaceId: request.user.workspaceId, diagnostic: { ok: false, latencyMs: diagnostic.latencyMs, recommendation: diagnostic.recommendation } }, at: bridge.lastSyncAt });
     }
+    await database.write();
+    return { ok: diagnostic.ok, bridge: sanitizeBridge(bridge), printer, status: diagnostic.status, diagnostic };
   });
 
   app.post("/api/printers/:id/sync", async (request, reply) => {

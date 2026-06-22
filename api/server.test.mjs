@@ -2542,8 +2542,17 @@ endsolid s3_store`;
 
         const tested = await app.inject({ method: "POST", url: `/api/bridges/${saved.json().id}/test`, headers: auth(token) });
         expect(tested.statusCode).toBe(200);
+        expect(tested.json()).toMatchObject({
+          ok: true,
+          diagnostic: expect.objectContaining({
+            ok: true,
+            latencyMs: expect.any(Number),
+            checks: expect.arrayContaining([expect.objectContaining({ name: "Status endpoint", status: "passed" })])
+          })
+        });
         expect(tested.json().printer).toMatchObject({ id: "p2", status: "idle", nozzle: 24, bed: 22 });
         expect(tested.json().bridge.apiKey).toBeUndefined();
+        expect(JSON.stringify(tested.json())).not.toContain("secret");
 
         const syncAll = await app.inject({ method: "POST", url: "/api/bridges/sync", headers: auth(token) });
         expect(syncAll.statusCode).toBe(200);
@@ -2555,6 +2564,7 @@ endsolid s3_store`;
         expect(bridges.json().some((bridge) => bridge.apiKey)).toBe(false);
         const persisted = JSON.parse(await readFile(dbPath, "utf8"));
         expect(persisted.events.some((event) => event.type === "bridge.poll")).toBe(true);
+        expect(persisted.bridges.find((bridge) => bridge.id === saved.json().id).lastDiagnostics.ok).toBe(true);
       } finally {
         global.fetch = originalFetch;
       }

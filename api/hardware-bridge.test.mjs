@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fetchMoonrakerStatus, fetchOctoPrintStatus, sendMoonrakerCommand, sendOctoPrintCommand } from "./hardware-bridge.mjs";
+import { diagnoseBridge, fetchMoonrakerStatus, fetchOctoPrintStatus, sendMoonrakerCommand, sendOctoPrintCommand } from "./hardware-bridge.mjs";
 
 function response(body = {}, status = 200) {
   return {
@@ -49,5 +49,31 @@ describe("hardware bridge adapters", () => {
     };
     await sendMoonrakerCommand({ baseUrl: "http://moonraker.local/", action: "home axes", fetchImpl });
     expect(calls).toEqual([{ url: "http://moonraker.local/printer/gcode/script", body: { script: "G28" } }]);
+  });
+
+  it("diagnoses invalid bridge URLs without network calls", async () => {
+    const diagnostic = await diagnoseBridge({ kind: "octoprint", name: "Bad bridge", baseUrl: "octopi.local", apiKey: "" }, { fetchImpl: async () => {
+      throw new Error("should not fetch");
+    } });
+    expect(diagnostic.ok).toBe(false);
+    expect(diagnostic.checks).toEqual(expect.arrayContaining([expect.objectContaining({ name: "Base URL", status: "failed" })]));
+    expect(diagnostic.recommendation).toContain("valid bridge URL");
+  });
+
+  it("returns a safe bridge diagnostic for HTTP failures", async () => {
+    const diagnostic = await diagnoseBridge({
+      kind: "octoprint",
+      name: "Farm Octo",
+      baseUrl: "http://octopi.local",
+      apiKey: "secret"
+    }, {
+      fetchImpl: async () => response({ error: "unauthorized" }, 401)
+    });
+    expect(diagnostic.ok).toBe(false);
+    expect(JSON.stringify(diagnostic)).not.toContain("secret");
+    expect(diagnostic.checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "Authentication", status: "passed" }),
+      expect.objectContaining({ name: "Status endpoint", status: "failed" })
+    ]));
   });
 });
