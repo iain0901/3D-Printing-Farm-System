@@ -137,6 +137,28 @@ type PrintFile = {
   usage: number;
 };
 type FileFolder = { id: string; name: string; parent?: string; purpose: "inbox" | "production" | "review" | "archive" | "sample"; fileCount?: number; createdAt?: string; updatedAt?: string };
+type FilePreview = {
+  fileId: string;
+  generatedAt: string;
+  name: string;
+  type: string;
+  material: string;
+  summary: { dimensions: [number, number, number]; size: string; estimateGrams: number; estimateMinutes: number; printTime: string; quote: number; sliced: boolean; status: string };
+  buildPlate: { width: number; depth: number; height: number; occupancyPercent: number; fit: string };
+  visualization: {
+    kind: "toolpath" | "bounding-box";
+    lineCount?: number;
+    motionCommands?: number;
+    extrusionMoves?: number;
+    travelMoves?: number;
+    totalExtrusion?: number;
+    layers?: Array<{ z: number; moves: number; extrusion: number }>;
+    sample?: Array<{ x: number; y: number; z: number; extrusion?: number }>;
+    extents: { min: number[]; max: number[] };
+  };
+  compatiblePrinters: Array<{ id: string; name: string; status: string; buildVolume: [number, number, number] }>;
+  warnings: string[];
+};
 
 type QueueItem = {
   id: string;
@@ -783,6 +805,10 @@ const zhTwTranslations: Record<string, string> = {
   "Professional setup available": "提供專業建置服務",
   "3DSTU support snapshot": "3DSTU 支援快照",
   "Creates a redacted operational snapshot for support without passwords, tokens, API key hashes, or billing secrets.": "建立遮蔽敏感資訊的營運支援快照，不包含密碼、Token、API key hash 或付款機密。",
+  "G-code toolpath": "G-code 路徑",
+  "Compatible printers": "相容打印機",
+  "No matching printer": "沒有相符打印機",
+  "Check material and build volume": "檢查材料與成型尺寸",
   "Generate": "產生",
   "Generating": "產生中",
   "Go-live checklist update failed. Check role or API status.": "上線檢查清單更新失敗，請檢查角色或 API 狀態。",
@@ -3493,6 +3519,8 @@ function FilesPage({ files, folders, queueFile, setView, addToast, createSampleF
   const [material, setMaterial] = useState("PLA");
   const [uploading, setUploading] = useState(false);
   const [working, setWorking] = useState("");
+  const [preview, setPreview] = useState<FilePreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState("");
   const visible = files.filter((f) => (type === "All" || f.type === type) && f.name.toLowerCase().includes(query.toLowerCase()));
   const addSample = async () => {
     setWorking("sample");
@@ -3523,6 +3551,18 @@ function FilesPage({ files, folders, queueFile, setView, addToast, createSampleF
     const ok = await deleteFile(file.id);
     addToast(ok ? `${file.name} deleted` : `${file.name} is still referenced; remove jobs or parts first`, ok ? "success" : "warning");
   };
+  const openPreview = async (file: PrintFile) => {
+    setPreviewLoading(file.id);
+    try {
+      const result = await apiRequest<FilePreview>(`/api/files/${file.id}/preview`);
+      setPreview(result);
+      addToast(`${file.name} preview ready`, "success");
+    } catch {
+      addToast(`${file.name} preview failed`, "warning");
+    } finally {
+      setPreviewLoading("");
+    }
+  };
   return (
     <Page title="Cloud files" kicker="Library, folders, slicing and queue actions">
       <div className="toolbar">
@@ -3535,9 +3575,66 @@ function FilesPage({ files, folders, queueFile, setView, addToast, createSampleF
       </div>
       <div className="folder-strip">{folders.slice(0, 6).map((folder) => <span key={folder.id}>{folder.name}<small>{folder.fileCount || files.filter((file) => file.folder === folder.name).length}</small></span>)}</div>
       <DataTable headers={["Model", "Folder", "Material", "Status", "Version", "Dimensions", "Estimate", "Actions"]}>
-        {visible.map((file) => <tr key={file.id}><td><div className="model-cell"><span className="model-thumb">{file.thumbnail.slice(0, 2).toUpperCase()}</span><div><b>{file.name}</b><small>{file.type} - {file.size} - {file.tags.join(", ")}</small></div></div></td><td>{file.folder}</td><td>{file.material}</td><td><StatusPill status={file.status} /></td><td>v{file.version}</td><td>{file.dimensions.join(" x ")} mm</td><td>{file.printTime}<small>{file.usage}g - ${file.cost} quote</small></td><td><button onClick={() => queueFile(file)}>Queue</button><button onClick={() => setView("slicer")}>Slice</button><button onClick={() => versionFile(file.id)}>New version</button><button onClick={() => download(file)}><Download size={14} /></button><button onClick={() => remove(file)}><Trash2 size={14} /></button></td></tr>)}
+        {visible.map((file) => <tr key={file.id}><td><div className="model-cell"><span className="model-thumb">{file.thumbnail.slice(0, 2).toUpperCase()}</span><div><b>{file.name}</b><small>{file.type} - {file.size} - {file.tags.join(", ")}</small></div></div></td><td>{file.folder}</td><td>{file.material}</td><td><StatusPill status={file.status} /></td><td>v{file.version}</td><td>{file.dimensions.join(" x ")} mm</td><td>{file.printTime}<small>{file.usage}g - ${file.cost} quote</small></td><td><button onClick={() => openPreview(file)}>{previewLoading === file.id ? "Loading" : "Preview"}</button><button onClick={() => queueFile(file)}>Queue</button><button onClick={() => setView("slicer")}>Slice</button><button onClick={() => versionFile(file.id)}>New version</button><button onClick={() => download(file)}><Download size={14} /></button><button onClick={() => remove(file)}><Trash2 size={14} /></button></td></tr>)}
       </DataTable>
+      {preview && <FilePreviewDrawer preview={preview} onClose={() => setPreview(null)} />}
     </Page>
+  );
+}
+
+function FilePreviewDrawer({ preview, onClose }: { preview: FilePreview; onClose: () => void }) {
+  const sample = preview.visualization.sample || [];
+  const maxX = Math.max(1, preview.buildPlate.width, preview.visualization.extents.max[0] || preview.summary.dimensions[0]);
+  const maxY = Math.max(1, preview.buildPlate.depth, preview.visualization.extents.max[1] || preview.summary.dimensions[1]);
+  const points = sample.slice(0, 160).map((point, index) => {
+    const left = Math.max(0, Math.min(100, (point.x / maxX) * 100));
+    const top = Math.max(0, Math.min(100, (point.y / maxY) * 100));
+    return <i key={`${point.x}-${point.y}-${point.z}-${index}`} style={{ left: `${left}%`, top: `${top}%`, opacity: point.extrusion ? 0.88 : 0.35 }} />;
+  });
+  const boxWidth = Math.max(4, Math.min(100, (preview.summary.dimensions[0] / preview.buildPlate.width) * 100));
+  const boxDepth = Math.max(4, Math.min(100, (preview.summary.dimensions[1] / preview.buildPlate.depth) * 100));
+  const layers = preview.visualization.layers || [];
+  return (
+    <div className="drawer-backdrop" onClick={onClose}>
+      <aside className="drawer file-preview-drawer" onClick={(event) => event.stopPropagation()}>
+        <button className="icon close" onClick={onClose}><X size={18} /></button>
+        <h2>{preview.name}</h2>
+        <p>{preview.type} - {preview.material} - generated {new Date(preview.generatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>
+        <div className="metric-grid">
+          <Metric label="Dimensions" value={`${preview.summary.dimensions.join(" x ")} mm`} icon={Box} />
+          <Metric label="Estimate" value={preview.summary.printTime} icon={CalendarClock} tone="teal" />
+          <Metric label="Material" value={`${preview.summary.estimateGrams}g`} icon={Database} tone="orange" />
+          <Metric label="Plate use" value={`${preview.buildPlate.occupancyPercent}%`} icon={Gauge} tone={preview.buildPlate.occupancyPercent > 100 ? "red" : "green"} />
+        </div>
+        <section className="preview-plate">
+          <div className="plate-canvas">
+            <span className="model-footprint" style={{ width: `${boxWidth}%`, height: `${boxDepth}%` }} />
+            {points}
+          </div>
+          <small>{preview.buildPlate.fit} - {preview.buildPlate.width} x {preview.buildPlate.depth} x {preview.buildPlate.height} mm reference</small>
+        </section>
+        {preview.visualization.kind === "toolpath" && <section className="panel flat-panel">
+          <PanelTitle title="G-code toolpath" />
+          <div className="preview-stats">
+            <span>{preview.visualization.lineCount || 0} lines</span>
+            <span>{preview.visualization.motionCommands || 0} moves</span>
+            <span>{preview.visualization.extrusionMoves || 0} extrusion moves</span>
+            <span>{preview.visualization.totalExtrusion || 0} E</span>
+          </div>
+          <div className="layer-bars">
+            {layers.slice(0, 32).map((layer) => <span key={layer.z} title={`Z${layer.z} - ${layer.moves} moves`} style={{ height: `${Math.max(8, Math.min(100, layer.moves * 2))}%` }} />)}
+          </div>
+        </section>}
+        <section className="panel flat-panel">
+          <PanelTitle title="Compatible printers" />
+          <div className="event-feed">
+            {preview.compatiblePrinters.map((printer) => <div key={printer.id}><StatusDot status={printer.status} /><span>{printer.name}<small>{printer.buildVolume.join(" x ")} mm</small></span><em>{printer.status}</em></div>)}
+            {!preview.compatiblePrinters.length && <div><StatusDot status="failed" /><span>No matching printer</span><em>Check material and build volume</em></div>}
+          </div>
+        </section>
+        {preview.warnings.length > 0 && <div className="notice warning"><AlertTriangle size={18} /><span>{preview.warnings.join(" ")}</span></div>}
+      </aside>
+    </div>
   );
 }
 

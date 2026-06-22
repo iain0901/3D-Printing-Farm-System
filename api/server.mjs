@@ -2207,6 +2207,136 @@ async function statStoredObject(file) {
   return 0;
 }
 
+function parseAxisValue(line, axis) {
+  const match = line.match(new RegExp(`\\b${axis}([-+\\d.]+)`, "i"));
+  if (!match) return null;
+  const value = Number(match[1]);
+  return Number.isFinite(value) ? value : null;
+}
+
+function buildGcodePreview(buffer) {
+  const text = buffer.toString("utf8");
+  const lines = text.split(/\r?\n/);
+  const position = { x: 0, y: 0, z: 0, e: 0 };
+  const bounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity, minZ: Infinity, maxZ: -Infinity };
+  const layers = new Map();
+  const sample = [];
+  let motionCommands = 0;
+  let extrusionMoves = 0;
+  let travelMoves = 0;
+  let totalExtrusion = 0;
+  for (const rawLine of lines) {
+    const line = rawLine.split(";")[0].trim();
+    if (!/^(G0|G1)\b/i.test(line)) continue;
+    const next = { ...position };
+    const x = parseAxisValue(line, "X");
+    const y = parseAxisValue(line, "Y");
+    const z = parseAxisValue(line, "Z");
+    const e = parseAxisValue(line, "E");
+    if (x !== null) next.x = x;
+    if (y !== null) next.y = y;
+    if (z !== null) next.z = z;
+    if (e !== null) next.e = e;
+    if (x === null && y === null && z === null && e === null) continue;
+    motionCommands += 1;
+    const extrusion = Math.max(0, next.e - position.e);
+    totalExtrusion += extrusion;
+    if (extrusion > 0) extrusionMoves += 1;
+    else travelMoves += 1;
+    bounds.minX = Math.min(bounds.minX, next.x);
+    bounds.maxX = Math.max(bounds.maxX, next.x);
+    bounds.minY = Math.min(bounds.minY, next.y);
+    bounds.maxY = Math.max(bounds.maxY, next.y);
+    bounds.minZ = Math.min(bounds.minZ, next.z);
+    bounds.maxZ = Math.max(bounds.maxZ, next.z);
+    const layerKey = next.z.toFixed(2);
+    const layer = layers.get(layerKey) || { z: Number(layerKey), moves: 0, extrusion: 0 };
+    layer.moves += 1;
+    layer.extrusion += extrusion;
+    layers.set(layerKey, layer);
+    if (sample.length < 420 && (extrusion > 0 || sample.length % 4 === 0)) {
+      sample.push({ x: Math.round(next.x * 100) / 100, y: Math.round(next.y * 100) / 100, z: Math.round(next.z * 100) / 100, extrusion: Math.round(extrusion * 1000) / 1000 });
+    }
+    Object.assign(position, next);
+  }
+  const hasBounds = Number.isFinite(bounds.minX) && Number.isFinite(bounds.maxX);
+  const extents = hasBounds
+    ? {
+        min: [bounds.minX, bounds.minY, bounds.minZ].map((value) => Math.round(value * 100) / 100),
+        max: [bounds.maxX, bounds.maxY, bounds.maxZ].map((value) => Math.round(value * 100) / 100)
+      }
+    : { min: [0, 0, 0], max: [0, 0, 0] };
+  return {
+    kind: "toolpath",
+    lineCount: lines.length,
+    motionCommands,
+    extrusionMoves,
+    travelMoves,
+    totalExtrusion: Math.round(totalExtrusion * 1000) / 1000,
+    layers: [...layers.values()].sort((a, b) => a.z - b.z).map((layer) => ({ ...layer, extrusion: Math.round(layer.extrusion * 1000) / 1000 })).slice(0, 240),
+    sample,
+    extents
+  };
+}
+
+async function buildFilePreview(file, buffer, data) {
+  const metadata = buffer ? await parseModelMetadata({ buffer, filename: file.name, material: file.material }) : null;
+  const dimensions = metadata?.dimensions || file.dimensions || [100, 100, 50];
+  const [width, depth, height] = dimensions.map((value) => Number(value) || 0);
+  const plate = { width: 256, depth: 256, height: 256 };
+  const occupancyPercent = Math.min(999, Math.round((width * depth) / (plate.width * plate.depth) * 100));
+  const warnings = [];
+  if (!buffer) warnings.push("Stored bytes are unavailable; preview is based on recorded metadata only.");
+  if (width > plate.width || depth > plate.depth || height > plate.height) warnings.push("Model exceeds the default 256 x 256 x 256 mm preview plate.");
+  if (file.type !== "GCODE" && !file.sliced) warnings.push("Model is not sliced yet; run a slicer profile before production.");
+  const visualization = file.type === "GCODE" && buffer
+    ? buildGcodePreview(buffer)
+    : {
+        kind: "bounding-box",
+        extents: { min: [0, 0, 0], max: dimensions },
+        vertices: [
+          [0, 0, 0],
+          [width, 0, 0],
+          [width, depth, 0],
+          [0, depth, 0],
+          [0, 0, height],
+          [width, 0, height],
+          [width, depth, height],
+          [0, depth, height]
+        ]
+      };
+  const compatiblePrinters = (data.printers || []).filter((printer) => {
+    const volume = printer.buildVolume || [0, 0, 0];
+    return volume[0] >= width && volume[1] >= depth && volume[2] >= height && (!file.material || (printer.compatibleMaterials || []).includes(file.material));
+  }).map((printer) => ({ id: printer.id, name: printer.name, status: printer.status, buildVolume: printer.buildVolume }));
+  if (!compatiblePrinters.length) warnings.push("No current printer matches both material and build-volume requirements.");
+  return {
+    fileId: file.id,
+    generatedAt: new Date().toISOString(),
+    name: file.name,
+    type: file.type,
+    material: file.material,
+    summary: {
+      dimensions,
+      size: file.size,
+      estimateGrams: metadata?.estimateGrams || file.estimateGrams || file.usage || 0,
+      estimateMinutes: metadata?.estimateMinutes || file.estimateMinutes || 0,
+      printTime: metadata?.printTime || file.printTime || "0h 00m",
+      quote: file.quote || file.cost || 0,
+      sliced: Boolean(file.sliced),
+      status: file.status
+    },
+    buildPlate: {
+      ...plate,
+      occupancyPercent,
+      fit: width <= plate.width && depth <= plate.depth && height <= plate.height ? "fits default plate" : "oversize on default plate"
+    },
+    visualization,
+    compatiblePrinters,
+    warnings
+  };
+}
+
 function triangleNormal(a, b, c) {
   const ux = b[0] - a[0];
   const uy = b[1] - a[1];
@@ -5304,6 +5434,20 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     reply.header("content-disposition", `attachment; filename="${path.basename(file.name, path.extname(file.name)) || file.id}.layerpilot.json"`);
     reply.type("application/json");
     return JSON.stringify({ exportedAt: new Date().toISOString(), file }, null, 2);
+  });
+
+  app.get("/api/files/:id/preview", async (request, reply) => {
+    const file = database.data.files.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
+    if (!file) return reply.code(404).send({ error: "File not found" });
+    let buffer = null;
+    if (file.storagePath || file.storageKey) {
+      try {
+        buffer = await readStoredObject(file);
+      } catch {
+        buffer = null;
+      }
+    }
+    return buildFilePreview(file, buffer, workspaceScopeForUser(database.data, request.user));
   });
 
   app.delete("/api/files/:id", async (request, reply) => {

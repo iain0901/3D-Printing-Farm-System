@@ -1361,6 +1361,46 @@ endsolid delete_me`;
     });
   });
 
+  it("builds safe file previews with G-code toolpath summaries", async () => {
+    await withApp(async ({ app }) => {
+      const token = await login(app);
+      const boundary = "layerpilot-preview-boundary";
+      const gcode = [
+        ";TIME:5400",
+        "G1 X0 Y0 Z0.2 E0",
+        "G1 X20 Y0 E1.2",
+        "G1 X20 Y20 E2.4",
+        "G1 X0 Y20 E3.6",
+        "G1 X0 Y0 E4.8",
+        "G1 Z0.4",
+        "G1 X25 Y25 E5.8",
+        "; customer secret note should not be copied as source"
+      ].join("\n");
+      const uploaded = await app.inject({
+        method: "POST",
+        url: "/api/files/upload",
+        headers: { ...auth(token), "content-type": `multipart/form-data; boundary=${boundary}` },
+        payload: multipartPayload({ boundary, filename: "preview-job.gcode", content: gcode, fields: { material: "PLA", folder: "Production" } })
+      });
+      expect(uploaded.statusCode).toBe(201);
+
+      const preview = await app.inject({ method: "GET", url: `/api/files/${uploaded.json().id}/preview`, headers: auth(token) });
+      expect(preview.statusCode).toBe(200);
+      expect(preview.json()).toMatchObject({
+        type: "GCODE",
+        summary: expect.objectContaining({ printTime: "1h 30m", sliced: true }),
+        visualization: expect.objectContaining({
+          kind: "toolpath",
+          lineCount: expect.any(Number),
+          extrusionMoves: expect.any(Number),
+          sample: expect.arrayContaining([expect.objectContaining({ x: expect.any(Number), y: expect.any(Number), z: expect.any(Number) })])
+        })
+      });
+      expect(preview.json().visualization.layers.length).toBeGreaterThan(0);
+      expect(JSON.stringify(preview.json())).not.toContain("customer secret note");
+    });
+  });
+
   it("stores uploaded files in an S3-compatible object store when configured", async () => {
     const objectStorageAdapter = createFakeS3Storage();
     await withApp(async ({ app, dbPath }) => {
