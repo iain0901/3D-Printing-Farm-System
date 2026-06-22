@@ -29,6 +29,7 @@
 - v0.1.7: Go-live readiness adds an operator/admin checklist, automatic readiness signals, manual completion tracking, and a redacted 3DSTU support snapshot export for production support without exposing secrets.
 - v0.1.8: Printer bridge diagnostics now validate URL shape, adapter support, credential presence, endpoint response, latency, safe status snapshots, and operator-facing remediation guidance for OctoPrint, Moonraker, and manual bridge setups.
 - v0.1.9: File previews add a safe backend preview endpoint, G-code toolpath/layer summaries, build-plate occupancy, compatible-printer matching, warning surfacing, and an operator drawer in the file library.
+- v0.1.10: Production templates add reusable file/SKU recipes, dry-run queue creation, one-click job generation, integrity checks for linked files and printers, support snapshot counts, and a global version footer across every app page.
 
 ## Definition Of Done For A Real Release
 

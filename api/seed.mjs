@@ -122,6 +122,9 @@ export const seedData = {
     { id: "sku-1", sku: "DUCT-KIT-BLK", title: "Aero Duct Kit", parts: ["Aero duct assembly"], price: 680, stock: 14, channel: "Shopify" },
     { id: "sku-2", sku: "CAM-MOUNT-ORG", title: "Camera Mount Pack", parts: ["Camera mount kit"], price: 420, stock: 8, channel: "Etsy" }
   ],
+  productionTemplates: [
+    { id: "pt-1", name: "Aero duct replenishment", sku: "DUCT-KIT-BLK", fileId: "f1", material: "PLA", color: "Black", priority: "Normal", stage: "needs scheduling", printerId: "p1", process: "0.20mm Production", dueOffsetDays: 2, quantity: 2, time: "3h 18m", cost: 72, notes: "Standard replenishment batch", runCount: 0 }
+  ],
   orders: [
     { id: "ord-1048", source: "Shopify", customer: "M. Rivera", items: ["DUCT-KIT-BLK x2"], status: "queued", due: "Jun 14", value: 1360 },
     { id: "ord-1049", source: "Etsy", customer: "A. Wood", items: ["CAM-MOUNT-ORG x1"], status: "received", due: "Jun 15", value: 420 }

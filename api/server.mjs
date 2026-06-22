@@ -25,7 +25,7 @@ import { seedData } from "./seed.mjs";
 
 const execFileAsync = promisify(execFile);
 
-const COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "orders", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns"];
+const COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "orders", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns"];
 const RESTORABLE_EXTRA_KEYS = ["users", "workspaces", "workspaceSettings", "costCatalog", "profileDefaults", "profileMatchingPolicy", "billingSessions", "invoices", "dataMeta"];
 const RESTORABLE_KEYS = [...COLLECTIONS, ...RESTORABLE_EXTRA_KEYS];
 const defaultCostCatalog = {
@@ -57,7 +57,7 @@ const defaultAuthRateLimit = { max: 8, timeWindow: "1 minute", groupId: "auth" }
 const defaultSensitiveRateLimit = { max: 30, timeWindow: "1 minute" };
 const CURRENT_SCHEMA_VERSION = 4;
 const DEFAULT_WORKSPACE_ID = "ws-default";
-const TENANT_COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "orders", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns", "billingSessions", "invoices"];
+const TENANT_COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "orders", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns", "billingSessions", "invoices"];
 const printerStatusSchema = z.enum(["idle", "printing", "paused", "offline", "error", "maintenance"]);
 const jobStatusSchema = z.enum(["queued", "printing", "paused", "complete", "failed", "cancelled"]);
 const prioritySchema = z.enum(["Rush", "High", "Normal", "Low"]);
@@ -338,6 +338,29 @@ const skuPatchSchema = z.object({
   stock: z.number().int().nonnegative().optional(),
   channel: z.string().min(1).optional()
 });
+const productionTemplateSchema = z.object({
+  name: z.string().min(1),
+  sku: z.string().optional().default(""),
+  fileId: z.string().min(1),
+  material: z.string().min(1),
+  color: z.string().min(1).default("Any"),
+  priority: prioritySchema.default("Normal"),
+  stage: taskStageSchema.default("needs scheduling"),
+  printerId: z.string().optional().default(""),
+  process: z.string().min(1).default("0.20mm Production"),
+  dueOffsetDays: z.number().int().min(0).max(365).default(2),
+  quantity: z.number().int().positive().max(500).default(1),
+  time: z.string().min(1).default("1h 00m"),
+  cost: z.number().nonnegative().default(0),
+  notes: z.string().max(1000).optional().default("")
+});
+const productionTemplatePatchSchema = productionTemplateSchema.partial();
+const productionTemplateRunSchema = z.object({
+  quantity: z.number().int().positive().max(500).optional(),
+  due: z.string().min(1).optional(),
+  printerId: z.string().min(1).optional(),
+  dryRun: z.boolean().default(false)
+}).default({});
 const orderJobGenerationSchema = z.object({
   dryRun: z.boolean().default(false),
   allowDuplicate: z.boolean().default(false)
@@ -891,6 +914,10 @@ async function buildDataIntegrityReport(data, options = {}) {
       if (!partNames.has(String(partName).toLowerCase())) warnings.push({ code: "sku.part_missing", message: `${sku.sku || sku.id} references missing part ${partName}` });
     }
   }
+  for (const template of data.productionTemplates || []) {
+    if (template.fileId && !fileIds.has(template.fileId)) warnings.push({ code: "production_template.file_missing", message: `${template.name || template.id} references missing file ${template.fileId}` });
+    if (template.printerId && !printerIds.has(template.printerId)) warnings.push({ code: "production_template.printer_missing", message: `${template.name || template.id} references missing printer ${template.printerId}` });
+  }
   for (const bridge of data.bridges || []) {
     if (bridge.printerId && !printerIds.has(bridge.printerId)) warnings.push({ code: "bridge.printer_missing", message: `${bridge.name || bridge.id} references missing printer ${bridge.printerId}` });
   }
@@ -1019,6 +1046,7 @@ async function ensureAuthData(database, options = {}) {
   database.data.todoActions ||= [];
   database.data.maintenanceTemplates ||= [];
   database.data.maintenanceReports ||= [];
+  database.data.productionTemplates ||= [];
   database.data.webhooks ||= [];
   database.data.webhookDeliveries ||= [];
   database.data.notificationChannels ||= [];
@@ -1120,6 +1148,19 @@ async function ensureAuthData(database, options = {}) {
     sku.price = Number(sku.price || 0);
     sku.stock = Number(sku.stock || 0);
     sku.channel ||= "Manual";
+  }
+  for (const template of database.data.productionTemplates || []) {
+    template.sku ||= "";
+    template.color ||= "Any";
+    template.priority = prioritySchema.safeParse(template.priority).success ? template.priority : "Normal";
+    template.stage = taskStageSchema.safeParse(template.stage).success ? template.stage : "needs scheduling";
+    template.printerId ||= "";
+    template.process ||= "0.20mm Production";
+    template.dueOffsetDays = Number.isFinite(Number(template.dueOffsetDays)) ? Number(template.dueOffsetDays) : 2;
+    template.quantity = Math.max(1, Number(template.quantity || 1));
+    template.time ||= "1h 00m";
+    template.cost = Number(template.cost || 0);
+    template.notes ||= "";
   }
   for (const webhook of database.data.webhooks || []) {
     webhook.name ||= "Webhook";
@@ -3313,6 +3354,64 @@ function createJobFromPart({ order, sku, part, file, printer, copyIndex }) {
   };
 }
 
+function dueFromOffset(days = 2) {
+  const date = new Date(Date.now() + Number(days || 0) * 24 * 60 * 60 * 1000);
+  return date.toISOString().slice(0, 10);
+}
+
+function createJobsFromProductionTemplate(data, templateId, options = {}) {
+  const normalized = productionTemplateRunSchema.parse(options || {});
+  const template = (data.productionTemplates || []).find((item) => item.id === templateId);
+  if (!template) return { error: "Production template not found", statusCode: 404 };
+  if (options.workspaceId && !itemInWorkspace(template, options.workspaceId)) return { error: "Production template not found", statusCode: 404 };
+  const workspaceId = template.workspaceId || DEFAULT_WORKSPACE_ID;
+  const workspaceData = scopedWorkspaceData(data, workspaceId);
+  const file = workspaceData.files.find((item) => item.id === template.fileId);
+  if (!file) return { error: "Template linked file not found", statusCode: 404 };
+  const printer = normalized.printerId
+    ? workspaceData.printers.find((item) => item.id === normalized.printerId)
+    : template.printerId
+      ? workspaceData.printers.find((item) => item.id === template.printerId)
+      : workspaceData.printers.find((item) => item.status === "idle") || workspaceData.printers.find((item) => item.status !== "offline" && item.status !== "maintenance") || workspaceData.printers[0];
+  if (!printer) return { error: "Printer not found", statusCode: 404 };
+  const quantity = normalized.quantity || template.quantity || 1;
+  const due = normalized.due || dueFromOffset(template.dueOffsetDays);
+  const jobs = Array.from({ length: quantity }, (_, index) => {
+    const job = {
+      id: randomUUID(),
+      workspaceId,
+      fileId: file.id,
+      file: `${template.name}${quantity > 1 ? ` #${index + 1}` : ""}`,
+      printerId: printer.id,
+      printer: printer.name,
+      status: "queued",
+      priority: template.priority || "Normal",
+      stage: template.stage || (file.sliced ? "needs scheduling" : "needs slicing"),
+      material: template.material || file.material || "PLA",
+      color: template.color || "Any",
+      due,
+      dimensions: file.dimensions || [100, 100, 50],
+      assignee: "Scheduler",
+      time: template.time || file.printTime || "1h 00m",
+      cost: Number(template.cost || file.cost || 0),
+      added: `Template: ${template.name}`,
+      sourceTemplateId: template.id,
+      sourceSku: template.sku || "",
+      process: template.process || ""
+    };
+    job.scheduleWarnings = getScheduleWarnings(workspaceData, job, printer);
+    return job;
+  });
+  if (!normalized.dryRun) {
+    data.queue.push(...jobs);
+    template.lastRunAt = new Date().toISOString();
+    template.runCount = Number(template.runCount || 0) + jobs.length;
+    template.updatedAt = template.lastRunAt;
+  }
+  const nextWorkspaceData = scopedWorkspaceData(data, workspaceId);
+  return { template: { ...template }, jobs, dryRun: normalized.dryRun, queue: nextWorkspaceData.queue, todos: deriveTodos(nextWorkspaceData) };
+}
+
 export function generateJobsForOrder(data, orderId, options = {}) {
   const normalized = orderJobGenerationSchema.parse(options);
   const order = data.orders.find((item) => item.id === orderId);
@@ -4064,6 +4163,7 @@ async function buildSupportSnapshot(data, user) {
       files: scoped.files.length,
       queue: scoped.queue.length,
       spools: scoped.spools.length,
+      productionTemplates: scoped.productionTemplates.length,
       orders: scoped.orders.length,
       webhooks: scoped.webhooks.length,
       apiKeys: scoped.apiKeys.length
@@ -5667,6 +5767,49 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     database.data.events.unshift({ id: randomUUID(), type: "part.updated", message: part.name, at: part.updatedAt });
     await database.write();
     return part;
+  });
+
+  app.post("/api/productionTemplates", async (request, reply) => {
+    if (!hasPermission(request.user, "catalog:write")) return reply.code(403).send({ error: "Missing permission: catalog:write" });
+    const parsed = productionTemplateSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid production template payload", issues: parsed.error.issues });
+    const file = database.data.files.find((item) => item.id === parsed.data.fileId && itemInWorkspace(item, request.user.workspaceId));
+    if (!file) return reply.code(404).send({ error: "Linked file not found" });
+    if (parsed.data.printerId && !database.data.printers.some((item) => item.id === parsed.data.printerId && itemInWorkspace(item, request.user.workspaceId))) return reply.code(404).send({ error: "Printer not found" });
+    const duplicate = database.data.productionTemplates.some((item) => itemInWorkspace(item, request.user.workspaceId) && item.name.toLowerCase() === parsed.data.name.toLowerCase());
+    if (duplicate) return reply.code(409).send({ error: "Production template already exists" });
+    const template = { id: randomUUID(), workspaceId: request.user.workspaceId, ...parsed.data, runCount: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    database.data.productionTemplates.unshift(template);
+    await dispatchEvent(database, "production_template.created", `${template.name} template saved`, { templateId: template.id, fileId: template.fileId, sku: template.sku });
+    await database.write();
+    return reply.code(201).send(template);
+  });
+
+  app.patch("/api/productionTemplates/:id", async (request, reply) => {
+    if (!hasPermission(request.user, "catalog:write")) return reply.code(403).send({ error: "Missing permission: catalog:write" });
+    const parsed = productionTemplatePatchSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid production template update", issues: parsed.error.issues });
+    if (parsed.data.fileId && !database.data.files.some((item) => item.id === parsed.data.fileId && itemInWorkspace(item, request.user.workspaceId))) return reply.code(404).send({ error: "Linked file not found" });
+    if (parsed.data.printerId && !database.data.printers.some((item) => item.id === parsed.data.printerId && itemInWorkspace(item, request.user.workspaceId))) return reply.code(404).send({ error: "Printer not found" });
+    const template = database.data.productionTemplates.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
+    if (!template) return reply.code(404).send({ error: "Production template not found" });
+    Object.assign(template, parsed.data, { updatedAt: new Date().toISOString() });
+    await dispatchEvent(database, "production_template.updated", `${template.name} template updated`, { templateId: template.id });
+    await database.write();
+    return template;
+  });
+
+  app.post("/api/productionTemplates/:id/run", async (request, reply) => {
+    if (!hasPermission(request.user, "catalog:write") || !hasPermission(request.user, "queue:write")) return reply.code(403).send({ error: "Missing permission: catalog:write and queue:write" });
+    const parsed = productionTemplateRunSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid production template run payload", issues: parsed.error.issues });
+    const result = createJobsFromProductionTemplate(database.data, request.params.id, { ...parsed.data, workspaceId: request.user.workspaceId });
+    if (result.error) return reply.code(result.statusCode || 400).send({ error: result.error });
+    if (!result.dryRun) {
+      await dispatchEvent(database, "production_template.run", `${result.jobs.length} jobs created from ${result.template.name}`, { templateId: result.template.id, jobs: result.jobs.map((job) => job.id) });
+      await database.write();
+    }
+    return result;
   });
 
   app.post("/api/profiles", async (request, reply) => {

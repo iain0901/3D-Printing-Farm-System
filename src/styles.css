@@ -525,7 +525,9 @@ code {
 
 .page {
   display: grid;
+  flex: 1;
   gap: 18px;
+  grid-auto-rows: max-content;
   padding: 28px;
 }
 
@@ -1059,6 +1061,66 @@ tr.dragging {
   color: var(--muted);
   font-size: 13px;
   font-style: normal;
+}
+
+.template-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.template-card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.template-card h3 {
+  font-size: 20px;
+  letter-spacing: 0;
+  margin: 4px 0;
+}
+
+.template-card p,
+.template-card small,
+.template-card span {
+  color: var(--muted);
+}
+
+.template-card > div:first-child > span {
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.template-meta {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.template-meta span {
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 12px;
+  padding: 8px 10px;
+}
+
+.template-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.template-actions button {
+  flex: 1 1 120px;
+  justify-content: center;
 }
 
 .spool-card,

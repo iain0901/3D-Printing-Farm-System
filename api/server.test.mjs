@@ -1941,6 +1941,34 @@ endsolid s3_store`;
     });
   });
 
+  it("creates reusable production templates and runs them into queue jobs", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/productionTemplates",
+        headers: auth(token),
+        payload: { name: "QC replenishment recipe", sku: "QC-BRACKET", fileId: "f1", material: "PLA", color: "Black", priority: "High", printerId: "p1", dueOffsetDays: 3, quantity: 2, time: "2h 15m", cost: 44, notes: "Run before weekend pickup" }
+      });
+      expect(created.statusCode).toBe(201);
+      expect(created.json()).toMatchObject({ name: "QC replenishment recipe", fileId: "f1", quantity: 2, runCount: 0 });
+
+      const dryRun = await app.inject({ method: "POST", url: `/api/productionTemplates/${created.json().id}/run`, headers: auth(token), payload: { dryRun: true, quantity: 1 } });
+      expect(dryRun.statusCode).toBe(200);
+      expect(dryRun.json()).toMatchObject({ dryRun: true, jobs: [expect.objectContaining({ sourceTemplateId: created.json().id, fileId: "f1", priority: "High" })] });
+
+      const committed = await app.inject({ method: "POST", url: `/api/productionTemplates/${created.json().id}/run`, headers: auth(token), payload: { quantity: 3, due: "2026-07-01" } });
+      expect(committed.statusCode).toBe(200);
+      expect(committed.json().jobs).toHaveLength(3);
+      expect(committed.json().jobs[0]).toMatchObject({ sourceTemplateId: created.json().id, due: "2026-07-01", added: "Template: QC replenishment recipe" });
+      expect(committed.json().queue.filter((job) => job.sourceTemplateId === created.json().id)).toHaveLength(3);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.productionTemplates.find((item) => item.id === created.json().id)).toMatchObject({ runCount: 3 });
+      expect(persisted.events.some((event) => event.type === "production_template.run")).toBe(true);
+    });
+  });
+
   it("generates stored parametric nameplate STL files and linked parts", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);

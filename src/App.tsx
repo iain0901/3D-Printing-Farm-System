@@ -225,6 +225,8 @@ type Bridge = { id: string; printerId: string; kind: "octoprint" | "moonraker" |
 type Toast = { id: string; message: string; type: "success" | "info" | "warning" };
 type Part = { id: string; name: string; fileId: string; material: string; process: string; plates: number; variants: string[]; status: "ready" | "needs profile" | "draft" };
 type SKU = { id: string; sku: string; title: string; parts: string[]; variants: string[]; price: number; stock: number; channel: string };
+type ProductionTemplate = { id: string; name: string; sku?: string; fileId: string; material: string; color: string; priority: QueueItem["priority"]; stage: TaskStage; printerId?: string; process: string; dueOffsetDays: number; quantity: number; time: string; cost: number; notes?: string; runCount?: number; lastRunAt?: string; createdAt?: string; updatedAt?: string };
+type ProductionTemplateRunResult = { template: ProductionTemplate; jobs: QueueItem[]; dryRun: boolean; queue: QueueItem[]; todos: Todo[] };
 type Order = { id: string; source: "Shopify" | "Etsy" | "Manual" | "eBay"; externalId?: string; customer: string; items: string[]; status: "received" | "queued" | "printing" | "packed" | "shipped"; due: string; value: number };
 type OrderJobGenerationResult = { order: Order; jobs: QueueItem[]; existingJobs?: QueueItem[]; missing?: Array<{ item: string; reason: string }>; skus?: SKU[]; todos?: Todo[]; dryRun?: boolean; duplicateBlocked?: boolean; stockChanges?: Array<{ sku: string; before: number; after: number; quantity: number }> };
 type CommerceConnector = { id: string; name: string; source: Order["source"] | "Generic"; url: string; enabled: boolean; hasToken?: boolean; lastStatus?: string; lastStatusCode?: number; lastError?: string; lastSyncAt?: string };
@@ -560,6 +562,9 @@ const zhTwTranslations: Record<string, string> = {
   "Dry run": "試算",
   "Due window hours": "交期視窗小時數",
   "Due-risk solve": "交期風險求解",
+  "Checking": "檢查中",
+  "Create jobs": "建立任務",
+  "Creating": "建立中",
   "Duplicate generation blocked": "已阻擋重複生成",
   "Dynamic model parameters": "動態模型參數",
   "Email provider webhook": "Email 服務 Webhook",
@@ -894,6 +899,13 @@ const zhTwTranslations: Record<string, string> = {
   "Open GitHub": "開啟 GitHub",
   "Current version": "目前版本",
   "System version": "系統版本",
+  "Manual recipe": "手動配方",
+  "No production templates yet": "尚無生產範本",
+  "Save template": "儲存範本",
+  "Save a reusable recipe from the file library, then run it into the print queue whenever a customer or stock batch repeats.": "從檔案庫儲存可重複使用的配方，當客戶訂單或庫存批次重複時即可送入打印佇列。",
+  "Saving template": "儲存範本中",
+  "Templates": "範本",
+  "Upload a model file before saving a template": "儲存範本前請先上傳模型檔",
   "Public deployment": "公開部署",
   "Production domain": "正式網域",
   "Documentation and install path": "文檔與安裝路徑",
@@ -1424,6 +1436,7 @@ function App() {
   const [users, setUsers] = useState(teamSeed);
   const [parts, setParts] = useState(partSeed);
   const [skus, setSkus] = useState(skuSeed);
+  const [productionTemplates, setProductionTemplates] = useState<ProductionTemplate[]>([]);
   const [orders, setOrders] = useState(orderSeed);
   const [profiles, setProfiles] = useState(profileSeed);
   const [profileDefaults, setProfileDefaults] = useState<ProfileDefaults>({ Machine: "prof-1", Process: "prof-2", Filament: "" });
@@ -2063,6 +2076,63 @@ function App() {
       setSkus((items) => [...items, fallback]);
       setBackendStatus("local");
       return fallback;
+    }
+  };
+
+  const createProductionTemplate = async (draft: Omit<ProductionTemplate, "id">) => {
+    const fallback: ProductionTemplate = { ...draft, id: crypto.randomUUID(), runCount: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    try {
+      const created = await apiRequest<ProductionTemplate>("/api/productionTemplates", {
+        method: "POST",
+        body: JSON.stringify(draft)
+      });
+      setProductionTemplates((items) => [created, ...items.filter((item) => item.id !== created.id)]);
+      setBackendStatus("connected");
+      return created;
+    } catch {
+      setProductionTemplates((items) => [fallback, ...items]);
+      setBackendStatus("local");
+      return fallback;
+    }
+  };
+
+  const runProductionTemplate = async (template: ProductionTemplate, options: { quantity?: number; dryRun?: boolean } = {}) => {
+    try {
+      const result = await apiRequest<ProductionTemplateRunResult>(`/api/productionTemplates/${template.id}/run`, {
+        method: "POST",
+        body: JSON.stringify(options)
+      });
+      if (Array.isArray(result.queue)) setQueue(result.queue);
+      setProductionTemplates((items) => items.map((item) => item.id === result.template.id ? result.template : item));
+      setBackendStatus("connected");
+      return result;
+    } catch {
+      const jobs: QueueItem[] = Array.from({ length: options.quantity || template.quantity || 1 }, (_, index) => {
+        const file = files.find((item) => item.id === template.fileId);
+        return {
+          id: crypto.randomUUID(),
+          fileId: template.fileId,
+          file: `${template.name}${(options.quantity || template.quantity || 1) > 1 ? ` #${index + 1}` : ""}`,
+          printerId: template.printerId || "",
+          printer: template.printerId || "Unassigned",
+          status: "queued",
+          priority: template.priority,
+          stage: template.stage,
+          material: template.material || file?.material || "PLA",
+          color: template.color || "Any",
+          due: new Date(Date.now() + template.dueOffsetDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+          dimensions: file?.dimensions || [100, 100, 50],
+          assignee: "Scheduler",
+          time: template.time,
+          cost: template.cost,
+          added: `Template: ${template.name}`,
+          sourceTemplateId: template.id,
+          sourceSku: template.sku || ""
+        };
+      });
+      if (!options.dryRun) setQueue((items) => [...items, ...jobs]);
+      setBackendStatus("local");
+      return { template, jobs, dryRun: Boolean(options.dryRun), queue: options.dryRun ? queue : [...queue, ...jobs], todos };
     }
   };
 
@@ -2742,6 +2812,7 @@ function App() {
     if (Array.isArray(data.users)) setUsers(data.users as User[]);
     if (Array.isArray(data.parts)) setParts(data.parts as Part[]);
     if (Array.isArray(data.skus)) setSkus(data.skus as SKU[]);
+    if (Array.isArray(data.productionTemplates)) setProductionTemplates(data.productionTemplates as ProductionTemplate[]);
     if (Array.isArray(data.orders)) setOrders(data.orders as Order[]);
     if (Array.isArray(data.profiles)) setProfiles(data.profiles as Profile[]);
     if (data.profileDefaults && typeof data.profileDefaults === "object") setProfileDefaults(data.profileDefaults as ProfileDefaults);
@@ -2814,7 +2885,7 @@ function App() {
         <Topbar setMobileNav={setMobileNav} setView={setView} notifications={notifications.length} onLogout={logout} language={language} setLanguage={setLanguage} backendStatus={backendStatus} />
         {view === "dashboard" && <Dashboard metrics={metrics} printers={printers} queue={queue} setView={setView} setModal={setModal} onPrinter={setSelectedPrinter} />}
         {view === "printers" && <PrintersPage printers={printers} onPrinter={setSelectedPrinter} setModal={setModal} api={mockApi} />}
-        {view === "products" && <ProductsPage parts={parts} skus={skus} files={files} createPart={createPart} createSku={createSku} generateNameplate={generateNameplate} exportCatalog={exportCatalog} mapMaterials={mapMaterials} addToast={addToast} />}
+        {view === "products" && <ProductsPage parts={parts} skus={skus} productionTemplates={productionTemplates} files={files} createPart={createPart} createSku={createSku} createProductionTemplate={createProductionTemplate} runProductionTemplate={runProductionTemplate} generateNameplate={generateNameplate} exportCatalog={exportCatalog} mapMaterials={mapMaterials} addToast={addToast} />}
         {view === "orders" && <OrdersPage orders={orders} setOrders={setOrders} skus={skus} commerceConnectors={commerceConnectors} setCommerceConnectors={setCommerceConnectors} commerceImports={commerceImports} setCommerceImports={setCommerceImports} createOrder={createOrder} updateOrderStatus={updateOrderStatus} generateJobsForOrder={generateJobsForOrder} addToast={addToast} setBackendStatus={setBackendStatus} />}
         {view === "files" && <FilesPage files={files} folders={fileFolders} queueFile={mockApi.addQueueFromFile} setView={setView} addToast={addToast} createSampleFile={createSampleFile} createFileFolder={createFileFolder} uploadModelFile={uploadModelFile} versionFile={versionFile} downloadFile={downloadFile} deleteFile={deleteFile} />}
         {view === "queue" && <QueuePage queue={queue} setQueue={setQueue} printers={printers} addToast={addToast} scheduleJob={scheduleQueueJob} updateStatus={updateQueueStatus} updatePriority={updateQueuePriority} matchQueueJobs={matchQueueJobs} />}
@@ -3272,14 +3343,15 @@ function PrintersPage({ printers, onPrinter, setModal, api }: { printers: Printe
   );
 }
 
-function ProductsPage({ parts, skus, files, createPart, createSku, generateNameplate, exportCatalog, mapMaterials, addToast }: { parts: Part[]; skus: SKU[]; files: PrintFile[]; createPart: (part: Omit<Part, "id">) => Promise<Part>; createSku: (sku: Omit<SKU, "id">) => Promise<SKU>; generateNameplate: (draft: ParametricNameplateDraft) => Promise<ParametricNameplateResult>; exportCatalog: () => Promise<CatalogExportResult>; mapMaterials: () => Promise<MaterialMapResult>; addToast: (message: string, type?: Toast["type"]) => void }) {
-  const [tab, setTab] = useState<"parts" | "skus" | "builder">("parts");
+function ProductsPage({ parts, skus, productionTemplates, files, createPart, createSku, createProductionTemplate, runProductionTemplate, generateNameplate, exportCatalog, mapMaterials, addToast }: { parts: Part[]; skus: SKU[]; productionTemplates: ProductionTemplate[]; files: PrintFile[]; createPart: (part: Omit<Part, "id">) => Promise<Part>; createSku: (sku: Omit<SKU, "id">) => Promise<SKU>; createProductionTemplate: (template: Omit<ProductionTemplate, "id">) => Promise<ProductionTemplate>; runProductionTemplate: (template: ProductionTemplate, options?: { quantity?: number; dryRun?: boolean }) => Promise<ProductionTemplateRunResult>; generateNameplate: (draft: ParametricNameplateDraft) => Promise<ParametricNameplateResult>; exportCatalog: () => Promise<CatalogExportResult>; mapMaterials: () => Promise<MaterialMapResult>; addToast: (message: string, type?: Toast["type"]) => void }) {
+  const [tab, setTab] = useState<"parts" | "skus" | "templates" | "builder">("parts");
   const [nameplate, setNameplate] = useState<ParametricNameplateDraft>({ text: "3DSTU FarmFlow", width: 120, height: 42, thickness: 3, material: "PLA", feature: "keyholes", createPart: true });
   const [generated, setGenerated] = useState<ParametricNameplateResult | null>(null);
   const [generating, setGenerating] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [mapping, setMapping] = useState<MaterialMapResult | null>(null);
   const [mappingBusy, setMappingBusy] = useState(false);
+  const [templateBusy, setTemplateBusy] = useState("");
   const addPart = async () => {
     const file = files.find((item) => item.type !== "GCODE") || files[0];
     await createPart({ name: "Hot-swappable jig", fileId: file.id, material: "Any PLA", process: "0.20mm Production", plates: 1, variants: ["Text", "Color"], status: "draft" });
@@ -3310,11 +3382,42 @@ function ProductsPage({ parts, skus, files, createPart, createSku, generateNamep
     setMappingBusy(false);
     addToast(`${result.changed} material labels normalized`, result.unmapped ? "warning" : "success");
   };
+  const saveTemplate = async () => {
+    const file = files.find((item) => item.status === "approved" || item.sliced) || files[0];
+    if (!file) return addToast("Upload a model file before saving a template", "warning");
+    const sku = skus[0];
+    setTemplateBusy("save");
+    const created = await createProductionTemplate({
+      name: `${file.name.replace(/\.[^.]+$/, "")} production`,
+      sku: sku?.sku || "",
+      fileId: file.id,
+      material: file.material || "PLA",
+      color: "Any",
+      priority: "Normal",
+      stage: file.sliced ? "needs scheduling" : "needs slicing",
+      printerId: "",
+      process: "0.20mm Production",
+      dueOffsetDays: 2,
+      quantity: 1,
+      time: file.printTime || "1h 00m",
+      cost: file.cost || 0,
+      notes: "Reusable production recipe"
+    });
+    setTemplateBusy("");
+    addToast(`${created.name} saved as a production template`);
+  };
+  const runTemplate = async (template: ProductionTemplate, dryRun = false) => {
+    setTemplateBusy(`${dryRun ? "dry" : "run"}-${template.id}`);
+    const result = await runProductionTemplate(template, { dryRun, quantity: template.quantity });
+    setTemplateBusy("");
+    addToast(dryRun ? `${result.jobs.length} jobs checked from ${template.name}` : `${result.jobs.length} jobs added from ${template.name}`, dryRun ? "info" : "success");
+  };
   return (
     <Page title="Products" kicker="Parts, SKUs, variants, and parametric production">
       <div className="quickbar">
         <button className={tab === "parts" ? "selected" : ""} onClick={() => setTab("parts")}><Package size={16} />Parts</button>
         <button className={tab === "skus" ? "selected" : ""} onClick={() => setTab("skus")}><Tag size={16} />SKUs</button>
+        <button className={tab === "templates" ? "selected" : ""} onClick={() => setTab("templates")}><Archive size={16} />Templates</button>
         <button className={tab === "builder" ? "selected" : ""} onClick={() => setTab("builder")}><Wand2 size={16} />Parametric builder</button>
       </div>
       {tab === "parts" && (
@@ -3332,6 +3435,39 @@ function ProductsPage({ parts, skus, files, createPart, createSku, generateNamep
           <DataTable headers={["SKU", "Product", "Linked parts", "Variants", "Channel", "Stock", "Price"]}>
             {skus.map((sku) => <tr key={sku.id}><td><code>{sku.sku}</code></td><td><b>{sku.title}</b></td><td>{sku.parts.join(", ")}</td><td>{sku.variants.join(", ")}</td><td>{sku.channel}</td><td>{sku.stock}</td><td>${sku.price}</td></tr>)}
           </DataTable>
+        </>
+      )}
+      {tab === "templates" && (
+        <>
+          <div className="quickbar"><button className="primary" onClick={saveTemplate} disabled={templateBusy === "save"}><Save size={16} />{templateBusy === "save" ? "Saving template" : "Save template"}</button></div>
+          <div className="template-grid">
+            {productionTemplates.map((template) => {
+              const file = files.find((item) => item.id === template.fileId);
+              const busyRun = templateBusy === `run-${template.id}`;
+              const busyDry = templateBusy === `dry-${template.id}`;
+              return (
+                <article className="template-card" key={template.id}>
+                  <div>
+                    <span>{template.sku || "Manual recipe"}</span>
+                    <h3>{template.name}</h3>
+                    <p>{file?.name || template.fileId}</p>
+                  </div>
+                  <div className="template-meta">
+                    <span><b>{template.quantity}</b> jobs</span>
+                    <span>{template.material} / {template.color}</span>
+                    <span>Due +{template.dueOffsetDays}d</span>
+                    <span>{template.time}</span>
+                  </div>
+                  <div className="template-actions">
+                    <button onClick={() => runTemplate(template, true)} disabled={busyDry || busyRun}>{busyDry ? "Checking" : "Dry run"}</button>
+                    <button className="primary" onClick={() => runTemplate(template)} disabled={busyDry || busyRun}>{busyRun ? "Creating" : "Create jobs"}</button>
+                  </div>
+                  <small>{template.runCount || 0} jobs created{template.lastRunAt ? ` - last run ${template.lastRunAt.slice(0, 10)}` : ""}</small>
+                </article>
+              );
+            })}
+            {!productionTemplates.length && <section className="panel empty-state"><Archive size={26} /><h3>No production templates yet</h3><p>Save a reusable recipe from the file library, then run it into the print queue whenever a customer or stock batch repeats.</p></section>}
+          </div>
         </>
       )}
       {tab === "builder" && (
