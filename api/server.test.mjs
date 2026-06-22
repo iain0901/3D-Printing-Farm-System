@@ -1789,6 +1789,32 @@ endsolid s3_store`;
       expect(scanned.statusCode).toBe(200);
       expect(scanned.json()).toMatchObject({ matchedBy: "nfc", usageLogged: 20, spool: { id: spool.json().id, remaining: 405, location: "Printer Bay" } });
 
+      await app.inject({ method: "PATCH", url: `/api/spools/${spool.json().id}/usage`, headers: auth(token), payload: { grams: 260 } });
+      const reorderPlan = await app.inject({
+        method: "POST",
+        url: "/api/purchaseRequests/reorderPlan",
+        headers: auth(token),
+        payload: { thresholdGrams: 250, targetGrams: 1000, quantity: 2, supplier: "QC Supplier" }
+      });
+      expect(reorderPlan.statusCode).toBe(200);
+      expect(reorderPlan.json().created).toHaveLength(1);
+      expect(reorderPlan.json().created[0]).toMatchObject({ spoolId: spool.json().id, material: "PLA", quantity: 2, supplier: "QC Supplier", status: "open" });
+
+      const ordered = await app.inject({ method: "PATCH", url: `/api/purchaseRequests/${reorderPlan.json().created[0].id}`, headers: auth(token), payload: { status: "ordered" } });
+      expect(ordered.statusCode).toBe(200);
+      expect(ordered.json()).toMatchObject({ status: "ordered" });
+
+      const received = await app.inject({
+        method: "POST",
+        url: `/api/purchaseRequests/${ordered.json().id}/receive`,
+        headers: auth(token),
+        payload: { location: "Rack Receiving QC", nfcPrefix: "LP-QC-PLA" }
+      });
+      expect(received.statusCode).toBe(200);
+      expect(received.json().spools).toHaveLength(2);
+      expect(received.json().request).toMatchObject({ status: "received", receivedSpoolIds: received.json().spools.map((item) => item.id) });
+      expect(received.json().inventory.some((item) => item.purchaseRequestId === ordered.json().id && item.location === "Rack Receiving QC")).toBe(true);
+
       const maintenance = await app.inject({
         method: "POST",
         url: "/api/maintenance",
@@ -1834,9 +1860,10 @@ endsolid s3_store`;
       expect(shipped.json()).toMatchObject({ id: order.json().id, status: "shipped" });
 
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
-      expect(persisted.spools.find((item) => item.id === spool.json().id)).toMatchObject({ remaining: 405, dry: false, location: "Printer Bay" });
+      expect(persisted.spools.find((item) => item.id === spool.json().id)).toMatchObject({ remaining: 145, dry: false, location: "Printer Bay" });
       expect(persisted.events.some((event) => event.type === "spool.labels_generated")).toBe(true);
       expect(persisted.events.some((event) => event.type === "spool.scanned_usage")).toBe(true);
+      expect(persisted.events.some((event) => event.type === "purchase_request.received")).toBe(true);
       expect(persisted.maintenance.find((item) => item.id === maintenance.json().id)).toMatchObject({ status: "done" });
       expect(persisted.maintenanceTemplates.find((item) => item.id === template.json().template.id)).toMatchObject({ title: "QC motion service" });
       expect(persisted.maintenanceReports.find((item) => item.id === report.json().report.id)).toMatchObject({ linkedJobId: report.json().job.id });

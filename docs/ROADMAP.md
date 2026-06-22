@@ -30,6 +30,7 @@
 - v0.1.8: Printer bridge diagnostics now validate URL shape, adapter support, credential presence, endpoint response, latency, safe status snapshots, and operator-facing remediation guidance for OctoPrint, Moonraker, and manual bridge setups.
 - v0.1.9: File previews add a safe backend preview endpoint, G-code toolpath/layer summaries, build-plate occupancy, compatible-printer matching, warning surfacing, and an operator drawer in the file library.
 - v0.1.10: Production templates add reusable file/SKU recipes, dry-run queue creation, one-click job generation, integrity checks for linked files and printers, support snapshot counts, and a global version footer across every app page.
+- v0.1.11: Filament purchasing adds low-stock reorder planning, purchase request tracking, ordered/received states, receive-to-inventory spool creation, integrity checks, support snapshot counts, and operator controls on the filament page.
 
 ## Definition Of Done For A Real Release
 

@@ -25,7 +25,7 @@ import { seedData } from "./seed.mjs";
 
 const execFileAsync = promisify(execFile);
 
-const COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "orders", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns"];
+const COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "orders", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns"];
 const RESTORABLE_EXTRA_KEYS = ["users", "workspaces", "workspaceSettings", "costCatalog", "profileDefaults", "profileMatchingPolicy", "billingSessions", "invoices", "dataMeta"];
 const RESTORABLE_KEYS = [...COLLECTIONS, ...RESTORABLE_EXTRA_KEYS];
 const defaultCostCatalog = {
@@ -57,7 +57,7 @@ const defaultAuthRateLimit = { max: 8, timeWindow: "1 minute", groupId: "auth" }
 const defaultSensitiveRateLimit = { max: 30, timeWindow: "1 minute" };
 const CURRENT_SCHEMA_VERSION = 4;
 const DEFAULT_WORKSPACE_ID = "ws-default";
-const TENANT_COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "orders", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns", "billingSessions", "invoices"];
+const TENANT_COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "orders", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns", "billingSessions", "invoices"];
 const printerStatusSchema = z.enum(["idle", "printing", "paused", "offline", "error", "maintenance"]);
 const jobStatusSchema = z.enum(["queued", "printing", "paused", "complete", "failed", "cancelled"]);
 const prioritySchema = z.enum(["Rush", "High", "Normal", "Low"]);
@@ -178,6 +178,32 @@ const spoolScanSchema = z.object({
   grams: z.number().positive().optional(),
   location: z.string().min(1).optional()
 });
+const purchaseStatusSchema = z.enum(["open", "ordered", "received", "cancelled"]);
+const purchaseRequestSchema = z.object({
+  spoolId: z.string().min(1).optional().default(""),
+  material: z.string().min(1),
+  color: z.string().min(1).default("Any"),
+  brand: z.string().min(1).default("Generic"),
+  quantity: z.number().int().positive().max(100).default(1),
+  targetGrams: z.number().positive().max(10000).default(1000),
+  supplier: z.string().min(1).default("Preferred supplier"),
+  priority: severitySchema.default("Medium"),
+  status: purchaseStatusSchema.default("open"),
+  due: z.string().min(1).default("This week"),
+  note: z.string().max(1000).optional().default("")
+});
+const purchaseRequestPatchSchema = purchaseRequestSchema.partial();
+const purchaseReorderPlanSchema = z.object({
+  thresholdGrams: z.number().nonnegative().max(10000).default(250),
+  targetGrams: z.number().positive().max(10000).default(1000),
+  quantity: z.number().int().positive().max(50).default(1),
+  supplier: z.string().min(1).default("Preferred supplier")
+}).default({});
+const purchaseReceiveSchema = z.object({
+  location: z.string().min(1).default("Rack Receiving"),
+  dry: z.boolean().default(true),
+  nfcPrefix: z.string().min(1).optional()
+}).default({});
 const maintenanceSchema = z.object({
   title: z.string().min(1),
   printer: z.string().min(1),
@@ -826,7 +852,7 @@ function applyDataMigrations(data) {
     applied.push({ version: 2, name: "account security metadata", appliedAt: now });
   }
   if (fromVersion < 3) {
-    for (const collection of ["printers", "files", "fileFolders", "queue", "spools", "maintenance", "maintenanceTemplates", "parts", "skus", "orders", "profiles", "webhooks", "notificationChannels", "commerceConnectors", "bridges", "events"]) {
+    for (const collection of ["printers", "files", "fileFolders", "queue", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "parts", "skus", "orders", "profiles", "webhooks", "notificationChannels", "commerceConnectors", "bridges", "events"]) {
       for (const item of ensureArray(data, collection)) {
         item.id ||= randomUUID();
         item.createdAt ||= item.at || item.updatedAt || now;
@@ -880,6 +906,7 @@ async function buildDataIntegrityReport(data, options = {}) {
   const printerIds = ids(data.printers);
   const fileIds = ids(data.files);
   const userIds = ids(data.users);
+  const spoolIds = ids(data.spools);
   const partNames = new Set((data.parts || []).map((part) => String(part.name || "").toLowerCase()).filter(Boolean));
   const seenEmails = new Set();
   for (const user of data.users || []) {
@@ -913,6 +940,9 @@ async function buildDataIntegrityReport(data, options = {}) {
     for (const partName of sku.parts || []) {
       if (!partNames.has(String(partName).toLowerCase())) warnings.push({ code: "sku.part_missing", message: `${sku.sku || sku.id} references missing part ${partName}` });
     }
+  }
+  for (const request of data.purchaseRequests || []) {
+    if (request.spoolId && !spoolIds.has(request.spoolId)) warnings.push({ code: "purchase_request.spool_missing", message: `${request.material || request.id} reorder references missing spool ${request.spoolId}` });
   }
   for (const template of data.productionTemplates || []) {
     if (template.fileId && !fileIds.has(template.fileId)) warnings.push({ code: "production_template.file_missing", message: `${template.name || template.id} references missing file ${template.fileId}` });
@@ -1047,6 +1077,7 @@ async function ensureAuthData(database, options = {}) {
   database.data.maintenanceTemplates ||= [];
   database.data.maintenanceReports ||= [];
   database.data.productionTemplates ||= [];
+  database.data.purchaseRequests ||= [];
   database.data.webhooks ||= [];
   database.data.webhookDeliveries ||= [];
   database.data.notificationChannels ||= [];
@@ -1108,6 +1139,19 @@ async function ensureAuthData(database, options = {}) {
     spool.color ||= "#0ea5e9";
     spool.dry = spool.dry ?? true;
     spool.nfc ||= `LP-${String(spool.material || "SPOOL").toUpperCase()}-${String(spool.id || randomUUID()).slice(0, 4)}`;
+  }
+  for (const request of database.data.purchaseRequests || []) {
+    request.material ||= "PLA";
+    request.color ||= "Any";
+    request.brand ||= "Generic";
+    request.quantity = Math.max(1, Number(request.quantity || 1));
+    request.targetGrams = Math.max(1, Number(request.targetGrams || 1000));
+    request.supplier ||= "Preferred supplier";
+    request.priority = severitySchema.safeParse(request.priority).success ? request.priority : "Medium";
+    request.status = purchaseStatusSchema.safeParse(request.status).success ? request.status : "open";
+    request.due ||= "This week";
+    request.note ||= "";
+    request.spoolId ||= "";
   }
   for (const job of database.data.maintenance || []) {
     job.status = maintenanceStatusSchema.safeParse(job.status).success ? job.status : "scheduled";
@@ -1895,6 +1939,77 @@ function findSpoolByCode(spools, code) {
   return (spools || []).find((spool) => [spool.nfc, spool.id, `${spool.material}-${spool.brand}`, `${spool.material} ${spool.brand}`]
     .filter(Boolean)
     .some((candidate) => String(candidate).trim().toLowerCase() === normalized));
+}
+
+function buildPurchaseRequestFromSpool(spool, options = {}, workspaceId = DEFAULT_WORKSPACE_ID) {
+  const now = new Date().toISOString();
+  return {
+    id: randomUUID(),
+    workspaceId,
+    spoolId: spool.id,
+    material: spool.material || "PLA",
+    color: spool.color || "Any",
+    brand: spool.brand || "Generic",
+    quantity: options.quantity || 1,
+    targetGrams: options.targetGrams || Number(spool.weight || 1000),
+    supplier: options.supplier || "Preferred supplier",
+    priority: Number(spoolAvailableGrams(spool)) <= 0 ? "Urgent" : "High",
+    status: "open",
+    due: "This week",
+    note: `Auto-generated because available inventory is ${Math.round(spoolAvailableGrams(spool))}g.`,
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+function createReorderPlan(data, workspaceId, options = {}) {
+  const normalized = purchaseReorderPlanSchema.parse(options || {});
+  const workspaceData = scopedWorkspaceData(data, workspaceId);
+  const existingOpen = new Set((workspaceData.purchaseRequests || [])
+    .filter((request) => ["open", "ordered"].includes(request.status) && request.spoolId)
+    .map((request) => request.spoolId));
+  const created = [];
+  const skipped = [];
+  for (const spool of workspaceData.spools || []) {
+    const available = spoolAvailableGrams(spool);
+    if (available >= normalized.thresholdGrams) continue;
+    if (existingOpen.has(spool.id)) {
+      skipped.push({ spoolId: spool.id, material: spool.material, reason: "open request exists" });
+      continue;
+    }
+    const request = buildPurchaseRequestFromSpool(spool, normalized, workspaceId);
+    data.purchaseRequests.unshift(request);
+    existingOpen.add(spool.id);
+    created.push(request);
+  }
+  return { created, skipped, thresholdGrams: normalized.thresholdGrams, purchaseRequests: scopedWorkspaceData(data, workspaceId).purchaseRequests };
+}
+
+function receivePurchaseRequest(data, requestId, workspaceId, options = {}) {
+  const normalized = purchaseReceiveSchema.parse(options || {});
+  const request = (data.purchaseRequests || []).find((item) => item.id === requestId && itemInWorkspace(item, workspaceId));
+  if (!request) return { error: "Purchase request not found", statusCode: 404 };
+  if (request.status === "cancelled") return { error: "Cancelled purchase request cannot be received", statusCode: 409 };
+  const now = new Date().toISOString();
+  const prefix = String(normalized.nfcPrefix || `LP-${request.material}`).toUpperCase().replace(/[^A-Z0-9-]+/g, "-").replace(/-+$/g, "");
+  const spools = Array.from({ length: Number(request.quantity || 1) }, (_, index) => ({
+    id: randomUUID(),
+    workspaceId,
+    material: request.material,
+    color: request.color || "Any",
+    brand: request.brand || "Generic",
+    remaining: Number(request.targetGrams || 1000),
+    weight: Number(request.targetGrams || 1000),
+    location: normalized.location,
+    dry: normalized.dry,
+    nfc: `${prefix}-${String(Date.now()).slice(-5)}-${index + 1}`,
+    purchaseRequestId: request.id,
+    createdAt: now,
+    updatedAt: now
+  }));
+  data.spools.push(...spools);
+  Object.assign(request, { status: "received", receivedAt: now, receivedSpoolIds: spools.map((spool) => spool.id), updatedAt: now });
+  return { request, spools, purchaseRequests: scopedWorkspaceData(data, workspaceId).purchaseRequests, inventory: scopedWorkspaceData(data, workspaceId).spools };
 }
 
 function buildCatalogExport(data) {
@@ -4163,6 +4278,7 @@ async function buildSupportSnapshot(data, user) {
       files: scoped.files.length,
       queue: scoped.queue.length,
       spools: scoped.spools.length,
+      purchaseRequests: scoped.purchaseRequests.length,
       productionTemplates: scoped.productionTemplates.length,
       orders: scoped.orders.length,
       webhooks: scoped.webhooks.length,
@@ -5648,6 +5764,55 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     await dispatchEvent(database, "spool.usage", `${parsed.data.grams}g logged for ${spool.material}`, { spoolId: spool.id, material: spool.material, remaining: spool.remaining, grams: parsed.data.grams });
     await database.write();
     return spool;
+  });
+
+  app.post("/api/purchaseRequests", async (request, reply) => {
+    if (!hasPermission(request.user, "inventory:write")) return reply.code(403).send({ error: "Missing permission: inventory:write" });
+    const parsed = purchaseRequestSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid purchase request payload", issues: parsed.error.issues });
+    if (parsed.data.spoolId && !database.data.spools.some((spool) => spool.id === parsed.data.spoolId && itemInWorkspace(spool, request.user.workspaceId))) return reply.code(404).send({ error: "Linked spool not found" });
+    const now = new Date().toISOString();
+    const purchaseRequest = { id: randomUUID(), workspaceId: request.user.workspaceId, ...parsed.data, createdAt: now, updatedAt: now };
+    database.data.purchaseRequests.unshift(purchaseRequest);
+    await dispatchEvent(database, "purchase_request.created", `${purchaseRequest.material} reorder request created`, { purchaseRequestId: purchaseRequest.id, material: purchaseRequest.material, quantity: purchaseRequest.quantity });
+    await database.write();
+    return reply.code(201).send(purchaseRequest);
+  });
+
+  app.post("/api/purchaseRequests/reorderPlan", async (request, reply) => {
+    if (!hasPermission(request.user, "inventory:write")) return reply.code(403).send({ error: "Missing permission: inventory:write" });
+    const parsed = purchaseReorderPlanSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid reorder plan payload", issues: parsed.error.issues });
+    const result = createReorderPlan(database.data, request.user.workspaceId, parsed.data);
+    await dispatchEvent(database, "purchase_request.reorder_plan", `${result.created.length} reorder requests created`, { created: result.created.map((item) => item.id), skipped: result.skipped.length, thresholdGrams: result.thresholdGrams });
+    await database.write();
+    return result;
+  });
+
+  app.patch("/api/purchaseRequests/:id", async (request, reply) => {
+    if (!hasPermission(request.user, "inventory:write")) return reply.code(403).send({ error: "Missing permission: inventory:write" });
+    const parsed = purchaseRequestPatchSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid purchase request update", issues: parsed.error.issues });
+    if (parsed.data.spoolId && !database.data.spools.some((spool) => spool.id === parsed.data.spoolId && itemInWorkspace(spool, request.user.workspaceId))) return reply.code(404).send({ error: "Linked spool not found" });
+    const purchaseRequest = database.data.purchaseRequests.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
+    if (!purchaseRequest) return reply.code(404).send({ error: "Purchase request not found" });
+    const rawPatch = request.body && typeof request.body === "object" ? request.body : {};
+    const patch = Object.fromEntries(Object.entries(parsed.data).filter(([key]) => Object.prototype.hasOwnProperty.call(rawPatch, key)));
+    Object.assign(purchaseRequest, patch, { updatedAt: new Date().toISOString() });
+    await dispatchEvent(database, "purchase_request.updated", `${purchaseRequest.material} reorder request ${purchaseRequest.status}`, { purchaseRequestId: purchaseRequest.id, status: purchaseRequest.status });
+    await database.write();
+    return purchaseRequest;
+  });
+
+  app.post("/api/purchaseRequests/:id/receive", async (request, reply) => {
+    if (!hasPermission(request.user, "inventory:write")) return reply.code(403).send({ error: "Missing permission: inventory:write" });
+    const parsed = purchaseReceiveSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid receive payload", issues: parsed.error.issues });
+    const result = receivePurchaseRequest(database.data, request.params.id, request.user.workspaceId, parsed.data);
+    if (result.error) return reply.code(result.statusCode || 400).send({ error: result.error });
+    await dispatchEvent(database, "purchase_request.received", `${result.spools.length} ${result.request.material} spools received`, { purchaseRequestId: result.request.id, spoolIds: result.spools.map((spool) => spool.id) });
+    await database.write();
+    return result;
   });
 
   app.post("/api/maintenance", async (request, reply) => {

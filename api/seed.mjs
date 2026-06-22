@@ -103,6 +103,9 @@ export const seedData = {
     { id: "s1", material: "PLA", color: "#111827", remaining: 742, location: "Rack A2" },
     { id: "s2", material: "PETG", color: "#f97316", remaining: 318, location: "Rack B1" }
   ],
+  purchaseRequests: [
+    { id: "pr-1", spoolId: "s2", material: "PETG", color: "#f97316", brand: "Prusament", quantity: 2, targetGrams: 1000, supplier: "Preferred supplier", priority: "High", status: "open", due: "This week", note: "Demo reorder request for production stock" }
+  ],
   maintenance: [
     { id: "m1", title: "Nozzle inspection", printer: "Forge A1", status: "in progress", due: "Today" }
   ],

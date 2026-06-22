@@ -199,6 +199,10 @@ type Spool = {
 };
 type SpoolLabelExport = { generatedAt: string; count: number; rows: Array<Record<string, string | number>>; csv: string; html: string };
 type SpoolScanResult = { spool: Spool; matchedBy: string; usageLogged: number; warnings: string[]; spools?: Spool[] };
+type Severity = "Low" | "Medium" | "High" | "Urgent";
+type PurchaseRequest = { id: string; spoolId?: string; material: string; color: string; brand: string; quantity: number; targetGrams: number; supplier: string; priority: Severity; status: "open" | "ordered" | "received" | "cancelled"; due: string; note?: string; receivedAt?: string; receivedSpoolIds?: string[]; createdAt?: string; updatedAt?: string };
+type ReorderPlanResult = { created: PurchaseRequest[]; skipped: Array<{ spoolId: string; material: string; reason: string }>; thresholdGrams: number; purchaseRequests: PurchaseRequest[] };
+type PurchaseReceiveResult = { request: PurchaseRequest; spools: Spool[]; purchaseRequests: PurchaseRequest[]; inventory: Spool[] };
 
 type MaintenanceJob = {
   id: string;
@@ -207,7 +211,7 @@ type MaintenanceJob = {
   status: "scheduled" | "in progress" | "done" | "blocked";
   due: string;
   progress: string;
-  severity: "Low" | "Medium" | "High" | "Urgent";
+  severity: Severity;
 };
 type MaintenanceTemplate = { id: string; title: string; printerModel: string; intervalDays: number; tasks: string[]; severity: MaintenanceJob["severity"]; createdAt?: string; updatedAt?: string };
 type MaintenanceReport = { id: string; title: string; printer: string; description: string; severity: MaintenanceJob["severity"]; status: "open" | "triaged" | "closed"; linkedJobId?: string; createdAt?: string; updatedAt?: string; createdBy?: string };
@@ -565,6 +569,7 @@ const zhTwTranslations: Record<string, string> = {
   "Checking": "檢查中",
   "Create jobs": "建立任務",
   "Creating": "建立中",
+  "Creating reorders": "建立補貨中",
   "Duplicate generation blocked": "已阻擋重複生成",
   "Dynamic model parameters": "動態模型參數",
   "Email provider webhook": "Email 服務 Webhook",
@@ -585,6 +590,7 @@ const zhTwTranslations: Record<string, string> = {
   "Flag": "標記",
   "Forge A1": "Forge A1",
   "Generated preview": "已產生預覽",
+  "Generate reorder plan": "生成補貨計畫",
   "Handling labor": "處理人力",
   "Height mm": "高度 mm",
   "Home axes": "歸零軸向",
@@ -614,6 +620,7 @@ const zhTwTranslations: Record<string, string> = {
   "Keep production moving": "保持生產運作",
   "Keyholes": "鑰匙孔",
   "3DSTU FarmFlow": "3DSTU FarmFlow",
+  "Add a spool before creating a purchase request": "建立採購請求前請先新增線材捲",
   "Loaded filament": "已載入線材",
   "Log 20g usage": "記錄使用 20g",
   "Log 20g usage on scan": "掃描時記錄使用 20g",
@@ -900,7 +907,15 @@ const zhTwTranslations: Record<string, string> = {
   "Current version": "目前版本",
   "System version": "系統版本",
   "Manual recipe": "手動配方",
+  "Mark ordered": "標記已下單",
+  "Material purchasing": "材料採購",
   "No production templates yet": "尚無生產範本",
+  "No purchase requests yet. Generate a reorder plan from low-stock spools.": "尚無採購請求，請從低庫存線材生成補貨計畫。",
+  "Open reorders": "待處理補貨",
+  "Purchase request": "採購請求",
+  "Qty": "數量",
+  "Receive": "收貨",
+  "Receiving": "收貨中",
   "Save template": "儲存範本",
   "Save a reusable recipe from the file library, then run it into the print queue whenever a customer or stock batch repeats.": "從檔案庫儲存可重複使用的配方，當客戶訂單或庫存批次重複時即可送入打印佇列。",
   "Saving template": "儲存範本中",
@@ -1430,6 +1445,7 @@ function App() {
   const [queue, setQueue] = useState(initialQueue);
   const [todoActions, setTodoActions] = useState<TodoAction[]>([]);
   const [spools, setSpools] = useState(initialSpools);
+  const [purchaseRequests, setPurchaseRequests] = useState<PurchaseRequest[]>([]);
   const [maintenance, setMaintenance] = useState(initialMaintenance);
   const [maintenanceTemplates, setMaintenanceTemplates] = useState<MaintenanceTemplate[]>([]);
   const [maintenanceReports, setMaintenanceReports] = useState<MaintenanceReport[]>([]);
@@ -1858,6 +1874,108 @@ function App() {
     setSpools(result.spools || spools.map((spool) => spool.id === result.spool.id ? result.spool : spool));
     setBackendStatus("connected");
     return result;
+  };
+
+  const createPurchaseRequest = async (draft: Omit<PurchaseRequest, "id">) => {
+    const fallback: PurchaseRequest = { ...draft, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    try {
+      const created = await apiRequest<PurchaseRequest>("/api/purchaseRequests", {
+        method: "POST",
+        body: JSON.stringify(draft)
+      });
+      setPurchaseRequests((items) => [created, ...items.filter((item) => item.id !== created.id)]);
+      setBackendStatus("connected");
+      return created;
+    } catch {
+      setPurchaseRequests((items) => [fallback, ...items]);
+      setBackendStatus("local");
+      return fallback;
+    }
+  };
+
+  const generateReorderPlan = async (options: { thresholdGrams?: number; targetGrams?: number; quantity?: number } = {}) => {
+    try {
+      const result = await apiRequest<ReorderPlanResult>("/api/purchaseRequests/reorderPlan", {
+        method: "POST",
+        body: JSON.stringify(options)
+      });
+      setPurchaseRequests(result.purchaseRequests);
+      setBackendStatus("connected");
+      return result;
+    } catch {
+      const existingOpen = new Set(purchaseRequests.filter((request) => ["open", "ordered"].includes(request.status) && request.spoolId).map((request) => request.spoolId));
+      const threshold = options.thresholdGrams || 250;
+      const created = spools
+        .filter((spool) => Math.max(0, Number(spool.remaining || 0) - Number(spool.reserved || 0)) < threshold && !existingOpen.has(spool.id))
+        .map((spool): PurchaseRequest => ({
+          id: crypto.randomUUID(),
+          spoolId: spool.id,
+          material: spool.material,
+          color: spool.color,
+          brand: spool.brand,
+          quantity: options.quantity || 1,
+          targetGrams: options.targetGrams || spool.weight || 1000,
+          supplier: "Preferred supplier",
+          priority: "High",
+          status: "open",
+          due: "This week",
+          note: "Local reorder request",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }));
+      setPurchaseRequests((items) => [...created, ...items]);
+      setBackendStatus("local");
+      return { created, skipped: [], thresholdGrams: threshold, purchaseRequests: [...created, ...purchaseRequests] };
+    }
+  };
+
+  const updatePurchaseRequest = async (requestId: string, patch: Partial<PurchaseRequest>) => {
+    setPurchaseRequests((items) => items.map((request) => request.id === requestId ? { ...request, ...patch } : request));
+    try {
+      const updated = await apiRequest<PurchaseRequest>(`/api/purchaseRequests/${requestId}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch)
+      });
+      setPurchaseRequests((items) => items.map((request) => request.id === requestId ? updated : request));
+      setBackendStatus("connected");
+      return updated;
+    } catch {
+      setBackendStatus("local");
+      return purchaseRequests.find((request) => request.id === requestId);
+    }
+  };
+
+  const receivePurchaseRequest = async (requestId: string, location = "Rack Receiving") => {
+    try {
+      const result = await apiRequest<PurchaseReceiveResult>(`/api/purchaseRequests/${requestId}/receive`, {
+        method: "POST",
+        body: JSON.stringify({ location })
+      });
+      setPurchaseRequests(result.purchaseRequests);
+      setSpools(result.inventory);
+      setBackendStatus("connected");
+      return result;
+    } catch {
+      const request = purchaseRequests.find((item) => item.id === requestId);
+      if (!request) throw new Error("Purchase request not found");
+      const now = new Date().toISOString();
+      const newSpools = Array.from({ length: request.quantity || 1 }, (_, index): Spool => ({
+        id: crypto.randomUUID(),
+        material: request.material,
+        color: request.color,
+        brand: request.brand,
+        remaining: request.targetGrams,
+        weight: request.targetGrams,
+        location,
+        dry: true,
+        nfc: `LP-${request.material.toUpperCase()}-${index + 1}`
+      }));
+      const updated = { ...request, status: "received" as const, receivedAt: now, receivedSpoolIds: newSpools.map((spool) => spool.id), updatedAt: now };
+      setSpools((items) => [...items, ...newSpools]);
+      setPurchaseRequests((items) => items.map((item) => item.id === requestId ? updated : item));
+      setBackendStatus("local");
+      return { request: updated, spools: newSpools, purchaseRequests: purchaseRequests.map((item) => item.id === requestId ? updated : item), inventory: [...spools, ...newSpools] };
+    }
   };
 
   const actOnTodo = async (todoId: string, action: TodoAction["action"], payload: Partial<Pick<TodoAction, "owner" | "note" | "snoozeUntil">> = {}) => {
@@ -2806,6 +2924,7 @@ function App() {
     if (Array.isArray(data.queue)) setQueue(data.queue as QueueItem[]);
     if (Array.isArray(data.todoActions)) setTodoActions(data.todoActions as TodoAction[]);
     if (Array.isArray(data.spools)) setSpools(data.spools as Spool[]);
+    if (Array.isArray(data.purchaseRequests)) setPurchaseRequests(data.purchaseRequests as PurchaseRequest[]);
     if (Array.isArray(data.maintenance)) setMaintenance(data.maintenance as MaintenanceJob[]);
     if (Array.isArray(data.maintenanceTemplates)) setMaintenanceTemplates(data.maintenanceTemplates as MaintenanceTemplate[]);
     if (Array.isArray(data.maintenanceReports)) setMaintenanceReports(data.maintenanceReports as MaintenanceReport[]);
@@ -2892,7 +3011,7 @@ function App() {
         {view === "scheduler" && <SchedulerPage queue={queue} setQueue={setQueue} printers={printers} addToast={addToast} scheduleJob={scheduleQueueJob} autoScheduleJobs={autoScheduleQueueJobs} optimizeScheduleJobs={optimizeScheduleJobs} solveScheduleJobs={solveScheduleJobs} />}
         {view === "todos" && <TodosPage todos={todos} queue={queue} printers={printers} currentUser={currentUser} actOnTodo={actOnTodo} addToast={addToast} />}
         {view === "slicer" && <SlicerPage files={files} printers={printers} slicerJobs={slicerJobs} addToast={addToast} runSlicerJob={runSlicerJob} />}
-        {view === "filament" && <FilamentPage spools={spools} createSpool={createSpool} updateSpool={updateSpool} logSpoolUsage={logSpoolUsage} generateSpoolLabels={generateSpoolLabels} scanSpool={scanSpool} addToast={addToast} />}
+        {view === "filament" && <FilamentPage spools={spools} purchaseRequests={purchaseRequests} createSpool={createSpool} updateSpool={updateSpool} logSpoolUsage={logSpoolUsage} generateSpoolLabels={generateSpoolLabels} scanSpool={scanSpool} createPurchaseRequest={createPurchaseRequest} generateReorderPlan={generateReorderPlan} updatePurchaseRequest={updatePurchaseRequest} receivePurchaseRequest={receivePurchaseRequest} addToast={addToast} />}
         {view === "profiles" && <ProfilesPage profiles={profiles} profileDefaults={profileDefaults} profileMatchingPolicy={profileMatchingPolicy} createProfile={createProfile} importProfiles={importProfiles} archiveProfile={archiveProfile} setDefaultProfile={setDefaultProfile} saveProfilePolicy={saveProfilePolicy} addToast={addToast} />}
         {view === "analytics" && <AnalyticsPage addToast={addToast} />}
         {view === "history" && <HistoryPage setQueue={setQueue} printers={printers} addToast={addToast} setBackendStatus={setBackendStatus} />}
@@ -4080,17 +4199,45 @@ function SlicerPage({ files, printers, slicerJobs, addToast, runSlicerJob }: { f
   );
 }
 
-function FilamentPage({ spools, createSpool, updateSpool, logSpoolUsage, generateSpoolLabels, scanSpool, addToast }: { spools: Spool[]; createSpool: (spool: Omit<Spool, "id">) => Promise<Spool>; updateSpool: (spoolId: string, patch: Partial<Spool>) => Promise<Spool | undefined>; logSpoolUsage: (spoolId: string, grams?: number) => Promise<Spool | undefined>; generateSpoolLabels: (ids?: string[]) => Promise<SpoolLabelExport>; scanSpool: (code: string, options?: { grams?: number; location?: string }) => Promise<SpoolScanResult>; addToast: (message: string, type?: Toast["type"]) => void }) {
-  const [busy, setBusy] = useState<"labels" | "scan" | null>(null);
+function FilamentPage({ spools, purchaseRequests, createSpool, updateSpool, logSpoolUsage, generateSpoolLabels, scanSpool, createPurchaseRequest, generateReorderPlan, updatePurchaseRequest, receivePurchaseRequest, addToast }: { spools: Spool[]; purchaseRequests: PurchaseRequest[]; createSpool: (spool: Omit<Spool, "id">) => Promise<Spool>; updateSpool: (spoolId: string, patch: Partial<Spool>) => Promise<Spool | undefined>; logSpoolUsage: (spoolId: string, grams?: number) => Promise<Spool | undefined>; generateSpoolLabels: (ids?: string[]) => Promise<SpoolLabelExport>; scanSpool: (code: string, options?: { grams?: number; location?: string }) => Promise<SpoolScanResult>; createPurchaseRequest: (request: Omit<PurchaseRequest, "id">) => Promise<PurchaseRequest>; generateReorderPlan: (options?: { thresholdGrams?: number; targetGrams?: number; quantity?: number }) => Promise<ReorderPlanResult>; updatePurchaseRequest: (requestId: string, patch: Partial<PurchaseRequest>) => Promise<PurchaseRequest | undefined>; receivePurchaseRequest: (requestId: string, location?: string) => Promise<PurchaseReceiveResult>; addToast: (message: string, type?: Toast["type"]) => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
   const [scanCode, setScanCode] = useState(spools[0]?.nfc || "");
   const [scanLocation, setScanLocation] = useState("");
   const [logUsageOnScan, setLogUsageOnScan] = useState(true);
   const [lastScan, setLastScan] = useState<SpoolScanResult | null>(null);
   const reservedGrams = (spool: Spool) => Math.round(Number(spool.reserved || 0) || (spool.reservations || []).reduce((sum, item) => sum + Number(item.grams || 0), 0));
   const availableGrams = (spool: Spool) => Math.max(0, Math.round(Number(spool.remaining || 0) - reservedGrams(spool)));
+  const lowStockSpools = spools.filter((spool) => availableGrams(spool) < 250);
+  const openPurchaseRequests = purchaseRequests.filter((request) => request.status === "open" || request.status === "ordered");
   const addSpool = async () => {
     await createSpool({ material: "PLA", color: "#0ea5e9", brand: "Demo", remaining: 1000, weight: 1000, location: "Rack New", dry: true, nfc: "LP-NEW" });
     addToast("Spool added");
+  };
+  const createManualPurchase = async () => {
+    const spool = lowStockSpools[0] || spools[0];
+    if (!spool) return addToast("Add a spool before creating a purchase request", "warning");
+    setBusy("manual-request");
+    const request = await createPurchaseRequest({ spoolId: spool.id, material: spool.material, color: spool.color, brand: spool.brand, quantity: 1, targetGrams: spool.weight || 1000, supplier: "Preferred supplier", priority: "High", status: "open", due: "This week", note: `Manual reorder for ${spool.location}` });
+    setBusy(null);
+    addToast(`${request.material} purchase request created`);
+  };
+  const createReorders = async () => {
+    setBusy("reorder-plan");
+    const result = await generateReorderPlan({ thresholdGrams: 250, targetGrams: 1000, quantity: 1 });
+    setBusy(null);
+    addToast(`${result.created.length} reorder requests created${result.skipped.length ? `, ${result.skipped.length} skipped` : ""}`, result.created.length ? "success" : "info");
+  };
+  const markOrdered = async (request: PurchaseRequest) => {
+    setBusy(`ordered-${request.id}`);
+    await updatePurchaseRequest(request.id, { status: "ordered" });
+    setBusy(null);
+    addToast(`${request.material} request marked ordered`);
+  };
+  const receiveRequest = async (request: PurchaseRequest) => {
+    setBusy(`receive-${request.id}`);
+    const result = await receivePurchaseRequest(request.id, "Rack Receiving");
+    setBusy(null);
+    addToast(`${result.spools.length} ${request.material} spools received`);
   };
   const downloadLabels = async () => {
     setBusy("labels");
@@ -4122,7 +4269,13 @@ function FilamentPage({ spools, createSpool, updateSpool, logSpoolUsage, generat
   };
   return (
     <Page title="Filament inventory" kicker="Track spools, color, storage, low stock and NFC labels">
-      <div className="quickbar"><button className="primary" onClick={addSpool}><Plus size={16} />Add spool</button><button onClick={downloadLabels} disabled={busy === "labels"}><FileCode2 size={16} />{busy === "labels" ? "Generating labels" : "Generate labels"}</button></div>
+      <div className="metric-grid">
+        <Metric label="Spools" value={`${spools.length}`} icon={CircleDot} />
+        <Metric label="Low stock" value={`${lowStockSpools.length}`} icon={AlertTriangle} tone="orange" />
+        <Metric label="Open reorders" value={`${openPurchaseRequests.length}`} icon={ShoppingBag} tone="teal" />
+        <Metric label="Reserved" value={`${spools.reduce((sum, spool) => sum + reservedGrams(spool), 0)}g`} icon={Database} tone="gray" />
+      </div>
+      <div className="quickbar"><button className="primary" onClick={addSpool}><Plus size={16} />Add spool</button><button onClick={downloadLabels} disabled={busy === "labels"}><FileCode2 size={16} />{busy === "labels" ? "Generating labels" : "Generate labels"}</button><button onClick={createReorders} disabled={busy === "reorder-plan"}><ShoppingBag size={16} />{busy === "reorder-plan" ? "Creating reorders" : "Generate reorder plan"}</button><button onClick={createManualPurchase} disabled={busy === "manual-request"}><Plus size={16} />Purchase request</button></div>
       <section className="panel scanner-panel">
         <PanelTitle title="Spool scanner" />
         <div className="settings-grid">
@@ -4132,6 +4285,23 @@ function FilamentPage({ spools, createSpool, updateSpool, logSpoolUsage, generat
         </div>
         <div className="quickbar"><button className="primary" onClick={runScan} disabled={busy === "scan"}><CircleDot size={16} />{busy === "scan" ? "Scanning" : "Scan spool"}</button></div>
         {lastScan && <div className={`notice ${lastScan.warnings.length ? "warning" : "success"}`}><Check size={18} /><span>{lastScan.spool.material} - {lastScan.spool.brand} matched by {lastScan.matchedBy}. Remaining {lastScan.spool.remaining}g. {lastScan.warnings.join(", ")}</span></div>}
+      </section>
+      <section className="panel">
+        <PanelTitle title="Material purchasing" />
+        <DataTable headers={["Material", "Supplier", "Qty", "Priority", "Status", "Due", "Actions"]}>
+          {purchaseRequests.map((request) => (
+            <tr key={request.id}>
+              <td><b>{request.material}</b><small>{request.brand} - {request.targetGrams}g - {request.note || "Reorder request"}</small></td>
+              <td>{request.supplier}</td>
+              <td>{request.quantity}</td>
+              <td><StatusPill status={request.priority} /></td>
+              <td><StatusPill status={request.status} /></td>
+              <td>{request.due}</td>
+              <td><button onClick={() => markOrdered(request)} disabled={request.status !== "open" || busy === `ordered-${request.id}`}>{busy === `ordered-${request.id}` ? "Updating" : "Mark ordered"}</button><button className="primary" onClick={() => receiveRequest(request)} disabled={request.status === "received" || request.status === "cancelled" || busy === `receive-${request.id}`}>{busy === `receive-${request.id}` ? "Receiving" : "Receive"}</button></td>
+            </tr>
+          ))}
+        </DataTable>
+        {!purchaseRequests.length && <p className="muted">No purchase requests yet. Generate a reorder plan from low-stock spools.</p>}
       </section>
       <div className="spool-grid">
         {spools.map((spool) => {
