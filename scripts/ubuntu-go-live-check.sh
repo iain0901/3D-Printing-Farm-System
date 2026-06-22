@@ -66,7 +66,7 @@ latest_backup() {
 on_failure() {
   local exit_code=$?
   trap - ERR
-  echo "LayerPilot go-live check failed with exit code $exit_code." >&2
+  echo "3DSTUXXX go-live check failed with exit code $exit_code." >&2
   if [ "$SUPPORT_ON_FAILURE" = "true" ] && [ -f scripts/ubuntu-support-bundle.sh ]; then
     echo "Creating support bundle for failed go-live check..." >&2
     bash scripts/ubuntu-support-bundle.sh || true
@@ -97,7 +97,7 @@ need_command docker
 need_command curl
 need_command tar
 
-echo "== LayerPilot go-live check =="
+echo "== 3DSTUXXX go-live check =="
 
 echo "== Bash syntax =="
 bash -n scripts/ubuntu-deploy.sh
@@ -149,4 +149,4 @@ bash scripts/ubuntu-backup.sh restore-drill "$archive"
 echo "== Ops check =="
 bash scripts/ubuntu-deploy.sh ops-check
 
-echo "LayerPilot go-live check passed."
+echo "3DSTUXXX go-live check passed."

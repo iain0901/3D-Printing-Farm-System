@@ -107,7 +107,7 @@ const printerSchema = z.object({
 const printerPatchSchema = printerSchema.partial();
 const signupSchema = authSchema.extend({
   name: z.string().min(1),
-  workspace: z.string().min(1).default("LayerPilot Workspace")
+  workspace: z.string().min(1).default("3DSTUXXX Workspace")
 });
 const userCreateSchema = z.object({
   name: z.string().min(1),
@@ -142,7 +142,7 @@ const fileFolderSchema = z.object({
   purpose: z.enum(["inbox", "production", "review", "archive", "sample"]).default("inbox")
 });
 const sampleFileSchema = z.object({
-  name: z.string().min(1).max(80).default("LayerPilot sample bracket"),
+  name: z.string().min(1).max(80).default("3DSTUXXX sample bracket"),
   folder: z.string().min(1).default("Samples"),
   material: z.string().min(1).default("PETG")
 });
@@ -271,7 +271,7 @@ const partPatchSchema = z.object({
   status: z.enum(["ready", "needs profile", "draft"]).optional()
 });
 const parametricNameplateSchema = z.object({
-  text: z.string().min(1).max(48).default("LayerPilot"),
+  text: z.string().min(1).max(48).default("3DSTUXXX"),
   width: z.number().min(30).max(300).default(120),
   height: z.number().min(15).max(160).default(42),
   thickness: z.number().min(1).max(12).default(3),
@@ -829,7 +829,7 @@ async function writePreMigrationBackup(file, data, migration) {
   }
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const backupPath = `${file}.pre-migration-${migration.fromVersion}-to-${migration.toVersion}-${stamp}.bak.json`;
-  await writeFile(backupPath, JSON.stringify({ service: "LayerPilot", exportedAt: new Date().toISOString(), reason: "pre-migration-backup", data }, null, 2));
+  await writeFile(backupPath, JSON.stringify({ service: "3DSTUXXX", exportedAt: new Date().toISOString(), reason: "pre-migration-backup", data }, null, 2));
   return backupPath;
 }
 
@@ -1347,7 +1347,7 @@ function summarizeRestoreData(data, warnings = [], storagePathsStripped = 0, fil
     if (Array.isArray(data[key])) collectionCounts[key] = data[key].length;
   }
   return {
-    service: "LayerPilot",
+    service: "3DSTUXXX",
     generatedAt: new Date().toISOString(),
     collectionCounts,
     users: (data.users || []).length,
@@ -1461,8 +1461,8 @@ function mqttTopicForEvent(config, eventType) {
 
 function mqttPayload(event, deliveryId, sentAt, data) {
   return JSON.stringify({
-    service: "LayerPilot",
-    workspace: data.workspaceSettings?.organizationName || "LayerPilot",
+    service: "3DSTUXXX",
+    workspace: data.workspaceSettings?.organizationName || "3DSTUXXX",
     event,
     deliveryId,
     sentAt
@@ -1519,7 +1519,7 @@ async function deliverMqtt(database, event, publisher = null) {
 }
 
 function notificationPayload(channel, event, deliveryId, sentAt) {
-  const title = `[LayerPilot] ${event.type}`;
+  const title = `[3DSTUXXX] ${event.type}`;
   const text = `${event.message || event.type}\n${sentAt}`;
   if (channel.type === "slack") return { text: `*${title}*\n${text}` };
   if (channel.type === "discord") return { content: `**${title}**\n${text}` };
@@ -1811,7 +1811,7 @@ function buildSpoolLabelExport(spools, generatedAt = new Date().toISOString()) {
 <html>
 <head>
   <meta charset="utf-8">
-  <title>LayerPilot spool labels</title>
+  <title>3DSTUXXX spool labels</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 24px; color: #111827; }
     .sheet { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
@@ -1825,7 +1825,7 @@ function buildSpoolLabelExport(spools, generatedAt = new Date().toISOString()) {
   </style>
 </head>
 <body>
-  <h1>LayerPilot spool labels - ${escapeHtml(generatedAt)}</h1>
+  <h1>3DSTUXXX spool labels - ${escapeHtml(generatedAt)}</h1>
   <main class="sheet">${cards || "<p>No labels selected.</p>"}</main>
 </body>
 </html>`;
@@ -2243,7 +2243,7 @@ function boxFacets(origin, size) {
 }
 
 function buildNameplateStl(payload) {
-  const safeText = payload.text.replace(/[^\w .-]/g, "").trim() || "LayerPilot";
+  const safeText = payload.text.replace(/[^\w .-]/g, "").trim() || "3DSTUXXX";
   const facets = [];
   facets.push(...boxFacets([0, 0, 0], [payload.width, payload.height, payload.thickness]));
   if (payload.feature === "keyholes") {
@@ -2260,7 +2260,7 @@ function buildNameplateStl(payload) {
   return [`solid ${solidName}`, ...facets, `endsolid ${solidName}`, ""].join("\n");
 }
 
-function buildSampleBracketStl(name = "LayerPilot sample bracket") {
+function buildSampleBracketStl(name = "3DSTUXXX sample bracket") {
   const facets = [
     ...boxFacets([0, 0, 0], [120, 36, 8]),
     ...boxFacets([10, 8, 8], [100, 6, 12]),
@@ -2497,10 +2497,10 @@ async function buildOperationalMetrics(database, startedAt) {
   const storage = await buildStorageUsage(data);
   const todos = deriveTodos(data);
   const lines = [
-    "# HELP layerpilot_up LayerPilot API process availability.",
+    "# HELP layerpilot_up 3DSTUXXX API process availability.",
     "# TYPE layerpilot_up gauge",
     metricLine("layerpilot_up", 1),
-    "# HELP layerpilot_uptime_seconds LayerPilot API uptime in seconds.",
+    "# HELP layerpilot_uptime_seconds 3DSTUXXX API uptime in seconds.",
     "# TYPE layerpilot_uptime_seconds gauge",
     metricLine("layerpilot_uptime_seconds", Math.max(0, Math.round((Date.now() - startedAt.getTime()) / 1000))),
     "# HELP layerpilot_storage_used_bytes Stored model and generated file bytes.",
@@ -2744,7 +2744,7 @@ export function calculateQuote(costCatalog, { material, grams, minutes, includeL
 function buildInternalGcode({ file, printer, profile, settings, estimates }) {
   const [x, y, z] = file.dimensions || [100, 100, 50];
   return [
-    "; Generated by LayerPilot internal slicer adapter",
+    "; Generated by 3DSTUXXX internal slicer adapter",
     `; Source file: ${file.name}`,
     `; Printer: ${printer.name}`,
     `; Profile: ${profile?.name || "Default"}`,
@@ -2770,7 +2770,7 @@ function buildInternalGcode({ file, printer, profile, settings, estimates }) {
     "M104 S0",
     "M140 S0",
     "M84",
-    "; End LayerPilot generated G-code",
+    "; End 3DSTUXXX generated G-code",
     ""
   ].join("\n");
 }
@@ -4007,7 +4007,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const { session, user } = userFromRequest(database, request);
     if (!session || !user) return reply.code(401).send({ error: "User session required" });
     const secret = base32Encode(randomBytes(20));
-    const issuer = database.data.workspaceSettings?.organizationName || "LayerPilot";
+    const issuer = database.data.workspaceSettings?.organizationName || "3DSTUXXX";
     await dispatchEvent(database, "auth.2fa_setup_started", `${user.email} started 2FA setup`, { userId: user.id });
     await database.write();
     return { secret, otpauthUrl: buildOtpAuthUrl({ secret, user, issuer }), user: sanitizeUser(user) };
@@ -4320,7 +4320,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const filePayloads = includeFiles ? await buildBackupFilePayloads(scoped) : { storage: { included: false, count: 0, bytes: 0, missing: [] } };
     return {
       exportedAt,
-      service: "LayerPilot",
+      service: "3DSTUXXX",
       version: "0.1.0",
       schemaVersion: CURRENT_SCHEMA_VERSION,
       data: publicState(scoped),
@@ -5580,17 +5580,17 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   const port = Number(process.env.LAYERPILOT_API_PORT || 8797);
   const host = process.env.LAYERPILOT_HOST || "127.0.0.1";
   await server.listen({ host, port });
-  console.log(`LayerPilot running at http://${host}:${port}`);
+  console.log(`3DSTUXXX running at http://${host}:${port}`);
   let shuttingDown = false;
   const shutdown = async (signal) => {
     if (shuttingDown) return;
     shuttingDown = true;
-    console.log(`LayerPilot received ${signal}; closing server...`);
+    console.log(`3DSTUXXX received ${signal}; closing server...`);
     try {
       await server.close();
       process.exit(0);
     } catch (error) {
-      console.error("LayerPilot shutdown failed", error);
+      console.error("3DSTUXXX shutdown failed", error);
       process.exit(1);
     }
   };

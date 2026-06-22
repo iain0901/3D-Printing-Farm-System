@@ -75,7 +75,7 @@ preflight() {
       echo "Warning: this setup script is tuned for Ubuntu; detected ${PRETTY_NAME:-unknown OS}." >&2
     fi
   fi
-  echo "LayerPilot Ubuntu setup preflight passed."
+  echo "3DSTUXXX Ubuntu setup preflight passed."
 }
 
 configure_docker_group() {
@@ -159,7 +159,7 @@ install_backup_timer() {
   sudo systemctl daemon-reload
   sudo systemctl enable --now layerpilot-backup.timer
   systemctl list-timers layerpilot-backup.timer --no-pager || true
-  echo "LayerPilot backup timer installed."
+  echo "3DSTUXXX backup timer installed."
 }
 
 install_ops_timer() {
@@ -169,7 +169,7 @@ install_ops_timer() {
   sudo systemctl daemon-reload
   sudo systemctl enable --now layerpilot-ops-check.timer
   systemctl list-timers layerpilot-ops-check.timer --no-pager || true
-  echo "LayerPilot ops-check timer installed."
+  echo "3DSTUXXX ops-check timer installed."
 }
 
 validate_domain() {

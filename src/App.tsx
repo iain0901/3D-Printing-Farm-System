@@ -552,7 +552,7 @@ const zhTwTranslations: Record<string, string> = {
   "Jobs that still need slicing or already have a slot are left untouched.": "仍需切片或已有時段的任務會保持不變。",
   "Keep production moving": "保持生產運作",
   "Keyholes": "鑰匙孔",
-  "LayerPilot": "LayerPilot",
+  "3DSTUXXX": "3DSTUXXX",
   "Loaded filament": "已載入線材",
   "Log 20g usage": "記錄使用 20g",
   "Log 20g usage on scan": "掃描時記錄使用 20g",
@@ -1203,7 +1203,7 @@ function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload.mode === "signup"
-          ? { email: payload.email, password: payload.password, name: payload.name || payload.email.split("@")[0], workspace: payload.workspace || "LayerPilot Workspace" }
+          ? { email: payload.email, password: payload.password, name: payload.name || payload.email.split("@")[0], workspace: payload.workspace || "3DSTUXXX Workspace" }
           : { email: payload.email, password: payload.password, twoFactorCode: payload.twoFactorCode || undefined })
       });
       const auth = await response.json();
@@ -2075,7 +2075,7 @@ function App() {
     } catch {
       const fallback: PrintFile = {
         id: crypto.randomUUID(),
-        name: `${draft.name || "LayerPilot sample bracket"}.stl`,
+        name: `${draft.name || "3DSTUXXX sample bracket"}.stl`,
         type: "STL",
         folder: draft.folder,
         size: "0 KB",
@@ -2603,7 +2603,7 @@ function AuthScreen({ onLogin, language, setLanguage }: { onLogin: (payload: { e
   return (
     <div className="auth-page">
       <section className="auth-visual">
-        <div className="brand-lockup"><Layers /><span>LayerPilot</span></div>
+        <div className="brand-lockup"><Layers /><span>3DSTUXXX</span></div>
         <h1>Run a smarter print lab from one cockpit.</h1>
         <p>Original cloud management for printers, jobs, materials, teams, and automations.</p>
         <div className="machine-wall">
@@ -2657,7 +2657,7 @@ function Sidebar({ view, setView, mobileNav, setMobileNav, hotDropMode, setHotDr
   ];
   return (
     <aside className={`sidebar ${mobileNav ? "open" : ""}`}>
-      <div className="brand-lockup small"><Layers /><span>LayerPilot</span></div>
+      <div className="brand-lockup small"><Layers /><span>3DSTUXXX</span></div>
       <nav>
         {items.map(([id, label, Icon]) => (
           <button key={id} className={view === id ? "active" : ""} onClick={() => { setView(id); setMobileNav(false); }}>
@@ -2790,7 +2790,7 @@ function PrintersPage({ printers, onPrinter, setModal, api }: { printers: Printe
 
 function ProductsPage({ parts, skus, files, createPart, createSku, generateNameplate, exportCatalog, mapMaterials, addToast }: { parts: Part[]; skus: SKU[]; files: PrintFile[]; createPart: (part: Omit<Part, "id">) => Promise<Part>; createSku: (sku: Omit<SKU, "id">) => Promise<SKU>; generateNameplate: (draft: ParametricNameplateDraft) => Promise<ParametricNameplateResult>; exportCatalog: () => Promise<CatalogExportResult>; mapMaterials: () => Promise<MaterialMapResult>; addToast: (message: string, type?: Toast["type"]) => void }) {
   const [tab, setTab] = useState<"parts" | "skus" | "builder">("parts");
-  const [nameplate, setNameplate] = useState<ParametricNameplateDraft>({ text: "LayerPilot", width: 120, height: 42, thickness: 3, material: "PLA", feature: "keyholes", createPart: true });
+  const [nameplate, setNameplate] = useState<ParametricNameplateDraft>({ text: "3DSTUXXX", width: 120, height: 42, thickness: 3, material: "PLA", feature: "keyholes", createPart: true });
   const [generated, setGenerated] = useState<ParametricNameplateResult | null>(null);
   const [generating, setGenerating] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -3038,7 +3038,7 @@ function FilesPage({ files, folders, queueFile, setView, addToast, createSampleF
   const visible = files.filter((f) => (type === "All" || f.type === type) && f.name.toLowerCase().includes(query.toLowerCase()));
   const addSample = async () => {
     setWorking("sample");
-    const result = await createSampleFile({ name: "LayerPilot sample bracket", material, folder: "Samples" });
+    const result = await createSampleFile({ name: "3DSTUXXX sample bracket", material, folder: "Samples" });
     setWorking("");
     addToast(`${result.file.name} generated and stored (${result.stlBytes} bytes)`);
   };

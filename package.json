@@ -1,5 +1,5 @@
 {
-  "name": "layerpilot",
+  "name": "3dstuxxx",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -43,5 +43,6 @@
     "typescript": "^5.7.3",
     "vite": "^8.0.16",
     "vitest": "^4.1.8"
-  }
+  },
+  "license": "SEE LICENSE IN LICENSE.md"
 }

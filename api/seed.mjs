@@ -197,6 +197,6 @@ export const seedData = {
     { id: "b2", printerId: "p3", kind: "octoprint", name: "Campus MK4 OctoPrint", baseUrl: "http://octopi.local", apiKey: "", enabled: false, lastStatus: "not tested" }
   ],
   events: [
-    { id: "e1", type: "system.boot", message: "LayerPilot API started", at: new Date().toISOString() }
+    { id: "e1", type: "system.boot", message: "3DSTUXXX API started", at: new Date().toISOString() }
   ]
 };

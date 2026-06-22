@@ -110,7 +110,7 @@ cleanup() {
 trap cleanup EXIT
 
 {
-  echo "LayerPilot support bundle"
+  echo "3DSTUXXX support bundle"
   echo "Generated: $(date -Is)"
   echo "Project root: $ROOT_DIR"
   echo "Environment file: $ENV_FILE"
