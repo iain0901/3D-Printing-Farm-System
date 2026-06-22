@@ -1,0 +1,37 @@
+{
+  "name": "LayerPilot",
+  "short_name": "LayerPilot",
+  "description": "3D printing production cockpit for printers, queue, files, materials, todos, and operations.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f8fafc",
+  "theme_color": "#2563eb",
+  "categories": ["productivity", "business", "utilities"],
+  "icons": [
+    {
+      "src": "/layerpilot-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "Open the production cockpit.",
+      "url": "/",
+      "icons": [{ "src": "/layerpilot-icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Print Queue",
+      "short_name": "Queue",
+      "description": "Review queued and active production jobs.",
+      "url": "/?view=queue",
+      "icons": [{ "src": "/layerpilot-icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+[Unit]
+Description=Run LayerPilot backup every night
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+Persistent=true
+RandomizedDelaySec=15m
+Unit=layerpilot-backup.service
+
+[Install]
+WantedBy=timers.target

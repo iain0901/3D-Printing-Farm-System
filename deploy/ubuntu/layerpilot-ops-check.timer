@@ -1,0 +1,12 @@
+[Unit]
+Description=Run LayerPilot operations health check every 15 minutes
+
+[Timer]
+OnBootSec=5m
+OnUnitActiveSec=15m
+Persistent=true
+RandomizedDelaySec=2m
+Unit=layerpilot-ops-check.service
+
+[Install]
+WantedBy=timers.target

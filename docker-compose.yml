@@ -1,0 +1,110 @@
+name: layerpilot
+
+services:
+  layerpilot:
+    build:
+      context: .
+    image: layerpilot:local
+    container_name: layerpilot
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    environment:
+      NODE_ENV: production
+      LAYERPILOT_HOST: 0.0.0.0
+      LAYERPILOT_API_PORT: 8797
+      LAYERPILOT_SERVE_STATIC: "true"
+      LAYERPILOT_DB_PATH: /data/layerpilot.db.json
+      LAYERPILOT_DB_ADAPTER: ${LAYERPILOT_DB_ADAPTER:-json}
+      LAYERPILOT_STORAGE_DIR: /data/storage
+      LAYERPILOT_ADMIN_EMAIL: ${LAYERPILOT_ADMIN_EMAIL:-}
+      LAYERPILOT_ADMIN_PASSWORD: ${LAYERPILOT_ADMIN_PASSWORD:-}
+      LAYERPILOT_ADMIN_NAME: ${LAYERPILOT_ADMIN_NAME:-Production Owner}
+      LAYERPILOT_WORKSPACE_NAME: ${LAYERPILOT_WORKSPACE_NAME:-LayerPilot Production}
+      LAYERPILOT_DISABLE_DEFAULT_USERS: ${LAYERPILOT_DISABLE_DEFAULT_USERS:-false}
+      LAYERPILOT_DISABLE_DEMO_LOGIN: ${LAYERPILOT_DISABLE_DEMO_LOGIN:-false}
+      LAYERPILOT_METRICS_TOKEN: ${LAYERPILOT_METRICS_TOKEN:-}
+      LAYERPILOT_AUTO_BACKUP_ON_MIGRATE: ${LAYERPILOT_AUTO_BACKUP_ON_MIGRATE:-true}
+      LAYERPILOT_WORKER_TOKEN: ${LAYERPILOT_WORKER_TOKEN:-change-this-worker-token}
+      LAYERPILOT_OBJECT_STORAGE_PROVIDER: ${LAYERPILOT_OBJECT_STORAGE_PROVIDER:-local}
+      LAYERPILOT_S3_BUCKET: ${LAYERPILOT_S3_BUCKET:-}
+      LAYERPILOT_S3_REGION: ${LAYERPILOT_S3_REGION:-us-east-1}
+      LAYERPILOT_S3_ENDPOINT: ${LAYERPILOT_S3_ENDPOINT:-}
+      LAYERPILOT_S3_PREFIX: ${LAYERPILOT_S3_PREFIX:-layerpilot}
+      LAYERPILOT_S3_FORCE_PATH_STYLE: ${LAYERPILOT_S3_FORCE_PATH_STYLE:-false}
+      LAYERPILOT_S3_ACCESS_KEY_ID: ${LAYERPILOT_S3_ACCESS_KEY_ID:-}
+      LAYERPILOT_S3_SECRET_ACCESS_KEY: ${LAYERPILOT_S3_SECRET_ACCESS_KEY:-}
+      LAYERPILOT_BILLING_PORTAL_URL: ${LAYERPILOT_BILLING_PORTAL_URL:-}
+      LAYERPILOT_STRIPE_SECRET_KEY: ${LAYERPILOT_STRIPE_SECRET_KEY:-}
+      LAYERPILOT_STRIPE_WEBHOOK_SECRET: ${LAYERPILOT_STRIPE_WEBHOOK_SECRET:-}
+      LAYERPILOT_STRIPE_PRICE_STUDIO: ${LAYERPILOT_STRIPE_PRICE_STUDIO:-}
+      LAYERPILOT_STRIPE_PRICE_FARM: ${LAYERPILOT_STRIPE_PRICE_FARM:-}
+      LAYERPILOT_STRIPE_PRICE_ENTERPRISE: ${LAYERPILOT_STRIPE_PRICE_ENTERPRISE:-}
+      LAYERPILOT_MQTT_URL: ${LAYERPILOT_MQTT_URL:-}
+      LAYERPILOT_MQTT_TOPIC_PREFIX: ${LAYERPILOT_MQTT_TOPIC_PREFIX:-layerpilot}
+      LAYERPILOT_MQTT_USERNAME: ${LAYERPILOT_MQTT_USERNAME:-}
+      LAYERPILOT_MQTT_PASSWORD: ${LAYERPILOT_MQTT_PASSWORD:-}
+      LAYERPILOT_MQTT_QOS: ${LAYERPILOT_MQTT_QOS:-0}
+      LAYERPILOT_MQTT_RETAIN: ${LAYERPILOT_MQTT_RETAIN:-false}
+      LAYERPILOT_SLICER_CMD: ${LAYERPILOT_SLICER_CMD:-}
+      LAYERPILOT_SLICER_ARGS: ${LAYERPILOT_SLICER_ARGS:-}
+      LAYERPILOT_ENABLE_INTERNAL_TELEMETRY: "false"
+      LAYERPILOT_ENABLE_INTERNAL_BRIDGE_POLLING: "false"
+    ports:
+      - "${LAYERPILOT_BIND_ADDRESS:-127.0.0.1}:8797:8797"
+    volumes:
+      - layerpilot-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"const port=process.env.LAYERPILOT_API_PORT||8797; fetch('http://127.0.0.1:'+port+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  layerpilot-worker:
+    image: layerpilot:local
+    container_name: layerpilot-worker
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    depends_on:
+      layerpilot:
+        condition: service_healthy
+    command: ["npm", "run", "worker"]
+    environment:
+      NODE_ENV: production
+      LAYERPILOT_DB_PATH: /data/layerpilot.db.json
+      LAYERPILOT_DB_ADAPTER: ${LAYERPILOT_DB_ADAPTER:-json}
+      LAYERPILOT_STORAGE_DIR: /data/storage
+      LAYERPILOT_WORKER_ID: ${LAYERPILOT_WORKER_ID:-layerpilot-worker}
+      LAYERPILOT_WORKER_TELEMETRY: ${LAYERPILOT_WORKER_TELEMETRY:-true}
+      LAYERPILOT_WORKER_BRIDGE_POLLING: ${LAYERPILOT_WORKER_BRIDGE_POLLING:-true}
+      LAYERPILOT_WORKER_TELEMETRY_INTERVAL_MS: ${LAYERPILOT_WORKER_TELEMETRY_INTERVAL_MS:-5000}
+      LAYERPILOT_WORKER_BRIDGE_POLL_INTERVAL_MS: ${LAYERPILOT_WORKER_BRIDGE_POLL_INTERVAL_MS:-10000}
+      LAYERPILOT_API_INTERNAL_URL: http://layerpilot:8797
+      LAYERPILOT_WORKER_TOKEN: ${LAYERPILOT_WORKER_TOKEN:-change-this-worker-token}
+      LAYERPILOT_MQTT_URL: ${LAYERPILOT_MQTT_URL:-}
+      LAYERPILOT_MQTT_TOPIC_PREFIX: ${LAYERPILOT_MQTT_TOPIC_PREFIX:-layerpilot}
+      LAYERPILOT_MQTT_USERNAME: ${LAYERPILOT_MQTT_USERNAME:-}
+      LAYERPILOT_MQTT_PASSWORD: ${LAYERPILOT_MQTT_PASSWORD:-}
+      LAYERPILOT_MQTT_QOS: ${LAYERPILOT_MQTT_QOS:-0}
+      LAYERPILOT_MQTT_RETAIN: ${LAYERPILOT_MQTT_RETAIN:-false}
+    volumes:
+      - layerpilot-data:/data
+
+volumes:
+  layerpilot-data:

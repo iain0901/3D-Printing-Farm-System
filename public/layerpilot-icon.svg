@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="LayerPilot">
+  <rect width="512" height="512" rx="96" fill="#2563eb"/>
+  <path d="M128 176l128-72 128 72-128 72-128-72z" fill="#dbeafe"/>
+  <path d="M128 248l128 72 128-72v88l-128 72-128-72v-88z" fill="#ffffff"/>
+  <path d="M144 248l112 62 112-62" fill="none" stroke="#0f172a" stroke-width="22" stroke-linecap="round" stroke-linejoin="round" opacity=".18"/>
+  <path d="M256 248v160" fill="none" stroke="#2563eb" stroke-width="22" stroke-linecap="round"/>
+  <circle cx="384" cy="144" r="42" fill="#14b8a6"/>
+</svg>

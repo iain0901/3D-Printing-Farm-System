@@ -1,0 +1,16 @@
+[Unit]
+Description=LayerPilot Docker volume backup
+Requires=docker.service
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/layerpilot
+Environment=LAYERPILOT_BACKUP_DIR=/var/backups/layerpilot
+Environment=LAYERPILOT_BACKUP_RETENTION_DAYS=30
+ExecStart=/usr/bin/env bash /opt/layerpilot/scripts/ubuntu-backup.sh backup
+TimeoutStartSec=30min
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
