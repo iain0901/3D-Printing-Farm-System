@@ -72,6 +72,8 @@ services:
     image: layerpilot:local
     container_name: layerpilot-worker
     init: true
+    healthcheck:
+      disable: true
     restart: unless-stopped
     stop_grace_period: 30s
     security_opt:

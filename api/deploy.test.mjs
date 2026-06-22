@@ -51,6 +51,7 @@ describe("3DSTU FarmFlow deployment packaging", () => {
     expect(compose).toContain("LAYERPILOT_DISABLE_DEMO_LOGIN");
     expect(compose).toContain("LAYERPILOT_METRICS_TOKEN");
     expect(compose).toContain("layerpilot-worker");
+    expect(compose).toContain("healthcheck:\n      disable: true");
     expect(compose).toContain("npm\", \"run\", \"worker");
     expect(compose).toContain("LAYERPILOT_ENABLE_INTERNAL_TELEMETRY");
     expect(compose).toContain("LAYERPILOT_ENABLE_INTERNAL_BRIDGE_POLLING");
