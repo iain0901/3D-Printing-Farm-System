@@ -1,5 +1,6 @@
 ﻿/// <reference types="vite/client" />
 import type * as React from "react";
+import packageJson from "../package.json";
 import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
@@ -65,6 +66,8 @@ import {
   XAxis,
   YAxis
 } from "recharts";
+
+const APP_VERSION = packageJson.version;
 
 type View =
   | "dashboard"
@@ -723,7 +726,29 @@ const zhTwTranslations: Record<string, string> = {
   "Fallback enabled": "已啟用備援",
   "Exact profile required": "必須使用精確設定檔",
   "Paid orders can override classroom and low-priority queues when due dates are close.": "付費訂單在交期接近時可優先於教室與低優先佇列。",
-  "hour due window": "小時交期視窗"
+  "hour due window": "小時交期視窗",
+  "3D printing farm operating system": "3D 打印農場作業系統",
+  "Plan every printer, file, material, and operator from one production control layer.": "從同一個生產控制層規劃每台打印機、檔案、材料與操作員。",
+  "Open App": "開啟系統",
+  "Contact 3DSTU": "聯絡 3DSTU",
+  "Live production signals": "即時生產訊號",
+  "Active queue": "進行中佇列",
+  "Automated todos": "自動待辦",
+  "Printer states": "打印機狀態",
+  "Built for real print-farm operations": "為真實打印農場營運打造",
+  "One system for the work between orders and machines.": "用一套系統串起訂單與機器之間的所有工作。",
+  "Order to production": "訂單到生產",
+  "Turn commerce or manual jobs into structured queue items.": "將電商或手動任務轉成結構化佇列項目。",
+  "Scheduling intelligence": "智慧排單",
+  "Match material, size, due date, and printer state before production starts.": "在生產開始前匹配材料、尺寸、交期與打印機狀態。",
+  "Human exception handling": "人工例外處理",
+  "Generate todos for slicing, material changes, post-processing, and late work.": "自動產生切片、換料、後處理與逾期工作的待辦。",
+  "Operational backbone": "營運骨幹",
+  "Keep files, versions, maintenance, roles, audit logs, and backups together.": "集中管理檔案、版本、維護、角色、稽核紀錄與備份。",
+  "Deployment ready": "可部署上線",
+  "Docker, Ubuntu, Nginx, HTTPS, backups, and health checks are part of the repo.": "Docker、Ubuntu、Nginx、HTTPS、備份與健康檢查都已納入倉庫。",
+  "Professional setup available": "提供專業建置服務",
+  "Need installation, training, or technical support?": "需要安裝、訓練或技術支援嗎？",
 };
 
 const traditionalToSimplifiedPairs = [
@@ -784,7 +809,7 @@ function localizeText(value: string, language: Language) {
 function applyLanguage(language: Language) {
   document.documentElement.lang = language;
   const ignored = new Set(["SCRIPT", "STYLE", "SVG", "PATH", "CODE", "SELECT", "OPTION", "TEXTAREA"]);
-  const root = document.querySelector(".auth-page, .app-shell") || document.body;
+  const root = document.querySelector(".marketing-site, .auth-page, .app-shell") || document.body;
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   const nodes: Text[] = [];
   while (walker.nextNode()) nodes.push(walker.currentNode as Text);
@@ -1197,6 +1222,7 @@ function applyTodoActions(todos: Todo[], actions: TodoAction[]) {
 
 function App() {
   const [language, setLanguage] = useState<Language>("en");
+  const [showMarketing, setShowMarketing] = useState(() => !Boolean(window.localStorage.getItem("layerpilot-token")) && window.location.hash !== "#app");
   const [authToken, setAuthToken] = useState(() => window.localStorage.getItem("layerpilot-token") || "");
   const [authed, setAuthed] = useState(() => Boolean(window.localStorage.getItem("layerpilot-token")));
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -2587,7 +2613,9 @@ function App() {
     return () => source.close();
   }, [authed, authToken]);
 
-  if (!authed) return <AuthScreen onLogin={authenticate} language={language} setLanguage={setLanguage} />;
+  if (!authed && showMarketing) return <MarketingSite language={language} setLanguage={setLanguage} onOpenApp={() => { window.location.hash = "app"; setShowMarketing(false); }} />;
+
+  if (!authed) return <><AuthScreen onLogin={authenticate} language={language} setLanguage={setLanguage} /><VersionBadge /></>;
 
   return (
     <div className="app-shell">
@@ -2617,6 +2645,75 @@ function App() {
       {selectedPrinter && <PrinterDrawer printer={selectedPrinter} onClose={() => setSelectedPrinter(null)} api={mockApi} />}
       {modal === "add-printer" && <AddPrinterModal onClose={() => setModal(null)} onAdd={async (printer) => { const created = await createPrinter(printer); setModal(null); addToast(`${created.name} added to printer fleet`); }} />}
       <ToastStack toasts={toasts} />
+      <VersionBadge />
+    </div>
+  );
+}
+
+function VersionBadge() {
+  return <div className="version-badge"><span>Version</span> <strong data-i18n-ignore>{APP_VERSION}</strong></div>;
+}
+
+function MarketingSite({ language, setLanguage, onOpenApp }: { language: Language; setLanguage: (language: Language) => void; onOpenApp: () => void }) {
+  const features = [
+    ["Order to production", "Turn commerce or manual jobs into structured queue items."],
+    ["Scheduling intelligence", "Match material, size, due date, and printer state before production starts."],
+    ["Human exception handling", "Generate todos for slicing, material changes, post-processing, and late work."],
+    ["Operational backbone", "Keep files, versions, maintenance, roles, audit logs, and backups together."],
+    ["Deployment ready", "Docker, Ubuntu, Nginx, HTTPS, backups, and health checks are part of the repo."]
+  ];
+  return (
+    <div className="marketing-site">
+      <header className="marketing-nav">
+        <div className="brand-lockup"><Layers /><span>3DSTU FarmFlow</span></div>
+        <div className="marketing-nav-actions">
+          <LanguageSwitcher language={language} setLanguage={setLanguage} compact />
+          <button onClick={onOpenApp}>Open App</button>
+        </div>
+      </header>
+      <main>
+        <section className="marketing-hero">
+          <div className="marketing-copy">
+            <p className="eyebrow">3D printing farm operating system</p>
+            <h1>3DSTU FarmFlow</h1>
+            <p>Plan every printer, file, material, and operator from one production control layer.</p>
+            <div className="marketing-actions">
+              <button className="primary" onClick={onOpenApp}>Open App</button>
+              <a className="ghost-link" href="mailto:support@3dstu.com">Contact 3DSTU</a>
+            </div>
+            <div className="signal-row">
+              <span>Live production signals</span>
+              <strong>48</strong><small>Active queue</small>
+              <strong>12</strong><small>Automated todos</small>
+              <strong>6</strong><small>Printer states</small>
+            </div>
+          </div>
+          <div className="cockpit-preview" aria-hidden="true">
+            <div className="preview-topline"><span></span><span></span><span></span></div>
+            <div className="preview-grid">
+              <div className="preview-panel tall"><b>Dashboard</b><i></i><i></i><i></i></div>
+              <div className="preview-panel"><b>Scheduler</b><i></i><i></i></div>
+              <div className="preview-panel"><b>Queue</b><i></i><i></i></div>
+              <div className="preview-panel wide"><b>Printers</b><i></i><i></i><i></i></div>
+            </div>
+          </div>
+        </section>
+        <section className="marketing-section">
+          <p className="eyebrow">Built for real print-farm operations</p>
+          <h2>One system for the work between orders and machines.</h2>
+          <div className="feature-grid">
+            {features.map(([title, body]) => <article key={title}><h3>{title}</h3><p>{body}</p></article>)}
+          </div>
+        </section>
+        <section className="marketing-contact">
+          <div>
+            <p className="eyebrow">Professional setup available</p>
+            <h2>Need installation, training, or technical support?</h2>
+          </div>
+          <a href="mailto:support@3dstu.com">support@3dstu.com</a>
+        </section>
+      </main>
+      <VersionBadge />
     </div>
   );
 }
