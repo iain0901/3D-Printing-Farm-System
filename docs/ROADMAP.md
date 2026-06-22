@@ -26,6 +26,7 @@
 
 - v0.1.5: Scheduled jobs reserve matching material spools, completed jobs deduct reserved grams, failed or cancelled jobs release reservations, and the filament inventory page shows reserved and available grams.
 - v0.1.6: History records now capture structured failure category, root cause, corrective action, waste grams, waste cost, optional waste inventory deduction, analytics waste totals, root-cause rollups, and printer reliability/waste summaries.
+- v0.1.7: Go-live readiness adds an operator/admin checklist, automatic readiness signals, manual completion tracking, and a redacted 3DSTU support snapshot export for production support without exposing secrets.
 
 ## Definition Of Done For A Real Release
 

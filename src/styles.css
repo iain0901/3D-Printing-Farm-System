@@ -1221,6 +1221,15 @@ button:disabled {
   padding: 10px 0;
 }
 
+.onboarding-feed > div {
+  grid-template-columns: auto minmax(0, 1fr) minmax(120px, .28fr) auto;
+}
+
+.onboarding-feed button {
+  min-height: 32px;
+  padding: 6px 9px;
+}
+
 .event-feed em {
   color: var(--muted);
   font-style: normal;

@@ -451,6 +451,12 @@ const workspaceSettingsSchema = z.object({
   storageLimitGb: z.number().positive().default(10),
   hotDropMode: z.enum(["Upload Only", "Direct Print", "Auto-Queue"]).default("Direct Print"),
   plan: z.string().min(1).default("Print Farm Trial"),
+  onboarding: z.record(z.string(), z.object({
+    status: z.enum(["pending", "complete", "skipped"]).default("pending"),
+    note: z.string().max(500).default(""),
+    updatedAt: z.string().optional(),
+    updatedBy: z.string().optional()
+  })).default({}),
   stripeCustomerId: z.string().min(1).optional(),
   stripeSubscriptionId: z.string().min(1).optional()
 });
@@ -464,6 +470,10 @@ const workspaceRecordSchema = z.object({
   settings: workspaceSettingsSchema
 });
 const workspaceSettingsPatchSchema = workspaceSettingsSchema.partial();
+const onboardingStepPatchSchema = z.object({
+  status: z.enum(["pending", "complete", "skipped"]).default("complete"),
+  note: z.string().max(500).optional().default("")
+});
 const billingPlanPatchSchema = z.object({
   planId: z.string().min(1)
 });
@@ -3841,6 +3851,105 @@ export function buildAnalytics(data) {
   };
 }
 
+const onboardingTemplates = [
+  { id: "workspace", title: "Workspace identity", description: "Organization name, default location, timezone, and currency are configured." },
+  { id: "team", title: "Team access", description: "At least one additional team member or API automation identity is configured." },
+  { id: "security", title: "Security posture", description: "Admin 2FA policy, audit retention, and optional API IP restrictions are reviewed." },
+  { id: "printers", title: "Printer fleet", description: "At least one printer exists and can be used by the scheduler." },
+  { id: "materials", title: "Material inventory", description: "At least one spool is registered for material planning." },
+  { id: "files", title: "File library", description: "A model or G-code file exists in the workspace library." },
+  { id: "production", title: "Production queue", description: "At least one queue job exists for schedule and workflow validation." },
+  { id: "automation", title: "Automation channels", description: "API keys, webhooks, notifications, or printer bridges are configured." },
+  { id: "backup", title: "Backup drill", description: "A workspace export or restore drill has been performed." },
+  { id: "support", title: "Support handoff", description: "A redacted support snapshot can be generated for 3DSTU support." }
+];
+
+function buildOnboarding(data) {
+  const settings = data.workspaceSettings || {};
+  const manual = settings.onboarding || {};
+  const checks = {
+    workspace: Boolean(settings.organizationName && settings.defaultLocation && settings.timezone && settings.currency),
+    team: (data.users || []).length > 1 || (data.apiKeys || []).length > 0,
+    security: settings.requireAdmin2fa === true && settings.auditLogRetention !== false,
+    printers: (data.printers || []).length > 0,
+    materials: (data.spools || []).length > 0,
+    files: (data.files || []).length > 0,
+    production: (data.queue || []).length > 0,
+    automation: Boolean((data.apiKeys || []).length || (data.webhooks || []).length || (data.notificationChannels || []).length || (data.bridges || []).length),
+    backup: Boolean((data.events || []).some((event) => ["admin.export", "admin.restore"].includes(event.type)) || manual.backup?.status === "complete"),
+    support: Boolean(manual.support?.status === "complete")
+  };
+  const steps = onboardingTemplates.map((template) => {
+    const saved = manual[template.id] || {};
+    const autoComplete = checks[template.id] === true;
+    const status = saved.status === "skipped" ? "skipped" : autoComplete ? "complete" : saved.status || "pending";
+    return {
+      ...template,
+      status,
+      autoComplete,
+      note: saved.note || "",
+      updatedAt: saved.updatedAt || "",
+      updatedBy: saved.updatedBy || ""
+    };
+  });
+  const complete = steps.filter((step) => step.status === "complete" || step.status === "skipped").length;
+  return {
+    generatedAt: new Date().toISOString(),
+    workspace: {
+      id: settings.workspaceId || DEFAULT_WORKSPACE_ID,
+      name: settings.organizationName || "Workspace",
+      plan: settings.plan || "Print Farm Trial"
+    },
+    progress: {
+      complete,
+      total: steps.length,
+      percent: Math.round(complete / Math.max(1, steps.length) * 100)
+    },
+    steps
+  };
+}
+
+function redactSupportValue(value, key = "") {
+  if (/count$/i.test(key) || /^apiKeys$/i.test(key)) return value;
+  if (/password|secret|token|authorization|stripe|hash/i.test(key) || /^apiKey$/i.test(key)) return "REDACTED";
+  if (Array.isArray(value)) return value.map((item) => redactSupportValue(item, key));
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([entryKey, entryValue]) => [entryKey, redactSupportValue(entryValue, entryKey)]));
+  return value;
+}
+
+async function buildSupportSnapshot(data, user) {
+  const scoped = workspaceScopeForUser(data, user);
+  const onboarding = buildOnboarding(scoped);
+  const integrity = await buildDataIntegrityReport(scoped);
+  return redactSupportValue({
+    service: "3DSTU FarmFlow",
+    generatedAt: new Date().toISOString(),
+    generatedBy: user.email,
+    workspace: onboarding.workspace,
+    version: process.env.npm_package_version || "",
+    schemaVersion: data.dataMeta?.schemaVersion || 0,
+    counts: {
+      printers: scoped.printers.length,
+      users: scoped.users.length,
+      files: scoped.files.length,
+      queue: scoped.queue.length,
+      spools: scoped.spools.length,
+      orders: scoped.orders.length,
+      webhooks: scoped.webhooks.length,
+      apiKeys: scoped.apiKeys.length
+    },
+    readiness: {
+      onboarding: onboarding.progress,
+      integrityWarnings: integrity.warnings.length,
+      storageLimitGb: scoped.workspaceSettings?.storageLimitGb || 0
+    },
+    analytics: buildAnalytics(scoped),
+    onboarding,
+    recentEvents: (scoped.events || []).slice(0, 20).map((event) => ({ type: event.type, message: event.message, at: event.at, data: event.data || {} })),
+    settings: scoped.workspaceSettings
+  });
+}
+
 export function buildPrintHistory(data) {
   return (data.queue || [])
     .filter((job) => ["complete", "failed", "cancelled"].includes(job.status) || job.completedAt || job.stage === "post processing")
@@ -4305,6 +4414,26 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   app.get("/api/apiKeys", async (request) => (scopedWorkspaceData(database.data, request.user.workspaceId).apiKeys || []).map(sanitizeApiKey));
   app.get("/api/addons", async (request) => (scopedWorkspaceData(database.data, request.user.workspaceId).addons || []).map(sanitizeAddon));
   app.get("/api/workspaceSettings", async (request) => scopedWorkspaceData(database.data, request.user.workspaceId).workspaceSettings);
+  app.get("/api/onboarding", async (request) => buildOnboarding(workspaceScopeForUser(database.data, request.user)));
+  app.patch("/api/onboarding/:id", async (request, reply) => {
+    if (!hasPermission(request.user, "settings:write")) return reply.code(403).send({ error: "Missing permission: settings:write" });
+    const parsed = onboardingStepPatchSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid onboarding step", issues: parsed.error.issues });
+    const current = workspaceScopeForUser(database.data, request.user).workspaceSettings || {};
+    const onboarding = { ...(current.onboarding || {}) };
+    onboarding[request.params.id] = { ...parsed.data, updatedAt: new Date().toISOString(), updatedBy: request.user.email };
+    const settings = updateWorkspaceSettings(database.data, request.user.workspaceId, { onboarding });
+    await dispatchEvent(database, "onboarding.updated", `${request.params.id} -> ${parsed.data.status}`, { workspaceId: request.user.workspaceId, stepId: request.params.id, status: parsed.data.status });
+    await database.write();
+    return { settings, onboarding: buildOnboarding(workspaceScopeForUser(database.data, request.user)) };
+  });
+  app.post("/api/support/snapshot", async (request, reply) => {
+    if (!hasPermission(request.user, "admin:export")) return reply.code(403).send({ error: "Missing permission: admin:export" });
+    const snapshot = await buildSupportSnapshot(database.data, request.user);
+    await dispatchEvent(database, "support.snapshot", `${request.user.email} generated support snapshot`, { workspaceId: request.user.workspaceId, generatedAt: snapshot.generatedAt, onboarding: snapshot.readiness.onboarding });
+    await database.write();
+    return snapshot;
+  });
   app.get("/api/billing", async (request) => buildBillingSummary(workspaceScopeForUser(database.data, request.user), { stripeClient }));
   app.get("/api/costCatalog", async () => database.data.costCatalog);
 

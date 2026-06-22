@@ -802,6 +802,51 @@ describe("3DSTU FarmFlow API", () => {
     });
   });
 
+  it("tracks onboarding readiness and generates redacted support snapshots", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const apiKey = await app.inject({
+        method: "POST",
+        url: "/api/apiKeys",
+        headers: auth(token),
+        payload: { name: "Support automation", scopes: ["admin:export"], enabled: true }
+      });
+      expect(apiKey.statusCode).toBe(201);
+
+      const onboarding = await app.inject({ method: "GET", url: "/api/onboarding", headers: auth(token) });
+      expect(onboarding.statusCode).toBe(200);
+      expect(onboarding.json().steps).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: "workspace", status: "complete" }),
+        expect.objectContaining({ id: "backup", status: "pending" })
+      ]));
+
+      const backup = await app.inject({
+        method: "PATCH",
+        url: "/api/onboarding/backup",
+        headers: auth(token),
+        payload: { status: "complete", note: "Export verified by owner" }
+      });
+      expect(backup.statusCode).toBe(200);
+      expect(backup.json().onboarding.steps.find((step) => step.id === "backup")).toMatchObject({ status: "complete", note: "Export verified by owner" });
+
+      const snapshot = await app.inject({ method: "POST", url: "/api/support/snapshot", headers: auth(token) });
+      expect(snapshot.statusCode).toBe(200);
+      expect(snapshot.json()).toMatchObject({
+        service: "3DSTU FarmFlow",
+        workspace: expect.objectContaining({ name: "North Campus Lab" }),
+        counts: expect.objectContaining({ printers: expect.any(Number), apiKeys: expect.any(Number) }),
+        readiness: expect.objectContaining({ onboarding: expect.objectContaining({ percent: expect.any(Number) }) })
+      });
+      const snapshotText = JSON.stringify(snapshot.json());
+      expect(snapshotText).not.toContain(apiKey.json().secret);
+      expect(snapshotText).not.toContain("scrypt$");
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.workspaceSettings.onboarding.backup).toMatchObject({ status: "complete", note: "Export verified by owner" });
+      expect(persisted.events.some((event) => event.type === "support.snapshot")).toBe(true);
+    });
+  });
+
   it("enforces audit retention policy and preserves protected admin events", async () => {
     await withApp(async ({ app, db, dbPath }) => {
       const token = await login(app);

@@ -206,7 +206,10 @@ type OrderJobGenerationResult = { order: Order; jobs: QueueItem[]; existingJobs?
 type CommerceConnector = { id: string; name: string; source: Order["source"] | "Generic"; url: string; enabled: boolean; hasToken?: boolean; lastStatus?: string; lastStatusCode?: number; lastError?: string; lastSyncAt?: string };
 type CommerceImport = { id: string; source: string; connectorId?: string; connectorName?: string; status: string; created: number; skipped: number; at: string; error?: string };
 type HotDropMode = "Upload Only" | "Direct Print" | "Auto-Queue";
-type WorkspaceSettings = { organizationName: string; defaultLocation: string; units: "metric" | "imperial"; currency: string; timezone: string; theme: "system" | "light" | "dark"; requireAdmin2fa: boolean; auditLogRetention: boolean; auditLogRetentionDays: number; restrictApiByIp: boolean; allowedApiIps: string[]; storageLimitGb: number; hotDropMode: HotDropMode; plan: string };
+type OnboardingStep = { id: string; title: string; description: string; status: "pending" | "complete" | "skipped"; autoComplete: boolean; note?: string; updatedAt?: string; updatedBy?: string };
+type OnboardingStatus = { generatedAt: string; workspace: { id: string; name: string; plan: string }; progress: { complete: number; total: number; percent: number }; steps: OnboardingStep[] };
+type SupportSnapshot = { service: string; generatedAt: string; generatedBy: string; workspace: { id: string; name: string; plan: string }; counts: Record<string, number>; readiness: { onboarding: OnboardingStatus["progress"]; integrityWarnings: number; storageLimitGb: number }; onboarding: OnboardingStatus; analytics: Partial<AnalyticsSummary> };
+type WorkspaceSettings = { organizationName: string; defaultLocation: string; units: "metric" | "imperial"; currency: string; timezone: string; theme: "system" | "light" | "dark"; requireAdmin2fa: boolean; auditLogRetention: boolean; auditLogRetentionDays: number; restrictApiByIp: boolean; allowedApiIps: string[]; storageLimitGb: number; hotDropMode: HotDropMode; plan: string; onboarding?: Record<string, { status: "pending" | "complete" | "skipped"; note?: string; updatedAt?: string; updatedBy?: string }> };
 type BillingTier = { id: string; name: string; storageLimitGb: number; monthlyPrice: number; currency: string; features: string[]; isCustom?: boolean };
 type BillingSummary = { status: string; plan: BillingTier; tiers: BillingTier[]; storage: { usedBytes: number; used: string; usedGb: number; limitGb: number; percent: number; files: number; storedFiles: number }; portalMode: "internal" | "external" | "stripe"; invoices: Array<{ id: string; provider?: string; plan: string; amount: number; currency: string; status: string; at: string; note?: string }>; sessions: Array<{ id: string; mode: string; provider?: string; status: string; url: string; createdAt: string; expiresAt: string }> };
 type RestoreSummary = { dryRun: boolean; restored?: boolean; collectionCounts: Record<string, number>; users: number; printers: number; queue: number; files: number; storagePathsStripped: number; filePayloadsRestored?: number; warnings: string[] };
@@ -281,6 +284,7 @@ const zhTwTranslations: Record<string, string> = {
   "Notifications": "通知",
   "Settings": "設定",
   "Hot Drop": "快速投放",
+  "Go-live readiness": "上線準備度",
   "Drop demo files here": "投放 Demo 檔案",
   "Run hot drop": "執行快速投放",
   "Print Farm Trial": "打印農場試用",
@@ -561,6 +565,8 @@ const zhTwTranslations: Record<string, string> = {
   "Integrations and API": "整合與 API",
   "Invite teammate": "邀請隊友",
   "Invite user": "邀請使用者",
+  "Loading go-live checklist": "正在載入上線檢查清單",
+  "Workspace readiness will appear here": "工作區準備狀態會顯示在這裡",
   "Jobs and print hours": "任務與打印時數",
   "History jobs": "歷史任務",
   "Print jobs": "打印任務",
@@ -660,6 +666,7 @@ const zhTwTranslations: Record<string, string> = {
   "Queue records stay available for audit and reporting after archiving.": "封存後佇列紀錄仍可用於稽核與報表。",
   "Refresh": "重新整理",
   "Reprint": "重新打印",
+  "Reopen": "重新開啟",
   "Reprint added locally": "重新打印已暫存於本機",
   "Reprint added to queue": "重新打印已加入佇列",
   "Require 2FA for admins": "管理員必須使用 2FA",
@@ -697,6 +704,8 @@ const zhTwTranslations: Record<string, string> = {
   "Spool added": "線材捲已新增",
   "Spool scan did not match inventory": "線材捲掃描未匹配庫存",
   "Spool scanner": "線材捲掃描器",
+  "Support snapshot generated": "支援快照已產生",
+  "Support snapshot failed. Owner/admin export access is required.": "支援快照失敗，需要擁有者/管理員匯出權限。",
   "Success trend": "成功率趨勢",
   "Sync all": "全部同步",
   "Team and permissions": "團隊與權限",
@@ -770,6 +779,11 @@ const zhTwTranslations: Record<string, string> = {
   "Deployment ready": "可部署上線",
   "Docker, Ubuntu, Nginx, HTTPS, backups, and health checks are part of the repo.": "Docker、Ubuntu、Nginx、HTTPS、備份與健康檢查都已納入倉庫。",
   "Professional setup available": "提供專業建置服務",
+  "3DSTU support snapshot": "3DSTU 支援快照",
+  "Creates a redacted operational snapshot for support without passwords, tokens, API key hashes, or billing secrets.": "建立遮蔽敏感資訊的營運支援快照，不包含密碼、Token、API key hash 或付款機密。",
+  "Generate": "產生",
+  "Generating": "產生中",
+  "Go-live checklist update failed. Check role or API status.": "上線檢查清單更新失敗，請檢查角色或 API 狀態。",
   "Need installation, training, or technical support?": "需要安裝、訓練或技術支援嗎？",
   "Website sections": "網站段落",
   "Platform": "平台",
@@ -851,6 +865,7 @@ const zhTwTranslations: Record<string, string> = {
   "Source, releases, deployment scripts, issue tracking, and project documentation live in the public repository.": "原始碼、版本、部署腳本、問題追蹤與專案文檔都放在公開倉庫。",
   "Open GitHub": "開啟 GitHub",
   "Current version": "目前版本",
+  "System version": "系統版本",
   "Public deployment": "公開部署",
   "Production domain": "正式網域",
   "Documentation and install path": "文檔與安裝路徑",
@@ -2798,7 +2813,7 @@ function App() {
 }
 
 function VersionBadge() {
-  return <div className="version-badge"><span>Version</span> <strong data-i18n-ignore>{APP_VERSION}</strong></div>;
+  return <footer className="version-badge"><span>System version</span> <strong data-i18n-ignore>v{APP_VERSION}</strong></footer>;
 }
 
 function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
@@ -4580,6 +4595,9 @@ function SettingsPage({ settings, setSettings, addToast, setBackendStatus, curre
   const [restoreBackup, setRestoreBackup] = useState<Record<string, unknown> | null>(null);
   const [restoreSummary, setRestoreSummary] = useState<RestoreSummary | null>(null);
   const [restoreBusy, setRestoreBusy] = useState(false);
+  const [onboarding, setOnboarding] = useState<OnboardingStatus | null>(null);
+  const [supportSnapshot, setSupportSnapshot] = useState<SupportSnapshot | null>(null);
+  const [supportBusy, setSupportBusy] = useState(false);
   const refreshBilling = async () => {
     try {
       const summary = await apiRequest<BillingSummary>("/api/billing");
@@ -4596,6 +4614,10 @@ function SettingsPage({ settings, setSettings, addToast, setBackendStatus, curre
   }, [settings.allowedApiIps]);
   useEffect(() => {
     refreshBilling();
+    apiRequest<OnboardingStatus>("/api/onboarding").then((result) => {
+      setOnboarding(result);
+      setBackendStatus("connected");
+    }).catch(() => setBackendStatus("local"));
   }, []);
   const saveSettings = async (patch: Partial<WorkspaceSettings>, label = "Settings") => {
     setSettings((current) => ({ ...current, ...patch }));
@@ -4748,6 +4770,37 @@ function SettingsPage({ settings, setSettings, addToast, setBackendStatus, curre
       addToast("Billing session could not be created", "warning");
     }
   };
+  const updateOnboardingStep = async (step: OnboardingStep, status: OnboardingStep["status"]) => {
+    try {
+      const result = await apiRequest<{ settings: WorkspaceSettings; onboarding: OnboardingStatus }>(`/api/onboarding/${step.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status, note: step.note || "" })
+      });
+      setSettings(result.settings);
+      setOnboarding(result.onboarding);
+      setBackendStatus("connected");
+      addToast(`${step.title} marked ${status}`, status === "complete" ? "success" : "info");
+    } catch {
+      setBackendStatus("local");
+      addToast("Go-live checklist update failed. Check role or API status.", "warning");
+    }
+  };
+  const generateSupportSnapshot = async () => {
+    setSupportBusy(true);
+    try {
+      const snapshot = await apiRequest<SupportSnapshot>("/api/support/snapshot", { method: "POST" });
+      setSupportSnapshot(snapshot);
+      setOnboarding(snapshot.onboarding);
+      downloadTextFile(`3dstu-farmflow-support-${Date.now()}.json`, JSON.stringify(snapshot, null, 2), "application/json");
+      setBackendStatus("connected");
+      addToast("Support snapshot generated", "success");
+    } catch {
+      setBackendStatus("local");
+      addToast("Support snapshot failed. Owner/admin export access is required.", "warning");
+    } finally {
+      setSupportBusy(false);
+    }
+  };
   const storage = billing?.storage || { used: "0 B", usedGb: 0, limitGb: settings.storageLimitGb, percent: 0, files: 0, storedFiles: 0, usedBytes: 0 };
   const currentPlanId = billing?.plan.id || "";
   return (
@@ -4765,6 +4818,22 @@ function SettingsPage({ settings, setSettings, addToast, setBackendStatus, curre
           </select></label>
           <div className="quickbar"><button onClick={managePlan}>Manage plan</button><button onClick={() => exportWorkspace()}><Download size={16} />Export backup</button><button onClick={() => exportWorkspace(true)}><Download size={16} />Export full backup</button></div>
           {billing?.invoices.length ? <div className="event-feed billing-feed">{billing.invoices.slice(0, 3).map((invoice) => <div key={invoice.id}><StatusDot status={invoice.status === "paid" ? "complete" : "queued"} /><span>{invoice.plan} - {invoice.currency} {invoice.amount}</span><em>{invoice.status} - {invoice.at.slice(0, 10)}</em></div>)}</div> : <p className="muted">No billing records yet.</p>}
+        </section>
+        <section className="panel">
+          <PanelTitle title="Go-live readiness" action={<strong>{onboarding?.progress.percent ?? 0}%</strong>} />
+          <div className="progress large"><span style={{ width: `${onboarding?.progress.percent ?? 0}%` }} /></div>
+          <div className="event-feed onboarding-feed">
+            {(onboarding?.steps || []).map((step) => <div key={step.id}><StatusDot status={step.status === "complete" ? "complete" : step.status === "skipped" ? "queued" : "failed"} /><span><b>{step.title}</b> - {step.description}</span><em>{step.status}{step.note ? ` - ${step.note}` : ""}</em><button onClick={() => updateOnboardingStep(step, step.status === "complete" ? "pending" : "complete")}>{step.status === "complete" ? "Reopen" : "Complete"}</button></div>)}
+            {!onboarding && <div><StatusDot status="queued" /><span>Loading go-live checklist</span><em>Workspace readiness will appear here</em></div>}
+          </div>
+        </section>
+        <section className="panel">
+          <PanelTitle title="3DSTU support snapshot" action={<button onClick={generateSupportSnapshot} disabled={supportBusy}><Download size={16} />{supportBusy ? "Generating" : "Generate"}</button>} />
+          <p>Creates a redacted operational snapshot for support without passwords, tokens, API key hashes, or billing secrets.</p>
+          {supportSnapshot && <div className="event-feed billing-feed">
+            <div><StatusDot status="complete" /><span>{supportSnapshot.workspace.name}</span><em>{supportSnapshot.generatedAt}</em></div>
+            <div><StatusDot status="queued" /><span>{supportSnapshot.counts.printers} printers, {supportSnapshot.counts.files} files, {supportSnapshot.counts.queue} queue jobs</span><em>{supportSnapshot.readiness.onboarding.percent}% go-live ready</em></div>
+          </div>}
         </section>
         <section className="panel">
           <PanelTitle title="Backup restore" />
