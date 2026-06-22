@@ -219,8 +219,8 @@ type Addon = { id: string; name: string; description: string; category: string; 
 type Language = "en" | "zh-TW" | "zh-CN";
 type Todo = { id: string; title: string; owner: string; source: string; severity: "Low" | "Medium" | "High" | "Urgent"; due: string; kind: "slicing" | "scheduling" | "material" | "size" | "post" | "exception"; status?: "open" | "claimed" | "snoozed"; actionNote?: string; claimedBy?: string; snoozeUntil?: string };
 type TodoAction = { id: string; todoId: string; todoTitle: string; todoKind: Todo["kind"]; action: "claim" | "complete" | "snooze" | "reopen"; owner: string; note?: string; snoozeUntil?: string; createdBy?: string; at: string };
-type AnalyticsSummary = { jobs: number; active: number; queued: number; completed: number; failed: number; successRate: number; utilization: number; cost: number; printHours: number; materialMix: Record<string, number>; daily: Array<{ day: string; jobs: number; hours: number; success: number }> };
-type HistoryRecord = { id: string; fileId?: string; file: string; printerId?: string; printer: string; status: JobStatus; duration: string; material: string; cost: number; date: string; note: string; issueTag?: string; issueSeverity?: string; flaggedAt?: string; failureReason?: string; sourceOrderId?: string };
+type AnalyticsSummary = { jobs: number; active: number; queued: number; completed: number; failed: number; successRate: number; utilization: number; cost: number; printHours: number; wasteGrams?: number; wasteCost?: number; failureCategories?: Record<string, number>; rootCauses?: Array<{ label: string; count: number }>; printerReliability?: Array<{ printerId: string; printer: string; finished: number; failed: number; successRate: number; wasteGrams: number; wasteCost: number }>; materialMix: Record<string, number>; daily: Array<{ day: string; jobs: number; hours: number; success: number }> };
+type HistoryRecord = { id: string; fileId?: string; file: string; printerId?: string; printer: string; status: JobStatus; duration: string; material: string; cost: number; date: string; note: string; issueTag?: string; issueSeverity?: string; flaggedAt?: string; failureReason?: string; failureCategory?: string; rootCause?: string; correctiveAction?: string; wasteGrams?: number; wasteCost?: number; wasteSpoolId?: string; wasteInventoryDeductedAt?: string; sourceOrderId?: string };
 type SlicerJob = { id: string; fileId: string; sourceFile: string; printerId: string; printer: string; profileId?: string; profile?: string; status: "running" | "complete" | "failed"; engine: "internal" | "external"; settings: { material: string; layerHeight: string; infill: number; supports: boolean }; outputName?: string; outputSize?: string; outputPath?: string; warning?: string; error?: string; createdAt: string; completedAt?: string };
 type AuditEvent = { id: string; type: string; message: string; at: string; data?: Record<string, unknown> };
 type AutoScheduleResult = {
@@ -562,6 +562,19 @@ const zhTwTranslations: Record<string, string> = {
   "Invite teammate": "邀請隊友",
   "Invite user": "邀請使用者",
   "Jobs and print hours": "任務與打印時數",
+  "History jobs": "歷史任務",
+  "Print jobs": "打印任務",
+  "Success rate": "成功率",
+  "Utilization": "稼動率",
+  "Cost": "成本",
+  "Waste": "耗損",
+  "Waste cost": "耗損成本",
+  "Failure intelligence": "失敗智慧",
+  "Waste by printer": "各設備耗損",
+  "No failure records yet": "尚無失敗紀錄",
+  "Flag failed prints from history": "從歷史紀錄標記失敗打印",
+  "Flagged": "已標記",
+  "Root cause": "根因",
   "Jobs that still need slicing or already have a slot are left untouched.": "仍需切片或已有時段的任務會保持不變。",
   "Keep production moving": "保持生產運作",
   "Keyholes": "鑰匙孔",
@@ -4167,7 +4180,7 @@ function AnalyticsPage({ addToast }: { addToast: (message: string, type?: Toast[
     ? Object.entries(analytics.materialMix).map(([name, value], index) => ({ name, value, color: ["#2563eb", "#f97316", "#14b8a6", "#64748b", "#16a34a"][index % 5] }))
     : materialData;
   const exportCsv = () => {
-    const summary = analytics || { jobs: 217, completed: 208, failed: 9, successRate: 96, utilization: 64, cost: 1245, printHours: 337, active: 0, queued: 0, materialMix: {}, daily: rows };
+    const summary = analytics || { jobs: 217, completed: 208, failed: 9, successRate: 96, utilization: 64, cost: 1245, printHours: 337, wasteGrams: 0, wasteCost: 0, active: 0, queued: 0, materialMix: {}, daily: rows };
     downloadCsvFile("layerpilot-analytics.csv", [
       { metric: "jobs", value: summary.jobs },
       { metric: "completed", value: summary.completed },
@@ -4175,17 +4188,34 @@ function AnalyticsPage({ addToast }: { addToast: (message: string, type?: Toast[
       { metric: "successRate", value: summary.successRate },
       { metric: "utilization", value: summary.utilization },
       { metric: "cost", value: summary.cost },
-      { metric: "printHours", value: summary.printHours }
+      { metric: "printHours", value: summary.printHours },
+      { metric: "wasteGrams", value: summary.wasteGrams || 0 },
+      { metric: "wasteCost", value: summary.wasteCost || 0 }
     ]);
     addToast("Analytics CSV exported", "info");
   };
   return (
     <Page title="Analytics" kicker="Success, utilization, material, cost and exports">
       <div className="toolbar"><select><option>Past 7 days</option><option>Past month</option><option>Custom range</option></select><select><option>All printers</option><option>Forge A1</option><option>Print Farm</option></select><select><option>All materials</option><option>PLA</option><option>PETG</option></select><button onClick={exportCsv}><Download size={16} />Export CSV</button></div>
-      <div className="metric-grid"><Metric label="Print jobs" value={String(analytics?.jobs ?? 217)} icon={ClipboardList} /><Metric label="Success rate" value={`${analytics?.successRate ?? 96}%`} icon={Check} tone="green" /><Metric label="Utilization" value={`${analytics?.utilization ?? 64}%`} icon={Gauge} tone="teal" /><Metric label="Cost" value={`$${analytics?.cost ?? 1245}`} icon={Database} tone="orange" /></div>
+      <div className="metric-grid"><Metric label="Print jobs" value={String(analytics?.jobs ?? 217)} icon={ClipboardList} /><Metric label="Success rate" value={`${analytics?.successRate ?? 96}%`} icon={Check} tone="green" /><Metric label="Utilization" value={`${analytics?.utilization ?? 64}%`} icon={Gauge} tone="teal" /><Metric label="Cost" value={`$${analytics?.cost ?? 1245}`} icon={Database} tone="orange" /><Metric label="Waste" value={`${analytics?.wasteGrams ?? 0}g`} icon={AlertTriangle} tone="red" /></div>
       <div className="split">
         <section className="panel"><PanelTitle title="Jobs and print hours" /><ResponsiveContainer width="100%" height={280}><BarChart data={rows}><CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" /><XAxis dataKey="day" /><YAxis /><Tooltip /><Bar dataKey="jobs" fill="#2563eb" /><Bar dataKey="hours" fill="#14b8a6" /></BarChart></ResponsiveContainer></section>
         <section className="panel"><PanelTitle title="Material mix" /><ResponsiveContainer width="100%" height={280}><PieChart><Pie data={mix} dataKey="value" nameKey="name" outerRadius={90} label>{mix.map((entry) => <Cell key={entry.name} fill={entry.color} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer></section>
+      </div>
+      <div className="split">
+        <section className="panel">
+          <PanelTitle title="Failure intelligence" action={<strong>${analytics?.wasteCost ?? 0} waste cost</strong>} />
+          <div className="event-feed">
+            {(analytics?.rootCauses || []).map((cause) => <div key={cause.label}><StatusDot status="failed" /><span>{cause.label}</span><em>{cause.count} job{cause.count === 1 ? "" : "s"}</em></div>)}
+            {!(analytics?.rootCauses || []).length && <div><StatusDot status="queued" /><span>No failure records yet</span><em>Flag failed prints from history</em></div>}
+          </div>
+        </section>
+        <section className="panel">
+          <PanelTitle title="Waste by printer" />
+          <div className="event-feed">
+            {(analytics?.printerReliability || []).slice(0, 6).map((printer) => <div key={printer.printerId}><StatusDot status={printer.successRate >= 95 ? "complete" : "failed"} /><span>{printer.printer}</span><em>{printer.successRate}% success - {printer.wasteGrams}g waste - ${printer.wasteCost}</em></div>)}
+          </div>
+        </section>
       </div>
       <section className="panel"><PanelTitle title="Success trend" /><ResponsiveContainer width="100%" height={220}><LineChart data={rows}><CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" /><XAxis dataKey="day" /><YAxis domain={[80, 100]} /><Tooltip /><Line type="monotone" dataKey="success" stroke="#16a34a" strokeWidth={3} /></LineChart></ResponsiveContainer></section>
     </Page>
@@ -4220,7 +4250,7 @@ function HistoryPage({ setQueue, printers, addToast, setBackendStatus }: { setQu
     setQueue((items) => [...items, { id: crypto.randomUUID(), fileId: "history", file: item.file, printerId: printer.id, printer: printer.name, status: "queued", priority: "Normal", stage: "needs scheduling", material: item.material, color: "Any", due: "Tomorrow 12:00", dimensions: [120, 90, 45], assignee: "Scheduler", time: item.duration, cost: item.cost, added: "Just now" }]);
     addToast("Reprint added locally");
   };
-  const updateHistory = async (item: HistoryRecord, patch: Partial<Pick<HistoryRecord, "note" | "issueTag" | "issueSeverity" | "failureReason">>, label: string) => {
+  const updateHistory = async (item: HistoryRecord, patch: Partial<HistoryRecord>, label: string) => {
     setHistory((records) => records.map((record) => record.id === item.id ? { ...record, ...patch } : record));
     if (item.id.startsWith("seed-")) {
       addToast(`${label} saved locally`, "warning");
@@ -4243,12 +4273,17 @@ function HistoryPage({ setQueue, printers, addToast, setBackendStatus }: { setQu
   const flagIssue = (item: HistoryRecord) => updateHistory(item, {
     issueTag: "Needs review",
     issueSeverity: item.status === "failed" ? "High" : "Medium",
-    failureReason: item.failureReason || item.note || "Operator flagged for review"
+    failureReason: item.failureReason || item.note || "Operator flagged for review",
+    failureCategory: item.failureCategory || "Print quality",
+    rootCause: item.rootCause || item.failureReason || item.note || "Operator flagged for review",
+    correctiveAction: item.correctiveAction || "Review setup, material condition, and first-layer result before reprint",
+    wasteGrams: item.wasteGrams || Math.max(1, Math.round(item.cost || 1))
   }, "Issue tag");
   return (
     <Page title="Print history" kicker="Review, annotate, and reprint previous jobs">
-      <DataTable headers={["File", "Printer", "Status", "Duration", "Material", "Cost", "Date", "Notes", "Actions"]}>
-        {history.map((job) => <tr key={job.id}><td><b>{job.file}</b>{job.issueTag && <small>{job.issueTag} - {job.issueSeverity || "Medium"}</small>}</td><td>{job.printer}</td><td><StatusPill status={job.status} /></td><td>{job.duration}</td><td>{job.material}</td><td>${job.cost}</td><td>{job.date}</td><td><input defaultValue={job.note} onBlur={(event) => event.target.value !== job.note && updateHistory(job, { note: event.target.value }, "History note")} /></td><td><button onClick={() => reprint(job)}>Reprint</button><button onClick={() => flagIssue(job)}>Flag</button></td></tr>)}
+      <div className="metric-grid"><Metric label="History jobs" value={String(history.length)} icon={ListChecks} /><Metric label="Flagged" value={String(history.filter((job) => job.issueTag || job.failureReason).length)} icon={AlertTriangle} tone="orange" /><Metric label="Waste" value={`${history.reduce((sum, job) => sum + Number(job.wasteGrams || 0), 0)}g`} icon={Database} tone="red" /><Metric label="Waste cost" value={`$${Math.round(history.reduce((sum, job) => sum + Number(job.wasteCost || 0), 0) * 100) / 100}`} icon={Gauge} tone="orange" /></div>
+      <DataTable headers={["File", "Printer", "Status", "Duration", "Material", "Waste", "Root cause", "Date", "Notes", "Actions"]}>
+        {history.map((job) => <tr key={job.id}><td><b>{job.file}</b>{job.issueTag && <small>{job.issueTag} - {job.issueSeverity || "Medium"}</small>}</td><td>{job.printer}</td><td><StatusPill status={job.status} /></td><td>{job.duration}</td><td>{job.material}</td><td>{Number(job.wasteGrams || 0)}g<small>${Number(job.wasteCost || 0)}</small></td><td>{job.rootCause || job.failureCategory || "None"}{job.correctiveAction && <small>{job.correctiveAction}</small>}</td><td>{job.date}</td><td><input defaultValue={job.note} onBlur={(event) => event.target.value !== job.note && updateHistory(job, { note: event.target.value }, "History note")} /></td><td><button onClick={() => reprint(job)}>Reprint</button><button onClick={() => flagIssue(job)}>Flag</button></td></tr>)}
       </DataTable>
     </Page>
   );

@@ -2281,10 +2281,36 @@ endsolid s3_store`;
         method: "PATCH",
         url: "/api/history/q1",
         headers: auth(token),
-        payload: { note: "QC passed after dimensional check", issueTag: "Dimensional variance", issueSeverity: "Medium", failureReason: "Corner lifted 0.2mm" }
+        payload: {
+          note: "QC passed after dimensional check",
+          issueTag: "Dimensional variance",
+          issueSeverity: "Medium",
+          failureReason: "Corner lifted 0.2mm",
+          failureCategory: "Adhesion",
+          rootCause: "Front-left bed corner was cool",
+          correctiveAction: "Clean plate and raise first-layer bed target",
+          wasteGrams: 24,
+          wasteSpoolId: "s1",
+          deductWasteFromInventory: true
+        }
       });
       expect(annotated.statusCode).toBe(200);
-      expect(annotated.json().historyRecord).toMatchObject({ id: "q1", note: "Corner lifted 0.2mm", issueTag: "Dimensional variance", issueSeverity: "Medium", failureReason: "Corner lifted 0.2mm" });
+      expect(annotated.json().historyRecord).toMatchObject({
+        id: "q1",
+        note: "Corner lifted 0.2mm",
+        issueTag: "Dimensional variance",
+        issueSeverity: "Medium",
+        failureReason: "Corner lifted 0.2mm",
+        failureCategory: "Adhesion",
+        rootCause: "Front-left bed corner was cool",
+        correctiveAction: "Clean plate and raise first-layer bed target",
+        wasteGrams: 24,
+        wasteCost: 0.2,
+        wasteSpoolId: "s1"
+      });
+      expect(annotated.json().wasteInventory).toMatchObject({ spoolId: "s1", before: 742, after: 718, grams: 24 });
+      expect(annotated.json().analytics).toMatchObject({ wasteGrams: 24, wasteCost: 0.2, failureCategories: { Adhesion: 1 } });
+      expect(annotated.json().analytics.printerReliability.find((printer) => printer.printerId === "p1")).toMatchObject({ wasteGrams: 24, wasteCost: 0.2 });
 
       const reprint = await app.inject({
         method: "POST",
@@ -2314,7 +2340,9 @@ endsolid s3_store`;
 
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
       expect(persisted.queue.some((job) => job.sourceJobId === "q1" && job.status === "queued")).toBe(true);
-      expect(persisted.queue.find((job) => job.id === "q1")).toMatchObject({ note: "QC passed after dimensional check", issueTag: "Dimensional variance", issueSeverity: "Medium", failureReason: "Corner lifted 0.2mm" });
+      expect(persisted.queue.find((job) => job.id === "q1")).toMatchObject({ note: "QC passed after dimensional check", issueTag: "Dimensional variance", issueSeverity: "Medium", failureReason: "Corner lifted 0.2mm", failureCategory: "Adhesion", wasteGrams: 24, wasteCost: 0.2, wasteSpoolId: "s1" });
+      expect(persisted.spools.find((spool) => spool.id === "s1")).toMatchObject({ remaining: 718 });
+      expect(persisted.queue.find((job) => job.sourceJobId === "q1")).not.toHaveProperty("wasteGrams");
       expect(persisted.events.some((event) => event.type === "history.annotated" && event.data.jobId === "q1")).toBe(true);
       expect(persisted.events.some((event) => event.type === "queue.reprint")).toBe(true);
       expect(persisted.events.some((event) => event.type === "admin.export")).toBe(true);

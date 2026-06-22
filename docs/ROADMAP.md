@@ -19,13 +19,13 @@
 1. Documentation and public project maturity.
 2. Printer bridge hardening with connector test harnesses.
 3. File preview and G-code visualization.
-4. Failure, waste, and profitability analytics.
-5. Customer onboarding, tenant provisioning, and production support flows.
-6. Plugin SDK for external connectors.
+4. Customer onboarding, tenant provisioning, and production support flows.
+5. Plugin SDK for external connectors.
 
 ## Recently Shipped
 
 - v0.1.5: Scheduled jobs reserve matching material spools, completed jobs deduct reserved grams, failed or cancelled jobs release reservations, and the filament inventory page shows reserved and available grams.
+- v0.1.6: History records now capture structured failure category, root cause, corrective action, waste grams, waste cost, optional waste inventory deduction, analytics waste totals, root-cause rollups, and printer reliability/waste summaries.
 
 ## Definition Of Done For A Real Release
 

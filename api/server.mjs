@@ -497,7 +497,14 @@ const historyPatchSchema = z.object({
   note: z.string().max(1000).optional(),
   issueTag: z.string().max(80).optional(),
   issueSeverity: severitySchema.optional(),
-  failureReason: z.string().max(1000).optional()
+  failureReason: z.string().max(1000).optional(),
+  failureCategory: z.string().max(80).optional(),
+  rootCause: z.string().max(1000).optional(),
+  correctiveAction: z.string().max(1000).optional(),
+  wasteGrams: z.number().nonnegative().optional(),
+  wasteCost: z.number().nonnegative().optional(),
+  wasteSpoolId: z.string().min(1).optional(),
+  deductWasteFromInventory: z.boolean().optional()
 });
 const adminRestoreSchema = z.object({
   backup: z.record(z.string(), z.unknown()),
@@ -3748,6 +3755,45 @@ function dayLabel(value = "") {
   return text.split(/\s+/)[0] || "Backlog";
 }
 
+function materialWasteCost(data, material, grams) {
+  const catalog = costCatalogSchema.parse({ ...defaultCostCatalog, ...(data.costCatalog || {}) });
+  const materialRate = catalog.materialRates[material] ?? catalog.materialRates[Object.keys(catalog.materialRates).find((key) => String(material || "").toLowerCase().includes(key.toLowerCase())) || "PLA"] ?? 1;
+  return Math.round(Number(grams || 0) / 100 * materialRate * 100) / 100;
+}
+
+function failureAnalytics(data) {
+  const queue = data.queue || [];
+  const printers = data.printers || [];
+  const failedJobs = queue.filter((job) => job.status === "failed" || job.status === "cancelled" || Number(job.wasteGrams || 0) > 0 || job.failureReason || job.failureCategory);
+  const wasteGrams = Math.round(failedJobs.reduce((sum, job) => sum + Number(job.wasteGrams || 0), 0));
+  const wasteCost = Math.round(failedJobs.reduce((sum, job) => sum + Number(job.wasteCost ?? materialWasteCost(data, job.material, job.wasteGrams || 0)), 0) * 100) / 100;
+  const rootCauseRows = Object.entries(groupCount(failedJobs, (job) => job.rootCause || job.failureReason || "Unclassified"))
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+    .slice(0, 8);
+  return {
+    wasteGrams,
+    wasteCost,
+    failureCategories: groupCount(failedJobs, (job) => job.failureCategory || job.issueTag || (job.status === "cancelled" ? "Cancelled" : "Print failure")),
+    rootCauses: rootCauseRows,
+    printerReliability: printers.map((printer) => {
+      const jobs = queue.filter((job) => job.printerId === printer.id || job.printer === printer.name);
+      const finished = jobs.filter((job) => ["complete", "failed", "cancelled"].includes(job.status));
+      const failed = jobs.filter((job) => job.status === "failed" || job.status === "cancelled");
+      const printerWasteGrams = Math.round(jobs.reduce((sum, job) => sum + Number(job.wasteGrams || 0), 0));
+      return {
+        printerId: printer.id,
+        printer: printer.name,
+        finished: finished.length,
+        failed: failed.length,
+        successRate: finished.length ? Math.round((finished.length - failed.length) / finished.length * 100) : 100,
+        wasteGrams: printerWasteGrams,
+        wasteCost: Math.round(jobs.reduce((sum, job) => sum + Number(job.wasteCost ?? materialWasteCost(data, job.material, job.wasteGrams || 0)), 0) * 100) / 100
+      };
+    })
+  };
+}
+
 export function buildAnalytics(data) {
   const queue = data.queue || [];
   const printers = data.printers || [];
@@ -3782,6 +3828,7 @@ export function buildAnalytics(data) {
     cost: queue.reduce((sum, job) => sum + Number(job.cost || 0), 0),
     printHours: Math.round(totalDuration / 60),
     materialMix: groupCount(queue, (job) => job.material),
+    ...failureAnalytics(data),
     printerLoad: printers.map((printer) => ({
       printerId: printer.id,
       printer: printer.name,
@@ -3813,6 +3860,13 @@ export function buildPrintHistory(data) {
       issueSeverity: job.issueSeverity || "",
       flaggedAt: job.flaggedAt || "",
       failureReason: job.failureReason || "",
+      failureCategory: job.failureCategory || "",
+      rootCause: job.rootCause || "",
+      correctiveAction: job.correctiveAction || "",
+      wasteGrams: Number(job.wasteGrams || 0),
+      wasteCost: Number(job.wasteCost ?? materialWasteCost(data, job.material, job.wasteGrams || 0)),
+      wasteSpoolId: job.wasteSpoolId || "",
+      wasteInventoryDeductedAt: job.wasteInventoryDeductedAt || "",
       sourceOrderId: job.sourceOrderId || ""
     }))
     .sort((a, b) => String(b.date).localeCompare(String(a.date)));
@@ -3839,6 +3893,14 @@ function createReprintJob(data, sourceJob, options) {
     scheduleWarnings: [],
     completedAt: undefined,
     failureReason: undefined,
+    failureCategory: undefined,
+    rootCause: undefined,
+    correctiveAction: undefined,
+    wasteGrams: undefined,
+    wasteCost: undefined,
+    wasteSpoolId: undefined,
+    wasteInventoryDeductedAt: undefined,
+    wasteInventoryDeductedGrams: undefined,
     added: `Reprint from ${sourceJob.id}`,
     sourceJobId: sourceJob.id,
     updatedAt: new Date().toISOString()
@@ -4401,17 +4463,43 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const now = new Date().toISOString();
     if (parsed.data.note !== undefined) job.note = parsed.data.note;
     if (parsed.data.failureReason !== undefined) job.failureReason = parsed.data.failureReason;
+    if (parsed.data.failureCategory !== undefined) job.failureCategory = parsed.data.failureCategory;
+    if (parsed.data.rootCause !== undefined) job.rootCause = parsed.data.rootCause;
+    if (parsed.data.correctiveAction !== undefined) job.correctiveAction = parsed.data.correctiveAction;
+    if (parsed.data.wasteGrams !== undefined) {
+      job.wasteGrams = Math.round(parsed.data.wasteGrams);
+      job.wasteCost = parsed.data.wasteCost !== undefined ? Math.round(parsed.data.wasteCost * 100) / 100 : materialWasteCost(workspaceScopeForUser(database.data, request.user), job.material, job.wasteGrams);
+    } else if (parsed.data.wasteCost !== undefined) {
+      job.wasteCost = Math.round(parsed.data.wasteCost * 100) / 100;
+    }
+    if (parsed.data.wasteSpoolId !== undefined) job.wasteSpoolId = parsed.data.wasteSpoolId;
     if (parsed.data.issueTag !== undefined) {
       job.issueTag = parsed.data.issueTag;
       if (parsed.data.issueTag) job.flaggedAt = now;
     }
     if (parsed.data.issueSeverity !== undefined) job.issueSeverity = parsed.data.issueSeverity;
+    let wasteInventory = null;
+    if (parsed.data.deductWasteFromInventory && Number(job.wasteGrams || 0) > 0 && !job.wasteInventoryDeductedAt) {
+      const scoped = workspaceScopeForUser(database.data, request.user);
+      const targetSpool = (job.wasteSpoolId || parsed.data.wasteSpoolId)
+        ? database.data.spools.find((spool) => spool.id === (job.wasteSpoolId || parsed.data.wasteSpoolId) && itemInWorkspace(spool, request.user.workspaceId))
+        : scoped.spools.find((spool) => materialKey(spool.material) === materialKey(job.material));
+      if (targetSpool) {
+        const before = Number(targetSpool.remaining || 0);
+        targetSpool.remaining = Math.max(0, before - Number(job.wasteGrams || 0));
+        targetSpool.updatedAt = now;
+        job.wasteSpoolId = targetSpool.id;
+        job.wasteInventoryDeductedAt = now;
+        job.wasteInventoryDeductedGrams = Number(job.wasteGrams || 0);
+        wasteInventory = { spoolId: targetSpool.id, before, after: targetSpool.remaining, grams: Number(job.wasteGrams || 0) };
+      }
+    }
     job.updatedAt = now;
-    await dispatchEvent(database, "history.annotated", `${job.file} history updated`, { workspaceId: request.user.workspaceId, jobId: job.id, issueTag: job.issueTag || "", issueSeverity: job.issueSeverity || "" });
+    await dispatchEvent(database, "history.annotated", `${job.file} history updated`, { workspaceId: request.user.workspaceId, jobId: job.id, issueTag: job.issueTag || "", issueSeverity: job.issueSeverity || "", failureCategory: job.failureCategory || "", wasteGrams: Number(job.wasteGrams || 0), wasteCost: Number(job.wasteCost || 0), wasteInventory });
     await database.write();
     const history = buildPrintHistory(workspaceScopeForUser(database.data, request.user));
     const historyRecord = history.find((item) => item.id === job.id);
-    return { job, historyRecord, history };
+    return { job, historyRecord, history, analytics: buildAnalytics(workspaceScopeForUser(database.data, request.user)), spools: workspaceScopeForUser(database.data, request.user).spools, wasteInventory };
   });
 
   app.post("/api/history/:id/reprint", async (request, reply) => {
