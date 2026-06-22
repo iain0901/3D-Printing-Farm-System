@@ -749,6 +749,77 @@ const zhTwTranslations: Record<string, string> = {
   "Docker, Ubuntu, Nginx, HTTPS, backups, and health checks are part of the repo.": "Docker、Ubuntu、Nginx、HTTPS、備份與健康檢查都已納入倉庫。",
   "Professional setup available": "提供專業建置服務",
   "Need installation, training, or technical support?": "需要安裝、訓練或技術支援嗎？",
+  "Website sections": "網站段落",
+  "Platform": "平台",
+  "Workflow": "流程",
+  "Operations": "營運",
+  "Support": "支援",
+  "Today's queue": "今日佇列",
+  "jobs structured by status, material, and due risk": "依狀態、材料與交期風險結構化的任務",
+  "Operator todos": "操作員待辦",
+  "generated from production state instead of manual reminders": "由生產狀態自動產生，而非手動提醒",
+  "Deployment track": "部署軌道",
+  "Docker, HTTPS, backups, health checks, and audit logs": "Docker、HTTPS、備份、健康檢查與稽核紀錄",
+  "Production control for serious 3D printing teams.": "為專業 3D 打印團隊打造的生產控制系統。",
+  "3DSTU FarmFlow connects orders, files, materials, printers, operators, alerts, and backups into one deployable SaaS platform for real print-farm operations.": "3DSTU FarmFlow 將訂單、檔案、材料、打印機、操作員、警報與備份整合成一套可部署的 SaaS 平台，服務真實打印農場營運。",
+  "Talk to 3DSTU": "聯絡 3DSTU",
+  "Built for": "適用於",
+  "Print farms": "打印農場",
+  "Service bureaus": "代工服務商",
+  "Makerspaces": "創客空間",
+  "School labs": "學校實驗室",
+  "Factory prototyping teams": "工廠打樣團隊",
+  "Why it exists": "為什麼需要它",
+  "A print farm does not need another task list. It needs an operating layer.": "打印農場不需要另一個任務清單，而是需要一個作業控制層。",
+  "From order chaos to machine-ready work": "把混亂訂單變成可上機工作",
+  "Every job carries the production facts that matter: model file, material, color, nozzle, build volume, due date, slicing state, operator owner, printer match, and exception history.": "每個任務都帶著真正影響生產的資料：模型檔、材料、顏色、噴嘴、成形尺寸、交期、切片狀態、負責操作員、打印機匹配與異常歷史。",
+  "Humans handle exceptions, not repetitive tracking": "人處理例外，不處理重複追蹤",
+  "Todos are generated when state changes: slicing needed, scheduling needed, material mismatch, maintenance risk, completion pickup, post-processing, or late-work escalation.": "狀態變更時自動產生待辦：需要切片、需要排單、材料不符、維護風險、完成取件、後處理或逾期升級。",
+  "Deployment is part of the product": "部署就是產品的一部分",
+  "The repo includes Docker deployment, Nginx and HTTPS guidance, health checks, backups, restore preview, audit trails, and support paths for customer farms.": "倉庫包含 Docker 部署、Nginx 與 HTTPS 指引、健康檢查、備份、還原預覽、稽核軌跡，以及客戶農場的支援路徑。",
+  "Operating workflow": "作業流程",
+  "One flow from intake to completed print.": "從接單到完成打印的一條流程。",
+  "FarmFlow is designed around the production decisions that cost time when they live in chat, spreadsheets, slicer notes, and memory.": "FarmFlow 圍繞那些散落在聊天、試算表、切片備註和人腦記憶中、最耗時間的生產決策而設計。",
+  "Intake": "接單",
+  "Bring in manual, CSV, webhook, or commerce orders and turn them into structured production jobs.": "匯入手動、CSV、Webhook 或電商訂單，轉成結構化生產任務。",
+  "Validate": "驗證",
+  "Check model files, material needs, print volume, slicing state, and quote assumptions before the job reaches a machine.": "在任務上機前檢查模型檔、材料需求、打印尺寸、切片狀態與報價假設。",
+  "Drag jobs onto printers or run automated matching with material, color, nozzle, capacity, and due-date constraints.": "將任務拖到打印機，或依材料、顏色、噴嘴、產能與交期限制進行自動匹配。",
+  "Produce": "生產",
+  "Track printer state, operator actions, file versions, maintenance, alerts, and exception todos in one control layer.": "在同一控制層追蹤打印機狀態、操作員動作、檔案版本、維護、警報與例外待辦。",
+  "Close the loop": "閉環",
+  "Archive job history, reprint from previous work, export reports, restore backups, and keep customer operations traceable.": "封存任務歷史、從舊任務重印、匯出報表、還原備份，並保持客戶營運可追溯。",
+  "Platform depth": "平台深度",
+  "Built around the real constraints of printers, people, files, and delivery promises.": "圍繞打印機、人員、檔案與交付承諾的真實限制打造。",
+  "Queue intelligence": "佇列智慧",
+  "Status-driven jobs, rush flags, due windows, commerce imports, CSV intake, SKU mapping, and reprint history.": "狀態驅動任務、急件標記、交期視窗、電商匯入、CSV 接單、SKU 對應與重印歷史。",
+  "Scheduling engine": "排單引擎",
+  "Drag-and-drop planning, dry-run matching, material conflicts, volume checks, due-risk warnings, and load balancing.": "拖曳排程、試算匹配、材料衝突、尺寸檢查、交期風險警告與負載平衡。",
+  "File operations": "檔案作業",
+  "STL, 3MF, and G-code uploads, model metadata, generated thumbnails, stored versions, slicer profiles, and G-code outputs.": "STL、3MF 與 G-code 上傳、模型資料、縮圖生成、版本儲存、切片設定檔與 G-code 輸出。",
+  "Fleet control": "設備控制",
+  "Printer states, bridge configs, OctoPrint/Moonraker-style sync, API actions, telemetry, and maintenance workflows.": "打印機狀態、橋接設定、OctoPrint/Moonraker 類型同步、API 動作、遙測與維護流程。",
+  "Team execution": "團隊執行",
+  "Role permissions, automatic todos, 2FA, audit logs, notifications, webhooks, Slack, Discord, and email channels.": "角色權限、自動待辦、2FA、稽核紀錄、通知、Webhook、Slack、Discord 與 Email 通道。",
+  "Business layer": "商業層",
+  "Cost catalog, storage usage, billing hooks, quote assumptions, backups, restore previews, and customer-ready deployment.": "成本目錄、儲存用量、帳務掛鉤、報價假設、備份、還原預覽與客戶可用部署。",
+  "See the work that needs attention before it becomes expensive.": "在問題變昂貴前，看見需要注意的工作。",
+  "Which jobs are due today, late, blocked, or waiting for slicing.": "哪些任務今日到期、逾期、被阻擋或等待切片。",
+  "Which printers are idle, printing, paused, offline, in error, or under maintenance.": "哪些打印機閒置、打印中、暫停、離線、異常或維護中。",
+  "Which material changes, build-volume conflicts, or due-date risks need a person.": "哪些換料、成形尺寸衝突或交期風險需要人工處理。",
+  "Which operators have actionable work generated from the production state.": "哪些操作員有由生產狀態產生的可執行工作。",
+  "3D printing production scheduling workspace": "3D 打印生產排程工作區",
+  "3DSTU customer model": "3DSTU 客戶模式",
+  "Free for 3DSTU farm customers, source-available with commercial-use boundaries.": "免費提供給 3DSTU 農場客戶使用，原始碼可見並設有商業使用邊界。",
+  "Use it to run your farm": "用它營運你的農場",
+  "Customers can self-host, operate production, and earn from their own printing services.": "客戶可以自架、營運生產，並從自己的打印服務中獲利。",
+  "Protect the platform": "保護平台",
+  "The license does not allow selling the script, modified source, clones, or hosted resale services.": "授權不允許販售腳本、修改後原始碼、複製品或託管轉售服務。",
+  "Get expert setup": "取得專家建置",
+  "Professional installation, technical setup, and training are available from 3DSTU.": "3DSTU 可提供專業安裝、技術設定與訓練。",
+  "Need installation, training, custom integration, or technical support?": "需要安裝、訓練、自訂整合或技術支援嗎？",
+  "Contact the 3DSTU team for deployment support, farm onboarding, connector planning, and production workflow design.": "聯絡 3DSTU 團隊取得部署支援、農場導入、連接器規劃與生產流程設計。",
+  "Designed for": "適用於"
 };
 
 const traditionalToSimplifiedPairs = [
@@ -2655,62 +2726,145 @@ function VersionBadge() {
 }
 
 function MarketingSite({ language, setLanguage, onOpenApp }: { language: Language; setLanguage: (language: Language) => void; onOpenApp: () => void }) {
-  const features = [
-    ["Order to production", "Turn commerce or manual jobs into structured queue items."],
-    ["Scheduling intelligence", "Match material, size, due date, and printer state before production starts."],
-    ["Human exception handling", "Generate todos for slicing, material changes, post-processing, and late work."],
-    ["Operational backbone", "Keep files, versions, maintenance, roles, audit logs, and backups together."],
-    ["Deployment ready", "Docker, Ubuntu, Nginx, HTTPS, backups, and health checks are part of the repo."]
+  const metrics = [
+    ["Today\'s queue", "48", "jobs structured by status, material, and due risk"],
+    ["Printer states", "6", "idle, printing, paused, offline, error, maintenance"],
+    ["Operator todos", "12", "generated from production state instead of manual reminders"],
+    ["Deployment track", "24/7", "Docker, HTTPS, backups, health checks, and audit logs"]
   ];
+  const workflow = [
+    ["Intake", "Bring in manual, CSV, webhook, or commerce orders and turn them into structured production jobs."],
+    ["Validate", "Check model files, material needs, print volume, slicing state, and quote assumptions before the job reaches a machine."],
+    ["Schedule", "Drag jobs onto printers or run automated matching with material, color, nozzle, capacity, and due-date constraints."],
+    ["Produce", "Track printer state, operator actions, file versions, maintenance, alerts, and exception todos in one control layer."],
+    ["Close the loop", "Archive job history, reprint from previous work, export reports, restore backups, and keep customer operations traceable."]
+  ];
+  const capabilities = [
+    ["Queue intelligence", "Status-driven jobs, rush flags, due windows, commerce imports, CSV intake, SKU mapping, and reprint history."],
+    ["Scheduling engine", "Drag-and-drop planning, dry-run matching, material conflicts, volume checks, due-risk warnings, and load balancing."],
+    ["File operations", "STL, 3MF, and G-code uploads, model metadata, generated thumbnails, stored versions, slicer profiles, and G-code outputs."],
+    ["Fleet control", "Printer states, bridge configs, OctoPrint/Moonraker-style sync, API actions, telemetry, and maintenance workflows."],
+    ["Team execution", "Role permissions, automatic todos, 2FA, audit logs, notifications, webhooks, Slack, Discord, and email channels."],
+    ["Business layer", "Cost catalog, storage usage, billing hooks, quote assumptions, backups, restore previews, and customer-ready deployment."]
+  ];
+  const audiences = ["Print farms", "Service bureaus", "Makerspaces", "School labs", "Factory prototyping teams"];
   return (
     <div className="marketing-site">
       <header className="marketing-nav">
-        <div className="brand-lockup"><Layers /><span>3DSTU FarmFlow</span></div>
+        <a className="brand-lockup" href="#top" aria-label="3DSTU FarmFlow home"><Layers /><span>3DSTU FarmFlow</span></a>
+        <nav className="marketing-links" aria-label="Website sections">
+          <a href="#platform">Platform</a>
+          <a href="#workflow">Workflow</a>
+          <a href="#operations">Operations</a>
+          <a href="#support">Support</a>
+        </nav>
         <div className="marketing-nav-actions">
           <LanguageSwitcher language={language} setLanguage={setLanguage} compact />
           <button onClick={onOpenApp}>Open App</button>
         </div>
       </header>
-      <main>
+
+      <main id="top">
         <section className="marketing-hero">
-          <div className="marketing-copy">
+          <div className="marketing-hero-media" aria-hidden="true"></div>
+          <div className="marketing-hero-shade" aria-hidden="true"></div>
+          <div className="marketing-hero-content">
             <p className="eyebrow">3D printing farm operating system</p>
-            <h1>3DSTU FarmFlow</h1>
-            <p>Plan every printer, file, material, and operator from one production control layer.</p>
+            <h1>Production control for serious 3D printing teams.</h1>
+            <p>3DSTU FarmFlow connects orders, files, materials, printers, operators, alerts, and backups into one deployable SaaS platform for real print-farm operations.</p>
             <div className="marketing-actions">
               <button className="primary" onClick={onOpenApp}>Open App</button>
-              <a className="ghost-link" href="mailto:support@3dstu.com">Contact 3DSTU</a>
-            </div>
-            <div className="signal-row">
-              <span>Live production signals</span>
-              <strong>48</strong><small>Active queue</small>
-              <strong>12</strong><small>Automated todos</small>
-              <strong>6</strong><small>Printer states</small>
+              <a className="ghost-link" href="mailto:support@3dstu.com">Talk to 3DSTU</a>
             </div>
           </div>
-          <div className="cockpit-preview" aria-hidden="true">
-            <div className="preview-topline"><span></span><span></span><span></span></div>
-            <div className="preview-grid">
-              <div className="preview-panel tall"><b>Dashboard</b><i></i><i></i><i></i></div>
-              <div className="preview-panel"><b>Scheduler</b><i></i><i></i></div>
-              <div className="preview-panel"><b>Queue</b><i></i><i></i></div>
-              <div className="preview-panel wide"><b>Printers</b><i></i><i></i><i></i></div>
-            </div>
+          <div className="marketing-hero-strip">
+            {metrics.map(([label, value, detail]) => <article key={label}><span>{label}</span><strong>{value}</strong><p>{detail}</p></article>)}
           </div>
         </section>
-        <section className="marketing-section">
-          <p className="eyebrow">Built for real print-farm operations</p>
-          <h2>One system for the work between orders and machines.</h2>
-          <div className="feature-grid">
-            {features.map(([title, body]) => <article key={title}><h3>{title}</h3><p>{body}</p></article>)}
+
+        <section className="audience-strip" aria-label="Designed for">
+          <span>Built for</span>
+          {audiences.map((audience) => <b key={audience}>{audience}</b>)}
+        </section>
+
+        <section className="marketing-section platform-section" id="platform">
+          <div className="section-kicker">
+            <p className="eyebrow">Why it exists</p>
+            <h2>A print farm does not need another task list. It needs an operating layer.</h2>
+          </div>
+          <div className="platform-grid">
+            <article>
+              <h3>From order chaos to machine-ready work</h3>
+              <p>Every job carries the production facts that matter: model file, material, color, nozzle, build volume, due date, slicing state, operator owner, printer match, and exception history.</p>
+            </article>
+            <article>
+              <h3>Humans handle exceptions, not repetitive tracking</h3>
+              <p>Todos are generated when state changes: slicing needed, scheduling needed, material mismatch, maintenance risk, completion pickup, post-processing, or late-work escalation.</p>
+            </article>
+            <article>
+              <h3>Deployment is part of the product</h3>
+              <p>The repo includes Docker deployment, Nginx and HTTPS guidance, health checks, backups, restore preview, audit trails, and support paths for customer farms.</p>
+            </article>
           </div>
         </section>
-        <section className="marketing-contact">
+
+        <section className="workflow-section" id="workflow">
+          <div className="workflow-copy">
+            <p className="eyebrow">Operating workflow</p>
+            <h2>One flow from intake to completed print.</h2>
+            <p>FarmFlow is designed around the production decisions that cost time when they live in chat, spreadsheets, slicer notes, and memory.</p>
+          </div>
+          <div className="workflow-steps">
+            {workflow.map(([title, body], index) => <article key={title}><span>{String(index + 1).padStart(2, "0")}</span><h3>{title}</h3><p>{body}</p></article>)}
+          </div>
+        </section>
+
+        <section className="marketing-section capability-section">
+          <div className="section-kicker">
+            <p className="eyebrow">Platform depth</p>
+            <h2>Built around the real constraints of printers, people, files, and delivery promises.</h2>
+          </div>
+          <div className="capability-grid">
+            {capabilities.map(([title, body]) => <article key={title}><h3>{title}</h3><p>{body}</p></article>)}
+          </div>
+        </section>
+
+        <section className="operations-section" id="operations">
+          <div className="operations-image">
+            <img src="/marketing/farmflow-scheduling-workspace.webp" alt="3D printing production scheduling workspace" />
+          </div>
+          <div className="operations-copy">
+            <p className="eyebrow">Production cockpit</p>
+            <h2>See the work that needs attention before it becomes expensive.</h2>
+            <ul>
+              <li>Which jobs are due today, late, blocked, or waiting for slicing.</li>
+              <li>Which printers are idle, printing, paused, offline, in error, or under maintenance.</li>
+              <li>Which material changes, build-volume conflicts, or due-date risks need a person.</li>
+              <li>Which operators have actionable work generated from the production state.</li>
+            </ul>
+          </div>
+        </section>
+
+        <section className="marketing-section customer-section">
+          <p className="eyebrow">3DSTU customer model</p>
+          <h2>Free for 3DSTU farm customers, source-available with commercial-use boundaries.</h2>
+          <div className="customer-grid">
+            <article><h3>Use it to run your farm</h3><p>Customers can self-host, operate production, and earn from their own printing services.</p></article>
+            <article><h3>Protect the platform</h3><p>The license does not allow selling the script, modified source, clones, or hosted resale services.</p></article>
+            <article><h3>Get expert setup</h3><p>Professional installation, technical setup, and training are available from 3DSTU.</p></article>
+          </div>
+        </section>
+
+        <section className="marketing-contact" id="support">
           <div>
             <p className="eyebrow">Professional setup available</p>
-            <h2>Need installation, training, or technical support?</h2>
+            <h2>Need installation, training, custom integration, or technical support?</h2>
+            <p>Contact the 3DSTU team for deployment support, farm onboarding, connector planning, and production workflow design.</p>
           </div>
-          <a href="mailto:support@3dstu.com">support@3dstu.com</a>
+          <div className="contact-actions">
+            <a href="mailto:support@3dstu.com">support@3dstu.com</a>
+            <button onClick={onOpenApp}>Open App</button>
+          </div>
         </section>
       </main>
       <VersionBadge />
