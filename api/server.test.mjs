@@ -1968,6 +1968,61 @@ endsolid s3_store`;
     });
   });
 
+  it("accepts public quote requests and converts accepted quotes into orders", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const quote = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        payload: {
+          customer: "Public Customer",
+          email: "customer@example.com",
+          company: "Customer Lab",
+          project: "ASA fixture batch",
+          material: "ASA",
+          quantity: 6,
+          due: "2026-07-08",
+          budget: 780,
+          notes: "Matte black finish preferred",
+          fileName: "fixture-batch.3mf"
+        }
+      });
+      expect(quote.statusCode).toBe(201);
+      expect(quote.json()).toMatchObject({ ok: true, quoteRequest: { status: "new", project: "ASA fixture batch" } });
+
+      const protectedList = await app.inject({ method: "GET", url: "/api/quoteRequests" });
+      expect(protectedList.statusCode).toBe(401);
+
+      const token = await login(app);
+      const id = quote.json().quoteRequest.id;
+      const quoted = await app.inject({
+        method: "PATCH",
+        url: `/api/quoteRequests/${id}`,
+        headers: auth(token),
+        payload: { status: "quoted", priority: "High", quotedValue: 720, internalNote: "Use ASA process profile" }
+      });
+      expect(quoted.statusCode).toBe(200);
+      expect(quoted.json()).toMatchObject({ status: "quoted", priority: "High", quotedValue: 720 });
+
+      const converted = await app.inject({
+        method: "POST",
+        url: `/api/quoteRequests/${id}/convert-order`,
+        headers: auth(token),
+        payload: { due: "2026-07-10" }
+      });
+      expect(converted.statusCode).toBe(201);
+      expect(converted.json().order).toMatchObject({ externalId: id, customer: "Public Customer / Customer Lab", items: ["ASA fixture batch x6"], status: "received", due: "2026-07-10", value: 720, quoteRequestId: id });
+      expect(converted.json().quoteRequest).toMatchObject({ status: "converted", orderId: converted.json().order.id });
+
+      const duplicate = await app.inject({ method: "POST", url: `/api/quoteRequests/${id}/convert-order`, headers: auth(token) });
+      expect(duplicate.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.quoteRequests.find((item) => item.id === id)).toMatchObject({ status: "converted", orderId: converted.json().order.id });
+      expect(persisted.orders.find((item) => item.id === converted.json().order.id)).toMatchObject({ quoteRequestId: id });
+      expect(persisted.events.some((event) => event.type === "quote_request.converted")).toBe(true);
+    });
+  });
+
   it("creates reusable production templates and runs them into queue jobs", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);

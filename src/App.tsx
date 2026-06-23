@@ -232,6 +232,7 @@ type SKU = { id: string; sku: string; title: string; parts: string[]; variants: 
 type ProductionTemplate = { id: string; name: string; sku?: string; fileId: string; material: string; color: string; priority: QueueItem["priority"]; stage: TaskStage; printerId?: string; process: string; dueOffsetDays: number; quantity: number; time: string; cost: number; notes?: string; runCount?: number; lastRunAt?: string; createdAt?: string; updatedAt?: string };
 type ProductionTemplateRunResult = { template: ProductionTemplate; jobs: QueueItem[]; dryRun: boolean; queue: QueueItem[]; todos: Todo[] };
 type Order = { id: string; source: "Shopify" | "Etsy" | "Manual" | "eBay"; externalId?: string; customer: string; items: string[]; status: "received" | "queued" | "printing" | "packed" | "shipped"; due: string; value: number };
+type QuoteRequest = { id: string; customer: string; email: string; company?: string; project: string; material: string; quantity: number; due: string; budget: number; notes?: string; fileName?: string; source: string; status: "new" | "reviewing" | "quoted" | "accepted" | "converted" | "rejected"; priority: QueueItem["priority"]; quotedValue?: number; internalNote?: string; orderId?: string; createdAt?: string; updatedAt?: string };
 type OrderJobGenerationResult = { order: Order; jobs: QueueItem[]; existingJobs?: QueueItem[]; missing?: Array<{ item: string; reason: string }>; skus?: SKU[]; todos?: Todo[]; dryRun?: boolean; duplicateBlocked?: boolean; stockChanges?: Array<{ sku: string; before: number; after: number; quantity: number }> };
 type CommerceConnector = { id: string; name: string; source: Order["source"] | "Generic"; url: string; enabled: boolean; hasToken?: boolean; lastStatus?: string; lastStatusCode?: number; lastError?: string; lastSyncAt?: string };
 type CommerceImport = { id: string; source: string; connectorId?: string; connectorName?: string; status: string; created: number; skipped: number; at: string; error?: string };
@@ -546,6 +547,7 @@ const zhTwTranslations: Record<string, string> = {
   "Connector save failed. Check URL, role, or API status.": "連接器儲存失敗，請檢查 URL、角色或 API 狀態。",
   "Constraint solve": "限制式求解",
   "Controls": "控制",
+  "Converting": "轉換中",
   "Cooldown": "冷卻",
   "Copy this key now. It will only be shown once.": "請立即複製此金鑰，它只會顯示一次。",
   "Cost catalog": "成本目錄",
@@ -634,6 +636,7 @@ const zhTwTranslations: Record<string, string> = {
   "Manual": "手動",
   "Manual profile": "手動設定檔",
   "Mark rush": "標記急件",
+  "Mark quoted": "標記已報價",
   "Match queue now": "立即匹配佇列",
   "Matching inspector": "匹配檢查器",
   "Material compatibility": "材料相容性",
@@ -911,7 +914,13 @@ const zhTwTranslations: Record<string, string> = {
   "Material purchasing": "材料採購",
   "No production templates yet": "尚無生產範本",
   "No purchase requests yet. Generate a reorder plan from low-stock spools.": "尚無採購請求，請從低庫存線材生成補貨計畫。",
+  "No quote requests yet. Website submissions will appear here.": "尚無詢價請求，網站提交會顯示在這裡。",
   "Open reorders": "待處理補貨",
+  "Quote intake": "詢價入口",
+  "Quote requests": "詢價請求",
+  "Quoting": "報價中",
+  "Accept / order": "接受 / 轉訂單",
+  "New quotes": "新詢價",
   "Purchase request": "採購請求",
   "Qty": "數量",
   "Receive": "收貨",
@@ -1453,6 +1462,7 @@ function App() {
   const [parts, setParts] = useState(partSeed);
   const [skus, setSkus] = useState(skuSeed);
   const [productionTemplates, setProductionTemplates] = useState<ProductionTemplate[]>([]);
+  const [quoteRequests, setQuoteRequests] = useState<QuoteRequest[]>([]);
   const [orders, setOrders] = useState(orderSeed);
   const [profiles, setProfiles] = useState(profileSeed);
   const [profileDefaults, setProfileDefaults] = useState<ProfileDefaults>({ Machine: "prof-1", Process: "prof-2", Filament: "" });
@@ -1805,6 +1815,42 @@ function App() {
     } catch {
       setBackendStatus("local");
       return orders.find((order) => order.id === orderId);
+    }
+  };
+
+  const updateQuoteRequest = async (quoteId: string, patch: Partial<Pick<QuoteRequest, "status" | "priority" | "quotedValue" | "internalNote">>) => {
+    setQuoteRequests((items) => items.map((quote) => quote.id === quoteId ? { ...quote, ...patch } : quote));
+    try {
+      const updated = await apiRequest<QuoteRequest>(`/api/quoteRequests/${quoteId}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch)
+      });
+      setQuoteRequests((items) => items.map((quote) => quote.id === quoteId ? updated : quote));
+      setBackendStatus("connected");
+      return updated;
+    } catch {
+      setBackendStatus("local");
+      return quoteRequests.find((quote) => quote.id === quoteId);
+    }
+  };
+
+  const convertQuoteRequest = async (quote: QuoteRequest) => {
+    try {
+      const result = await apiRequest<{ quoteRequest: QuoteRequest; order: Order; orders: Order[]; quoteRequests: QuoteRequest[] }>(`/api/quoteRequests/${quote.id}/convert-order`, {
+        method: "POST",
+        body: JSON.stringify({ due: quote.due, value: quote.quotedValue || quote.budget || 0 })
+      });
+      setQuoteRequests(result.quoteRequests);
+      setOrders(result.orders);
+      setBackendStatus("connected");
+      return result;
+    } catch {
+      const order: Order = { id: `local-${crypto.randomUUID().slice(0, 8)}`, source: "Manual", externalId: quote.id, customer: quote.company ? `${quote.customer} / ${quote.company}` : quote.customer, items: [`${quote.project} x${quote.quantity}`], status: "received", due: quote.due, value: quote.quotedValue || quote.budget || 0 };
+      const updated = { ...quote, status: "converted" as const, orderId: order.id };
+      setQuoteRequests((items) => items.map((item) => item.id === quote.id ? updated : item));
+      setOrders((items) => [order, ...items]);
+      setBackendStatus("local");
+      return { quoteRequest: updated, order, orders: [order, ...orders], quoteRequests: quoteRequests.map((item) => item.id === quote.id ? updated : item) };
     }
   };
 
@@ -2932,6 +2978,7 @@ function App() {
     if (Array.isArray(data.parts)) setParts(data.parts as Part[]);
     if (Array.isArray(data.skus)) setSkus(data.skus as SKU[]);
     if (Array.isArray(data.productionTemplates)) setProductionTemplates(data.productionTemplates as ProductionTemplate[]);
+    if (Array.isArray(data.quoteRequests)) setQuoteRequests(data.quoteRequests as QuoteRequest[]);
     if (Array.isArray(data.orders)) setOrders(data.orders as Order[]);
     if (Array.isArray(data.profiles)) setProfiles(data.profiles as Profile[]);
     if (data.profileDefaults && typeof data.profileDefaults === "object") setProfileDefaults(data.profileDefaults as ProfileDefaults);
@@ -3005,7 +3052,7 @@ function App() {
         {view === "dashboard" && <Dashboard metrics={metrics} printers={printers} queue={queue} setView={setView} setModal={setModal} onPrinter={setSelectedPrinter} />}
         {view === "printers" && <PrintersPage printers={printers} onPrinter={setSelectedPrinter} setModal={setModal} api={mockApi} />}
         {view === "products" && <ProductsPage parts={parts} skus={skus} productionTemplates={productionTemplates} files={files} createPart={createPart} createSku={createSku} createProductionTemplate={createProductionTemplate} runProductionTemplate={runProductionTemplate} generateNameplate={generateNameplate} exportCatalog={exportCatalog} mapMaterials={mapMaterials} addToast={addToast} />}
-        {view === "orders" && <OrdersPage orders={orders} setOrders={setOrders} skus={skus} commerceConnectors={commerceConnectors} setCommerceConnectors={setCommerceConnectors} commerceImports={commerceImports} setCommerceImports={setCommerceImports} createOrder={createOrder} updateOrderStatus={updateOrderStatus} generateJobsForOrder={generateJobsForOrder} addToast={addToast} setBackendStatus={setBackendStatus} />}
+        {view === "orders" && <OrdersPage orders={orders} setOrders={setOrders} quoteRequests={quoteRequests} skus={skus} commerceConnectors={commerceConnectors} setCommerceConnectors={setCommerceConnectors} commerceImports={commerceImports} setCommerceImports={setCommerceImports} createOrder={createOrder} updateOrderStatus={updateOrderStatus} updateQuoteRequest={updateQuoteRequest} convertQuoteRequest={convertQuoteRequest} generateJobsForOrder={generateJobsForOrder} addToast={addToast} setBackendStatus={setBackendStatus} />}
         {view === "files" && <FilesPage files={files} folders={fileFolders} queueFile={mockApi.addQueueFromFile} setView={setView} addToast={addToast} createSampleFile={createSampleFile} createFileFolder={createFileFolder} uploadModelFile={uploadModelFile} versionFile={versionFile} downloadFile={downloadFile} deleteFile={deleteFile} />}
         {view === "queue" && <QueuePage queue={queue} setQueue={setQueue} printers={printers} addToast={addToast} scheduleJob={scheduleQueueJob} updateStatus={updateQueueStatus} updatePriority={updateQueuePriority} matchQueueJobs={matchQueueJobs} />}
         {view === "scheduler" && <SchedulerPage queue={queue} setQueue={setQueue} printers={printers} addToast={addToast} scheduleJob={scheduleQueueJob} autoScheduleJobs={autoScheduleQueueJobs} optimizeScheduleJobs={optimizeScheduleJobs} solveScheduleJobs={solveScheduleJobs} />}
@@ -3035,6 +3082,28 @@ function VersionBadge() {
 }
 
 function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
+  const [quoteDraft, setQuoteDraft] = useState({ customer: "", email: "", company: "", project: "Prototype enclosure", material: "PLA", quantity: 1, due: "Flexible", budget: 0, fileName: "", notes: "" });
+  const [quoteStatus, setQuoteStatus] = useState("");
+  const submitQuote = async () => {
+    if (!quoteDraft.customer.trim() || !quoteDraft.email.trim() || !quoteDraft.project.trim()) {
+      setQuoteStatus("Please add your name, email, and project.");
+      return;
+    }
+    setQuoteStatus("Sending quote request...");
+    try {
+      const response = await fetch(`${API_BASE}/api/public/quoteRequests`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...quoteDraft, quantity: Number(quoteDraft.quantity || 1), budget: Number(quoteDraft.budget || 0), source: "Marketing website" })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result?.error || "Quote request failed");
+      setQuoteStatus(`Quote request ${result.quoteRequest.id} received.`);
+      setQuoteDraft({ customer: "", email: "", company: "", project: "Prototype enclosure", material: "PLA", quantity: 1, due: "Flexible", budget: 0, fileName: "", notes: "" });
+    } catch {
+      setQuoteStatus("Quote request could not be sent. Please contact support@3dstu.com.");
+    }
+  };
   const metrics = [
     ["Today\'s queue", "48", "jobs structured by status, material, and due risk"],
     ["Printer states", "6", "idle, printing, paused, offline, error, maintenance"],
@@ -3087,6 +3156,7 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
           <a href="#docs">Docs</a>
           <a href="#github">GitHub</a>
           <a href="#roadmap">Roadmap</a>
+          <a href="#quote">Quote</a>
           <a href="#support">Support</a>
         </nav>
         <div className="marketing-nav-actions">
@@ -3232,6 +3302,27 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
           </div>
           <div className="priority-list">
             {buildPriorities.map(([title, body]) => <article key={title}><h3>{title}</h3><p>{body}</p></article>)}
+          </div>
+        </section>
+
+        <section className="marketing-section quote-section" id="quote">
+          <div className="section-kicker">
+            <p className="eyebrow">Customer quote intake</p>
+            <h2>Send print requirements into the production pipeline.</h2>
+          </div>
+          <div className="quote-form">
+            <label>Name<input value={quoteDraft.customer} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, customer: event.target.value }))} /></label>
+            <label>Email<input type="email" value={quoteDraft.email} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, email: event.target.value }))} /></label>
+            <label>Company<input value={quoteDraft.company} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, company: event.target.value }))} /></label>
+            <label>Project<input value={quoteDraft.project} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, project: event.target.value }))} /></label>
+            <label>Material<select value={quoteDraft.material} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, material: event.target.value }))}>{["PLA", "PETG", "ASA", "TPU", "Resin"].map((item) => <option key={item}>{item}</option>)}</select></label>
+            <label>Quantity<input type="number" min="1" value={quoteDraft.quantity} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, quantity: Number(event.target.value) }))} /></label>
+            <label>Due date<input value={quoteDraft.due} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, due: event.target.value }))} /></label>
+            <label>Budget<input type="number" min="0" value={quoteDraft.budget} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, budget: Number(event.target.value) }))} /></label>
+            <label>File name<input value={quoteDraft.fileName} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, fileName: event.target.value }))} placeholder="model.stl / model.3mf" /></label>
+            <label className="wide">Notes<textarea value={quoteDraft.notes} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, notes: event.target.value }))} /></label>
+            <button className="primary wide" onClick={submitQuote}>Request quote</button>
+            {quoteStatus && <p className="quote-status">{quoteStatus}</p>}
           </div>
         </section>
 
@@ -3616,11 +3707,12 @@ function ProductsPage({ parts, skus, productionTemplates, files, createPart, cre
   );
 }
 
-function OrdersPage({ orders, setOrders, skus, commerceConnectors, setCommerceConnectors, commerceImports, setCommerceImports, createOrder, updateOrderStatus, generateJobsForOrder, addToast, setBackendStatus }: { orders: Order[]; setOrders: React.Dispatch<React.SetStateAction<Order[]>>; skus: SKU[]; commerceConnectors: CommerceConnector[]; setCommerceConnectors: React.Dispatch<React.SetStateAction<CommerceConnector[]>>; commerceImports: CommerceImport[]; setCommerceImports: React.Dispatch<React.SetStateAction<CommerceImport[]>>; createOrder: (order: Omit<Order, "id">) => Promise<Order>; updateOrderStatus: (orderId: string, status: Order["status"]) => Promise<Order | undefined>; generateJobsForOrder: (order: Order, dryRun?: boolean) => Promise<OrderJobGenerationResult>; addToast: (message: string, type?: Toast["type"]) => void; setBackendStatus: React.Dispatch<React.SetStateAction<"local" | "connected">> }) {
+function OrdersPage({ orders, setOrders, quoteRequests, skus, commerceConnectors, setCommerceConnectors, commerceImports, setCommerceImports, createOrder, updateOrderStatus, updateQuoteRequest, convertQuoteRequest, generateJobsForOrder, addToast, setBackendStatus }: { orders: Order[]; setOrders: React.Dispatch<React.SetStateAction<Order[]>>; quoteRequests: QuoteRequest[]; skus: SKU[]; commerceConnectors: CommerceConnector[]; setCommerceConnectors: React.Dispatch<React.SetStateAction<CommerceConnector[]>>; commerceImports: CommerceImport[]; setCommerceImports: React.Dispatch<React.SetStateAction<CommerceImport[]>>; createOrder: (order: Omit<Order, "id">) => Promise<Order>; updateOrderStatus: (orderId: string, status: Order["status"]) => Promise<Order | undefined>; updateQuoteRequest: (quoteId: string, patch: Partial<Pick<QuoteRequest, "status" | "priority" | "quotedValue" | "internalNote">>) => Promise<QuoteRequest | undefined>; convertQuoteRequest: (quote: QuoteRequest) => Promise<{ quoteRequest: QuoteRequest; order: Order; orders: Order[]; quoteRequests: QuoteRequest[] }>; generateJobsForOrder: (order: Order, dryRun?: boolean) => Promise<OrderJobGenerationResult>; addToast: (message: string, type?: Toast["type"]) => void; setBackendStatus: React.Dispatch<React.SetStateAction<"local" | "connected">> }) {
   const [connectorDraft, setConnectorDraft] = useState({ name: "Shopify feed", source: "Shopify" as CommerceConnector["source"], url: "https://example.com/orders.json", token: "", enabled: true });
   const [csvText, setCsvText] = useState("externalId,customer,items,due,value\nSP-1001,Demo Customer,DUCT-KIT-BLK x1,Tomorrow 17:00,680");
   const [busy, setBusy] = useState("");
   const [jobPlan, setJobPlan] = useState<OrderJobGenerationResult | null>(null);
+  const newQuotes = quoteRequests.filter((quote) => quote.status === "new" || quote.status === "reviewing");
   const saveConnector = async () => {
     setBusy("save");
     try {
@@ -3708,9 +3800,24 @@ function OrdersPage({ orders, setOrders, skus, commerceConnectors, setCommerceCo
     addToast(`${order.id} generated ${result.jobs.length} queue jobs${missing}${duplicate}`, result.jobs.length ? "success" : "warning");
     setBusy("");
   };
+  const quoteValue = (quote: QuoteRequest) => quote.quotedValue || quote.budget || Math.max(50, quote.quantity * 80);
+  const markQuoted = async (quote: QuoteRequest) => {
+    setBusy(`quote-${quote.id}`);
+    const updated = await updateQuoteRequest(quote.id, { status: "quoted", priority: quote.priority || "Normal", quotedValue: quoteValue(quote), internalNote: quote.internalNote || "Operator quote prepared" });
+    setBusy("");
+    addToast(updated ? `${quote.id} quoted at $${updated.quotedValue || quoteValue(quote)}` : `${quote.id} quote saved locally`, updated ? "success" : "warning");
+  };
+  const acceptQuote = async (quote: QuoteRequest) => {
+    setBusy(`convert-${quote.id}`);
+    const result = await convertQuoteRequest({ ...quote, status: quote.status === "new" ? "quoted" : quote.status, quotedValue: quoteValue(quote) });
+    setBusy("");
+    addToast(`${quote.id} converted to ${result.order.id}`);
+  };
   return (
     <Page title="Orders" kicker="Commerce intake, SKU mapping, and production fulfillment">
       <div className="metric-grid">
+        <Metric label="Quote requests" value={`${quoteRequests.length}`} icon={FilePlus2} tone="teal" />
+        <Metric label="New quotes" value={`${newQuotes.length}`} icon={Sparkles} tone="orange" />
         <Metric label="Received" value={`${orders.filter((order) => order.status === "received").length}`} icon={ShoppingBag} />
         <Metric label="Queued" value={`${orders.filter((order) => order.status === "queued").length}`} icon={ClipboardList} tone="orange" />
         <Metric label="Printing" value={`${orders.filter((order) => order.status === "printing").length}`} icon={Activity} tone="teal" />
@@ -3734,6 +3841,13 @@ function OrdersPage({ orders, setOrders, skus, commerceConnectors, setCommerceCo
           <p className="muted">Headers: externalId, customer, items, due, value. Separate multiple items with ; or |.</p>
         </section>
       </div>
+      <section className="panel">
+        <PanelTitle title="Quote intake" />
+        <DataTable headers={["Request", "Customer", "Material", "Qty", "Due", "Budget", "Status", "Actions"]}>
+          {quoteRequests.map((quote) => <tr key={quote.id}><td><b>{quote.project}</b><small>{quote.fileName || "No file attached"} - {quote.notes || "No notes"}</small></td><td>{quote.customer}<small>{quote.email}{quote.company ? ` - ${quote.company}` : ""}</small></td><td>{quote.material}</td><td>{quote.quantity}</td><td>{quote.due}</td><td>${quoteValue(quote)}</td><td><StatusPill status={quote.status} /></td><td><button onClick={() => markQuoted(quote)} disabled={busy === `quote-${quote.id}` || quote.status === "converted"}>{busy === `quote-${quote.id}` ? "Quoting" : "Mark quoted"}</button><button className="primary" onClick={() => acceptQuote(quote)} disabled={busy === `convert-${quote.id}` || quote.status === "converted"}>{busy === `convert-${quote.id}` ? "Converting" : "Accept / order"}</button></td></tr>)}
+        </DataTable>
+        {!quoteRequests.length && <p className="muted">No quote requests yet. Website submissions will appear here.</p>}
+      </section>
       <section className="panel">
         <PanelTitle title="Commerce feeds" action={<button onClick={importSample}><Plus size={16} />Add sample order</button>} />
         <DataTable headers={["Name", "Source", "URL", "Status", "Token", "Enabled", "Last sync", "Actions"]}>

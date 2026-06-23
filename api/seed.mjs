@@ -132,6 +132,9 @@ export const seedData = {
     { id: "ord-1048", source: "Shopify", customer: "M. Rivera", items: ["DUCT-KIT-BLK x2"], status: "queued", due: "Jun 14", value: 1360 },
     { id: "ord-1049", source: "Etsy", customer: "A. Wood", items: ["CAM-MOUNT-ORG x1"], status: "received", due: "Jun 15", value: 420 }
   ],
+  quoteRequests: [
+    { id: "qr-demo-1", customer: "Jamie Park", email: "jamie@example.com", company: "Prototype Studio", project: "PETG enclosure prototype", material: "PETG", quantity: 4, due: "Next Friday", budget: 520, notes: "Needs threaded inserts after printing", fileName: "enclosure-v2.step", source: "Website", status: "new", priority: "Normal", quotedValue: 0 }
+  ],
   profiles: [
     { id: "prof-1", name: "CoreXY Pro 300", kind: "Machine", target: "Forge A1", source: "Manual", updated: "Today" },
     { id: "prof-2", name: "0.20mm Production", kind: "Process", target: "FDM fleet", source: "Orca import", updated: "Yesterday" }

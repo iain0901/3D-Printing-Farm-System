@@ -25,7 +25,7 @@ import { seedData } from "./seed.mjs";
 
 const execFileAsync = promisify(execFile);
 
-const COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "orders", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns"];
+const COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "orders", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns"];
 const RESTORABLE_EXTRA_KEYS = ["users", "workspaces", "workspaceSettings", "costCatalog", "profileDefaults", "profileMatchingPolicy", "billingSessions", "invoices", "dataMeta"];
 const RESTORABLE_KEYS = [...COLLECTIONS, ...RESTORABLE_EXTRA_KEYS];
 const defaultCostCatalog = {
@@ -57,7 +57,7 @@ const defaultAuthRateLimit = { max: 8, timeWindow: "1 minute", groupId: "auth" }
 const defaultSensitiveRateLimit = { max: 30, timeWindow: "1 minute" };
 const CURRENT_SCHEMA_VERSION = 4;
 const DEFAULT_WORKSPACE_ID = "ws-default";
-const TENANT_COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "orders", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns", "billingSessions", "invoices"];
+const TENANT_COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "orders", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns", "billingSessions", "invoices"];
 const printerStatusSchema = z.enum(["idle", "printing", "paused", "offline", "error", "maintenance"]);
 const jobStatusSchema = z.enum(["queued", "printing", "paused", "complete", "failed", "cancelled"]);
 const prioritySchema = z.enum(["Rush", "High", "Normal", "Low"]);
@@ -243,6 +243,30 @@ const orderSchema = z.object({
   due: z.string().min(1).default("Tomorrow 17:00"),
   value: z.number().nonnegative().default(0)
 });
+const quoteStatusSchema = z.enum(["new", "reviewing", "quoted", "accepted", "converted", "rejected"]);
+const publicQuoteRequestSchema = z.object({
+  customer: z.string().min(1).max(120),
+  email: z.string().email(),
+  company: z.string().max(120).optional().default(""),
+  project: z.string().min(1).max(160),
+  material: z.string().min(1).default("PLA"),
+  quantity: z.number().int().positive().max(10000).default(1),
+  due: z.string().min(1).default("Flexible"),
+  budget: z.number().nonnegative().default(0),
+  notes: z.string().max(2000).optional().default(""),
+  fileName: z.string().max(160).optional().default(""),
+  source: z.string().min(1).default("Website")
+});
+const quoteRequestPatchSchema = z.object({
+  status: quoteStatusSchema.optional(),
+  priority: prioritySchema.optional(),
+  quotedValue: z.number().nonnegative().optional(),
+  internalNote: z.string().max(2000).optional()
+});
+const quoteConvertSchema = z.object({
+  due: z.string().min(1).optional(),
+  value: z.number().nonnegative().optional()
+}).default({});
 const commerceConnectorSchema = z.object({
   name: z.string().min(1),
   source: commerceSourceSchema.default("Generic"),
@@ -852,7 +876,7 @@ function applyDataMigrations(data) {
     applied.push({ version: 2, name: "account security metadata", appliedAt: now });
   }
   if (fromVersion < 3) {
-    for (const collection of ["printers", "files", "fileFolders", "queue", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "parts", "skus", "orders", "profiles", "webhooks", "notificationChannels", "commerceConnectors", "bridges", "events"]) {
+    for (const collection of ["printers", "files", "fileFolders", "queue", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "parts", "skus", "productionTemplates", "quoteRequests", "orders", "profiles", "webhooks", "notificationChannels", "commerceConnectors", "bridges", "events"]) {
       for (const item of ensureArray(data, collection)) {
         item.id ||= randomUUID();
         item.createdAt ||= item.at || item.updatedAt || now;
@@ -1078,6 +1102,7 @@ async function ensureAuthData(database, options = {}) {
   database.data.maintenanceReports ||= [];
   database.data.productionTemplates ||= [];
   database.data.purchaseRequests ||= [];
+  database.data.quoteRequests ||= [];
   database.data.webhooks ||= [];
   database.data.webhookDeliveries ||= [];
   database.data.notificationChannels ||= [];
@@ -1166,6 +1191,23 @@ async function ensureAuthData(database, options = {}) {
     order.status = orderStatusSchema.safeParse(order.status).success ? order.status : "received";
     order.due ||= "Tomorrow 17:00";
     order.value = Number(order.value || 0);
+  }
+  for (const quote of database.data.quoteRequests || []) {
+    quote.customer ||= "Unknown customer";
+    quote.email ||= "unknown@example.com";
+    quote.company ||= "";
+    quote.project ||= "3D print request";
+    quote.material ||= "PLA";
+    quote.quantity = Math.max(1, Number(quote.quantity || 1));
+    quote.due ||= "Flexible";
+    quote.budget = Number(quote.budget || 0);
+    quote.notes ||= "";
+    quote.fileName ||= "";
+    quote.source ||= "Website";
+    quote.status = quoteStatusSchema.safeParse(quote.status).success ? quote.status : "new";
+    quote.priority = prioritySchema.safeParse(quote.priority).success ? quote.priority : "Normal";
+    quote.quotedValue = Number(quote.quotedValue || 0);
+    quote.internalNote ||= "";
   }
   for (const part of database.data.parts || []) {
     part.process ||= "0.20mm Production";
@@ -4280,6 +4322,7 @@ async function buildSupportSnapshot(data, user) {
       spools: scoped.spools.length,
       purchaseRequests: scoped.purchaseRequests.length,
       productionTemplates: scoped.productionTemplates.length,
+      quoteRequests: scoped.quoteRequests.length,
       orders: scoped.orders.length,
       webhooks: scoped.webhooks.length,
       apiKeys: scoped.apiKeys.length
@@ -4539,7 +4582,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
 
   app.addHook("preHandler", async (request, reply) => {
     const routePath = request.url.split("?")[0];
-    const publicRoute = routePath === "/api/health" || routePath === "/api/readiness" || routePath === "/api/metrics" && hasValidMetricsToken(request) || routePath === "/api/internal/worker-broadcast" && hasValidWorkerToken(request) || routePath === "/api/billing/webhook/stripe" || routePath.startsWith("/api/auth/") || serveStatic && !routePath.startsWith("/api/");
+    const publicRoute = routePath === "/api/health" || routePath === "/api/readiness" || routePath === "/api/metrics" && hasValidMetricsToken(request) || routePath === "/api/internal/worker-broadcast" && hasValidWorkerToken(request) || routePath === "/api/billing/webhook/stripe" || routePath === "/api/public/quoteRequests" || routePath.startsWith("/api/auth/") || serveStatic && !routePath.startsWith("/api/");
     if (publicRoute) return;
     const { session, user, apiKey } = userFromRequest(database, request);
     if (!user) return reply.code(401).send({ error: "Authentication required" });
@@ -4818,6 +4861,18 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const todos = deriveTodos(workspaceScopeForUser(database.data, request.user));
     broadcastRealtime(database, "state", { reason: "todo.action", state: realtimeState(database.data), action });
     return { action, todo: todos.find((todo) => todo.id === existing.id) || null, todos, todoActions: workspaceScopeForUser(database.data, request.user).todoActions };
+  });
+
+  app.post("/api/public/quoteRequests", { config: { rateLimit: { max: 20, timeWindow: "1 minute", groupId: "quote-intake" } } }, async (request, reply) => {
+    const parsed = publicQuoteRequestSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid quote request payload", issues: parsed.error.issues });
+    const workspace = workspaceForId(database.data, DEFAULT_WORKSPACE_ID);
+    const now = new Date().toISOString();
+    const quote = { id: `qr-${randomUUID().slice(0, 8)}`, workspaceId: workspace.id, ...parsed.data, status: "new", priority: "Normal", quotedValue: 0, internalNote: "", createdAt: now, updatedAt: now };
+    database.data.quoteRequests.unshift(quote);
+    await dispatchEvent(database, "quote_request.created", `${quote.customer} requested ${quote.project}`, { quoteRequestId: quote.id, material: quote.material, quantity: quote.quantity, source: quote.source });
+    await database.write();
+    return reply.code(201).send({ ok: true, quoteRequest: { id: quote.id, status: quote.status, project: quote.project, createdAt: quote.createdAt } });
   });
 
   app.post("/api/telemetry/tick", async (request, reply) => {
@@ -5894,6 +5949,46 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     database.data.events.unshift({ id: randomUUID(), type: "order.created", message: `${order.id} from ${order.source}`, at: order.updatedAt });
     await database.write();
     return reply.code(201).send(order);
+  });
+
+  app.patch("/api/quoteRequests/:id", async (request, reply) => {
+    if (!hasPermission(request.user, "orders:write")) return reply.code(403).send({ error: "Missing permission: orders:write" });
+    const parsed = quoteRequestPatchSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid quote request update", issues: parsed.error.issues });
+    const quote = database.data.quoteRequests.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
+    if (!quote) return reply.code(404).send({ error: "Quote request not found" });
+    Object.assign(quote, parsed.data, { updatedAt: new Date().toISOString(), reviewedBy: request.user.email });
+    await dispatchEvent(database, "quote_request.updated", `${quote.id} -> ${quote.status}`, { quoteRequestId: quote.id, status: quote.status, quotedValue: quote.quotedValue || 0 });
+    await database.write();
+    return quote;
+  });
+
+  app.post("/api/quoteRequests/:id/convert-order", async (request, reply) => {
+    if (!hasPermission(request.user, "orders:write")) return reply.code(403).send({ error: "Missing permission: orders:write" });
+    const parsed = quoteConvertSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid quote conversion payload", issues: parsed.error.issues });
+    const quote = database.data.quoteRequests.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
+    if (!quote) return reply.code(404).send({ error: "Quote request not found" });
+    if (quote.orderId) return reply.code(409).send({ error: "Quote request already converted", orderId: quote.orderId });
+    const now = new Date().toISOString();
+    const order = {
+      id: `ord-${1000 + database.data.orders.length + 1}`,
+      workspaceId: request.user.workspaceId,
+      source: "Manual",
+      externalId: quote.id,
+      customer: quote.company ? `${quote.customer} / ${quote.company}` : quote.customer,
+      items: [`${quote.project} x${quote.quantity}`],
+      status: "received",
+      due: parsed.data.due || quote.due || "Flexible",
+      value: Number(parsed.data.value ?? quote.quotedValue ?? quote.budget ?? 0),
+      quoteRequestId: quote.id,
+      updatedAt: now
+    };
+    database.data.orders.push(order);
+    Object.assign(quote, { status: "converted", orderId: order.id, convertedAt: now, updatedAt: now, reviewedBy: request.user.email });
+    await dispatchEvent(database, "quote_request.converted", `${quote.id} converted to ${order.id}`, { quoteRequestId: quote.id, orderId: order.id, value: order.value });
+    await database.write();
+    return reply.code(201).send({ quoteRequest: quote, order, orders: workspaceScopeForUser(database.data, request.user).orders, quoteRequests: workspaceScopeForUser(database.data, request.user).quoteRequests });
   });
 
   app.patch("/api/orders/:id/status", async (request, reply) => {
