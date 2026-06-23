@@ -11,7 +11,7 @@ function normalizeStatus(value) {
   const state = String(value || "").toLowerCase();
   if (state.includes("print")) return "printing";
   if (state.includes("pause")) return "paused";
-  if (state.includes("operational") || state.includes("ready") || state.includes("standby")) return "idle";
+  if (state.includes("operational") || state.includes("ready") || state.includes("standby") || state.includes("idle")) return "idle";
   if (state.includes("error") || state.includes("shutdown")) return "error";
   if (state.includes("maintenance")) return "maintenance";
   return "offline";
@@ -35,6 +35,15 @@ function moonrakerHeaders(apiKey) {
     "Content-Type": "application/json",
     ...(apiKey ? { "X-Api-Key": apiKey } : {})
   };
+}
+
+function prusaLinkHeaders(apiKey) {
+  const headers = {
+    "Content-Type": "application/json",
+    ...(apiKey ? { "X-Api-Key": apiKey } : {})
+  };
+  if (apiKey && apiKey.includes(":")) headers.Authorization = `Basic ${Buffer.from(apiKey).toString("base64")}`;
+  return headers;
 }
 
 export async function fetchOctoPrintStatus({ baseUrl, apiKey, fetchImpl = fetch }) {
@@ -154,9 +163,47 @@ export async function sendMoonrakerCommand({ baseUrl, apiKey, action, fetchImpl 
   return { ok: true, skipped: true };
 }
 
+export async function fetchPrusaLinkStatus({ baseUrl, apiKey, fetchImpl = fetch }) {
+  const base = cleanBaseUrl(baseUrl);
+  const status = await fetchImpl(`${base}/api/v1/status`, { headers: prusaLinkHeaders(apiKey) }).then(readJson);
+  const printer = status.printer || {};
+  const job = status.job || {};
+  const progress = Math.round(Number(job.progress || job.printingTime?.percentage || 0));
+  return {
+    status: normalizeStatus(printer.state || printer.status || job.state),
+    progress: Number.isFinite(progress) ? progress : 0,
+    nozzle: Math.round(Number(printer.temp_nozzle || printer.nozzle_temperature || printer.temperature?.tool0?.actual || 0)),
+    bed: Math.round(Number(printer.temp_bed || printer.bed_temperature || printer.temperature?.bed?.actual || 0)),
+    targetNozzle: Math.round(Number(printer.target_nozzle || printer.nozzle_target || printer.temperature?.tool0?.target || 0)),
+    targetBed: Math.round(Number(printer.target_bed || printer.bed_target || printer.temperature?.bed?.target || 0)),
+    job: job.file?.display || job.file?.display_name || job.file?.name || job.path || job.name,
+    raw: { status }
+  };
+}
+
+async function currentPrusaLinkJobId({ baseUrl, apiKey, fetchImpl }) {
+  const base = cleanBaseUrl(baseUrl);
+  const job = await fetchImpl(`${base}/api/v1/job`, { headers: prusaLinkHeaders(apiKey) }).then(readJson);
+  return job.id || job.job_id || job.jobId;
+}
+
+export async function sendPrusaLinkCommand({ baseUrl, apiKey, action, fetchImpl = fetch }) {
+  const base = cleanBaseUrl(baseUrl);
+  if (["pause", "resume", "cancel"].includes(action)) {
+    const jobId = await currentPrusaLinkJobId({ baseUrl, apiKey, fetchImpl });
+    if (!jobId && jobId !== 0) throw new Error("No active PrusaLink job id is available");
+    const endpoint = action === "cancel" ? `${base}/api/v1/job/${jobId}` : `${base}/api/v1/job/${jobId}/${action}`;
+    const response = await fetchImpl(endpoint, { method: action === "cancel" ? "DELETE" : "PUT", headers: prusaLinkHeaders(apiKey) });
+    if (!response.ok && response.status !== 204) throw new Error(`Bridge HTTP ${response.status}`);
+    return { ok: true };
+  }
+  return { ok: true, skipped: true };
+}
+
 export async function fetchBridgeStatus(bridge, options = {}) {
   if (bridge.kind === "octoprint") return fetchOctoPrintStatus({ ...bridge, ...options });
   if (bridge.kind === "moonraker") return fetchMoonrakerStatus({ ...bridge, ...options });
+  if (bridge.kind === "prusalink") return fetchPrusaLinkStatus({ ...bridge, ...options });
   return { status: "idle", progress: 0, nozzle: 0, bed: 0, targetNozzle: 0, targetBed: 0, job: undefined, raw: {} };
 }
 
@@ -185,8 +232,8 @@ export async function diagnoseBridge(bridge, options = {}) {
     diagnostic.latencyMs = Date.now() - started;
     return diagnostic;
   }
-  if (!["octoprint", "moonraker"].includes(bridge.kind)) {
-    addCheck("Adapter", "failed", `Unsupported bridge kind: ${bridge.kind}`, "Choose OctoPrint, Moonraker, or Manual.");
+  if (!["octoprint", "moonraker", "prusalink"].includes(bridge.kind)) {
+    addCheck("Adapter", "failed", `Unsupported bridge kind: ${bridge.kind}`, "Choose OctoPrint, Moonraker, PrusaLink, or Manual.");
     diagnostic.summary = "Unsupported bridge adapter.";
     diagnostic.recommendation = "Choose a supported connector type before testing again.";
     diagnostic.latencyMs = Date.now() - started;
@@ -211,6 +258,8 @@ export async function diagnoseBridge(bridge, options = {}) {
   }
   if (bridge.kind === "octoprint" && !bridge.apiKey) {
     addCheck("Authentication", "warning", "No OctoPrint API key is stored.", "Most OctoPrint instances require an API key for status and job control.");
+  } else if (bridge.kind === "prusalink" && !bridge.apiKey) {
+    addCheck("Authentication", "warning", "No PrusaLink credential is stored.", "PrusaLink usually requires an API key or user:password credential for status and job control.");
   } else if (bridge.apiKey) {
     addCheck("Authentication", "passed", "A credential is stored without being exposed in diagnostics.");
   } else {
@@ -236,5 +285,6 @@ export async function diagnoseBridge(bridge, options = {}) {
 export async function sendBridgeCommand(bridge, action, options = {}) {
   if (bridge.kind === "octoprint") return sendOctoPrintCommand({ ...bridge, action, ...options });
   if (bridge.kind === "moonraker") return sendMoonrakerCommand({ ...bridge, action, ...options });
+  if (bridge.kind === "prusalink") return sendPrusaLinkCommand({ ...bridge, action, ...options });
   return { ok: true, skipped: true };
 }

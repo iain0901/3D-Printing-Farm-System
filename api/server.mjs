@@ -486,7 +486,7 @@ const queueCreateSchema = z.object({
 });
 const bridgeSchema = z.object({
   printerId: z.string().min(1),
-  kind: z.enum(["octoprint", "moonraker", "manual"]),
+  kind: z.enum(["octoprint", "moonraker", "prusalink", "manual"]),
   name: z.string().min(1),
   baseUrl: z.string().min(1),
   apiKey: z.string().optional().default(""),
@@ -6244,7 +6244,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const bridge = existing || { id: randomUUID(), workspaceId: request.user.workspaceId, lastStatus: "not tested" };
     Object.assign(bridge, parsed.data, { updatedAt: new Date().toISOString() });
     if (!existing) database.data.bridges.push(bridge);
-    printer.connection = parsed.data.kind === "octoprint" ? "OctoPrint" : parsed.data.kind === "moonraker" ? "Klipper / Moonraker" : "Manual bridge";
+    printer.connection = parsed.data.kind === "octoprint" ? "OctoPrint" : parsed.data.kind === "moonraker" ? "Klipper / Moonraker" : parsed.data.kind === "prusalink" ? "PrusaLink" : "Manual bridge";
     database.data.events.unshift({ id: randomUUID(), workspaceId: request.user.workspaceId, type: "bridge.saved", message: `${bridge.name} saved for ${printer.name}`, data: { workspaceId: request.user.workspaceId }, at: new Date().toISOString() });
     await database.write();
     return reply.code(existing ? 200 : 201).send(sanitizeBridge(bridge));

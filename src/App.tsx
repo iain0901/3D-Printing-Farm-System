@@ -225,7 +225,7 @@ type NotificationChannel = { id: string; name: string; type: "slack" | "discord"
 type NotificationDelivery = { id: string; channelId: string; channelName: string; channelType: string; eventId: string; eventType: string; url: string; status: string; statusCode: number; at: string; error?: string };
 type BridgeDiagnosticCheck = { name: string; status: "passed" | "warning" | "failed"; detail: string; recommendation?: string };
 type BridgeDiagnostic = { ok: boolean; generatedAt: string; kind: Bridge["kind"]; baseUrl: string; latencyMs: number; status?: Partial<Printer> | null; checks: BridgeDiagnosticCheck[]; summary: string; recommendation: string };
-type Bridge = { id: string; printerId: string; kind: "octoprint" | "moonraker" | "manual"; name: string; baseUrl: string; enabled: boolean; hasApiKey?: boolean; lastStatus?: string; lastError?: string; lastSyncAt?: string; lastDiagnostics?: BridgeDiagnostic };
+type Bridge = { id: string; printerId: string; kind: "octoprint" | "moonraker" | "prusalink" | "manual"; name: string; baseUrl: string; enabled: boolean; hasApiKey?: boolean; lastStatus?: string; lastError?: string; lastSyncAt?: string; lastDiagnostics?: BridgeDiagnostic };
 type Toast = { id: string; message: string; type: "success" | "info" | "warning" };
 type Part = { id: string; name: string; fileId: string; material: string; process: string; plates: number; variants: string[]; status: "ready" | "needs profile" | "draft" };
 type SKU = { id: string; sku: string; title: string; parts: string[]; variants: string[]; price: number; stock: number; channel: string };
@@ -904,6 +904,8 @@ const zhTwTranslations: Record<string, string> = {
   "Install": "安裝",
   "Roadmap": "路線圖",
   "Project home": "專案首頁",
+  "PrusaLink": "PrusaLink",
+  "Connect Prusa printers through the local PrusaLink HTTP API.": "透過本機 PrusaLink HTTP API 連接 Prusa 打印機。",
   "GitHub repository": "GitHub 倉庫",
   "Source, releases, deployment scripts, issue tracking, and project documentation live in the public repository.": "原始碼、版本、部署腳本、問題追蹤與專案文檔都放在公開倉庫。",
   "Open GitHub": "開啟 GitHub",
@@ -1277,6 +1279,7 @@ const auditSeed = [
 const integrations = [
   ["OctoPrint", "Connect USB printers through an OctoPrint plugin.", "Ready"],
   ["Klipper / Moonraker", "Stream status and send controls over a local bridge.", "Ready"],
+  ["PrusaLink", "Connect Prusa printers through the local PrusaLink HTTP API.", "Ready"],
   ["Cura", "Send sliced files from Cura into the cloud library.", "Available"],
   ["OrcaSlicer", "Push plate exports to selected folders and queues.", "Available"],
   ["Slack", "Notify channels when jobs complete or fail.", "Connected"],
@@ -5002,7 +5005,7 @@ function IntegrationsPage({ apiKeys, setApiKeys, webhooks, setWebhooks, webhookD
         <PanelTitle title="Printer bridges" action={<><button onClick={syncBridges}><RefreshCw size={16} />Sync all</button><button className="primary" onClick={saveBridge}><Save size={16} />Save bridge</button></>} />
         <div className="toolbar">
           <select value={bridgeDraft.printerId} onChange={(event) => setBridgeDraft({ ...bridgeDraft, printerId: event.target.value })}>{printers.map((printer) => <option key={printer.id} value={printer.id}>{printer.name}</option>)}</select>
-          <select value={bridgeDraft.kind} onChange={(event) => setBridgeDraft({ ...bridgeDraft, kind: event.target.value as Bridge["kind"] })}><option value="octoprint">OctoPrint</option><option value="moonraker">Moonraker</option><option value="manual">Manual</option></select>
+          <select value={bridgeDraft.kind} onChange={(event) => setBridgeDraft({ ...bridgeDraft, kind: event.target.value as Bridge["kind"] })}><option value="octoprint">OctoPrint</option><option value="moonraker">Moonraker</option><option value="prusalink">PrusaLink</option><option value="manual">Manual</option></select>
           <input value={bridgeDraft.name} onChange={(event) => setBridgeDraft({ ...bridgeDraft, name: event.target.value })} placeholder="Bridge name" />
           <input value={bridgeDraft.baseUrl} onChange={(event) => setBridgeDraft({ ...bridgeDraft, baseUrl: event.target.value })} placeholder="http://octopi.local" />
           <input type="password" value={bridgeDraft.apiKey} onChange={(event) => setBridgeDraft({ ...bridgeDraft, apiKey: event.target.value })} placeholder="API key or access token" />

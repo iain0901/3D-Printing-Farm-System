@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { diagnoseBridge, fetchMoonrakerStatus, fetchOctoPrintStatus, sendMoonrakerCommand, sendOctoPrintCommand } from "./hardware-bridge.mjs";
+import { diagnoseBridge, fetchMoonrakerStatus, fetchOctoPrintStatus, fetchPrusaLinkStatus, sendMoonrakerCommand, sendOctoPrintCommand, sendPrusaLinkCommand } from "./hardware-bridge.mjs";
 
 function response(body = {}, status = 200) {
   return {
@@ -49,6 +49,50 @@ describe("hardware bridge adapters", () => {
     };
     await sendMoonrakerCommand({ baseUrl: "http://moonraker.local/", action: "home axes", fetchImpl });
     expect(calls).toEqual([{ url: "http://moonraker.local/printer/gcode/script", body: { script: "G28" } }]);
+  });
+
+  it("normalizes PrusaLink status from the v1 status endpoint", async () => {
+    const status = await fetchPrusaLinkStatus({
+      baseUrl: "http://prusa-mini.local/",
+      apiKey: "key",
+      fetchImpl: async (url, init) => {
+        expect(url).toBe("http://prusa-mini.local/api/v1/status");
+        expect(init.headers["X-Api-Key"]).toBe("key");
+        return response({
+          printer: { state: "PRINTING", temp_nozzle: 213.2, target_nozzle: 215, temp_bed: 58.1, target_bed: 60 },
+          job: { progress: 67.6, file: { display_name: "mk4-part.gcode" } }
+        });
+      }
+    });
+    expect(status).toMatchObject({ status: "printing", progress: 68, nozzle: 213, bed: 58, targetNozzle: 215, targetBed: 60, job: "mk4-part.gcode" });
+  });
+
+  it("sends PrusaLink pause commands through the active job endpoint", async () => {
+    const calls = [];
+    const fetchImpl = async (url, init = {}) => {
+      calls.push({ url, method: init.method || "GET", auth: init.headers?.Authorization });
+      if (url.endsWith("/api/v1/job")) return response({ id: 42 });
+      return response({}, 204);
+    };
+    await sendPrusaLinkCommand({ baseUrl: "http://prusa-mini.local", apiKey: "maker:secret", action: "pause", fetchImpl });
+    expect(calls).toEqual([
+      { url: "http://prusa-mini.local/api/v1/job", method: "GET", auth: "Basic bWFrZXI6c2VjcmV0" },
+      { url: "http://prusa-mini.local/api/v1/job/42/pause", method: "PUT", auth: "Basic bWFrZXI6c2VjcmV0" }
+    ]);
+  });
+
+  it("diagnoses PrusaLink bridges with safe credential handling", async () => {
+    const diagnostic = await diagnoseBridge({
+      kind: "prusalink",
+      name: "MK4 PrusaLink",
+      baseUrl: "http://mk4.local",
+      apiKey: "secret"
+    }, {
+      fetchImpl: async () => response({ printer: { state: "READY" }, job: {} })
+    });
+    expect(diagnostic.ok).toBe(true);
+    expect(diagnostic.status).toMatchObject({ status: "idle" });
+    expect(JSON.stringify(diagnostic)).not.toContain("secret");
   });
 
   it("diagnoses invalid bridge URLs without network calls", async () => {
