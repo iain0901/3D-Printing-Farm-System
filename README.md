@@ -1,5 +1,7 @@
 # 3DSTU FarmFlow
 
+[![CI](https://github.com/iain0901/3D-Printing-Farm-System/actions/workflows/ci.yml/badge.svg)](https://github.com/iain0901/3D-Printing-Farm-System/actions/workflows/ci.yml)
+
 3DSTU FarmFlow is an original 3D printing production operating system MVP for studios, labs, and small print farms. It focuses on structured tasks, model files, printer capability matching, scheduling, automatic todos, and exception-driven operations.
 
 Localized documentation:
@@ -18,6 +20,7 @@ Project links:
 - Installation guide: docs/INSTALL.md
 - Operations runbook: docs/OPERATIONS.md
 - Product roadmap: docs/ROADMAP.md
+- Release runbook: docs/RELEASE.md
 
 
 ## License
@@ -252,6 +255,8 @@ npm run qc
 ```
 
 This runs the TypeScript/Vite production build plus API tests.
+
+GitHub Actions runs the same QC gate on every push to `main` and every pull request. Release discipline and VPS deployment evidence are documented in `docs/RELEASE.md`.
 
 ## Open Source Stack
 

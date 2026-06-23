@@ -32,6 +32,7 @@
 - v0.1.10: Production templates add reusable file/SKU recipes, dry-run queue creation, one-click job generation, integrity checks for linked files and printers, support snapshot counts, and a global version footer across every app page.
 - v0.1.11: Filament purchasing adds low-stock reorder planning, purchase request tracking, ordered/received states, receive-to-inventory spool creation, integrity checks, support snapshot counts, and operator controls on the filament page.
 - v0.1.12: Public quote intake adds website quote submissions, operator quote review, quote-to-order conversion, linked order records, and customer intake UI on the marketing site and Orders page.
+- v0.1.13: GitHub CI and release runbook add automated build/test evidence for every push and a documented versioned release workflow for VPS deployments.
 
 ## Definition Of Done For A Real Release
 
