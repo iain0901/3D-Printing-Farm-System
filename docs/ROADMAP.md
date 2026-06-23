@@ -36,6 +36,7 @@
 - v0.1.14: PrusaLink printer bridges add local PrusaLink status polling, safe diagnostics, UI configuration, and pause/resume/cancel job control alongside OctoPrint and Moonraker.
 - v0.1.15: Customer quote intake now accepts real STL/3MF/G-code/OBJ model uploads, stores them in the shared file library, links them to quote requests, and exposes operator downloads from the Orders page.
 - v0.1.16: Accepted quote requests with attached model files now create linked production orders and queue jobs in one handoff, keeping the uploaded file protected and ready for slicing or scheduling.
+- v0.1.17: Public quote tracking adds customer access tokens, status lookup, and customer accept/reject decisions; accepted quotes convert into production orders through the same queue handoff path.
 
 ## Definition Of Done For A Real Release
 

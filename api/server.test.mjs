@@ -1988,6 +1988,7 @@ endsolid s3_store`;
       });
       expect(quote.statusCode).toBe(201);
       expect(quote.json()).toMatchObject({ ok: true, quoteRequest: { status: "new", project: "ASA fixture batch" } });
+      expect(quote.json().quoteRequest.accessToken).toEqual(expect.any(String));
 
       const protectedList = await app.inject({ method: "GET", url: "/api/quoteRequests" });
       expect(protectedList.statusCode).toBe(401);
@@ -2002,6 +2003,13 @@ endsolid s3_store`;
       });
       expect(quoted.statusCode).toBe(200);
       expect(quoted.json()).toMatchObject({ status: "quoted", priority: "High", quotedValue: 720 });
+
+      const blockedStatus = await app.inject({ method: "GET", url: `/api/public/quoteRequests/${id}?token=wrong-token` });
+      expect(blockedStatus.statusCode).toBe(404);
+
+      const publicStatus = await app.inject({ method: "GET", url: `/api/public/quoteRequests/${id}?token=${quote.json().quoteRequest.accessToken}` });
+      expect(publicStatus.statusCode).toBe(200);
+      expect(publicStatus.json().quoteRequest).toMatchObject({ id, status: "quoted", quotedValue: 720, orderId: "" });
 
       const converted = await app.inject({
         method: "POST",
@@ -2021,6 +2029,55 @@ endsolid s3_store`;
       expect(persisted.quoteRequests.find((item) => item.id === id)).toMatchObject({ status: "converted", orderId: converted.json().order.id });
       expect(persisted.orders.find((item) => item.id === converted.json().order.id)).toMatchObject({ quoteRequestId: id });
       expect(persisted.events.some((event) => event.type === "quote_request.converted")).toBe(true);
+    });
+  });
+
+  it("lets customers accept quoted requests through the public quote portal", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const quote = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        payload: {
+          customer: "Portal Buyer",
+          email: "buyer@example.com",
+          company: "Buyer Studio",
+          project: "PETG jig run",
+          material: "PETG",
+          quantity: 3,
+          due: "2026-07-18",
+          budget: 300,
+          notes: "Approve from public portal"
+        }
+      });
+      expect(quote.statusCode).toBe(201);
+      const { id, accessToken } = quote.json().quoteRequest;
+      const token = await login(app);
+      const quoted = await app.inject({
+        method: "PATCH",
+        url: `/api/quoteRequests/${id}`,
+        headers: auth(token),
+        payload: { status: "quoted", quotedValue: 255, priority: "Normal" }
+      });
+      expect(quoted.statusCode).toBe(200);
+
+      const accepted = await app.inject({
+        method: "POST",
+        url: `/api/public/quoteRequests/${id}/decision`,
+        payload: { token: accessToken, decision: "accepted", note: "Customer approved" }
+      });
+      expect(accepted.statusCode).toBe(201);
+      expect(accepted.json().quoteRequest).toMatchObject({ id, status: "converted", quotedValue: 255, customerDecision: "accepted" });
+      expect(accepted.json().order).toMatchObject({ status: "received", value: 255, due: "2026-07-18" });
+      expect(accepted.json().job).toBe(null);
+
+      const duplicate = await app.inject({ method: "POST", url: `/api/public/quoteRequests/${id}/decision`, payload: { token: accessToken, decision: "accepted" } });
+      expect(duplicate.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.quoteRequests.find((item) => item.id === id)).toMatchObject({ status: "converted", orderId: accepted.json().order.id, customerDecisionNote: "Customer approved" });
+      expect(persisted.orders.find((item) => item.id === accepted.json().order.id)).toMatchObject({ quoteRequestId: id, value: 255 });
+      expect(persisted.events.some((event) => event.type === "quote_request.customer_accepted")).toBe(true);
+      expect(persisted.events.some((event) => event.type === "quote_request.converted" && event.data.orderId === accepted.json().order.id)).toBe(true);
     });
   });
 

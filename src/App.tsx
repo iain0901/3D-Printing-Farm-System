@@ -921,6 +921,11 @@ const zhTwTranslations: Record<string, string> = {
   "Open reorders": "待處理補貨",
   "Quote intake": "詢價入口",
   "Quote requests": "詢價請求",
+  "Quote request ID": "詢價單 ID",
+  "Quote status lookup": "詢價狀態查詢",
+  "Tracking token": "追蹤權杖",
+  "Check status": "查詢狀態",
+  "Save the returned tracking token to check quote status after the operator reviews it.": "請保存回傳的追蹤權杖，操作員審核後可查詢詢價狀態。",
   "Quoting": "報價中",
   "Accept / order": "接受 / 轉訂單",
   "New quotes": "新詢價",
@@ -3090,6 +3095,8 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
   const [quoteDraft, setQuoteDraft] = useState({ customer: "", email: "", company: "", project: "Prototype enclosure", material: "PLA", quantity: 1, due: "Flexible", budget: 0, fileName: "", notes: "" });
   const [quoteFile, setQuoteFile] = useState<File | null>(null);
   const [quoteStatus, setQuoteStatus] = useState("");
+  const [quoteLookup, setQuoteLookup] = useState({ id: "", token: "" });
+  const [quoteLookupStatus, setQuoteLookupStatus] = useState("");
   const submitQuote = async () => {
     if (!quoteDraft.customer.trim() || !quoteDraft.email.trim() || !quoteDraft.project.trim()) {
       setQuoteStatus("Please add your name, email, and project.");
@@ -3110,11 +3117,29 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result?.error || "Quote request failed");
-      setQuoteStatus(`Quote request ${result.quoteRequest.id} received.`);
+      const token = result.quoteRequest?.accessToken || "";
+      setQuoteStatus(token ? `Quote request ${result.quoteRequest.id} received. Tracking token: ${token}` : `Quote request ${result.quoteRequest.id} received.`);
+      setQuoteLookup({ id: result.quoteRequest.id, token });
       setQuoteDraft({ customer: "", email: "", company: "", project: "Prototype enclosure", material: "PLA", quantity: 1, due: "Flexible", budget: 0, fileName: "", notes: "" });
       setQuoteFile(null);
     } catch {
       setQuoteStatus("Quote request could not be sent. Please contact support@3dstu.com.");
+    }
+  };
+  const checkQuoteStatus = async () => {
+    if (!quoteLookup.id.trim() || !quoteLookup.token.trim()) {
+      setQuoteLookupStatus("Add the quote request ID and tracking token first.");
+      return;
+    }
+    setQuoteLookupStatus("Checking quote status...");
+    try {
+      const response = await fetch(`${API_BASE}/api/public/quoteRequests/${encodeURIComponent(quoteLookup.id.trim())}?token=${encodeURIComponent(quoteLookup.token.trim())}`);
+      const result = await response.json();
+      if (!response.ok) throw new Error(result?.error || "Quote status lookup failed");
+      const quote = result.quoteRequest;
+      setQuoteLookupStatus(`${quote.id}: ${quote.status}${quote.quotedValue ? ` - quoted $${quote.quotedValue}` : ""}${quote.orderId ? ` - order ${quote.orderId}` : ""}`);
+    } catch {
+      setQuoteLookupStatus("Quote status could not be loaded. Check the ID and tracking token.");
     }
   };
   const metrics = [
@@ -3338,6 +3363,16 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
             <button className="primary wide" onClick={submitQuote}>Request quote</button>
             {quoteFile && <p className="quote-status wide">Attached: {quoteFile.name} ({Math.round(quoteFile.size / 1024)} KB)</p>}
             {quoteStatus && <p className="quote-status wide">{quoteStatus}</p>}
+          </div>
+          <div className="quote-form quote-lookup">
+            <div className="wide">
+              <p className="eyebrow">Quote status lookup</p>
+              <p className="muted">Save the returned tracking token to check quote status after the operator reviews it.</p>
+            </div>
+            <label>Quote request ID<input value={quoteLookup.id} onChange={(event) => setQuoteLookup((draft) => ({ ...draft, id: event.target.value }))} placeholder="qr-..." /></label>
+            <label>Tracking token<input value={quoteLookup.token} onChange={(event) => setQuoteLookup((draft) => ({ ...draft, token: event.target.value }))} /></label>
+            <button className="primary" onClick={checkQuoteStatus}>Check status</button>
+            {quoteLookupStatus && <p className="quote-status wide">{quoteLookupStatus}</p>}
           </div>
         </section>
 

@@ -268,6 +268,11 @@ const quoteConvertSchema = z.object({
   value: z.number().nonnegative().optional(),
   createJob: z.boolean().default(true)
 }).default({});
+const publicQuoteDecisionSchema = z.object({
+  token: z.string().min(12),
+  decision: z.enum(["accepted", "rejected"]),
+  note: z.string().max(1000).optional().default("")
+});
 const commerceConnectorSchema = z.object({
   name: z.string().min(1),
   source: commerceSourceSchema.default("Generic"),
@@ -1212,6 +1217,7 @@ async function ensureAuthData(database, options = {}) {
     quote.priority = prioritySchema.safeParse(quote.priority).success ? quote.priority : "Normal";
     quote.quotedValue = Number(quote.quotedValue || 0);
     quote.internalNote ||= "";
+    quote.customerAccessToken ||= randomBytes(18).toString("base64url");
   }
   for (const part of database.data.parts || []) {
     part.process ||= "0.20mm Production";
@@ -3591,6 +3597,71 @@ function createJobFromQuote({ quote, order, file, printer, workspaceData }) {
   return job;
 }
 
+function publicQuoteSummary(quote) {
+  return {
+    id: quote.id,
+    status: quote.status,
+    project: quote.project,
+    customer: quote.customer,
+    company: quote.company || "",
+    material: quote.material,
+    quantity: quote.quantity,
+    due: quote.due,
+    budget: quote.budget,
+    quotedValue: quote.quotedValue || 0,
+    fileName: quote.fileName || "",
+    fileType: quote.fileType || "",
+    fileSize: quote.fileSize || "",
+    estimatedGrams: quote.estimatedGrams || 0,
+    estimatedMinutes: quote.estimatedMinutes || 0,
+    estimatedQuote: quote.estimatedQuote || 0,
+    orderId: quote.orderId || "",
+    customerDecision: quote.customerDecision || "",
+    customerDecisionAt: quote.customerDecisionAt || "",
+    createdAt: quote.createdAt,
+    updatedAt: quote.updatedAt
+  };
+}
+
+function quoteTokenMatches(quote, token) {
+  if (!quote?.customerAccessToken || !token) return false;
+  const expected = Buffer.from(String(quote.customerAccessToken));
+  const received = Buffer.from(String(token));
+  return expected.length === received.length && timingSafeEqual(expected, received);
+}
+
+function convertQuoteToProduction(data, quote, { workspaceId, due, value, createJob = true, reviewedBy = "system" } = {}) {
+  if (quote.orderId) return { error: "Quote request already converted", statusCode: 409, orderId: quote.orderId };
+  const now = new Date().toISOString();
+  const targetWorkspaceId = workspaceId || quote.workspaceId || DEFAULT_WORKSPACE_ID;
+  const order = {
+    id: `ord-${1000 + data.orders.length + 1}`,
+    workspaceId: targetWorkspaceId,
+    source: "Manual",
+    externalId: quote.id,
+    customer: quote.company ? `${quote.customer} / ${quote.company}` : quote.customer,
+    items: [`${quote.project} x${quote.quantity}`],
+    status: "received",
+    due: due || quote.due || "Flexible",
+    value: Number(value ?? quote.quotedValue ?? quote.budget ?? 0),
+    quoteRequestId: quote.id,
+    updatedAt: now
+  };
+  data.orders.push(order);
+  const scoped = scopedWorkspaceData(data, targetWorkspaceId);
+  const file = quote.fileId ? scoped.files.find((item) => item.id === quote.fileId) : null;
+  const printer = scoped.printers.find((item) => item.status === "idle") || scoped.printers.find((item) => item.status !== "offline" && item.status !== "maintenance") || scoped.printers[0];
+  const job = createJob && file && printer ? createJobFromQuote({ quote, order, file, printer, workspaceData: scoped }) : null;
+  if (job) {
+    data.queue.push(job);
+    order.status = "queued";
+    order.updatedAt = now;
+  }
+  Object.assign(quote, { status: "converted", orderId: order.id, convertedAt: now, updatedAt: now, reviewedBy });
+  const nextScoped = scopedWorkspaceData(data, targetWorkspaceId);
+  return { quoteRequest: quote, order, job, orders: nextScoped.orders, quoteRequests: nextScoped.quoteRequests, queue: nextScoped.queue, todos: deriveTodos(nextScoped) };
+}
+
 function dueFromOffset(days = 2) {
   const date = new Date(Date.now() + Number(days || 0) * 24 * 60 * 60 * 1000);
   return date.toISOString().slice(0, 10);
@@ -4690,7 +4761,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
 
   app.addHook("preHandler", async (request, reply) => {
     const routePath = request.url.split("?")[0];
-    const publicRoute = routePath === "/api/health" || routePath === "/api/readiness" || routePath === "/api/metrics" && hasValidMetricsToken(request) || routePath === "/api/internal/worker-broadcast" && hasValidWorkerToken(request) || routePath === "/api/billing/webhook/stripe" || routePath === "/api/public/quoteRequests" || routePath.startsWith("/api/auth/") || serveStatic && !routePath.startsWith("/api/");
+    const publicRoute = routePath === "/api/health" || routePath === "/api/readiness" || routePath === "/api/metrics" && hasValidMetricsToken(request) || routePath === "/api/internal/worker-broadcast" && hasValidWorkerToken(request) || routePath === "/api/billing/webhook/stripe" || routePath === "/api/public/quoteRequests" || routePath.startsWith("/api/public/quoteRequests/") || routePath.startsWith("/api/auth/") || serveStatic && !routePath.startsWith("/api/");
     if (publicRoute) return;
     const { session, user, apiKey } = userFromRequest(database, request);
     if (!user) return reply.code(401).send({ error: "Authentication required" });
@@ -4991,6 +5062,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const quote = {
       id: quoteId,
       workspaceId: workspace.id,
+      customerAccessToken: randomBytes(18).toString("base64url"),
       ...parsed.data,
       fileName: uploaded?.file?.name || parsed.data.fileName,
       fileId: uploaded?.file?.id || "",
@@ -5009,7 +5081,44 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     database.data.quoteRequests.unshift(quote);
     await dispatchEvent(database, "quote_request.created", `${quote.customer} requested ${quote.project}`, { quoteRequestId: quote.id, fileId: quote.fileId, material: quote.material, quantity: quote.quantity, source: quote.source });
     await database.write();
-    return reply.code(201).send({ ok: true, quoteRequest: { id: quote.id, status: quote.status, project: quote.project, fileId: quote.fileId, fileName: quote.fileName, createdAt: quote.createdAt } });
+    return reply.code(201).send({ ok: true, quoteRequest: { ...publicQuoteSummary(quote), fileId: quote.fileId, accessToken: quote.customerAccessToken } });
+  });
+
+  app.get("/api/public/quoteRequests/:id", { config: { rateLimit: { max: 60, timeWindow: "1 minute", groupId: "quote-portal" } } }, async (request, reply) => {
+    const token = request.query?.token;
+    const quote = database.data.quoteRequests.find((item) => item.id === request.params.id && itemInWorkspace(item, DEFAULT_WORKSPACE_ID));
+    if (!quote || !quoteTokenMatches(quote, token)) return reply.code(404).send({ error: "Quote request not found" });
+    return { ok: true, quoteRequest: publicQuoteSummary(quote) };
+  });
+
+  app.post("/api/public/quoteRequests/:id/decision", { config: { rateLimit: { max: 20, timeWindow: "1 minute", groupId: "quote-portal-decision" } } }, async (request, reply) => {
+    const parsed = publicQuoteDecisionSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid quote decision payload", issues: parsed.error.issues });
+    const quote = database.data.quoteRequests.find((item) => item.id === request.params.id && itemInWorkspace(item, DEFAULT_WORKSPACE_ID));
+    if (!quote || !quoteTokenMatches(quote, parsed.data.token)) return reply.code(404).send({ error: "Quote request not found" });
+    if (quote.orderId) return reply.code(409).send({ error: "Quote request already converted", orderId: quote.orderId });
+    if (!["quoted", "accepted"].includes(quote.status)) return reply.code(409).send({ error: "Quote request is not ready for a customer decision", status: quote.status });
+    const now = new Date().toISOString();
+    Object.assign(quote, {
+      customerDecision: parsed.data.decision,
+      customerDecisionAt: now,
+      customerDecisionNote: parsed.data.note,
+      updatedAt: now
+    });
+    if (parsed.data.decision === "rejected") {
+      Object.assign(quote, { status: "rejected", rejectedAt: now });
+      await dispatchEvent(database, "quote_request.customer_rejected", `${quote.id} rejected by customer`, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, quoteRequestId: quote.id });
+      await database.write();
+      return { ok: true, quoteRequest: publicQuoteSummary(quote) };
+    }
+    Object.assign(quote, { status: "accepted", acceptedAt: now });
+    await dispatchEvent(database, "quote_request.customer_accepted", `${quote.id} accepted by customer`, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, quoteRequestId: quote.id, quotedValue: quote.quotedValue || 0 });
+    const result = convertQuoteToProduction(database.data, quote, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, due: quote.due, value: quote.quotedValue || quote.budget || 0, createJob: true, reviewedBy: quote.email });
+    if (result.error) return reply.code(result.statusCode || 400).send({ error: result.error, orderId: result.orderId });
+    await dispatchEvent(database, "quote_request.converted", `${quote.id} converted to ${result.order.id}`, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, quoteRequestId: quote.id, orderId: result.order.id, value: result.order.value });
+    if (result.job) await dispatchEvent(database, "queue.created", `${result.job.file} queued from quote`, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, jobId: result.job.id, fileId: result.job.fileId, orderId: result.order.id, quoteRequestId: quote.id, material: result.job.material });
+    await database.write();
+    return reply.code(201).send({ ok: true, quoteRequest: publicQuoteSummary(quote), order: { id: result.order.id, status: result.order.status, due: result.order.due, value: result.order.value }, job: result.job ? { id: result.job.id, status: result.job.status, stage: result.job.stage, printer: result.job.printer } : null });
   });
 
   app.post("/api/telemetry/tick", async (request, reply) => {
@@ -6077,36 +6186,12 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const quote = database.data.quoteRequests.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!quote) return reply.code(404).send({ error: "Quote request not found" });
     if (quote.orderId) return reply.code(409).send({ error: "Quote request already converted", orderId: quote.orderId });
-    const now = new Date().toISOString();
-    const order = {
-      id: `ord-${1000 + database.data.orders.length + 1}`,
-      workspaceId: request.user.workspaceId,
-      source: "Manual",
-      externalId: quote.id,
-      customer: quote.company ? `${quote.customer} / ${quote.company}` : quote.customer,
-      items: [`${quote.project} x${quote.quantity}`],
-      status: "received",
-      due: parsed.data.due || quote.due || "Flexible",
-      value: Number(parsed.data.value ?? quote.quotedValue ?? quote.budget ?? 0),
-      quoteRequestId: quote.id,
-      updatedAt: now
-    };
-    database.data.orders.push(order);
-    const scoped = workspaceScopeForUser(database.data, request.user);
-    const file = quote.fileId ? scoped.files.find((item) => item.id === quote.fileId) : null;
-    const printer = scoped.printers.find((item) => item.status === "idle") || scoped.printers.find((item) => item.status !== "offline" && item.status !== "maintenance") || scoped.printers[0];
-    const job = parsed.data.createJob && file && printer ? createJobFromQuote({ quote, order, file, printer, workspaceData: scoped }) : null;
-    if (job) {
-      database.data.queue.push(job);
-      order.status = "queued";
-      order.updatedAt = now;
-    }
-    Object.assign(quote, { status: "converted", orderId: order.id, convertedAt: now, updatedAt: now, reviewedBy: request.user.email });
-    await dispatchEvent(database, "quote_request.converted", `${quote.id} converted to ${order.id}`, { quoteRequestId: quote.id, orderId: order.id, value: order.value });
-    if (job) await dispatchEvent(database, "queue.created", `${job.file} queued from quote`, { workspaceId: request.user.workspaceId, jobId: job.id, fileId: job.fileId, orderId: order.id, quoteRequestId: quote.id, material: job.material });
+    const result = convertQuoteToProduction(database.data, quote, { workspaceId: request.user.workspaceId, due: parsed.data.due, value: parsed.data.value, createJob: parsed.data.createJob, reviewedBy: request.user.email });
+    if (result.error) return reply.code(result.statusCode || 400).send({ error: result.error, orderId: result.orderId });
+    await dispatchEvent(database, "quote_request.converted", `${quote.id} converted to ${result.order.id}`, { workspaceId: request.user.workspaceId, quoteRequestId: quote.id, orderId: result.order.id, value: result.order.value });
+    if (result.job) await dispatchEvent(database, "queue.created", `${result.job.file} queued from quote`, { workspaceId: request.user.workspaceId, jobId: result.job.id, fileId: result.job.fileId, orderId: result.order.id, quoteRequestId: quote.id, material: result.job.material });
     await database.write();
-    const nextScoped = workspaceScopeForUser(database.data, request.user);
-    return reply.code(201).send({ quoteRequest: quote, order, job, orders: nextScoped.orders, quoteRequests: nextScoped.quoteRequests, queue: nextScoped.queue, todos: deriveTodos(nextScoped) });
+    return reply.code(201).send(result);
   });
 
   app.patch("/api/orders/:id/status", async (request, reply) => {
