@@ -2011,6 +2011,7 @@ endsolid s3_store`;
       });
       expect(converted.statusCode).toBe(201);
       expect(converted.json().order).toMatchObject({ externalId: id, customer: "Public Customer / Customer Lab", items: ["ASA fixture batch x6"], status: "received", due: "2026-07-10", value: 720, quoteRequestId: id });
+      expect(converted.json().job).toBe(null);
       expect(converted.json().quoteRequest).toMatchObject({ status: "converted", orderId: converted.json().order.id });
 
       const duplicate = await app.inject({ method: "POST", url: `/api/quoteRequests/${id}/convert-order`, headers: auth(token) });
@@ -2066,6 +2067,17 @@ endsolid s3_store`;
       const blockedDelete = await app.inject({ method: "DELETE", url: `/api/files/${storedFile.id}`, headers: auth(token) });
       expect(blockedDelete.statusCode).toBe(409);
       expect(blockedDelete.json().references.quoteRequests).toEqual([{ id: storedQuote.id, project: "Uploaded bracket", status: "new" }]);
+
+      const converted = await app.inject({ method: "POST", url: `/api/quoteRequests/${storedQuote.id}/convert-order`, headers: auth(token), payload: { due: "2026-08-02" } });
+      expect(converted.statusCode).toBe(201);
+      expect(converted.json().order).toMatchObject({ externalId: storedQuote.id, status: "queued", quoteRequestId: storedQuote.id, due: "2026-08-02" });
+      expect(converted.json().job).toMatchObject({ fileId: storedFile.id, sourceOrderId: converted.json().order.id, sourceQuoteRequestId: storedQuote.id, material: "PETG", stage: "needs slicing" });
+      expect(converted.json().queue.some((job) => job.id === converted.json().job.id)).toBe(true);
+      expect(converted.json().todos.length).toBeGreaterThan(0);
+
+      const queueProtectedDelete = await app.inject({ method: "DELETE", url: `/api/files/${storedFile.id}`, headers: auth(token) });
+      expect(queueProtectedDelete.statusCode).toBe(409);
+      expect(queueProtectedDelete.json().references.activeQueue).toEqual([expect.objectContaining({ id: converted.json().job.id, status: "queued" })]);
     });
   });
 

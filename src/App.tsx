@@ -1840,12 +1840,13 @@ function App() {
 
   const convertQuoteRequest = async (quote: QuoteRequest) => {
     try {
-      const result = await apiRequest<{ quoteRequest: QuoteRequest; order: Order; orders: Order[]; quoteRequests: QuoteRequest[] }>(`/api/quoteRequests/${quote.id}/convert-order`, {
+      const result = await apiRequest<{ quoteRequest: QuoteRequest; order: Order; job?: QueueItem | null; orders: Order[]; quoteRequests: QuoteRequest[]; queue?: QueueItem[]; todos?: Todo[] }>(`/api/quoteRequests/${quote.id}/convert-order`, {
         method: "POST",
-        body: JSON.stringify({ due: quote.due, value: quote.quotedValue || quote.budget || 0 })
+        body: JSON.stringify({ due: quote.due, value: quote.quotedValue || quote.budget || 0, createJob: true })
       });
       setQuoteRequests(result.quoteRequests);
       setOrders(result.orders);
+      if (result.queue) setQueue(result.queue);
       setBackendStatus("connected");
       return result;
     } catch {
@@ -3721,7 +3722,7 @@ function ProductsPage({ parts, skus, productionTemplates, files, createPart, cre
   );
 }
 
-function OrdersPage({ orders, setOrders, quoteRequests, files, skus, commerceConnectors, setCommerceConnectors, commerceImports, setCommerceImports, createOrder, updateOrderStatus, updateQuoteRequest, convertQuoteRequest, generateJobsForOrder, downloadFile, addToast, setBackendStatus }: { orders: Order[]; setOrders: React.Dispatch<React.SetStateAction<Order[]>>; quoteRequests: QuoteRequest[]; files: PrintFile[]; skus: SKU[]; commerceConnectors: CommerceConnector[]; setCommerceConnectors: React.Dispatch<React.SetStateAction<CommerceConnector[]>>; commerceImports: CommerceImport[]; setCommerceImports: React.Dispatch<React.SetStateAction<CommerceImport[]>>; createOrder: (order: Omit<Order, "id">) => Promise<Order>; updateOrderStatus: (orderId: string, status: Order["status"]) => Promise<Order | undefined>; updateQuoteRequest: (quoteId: string, patch: Partial<Pick<QuoteRequest, "status" | "priority" | "quotedValue" | "internalNote">>) => Promise<QuoteRequest | undefined>; convertQuoteRequest: (quote: QuoteRequest) => Promise<{ quoteRequest: QuoteRequest; order: Order; orders: Order[]; quoteRequests: QuoteRequest[] }>; generateJobsForOrder: (order: Order, dryRun?: boolean) => Promise<OrderJobGenerationResult>; downloadFile: (file: PrintFile) => Promise<boolean>; addToast: (message: string, type?: Toast["type"]) => void; setBackendStatus: React.Dispatch<React.SetStateAction<"local" | "connected">> }) {
+function OrdersPage({ orders, setOrders, quoteRequests, files, skus, commerceConnectors, setCommerceConnectors, commerceImports, setCommerceImports, createOrder, updateOrderStatus, updateQuoteRequest, convertQuoteRequest, generateJobsForOrder, downloadFile, addToast, setBackendStatus }: { orders: Order[]; setOrders: React.Dispatch<React.SetStateAction<Order[]>>; quoteRequests: QuoteRequest[]; files: PrintFile[]; skus: SKU[]; commerceConnectors: CommerceConnector[]; setCommerceConnectors: React.Dispatch<React.SetStateAction<CommerceConnector[]>>; commerceImports: CommerceImport[]; setCommerceImports: React.Dispatch<React.SetStateAction<CommerceImport[]>>; createOrder: (order: Omit<Order, "id">) => Promise<Order>; updateOrderStatus: (orderId: string, status: Order["status"]) => Promise<Order | undefined>; updateQuoteRequest: (quoteId: string, patch: Partial<Pick<QuoteRequest, "status" | "priority" | "quotedValue" | "internalNote">>) => Promise<QuoteRequest | undefined>; convertQuoteRequest: (quote: QuoteRequest) => Promise<{ quoteRequest: QuoteRequest; order: Order; job?: QueueItem | null; orders: Order[]; quoteRequests: QuoteRequest[]; queue?: QueueItem[]; todos?: Todo[] }>; generateJobsForOrder: (order: Order, dryRun?: boolean) => Promise<OrderJobGenerationResult>; downloadFile: (file: PrintFile) => Promise<boolean>; addToast: (message: string, type?: Toast["type"]) => void; setBackendStatus: React.Dispatch<React.SetStateAction<"local" | "connected">> }) {
   const [connectorDraft, setConnectorDraft] = useState({ name: "Shopify feed", source: "Shopify" as CommerceConnector["source"], url: "https://example.com/orders.json", token: "", enabled: true });
   const [csvText, setCsvText] = useState("externalId,customer,items,due,value\nSP-1001,Demo Customer,DUCT-KIT-BLK x1,Tomorrow 17:00,680");
   const [busy, setBusy] = useState("");
@@ -3826,7 +3827,7 @@ function OrdersPage({ orders, setOrders, quoteRequests, files, skus, commerceCon
     setBusy(`convert-${quote.id}`);
     const result = await convertQuoteRequest({ ...quote, status: quote.status === "new" ? "quoted" : quote.status, quotedValue: quoteValue(quote) });
     setBusy("");
-    addToast(`${quote.id} converted to ${result.order.id}`);
+    addToast(result.job ? `${quote.id} converted to ${result.order.id} and queued ${result.job.id}` : `${quote.id} converted to ${result.order.id}`);
   };
   return (
     <Page title="Orders" kicker="Commerce intake, SKU mapping, and production fulfillment">

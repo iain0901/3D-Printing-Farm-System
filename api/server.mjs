@@ -265,7 +265,8 @@ const quoteRequestPatchSchema = z.object({
 });
 const quoteConvertSchema = z.object({
   due: z.string().min(1).optional(),
-  value: z.number().nonnegative().optional()
+  value: z.number().nonnegative().optional(),
+  createJob: z.boolean().default(true)
 }).default({});
 const commerceConnectorSchema = z.object({
   name: z.string().min(1),
@@ -3562,6 +3563,34 @@ function createJobFromPart({ order, sku, part, file, printer, copyIndex }) {
   };
 }
 
+function createJobFromQuote({ quote, order, file, printer, workspaceData }) {
+  const job = {
+    id: randomUUID(),
+    workspaceId: quote.workspaceId || order.workspaceId || DEFAULT_WORKSPACE_ID,
+    fileId: file.id,
+    file: `${quote.project} x${quote.quantity}`,
+    printerId: printer.id,
+    printer: printer.name,
+    status: "queued",
+    priority: quote.priority || "Normal",
+    stage: file.sliced ? "needs scheduling" : "needs slicing",
+    material: quote.material || file.material || "PLA",
+    color: "Any",
+    due: order.due || quote.due || "Flexible",
+    dimensions: file.dimensions || [100, 100, 50],
+    assignee: "Scheduler",
+    time: file.printTime || "1h 00m",
+    cost: Number(order.value || quote.quotedValue || quote.estimatedQuote || file.cost || 0),
+    added: `Quote ${quote.id}`,
+    sourceOrderId: order.id,
+    sourceQuoteRequestId: quote.id,
+    estimateGrams: file.estimateGrams || file.usage || quote.estimatedGrams || 0,
+    estimateMinutes: file.estimateMinutes || quote.estimatedMinutes || 0
+  };
+  job.scheduleWarnings = getScheduleWarnings(workspaceData, job, printer);
+  return job;
+}
+
 function dueFromOffset(days = 2) {
   const date = new Date(Date.now() + Number(days || 0) * 24 * 60 * 60 * 1000);
   return date.toISOString().slice(0, 10);
@@ -6063,10 +6092,21 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       updatedAt: now
     };
     database.data.orders.push(order);
+    const scoped = workspaceScopeForUser(database.data, request.user);
+    const file = quote.fileId ? scoped.files.find((item) => item.id === quote.fileId) : null;
+    const printer = scoped.printers.find((item) => item.status === "idle") || scoped.printers.find((item) => item.status !== "offline" && item.status !== "maintenance") || scoped.printers[0];
+    const job = parsed.data.createJob && file && printer ? createJobFromQuote({ quote, order, file, printer, workspaceData: scoped }) : null;
+    if (job) {
+      database.data.queue.push(job);
+      order.status = "queued";
+      order.updatedAt = now;
+    }
     Object.assign(quote, { status: "converted", orderId: order.id, convertedAt: now, updatedAt: now, reviewedBy: request.user.email });
     await dispatchEvent(database, "quote_request.converted", `${quote.id} converted to ${order.id}`, { quoteRequestId: quote.id, orderId: order.id, value: order.value });
+    if (job) await dispatchEvent(database, "queue.created", `${job.file} queued from quote`, { workspaceId: request.user.workspaceId, jobId: job.id, fileId: job.fileId, orderId: order.id, quoteRequestId: quote.id, material: job.material });
     await database.write();
-    return reply.code(201).send({ quoteRequest: quote, order, orders: workspaceScopeForUser(database.data, request.user).orders, quoteRequests: workspaceScopeForUser(database.data, request.user).quoteRequests });
+    const nextScoped = workspaceScopeForUser(database.data, request.user);
+    return reply.code(201).send({ quoteRequest: quote, order, job, orders: nextScoped.orders, quoteRequests: nextScoped.quoteRequests, queue: nextScoped.queue, todos: deriveTodos(nextScoped) });
   });
 
   app.patch("/api/orders/:id/status", async (request, reply) => {

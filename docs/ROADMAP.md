@@ -35,6 +35,7 @@
 - v0.1.13: GitHub CI and release runbook add automated build/test evidence for every push and a documented versioned release workflow for VPS deployments.
 - v0.1.14: PrusaLink printer bridges add local PrusaLink status polling, safe diagnostics, UI configuration, and pause/resume/cancel job control alongside OctoPrint and Moonraker.
 - v0.1.15: Customer quote intake now accepts real STL/3MF/G-code/OBJ model uploads, stores them in the shared file library, links them to quote requests, and exposes operator downloads from the Orders page.
+- v0.1.16: Accepted quote requests with attached model files now create linked production orders and queue jobs in one handoff, keeping the uploaded file protected and ready for slicing or scheduling.
 
 ## Definition Of Done For A Real Release
 
