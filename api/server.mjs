@@ -268,6 +268,9 @@ const quoteConvertSchema = z.object({
   value: z.number().nonnegative().optional(),
   createJob: z.boolean().default(true)
 }).default({});
+const quoteCustomerLinkSchema = z.object({
+  rotate: z.boolean().default(false)
+}).default({});
 const publicQuoteDecisionSchema = z.object({
   token: z.string().min(12),
   decision: z.enum(["accepted", "rejected"]),
@@ -3630,6 +3633,16 @@ function quoteTokenMatches(quote, token) {
   return expected.length === received.length && timingSafeEqual(expected, received);
 }
 
+function publicQuoteUrl(request, quote) {
+  const configured = process.env.LAYERPILOT_PUBLIC_URL || "";
+  const forwardedProto = String(request.headers["x-forwarded-proto"] || "").split(",")[0].trim();
+  const forwardedHost = String(request.headers["x-forwarded-host"] || "").split(",")[0].trim();
+  const host = forwardedHost || request.headers.host || "127.0.0.1:8797";
+  const base = (configured || `${forwardedProto || "http"}://${host}`).replace(/\/+$/, "");
+  const params = new URLSearchParams({ quoteId: quote.id, quoteToken: quote.customerAccessToken || "" });
+  return `${base}/?${params.toString()}#quote`;
+}
+
 function convertQuoteToProduction(data, quote, { workspaceId, due, value, createJob = true, reviewedBy = "system" } = {}) {
   if (quote.orderId) return { error: "Quote request already converted", statusCode: 409, orderId: quote.orderId };
   const now = new Date().toISOString();
@@ -6177,6 +6190,22 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     await dispatchEvent(database, "quote_request.updated", `${quote.id} -> ${quote.status}`, { quoteRequestId: quote.id, status: quote.status, quotedValue: quote.quotedValue || 0 });
     await database.write();
     return quote;
+  });
+
+  app.post("/api/quoteRequests/:id/customer-link", async (request, reply) => {
+    if (!hasPermission(request.user, "orders:write")) return reply.code(403).send({ error: "Missing permission: orders:write" });
+    const parsed = quoteCustomerLinkSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid quote customer link payload", issues: parsed.error.issues });
+    const quote = database.data.quoteRequests.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
+    if (!quote) return reply.code(404).send({ error: "Quote request not found" });
+    if (parsed.data.rotate || !quote.customerAccessToken) quote.customerAccessToken = randomBytes(18).toString("base64url");
+    quote.portalLinkGeneratedAt = new Date().toISOString();
+    quote.portalLinkGeneratedBy = request.user.email;
+    quote.updatedAt = quote.portalLinkGeneratedAt;
+    const url = publicQuoteUrl(request, quote);
+    await dispatchEvent(database, parsed.data.rotate ? "quote_request.portal_link_rotated" : "quote_request.portal_link_generated", `${quote.id} customer portal link ${parsed.data.rotate ? "rotated" : "generated"}`, { workspaceId: request.user.workspaceId, quoteRequestId: quote.id });
+    await database.write();
+    return { quoteRequest: quote, url, accessToken: quote.customerAccessToken };
   });
 
   app.post("/api/quoteRequests/:id/convert-order", async (request, reply) => {

@@ -2004,12 +2004,37 @@ endsolid s3_store`;
       expect(quoted.statusCode).toBe(200);
       expect(quoted.json()).toMatchObject({ status: "quoted", priority: "High", quotedValue: 720 });
 
+      const portalLink = await app.inject({
+        method: "POST",
+        url: `/api/quoteRequests/${id}/customer-link`,
+        headers: { ...auth(token), host: "farm-saas.3dstu.com", "x-forwarded-proto": "https" }
+      });
+      expect(portalLink.statusCode).toBe(200);
+      expect(portalLink.json().url).toContain("https://farm-saas.3dstu.com/?");
+      expect(portalLink.json().url).toContain(`quoteId=${id}`);
+      expect(portalLink.json().accessToken).toBe(quote.json().quoteRequest.accessToken);
+      const portalUrl = new URL(portalLink.json().url);
+      expect(portalUrl.searchParams.get("quoteToken")).toBe(quote.json().quoteRequest.accessToken);
+
       const blockedStatus = await app.inject({ method: "GET", url: `/api/public/quoteRequests/${id}?token=wrong-token` });
       expect(blockedStatus.statusCode).toBe(404);
 
       const publicStatus = await app.inject({ method: "GET", url: `/api/public/quoteRequests/${id}?token=${quote.json().quoteRequest.accessToken}` });
       expect(publicStatus.statusCode).toBe(200);
       expect(publicStatus.json().quoteRequest).toMatchObject({ id, status: "quoted", quotedValue: 720, orderId: "" });
+
+      const rotatedLink = await app.inject({
+        method: "POST",
+        url: `/api/quoteRequests/${id}/customer-link`,
+        headers: auth(token),
+        payload: { rotate: true }
+      });
+      expect(rotatedLink.statusCode).toBe(200);
+      expect(rotatedLink.json().accessToken).not.toBe(quote.json().quoteRequest.accessToken);
+      const oldTokenStatus = await app.inject({ method: "GET", url: `/api/public/quoteRequests/${id}?token=${quote.json().quoteRequest.accessToken}` });
+      expect(oldTokenStatus.statusCode).toBe(404);
+      const rotatedStatus = await app.inject({ method: "GET", url: `/api/public/quoteRequests/${id}?token=${rotatedLink.json().accessToken}` });
+      expect(rotatedStatus.statusCode).toBe(200);
 
       const converted = await app.inject({
         method: "POST",

@@ -232,7 +232,7 @@ type SKU = { id: string; sku: string; title: string; parts: string[]; variants: 
 type ProductionTemplate = { id: string; name: string; sku?: string; fileId: string; material: string; color: string; priority: QueueItem["priority"]; stage: TaskStage; printerId?: string; process: string; dueOffsetDays: number; quantity: number; time: string; cost: number; notes?: string; runCount?: number; lastRunAt?: string; createdAt?: string; updatedAt?: string };
 type ProductionTemplateRunResult = { template: ProductionTemplate; jobs: QueueItem[]; dryRun: boolean; queue: QueueItem[]; todos: Todo[] };
 type Order = { id: string; source: "Shopify" | "Etsy" | "Manual" | "eBay"; externalId?: string; customer: string; items: string[]; status: "received" | "queued" | "printing" | "packed" | "shipped"; due: string; value: number };
-type QuoteRequest = { id: string; customer: string; email: string; company?: string; project: string; material: string; quantity: number; due: string; budget: number; notes?: string; fileName?: string; fileId?: string; fileType?: string; fileSize?: string; estimatedGrams?: number; estimatedMinutes?: number; estimatedQuote?: number; source: string; status: "new" | "reviewing" | "quoted" | "accepted" | "converted" | "rejected"; priority: QueueItem["priority"]; quotedValue?: number; internalNote?: string; orderId?: string; createdAt?: string; updatedAt?: string };
+type QuoteRequest = { id: string; customer: string; email: string; company?: string; project: string; material: string; quantity: number; due: string; budget: number; notes?: string; fileName?: string; fileId?: string; fileType?: string; fileSize?: string; estimatedGrams?: number; estimatedMinutes?: number; estimatedQuote?: number; source: string; status: "new" | "reviewing" | "quoted" | "accepted" | "converted" | "rejected"; priority: QueueItem["priority"]; quotedValue?: number; internalNote?: string; orderId?: string; customerAccessToken?: string; portalLinkGeneratedAt?: string; createdAt?: string; updatedAt?: string };
 type PublicQuoteStatus = Pick<QuoteRequest, "id" | "status" | "project" | "material" | "quantity" | "due" | "budget" | "quotedValue" | "fileName" | "fileType" | "fileSize" | "estimatedGrams" | "estimatedMinutes" | "estimatedQuote" | "orderId" | "createdAt" | "updatedAt"> & { customerDecision?: string; customerDecisionAt?: string };
 type OrderJobGenerationResult = { order: Order; jobs: QueueItem[]; existingJobs?: QueueItem[]; missing?: Array<{ item: string; reason: string }>; skus?: SKU[]; todos?: Todo[]; dryRun?: boolean; duplicateBlocked?: boolean; stockChanges?: Array<{ sku: string; before: number; after: number; quantity: number }> };
 type CommerceConnector = { id: string; name: string; source: Order["source"] | "Generic"; url: string; enabled: boolean; hasToken?: boolean; lastStatus?: string; lastStatusCode?: number; lastError?: string; lastSyncAt?: string };
@@ -546,6 +546,7 @@ const zhTwTranslations: Record<string, string> = {
   "Configure": "設定",
   "Confirm new password": "確認新密碼",
   "Connector save failed. Check URL, role, or API status.": "連接器儲存失敗，請檢查 URL、角色或 API 狀態。",
+  "Creating": "建立中",
   "Constraint solve": "限制式求解",
   "Controls": "控制",
   "Converting": "轉換中",
@@ -571,7 +572,6 @@ const zhTwTranslations: Record<string, string> = {
   "Due-risk solve": "交期風險求解",
   "Checking": "檢查中",
   "Create jobs": "建立任務",
-  "Creating": "建立中",
   "Creating reorders": "建立補貨中",
   "Duplicate generation blocked": "已阻擋重複生成",
   "Dynamic model parameters": "動態模型參數",
@@ -920,6 +920,12 @@ const zhTwTranslations: Record<string, string> = {
   "No quote requests yet. Website submissions will appear here.": "尚無詢價請求，網站提交會顯示在這裡。",
   "Download model": "下載模型",
   "Open reorders": "待處理補貨",
+  "Copy portal link": "複製入口連結",
+  "Rotate link": "輪換連結",
+  "Rotating": "輪換中",
+  "Customer portal link copied": "客戶入口連結已複製",
+  "Customer portal link ready": "客戶入口連結已建立",
+  "Customer portal link could not be created. Check API status.": "無法建立客戶入口連結，請檢查 API 狀態。",
   "Quote intake": "詢價入口",
   "Quote requests": "詢價請求",
   "Quote request ID": "詢價單 ID",
@@ -1843,6 +1849,21 @@ function App() {
     } catch {
       setBackendStatus("local");
       return quoteRequests.find((quote) => quote.id === quoteId);
+    }
+  };
+
+  const createQuotePortalLink = async (quote: QuoteRequest, rotate = false) => {
+    try {
+      const result = await apiRequest<{ quoteRequest: QuoteRequest; url: string; accessToken: string }>(`/api/quoteRequests/${quote.id}/customer-link`, {
+        method: "POST",
+        body: JSON.stringify({ rotate })
+      });
+      setQuoteRequests((items) => items.map((item) => item.id === quote.id ? result.quoteRequest : item));
+      setBackendStatus("connected");
+      return result;
+    } catch {
+      setBackendStatus("local");
+      return null;
     }
   };
 
@@ -3065,7 +3086,7 @@ function App() {
         {view === "dashboard" && <Dashboard metrics={metrics} printers={printers} queue={queue} setView={setView} setModal={setModal} onPrinter={setSelectedPrinter} />}
         {view === "printers" && <PrintersPage printers={printers} onPrinter={setSelectedPrinter} setModal={setModal} api={mockApi} />}
         {view === "products" && <ProductsPage parts={parts} skus={skus} productionTemplates={productionTemplates} files={files} createPart={createPart} createSku={createSku} createProductionTemplate={createProductionTemplate} runProductionTemplate={runProductionTemplate} generateNameplate={generateNameplate} exportCatalog={exportCatalog} mapMaterials={mapMaterials} addToast={addToast} />}
-        {view === "orders" && <OrdersPage orders={orders} setOrders={setOrders} quoteRequests={quoteRequests} files={files} skus={skus} commerceConnectors={commerceConnectors} setCommerceConnectors={setCommerceConnectors} commerceImports={commerceImports} setCommerceImports={setCommerceImports} createOrder={createOrder} updateOrderStatus={updateOrderStatus} updateQuoteRequest={updateQuoteRequest} convertQuoteRequest={convertQuoteRequest} generateJobsForOrder={generateJobsForOrder} downloadFile={downloadFile} addToast={addToast} setBackendStatus={setBackendStatus} />}
+        {view === "orders" && <OrdersPage orders={orders} setOrders={setOrders} quoteRequests={quoteRequests} files={files} skus={skus} commerceConnectors={commerceConnectors} setCommerceConnectors={setCommerceConnectors} commerceImports={commerceImports} setCommerceImports={setCommerceImports} createOrder={createOrder} updateOrderStatus={updateOrderStatus} updateQuoteRequest={updateQuoteRequest} createQuotePortalLink={createQuotePortalLink} convertQuoteRequest={convertQuoteRequest} generateJobsForOrder={generateJobsForOrder} downloadFile={downloadFile} addToast={addToast} setBackendStatus={setBackendStatus} />}
         {view === "files" && <FilesPage files={files} folders={fileFolders} queueFile={mockApi.addQueueFromFile} setView={setView} addToast={addToast} createSampleFile={createSampleFile} createFileFolder={createFileFolder} uploadModelFile={uploadModelFile} versionFile={versionFile} downloadFile={downloadFile} deleteFile={deleteFile} />}
         {view === "queue" && <QueuePage queue={queue} setQueue={setQueue} printers={printers} addToast={addToast} scheduleJob={scheduleQueueJob} updateStatus={updateQueueStatus} updatePriority={updateQueuePriority} matchQueueJobs={matchQueueJobs} />}
         {view === "scheduler" && <SchedulerPage queue={queue} setQueue={setQueue} printers={printers} addToast={addToast} scheduleJob={scheduleQueueJob} autoScheduleJobs={autoScheduleQueueJobs} optimizeScheduleJobs={optimizeScheduleJobs} solveScheduleJobs={solveScheduleJobs} />}
@@ -3095,10 +3116,14 @@ function VersionBadge() {
 }
 
 function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
+  const initialQuoteLookup = () => {
+    const params = new URLSearchParams(window.location.search);
+    return { id: params.get("quoteId") || "", token: params.get("quoteToken") || "" };
+  };
   const [quoteDraft, setQuoteDraft] = useState({ customer: "", email: "", company: "", project: "Prototype enclosure", material: "PLA", quantity: 1, due: "Flexible", budget: 0, fileName: "", notes: "" });
   const [quoteFile, setQuoteFile] = useState<File | null>(null);
   const [quoteStatus, setQuoteStatus] = useState("");
-  const [quoteLookup, setQuoteLookup] = useState({ id: "", token: "" });
+  const [quoteLookup, setQuoteLookup] = useState(initialQuoteLookup);
   const [quoteLookupStatus, setQuoteLookupStatus] = useState("");
   const [quoteLookupResult, setQuoteLookupResult] = useState<PublicQuoteStatus | null>(null);
   const submitQuote = async () => {
@@ -3168,6 +3193,9 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
       setQuoteLookupStatus("Quote decision could not be saved. Check the ID and tracking token.");
     }
   };
+  useEffect(() => {
+    if (quoteLookup.id && quoteLookup.token) void checkQuoteStatus();
+  }, []);
   const metrics = [
     ["Today\'s queue", "48", "jobs structured by status, material, and due risk"],
     ["Printer states", "6", "idle, printing, paused, offline, error, maintenance"],
@@ -3784,7 +3812,7 @@ function ProductsPage({ parts, skus, productionTemplates, files, createPart, cre
   );
 }
 
-function OrdersPage({ orders, setOrders, quoteRequests, files, skus, commerceConnectors, setCommerceConnectors, commerceImports, setCommerceImports, createOrder, updateOrderStatus, updateQuoteRequest, convertQuoteRequest, generateJobsForOrder, downloadFile, addToast, setBackendStatus }: { orders: Order[]; setOrders: React.Dispatch<React.SetStateAction<Order[]>>; quoteRequests: QuoteRequest[]; files: PrintFile[]; skus: SKU[]; commerceConnectors: CommerceConnector[]; setCommerceConnectors: React.Dispatch<React.SetStateAction<CommerceConnector[]>>; commerceImports: CommerceImport[]; setCommerceImports: React.Dispatch<React.SetStateAction<CommerceImport[]>>; createOrder: (order: Omit<Order, "id">) => Promise<Order>; updateOrderStatus: (orderId: string, status: Order["status"]) => Promise<Order | undefined>; updateQuoteRequest: (quoteId: string, patch: Partial<Pick<QuoteRequest, "status" | "priority" | "quotedValue" | "internalNote">>) => Promise<QuoteRequest | undefined>; convertQuoteRequest: (quote: QuoteRequest) => Promise<{ quoteRequest: QuoteRequest; order: Order; job?: QueueItem | null; orders: Order[]; quoteRequests: QuoteRequest[]; queue?: QueueItem[]; todos?: Todo[] }>; generateJobsForOrder: (order: Order, dryRun?: boolean) => Promise<OrderJobGenerationResult>; downloadFile: (file: PrintFile) => Promise<boolean>; addToast: (message: string, type?: Toast["type"]) => void; setBackendStatus: React.Dispatch<React.SetStateAction<"local" | "connected">> }) {
+function OrdersPage({ orders, setOrders, quoteRequests, files, skus, commerceConnectors, setCommerceConnectors, commerceImports, setCommerceImports, createOrder, updateOrderStatus, updateQuoteRequest, createQuotePortalLink, convertQuoteRequest, generateJobsForOrder, downloadFile, addToast, setBackendStatus }: { orders: Order[]; setOrders: React.Dispatch<React.SetStateAction<Order[]>>; quoteRequests: QuoteRequest[]; files: PrintFile[]; skus: SKU[]; commerceConnectors: CommerceConnector[]; setCommerceConnectors: React.Dispatch<React.SetStateAction<CommerceConnector[]>>; commerceImports: CommerceImport[]; setCommerceImports: React.Dispatch<React.SetStateAction<CommerceImport[]>>; createOrder: (order: Omit<Order, "id">) => Promise<Order>; updateOrderStatus: (orderId: string, status: Order["status"]) => Promise<Order | undefined>; updateQuoteRequest: (quoteId: string, patch: Partial<Pick<QuoteRequest, "status" | "priority" | "quotedValue" | "internalNote">>) => Promise<QuoteRequest | undefined>; createQuotePortalLink: (quote: QuoteRequest, rotate?: boolean) => Promise<{ quoteRequest: QuoteRequest; url: string; accessToken: string } | null>; convertQuoteRequest: (quote: QuoteRequest) => Promise<{ quoteRequest: QuoteRequest; order: Order; job?: QueueItem | null; orders: Order[]; quoteRequests: QuoteRequest[]; queue?: QueueItem[]; todos?: Todo[] }>; generateJobsForOrder: (order: Order, dryRun?: boolean) => Promise<OrderJobGenerationResult>; downloadFile: (file: PrintFile) => Promise<boolean>; addToast: (message: string, type?: Toast["type"]) => void; setBackendStatus: React.Dispatch<React.SetStateAction<"local" | "connected">> }) {
   const [connectorDraft, setConnectorDraft] = useState({ name: "Shopify feed", source: "Shopify" as CommerceConnector["source"], url: "https://example.com/orders.json", token: "", enabled: true });
   const [csvText, setCsvText] = useState("externalId,customer,items,due,value\nSP-1001,Demo Customer,DUCT-KIT-BLK x1,Tomorrow 17:00,680");
   const [busy, setBusy] = useState("");
@@ -3879,6 +3907,21 @@ function OrdersPage({ orders, setOrders, quoteRequests, files, skus, commerceCon
   };
   const quoteValue = (quote: QuoteRequest) => quote.quotedValue || quote.budget || Math.max(50, quote.quantity * 80);
   const quoteAttachment = (quote: QuoteRequest) => quote.fileId ? files.find((file) => file.id === quote.fileId) : undefined;
+  const copyPortalLink = async (quote: QuoteRequest, rotate = false) => {
+    setBusy(`${rotate ? "rotate" : "portal"}-${quote.id}`);
+    const result = await createQuotePortalLink(quote, rotate);
+    setBusy("");
+    if (!result) {
+      addToast("Customer portal link could not be created. Check API status.", "warning");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(result.url);
+      addToast("Customer portal link copied", "success");
+    } catch {
+      addToast(`Customer portal link ready: ${result.url}`, "info");
+    }
+  };
   const markQuoted = async (quote: QuoteRequest) => {
     setBusy(`quote-${quote.id}`);
     const updated = await updateQuoteRequest(quote.id, { status: "quoted", priority: quote.priority || "Normal", quotedValue: quoteValue(quote), internalNote: quote.internalNote || "Operator quote prepared" });
@@ -3924,7 +3967,7 @@ function OrdersPage({ orders, setOrders, quoteRequests, files, skus, commerceCon
         <DataTable headers={["Request", "Customer", "Material", "Qty", "Due", "Budget", "Status", "Actions"]}>
           {quoteRequests.map((quote) => {
             const attachment = quoteAttachment(quote);
-            return <tr key={quote.id}><td><b>{quote.project}</b><small>{quote.fileName || "No file attached"}{quote.fileSize ? ` - ${quote.fileSize}` : ""}{quote.estimatedGrams ? ` - ${quote.estimatedGrams}g estimate` : ""}</small><small>{quote.notes || "No notes"}</small>{attachment && <button onClick={() => downloadFile(attachment)}><Download size={14} />Download model</button>}</td><td>{quote.customer}<small>{quote.email}{quote.company ? ` - ${quote.company}` : ""}</small></td><td>{quote.material}</td><td>{quote.quantity}</td><td>{quote.due}</td><td>${quoteValue(quote)}</td><td><StatusPill status={quote.status} /></td><td><button onClick={() => markQuoted(quote)} disabled={busy === `quote-${quote.id}` || quote.status === "converted"}>{busy === `quote-${quote.id}` ? "Quoting" : "Mark quoted"}</button><button className="primary" onClick={() => acceptQuote(quote)} disabled={busy === `convert-${quote.id}` || quote.status === "converted"}>{busy === `convert-${quote.id}` ? "Converting" : "Accept / order"}</button></td></tr>;
+            return <tr key={quote.id}><td><b>{quote.project}</b><small>{quote.fileName || "No file attached"}{quote.fileSize ? ` - ${quote.fileSize}` : ""}{quote.estimatedGrams ? ` - ${quote.estimatedGrams}g estimate` : ""}</small><small>{quote.notes || "No notes"}</small>{attachment && <button onClick={() => downloadFile(attachment)}><Download size={14} />Download model</button>}</td><td>{quote.customer}<small>{quote.email}{quote.company ? ` - ${quote.company}` : ""}</small></td><td>{quote.material}</td><td>{quote.quantity}</td><td>{quote.due}</td><td>${quoteValue(quote)}</td><td><StatusPill status={quote.status} /></td><td><button onClick={() => copyPortalLink(quote)} disabled={busy === `portal-${quote.id}`}>{busy === `portal-${quote.id}` ? "Creating" : "Copy portal link"}</button><button onClick={() => copyPortalLink(quote, true)} disabled={busy === `rotate-${quote.id}`}>{busy === `rotate-${quote.id}` ? "Rotating" : "Rotate link"}</button><button onClick={() => markQuoted(quote)} disabled={busy === `quote-${quote.id}` || quote.status === "converted"}>{busy === `quote-${quote.id}` ? "Quoting" : "Mark quoted"}</button><button className="primary" onClick={() => acceptQuote(quote)} disabled={busy === `convert-${quote.id}` || quote.status === "converted"}>{busy === `convert-${quote.id}` ? "Converting" : "Accept / order"}</button></td></tr>;
           })}
         </DataTable>
         {!quoteRequests.length && <p className="muted">No quote requests yet. Website submissions will appear here.</p>}
