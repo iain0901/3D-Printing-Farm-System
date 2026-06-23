@@ -232,7 +232,7 @@ type SKU = { id: string; sku: string; title: string; parts: string[]; variants: 
 type ProductionTemplate = { id: string; name: string; sku?: string; fileId: string; material: string; color: string; priority: QueueItem["priority"]; stage: TaskStage; printerId?: string; process: string; dueOffsetDays: number; quantity: number; time: string; cost: number; notes?: string; runCount?: number; lastRunAt?: string; createdAt?: string; updatedAt?: string };
 type ProductionTemplateRunResult = { template: ProductionTemplate; jobs: QueueItem[]; dryRun: boolean; queue: QueueItem[]; todos: Todo[] };
 type Order = { id: string; source: "Shopify" | "Etsy" | "Manual" | "eBay"; externalId?: string; customer: string; items: string[]; status: "received" | "queued" | "printing" | "packed" | "shipped"; due: string; value: number };
-type QuoteRequest = { id: string; customer: string; email: string; company?: string; project: string; material: string; quantity: number; due: string; budget: number; notes?: string; fileName?: string; source: string; status: "new" | "reviewing" | "quoted" | "accepted" | "converted" | "rejected"; priority: QueueItem["priority"]; quotedValue?: number; internalNote?: string; orderId?: string; createdAt?: string; updatedAt?: string };
+type QuoteRequest = { id: string; customer: string; email: string; company?: string; project: string; material: string; quantity: number; due: string; budget: number; notes?: string; fileName?: string; fileId?: string; fileType?: string; fileSize?: string; estimatedGrams?: number; estimatedMinutes?: number; estimatedQuote?: number; source: string; status: "new" | "reviewing" | "quoted" | "accepted" | "converted" | "rejected"; priority: QueueItem["priority"]; quotedValue?: number; internalNote?: string; orderId?: string; createdAt?: string; updatedAt?: string };
 type OrderJobGenerationResult = { order: Order; jobs: QueueItem[]; existingJobs?: QueueItem[]; missing?: Array<{ item: string; reason: string }>; skus?: SKU[]; todos?: Todo[]; dryRun?: boolean; duplicateBlocked?: boolean; stockChanges?: Array<{ sku: string; before: number; after: number; quantity: number }> };
 type CommerceConnector = { id: string; name: string; source: Order["source"] | "Generic"; url: string; enabled: boolean; hasToken?: boolean; lastStatus?: string; lastStatusCode?: number; lastError?: string; lastSyncAt?: string };
 type CommerceImport = { id: string; source: string; connectorId?: string; connectorName?: string; status: string; created: number; skipped: number; at: string; error?: string };
@@ -917,6 +917,7 @@ const zhTwTranslations: Record<string, string> = {
   "No production templates yet": "尚無生產範本",
   "No purchase requests yet. Generate a reorder plan from low-stock spools.": "尚無採購請求，請從低庫存線材生成補貨計畫。",
   "No quote requests yet. Website submissions will appear here.": "尚無詢價請求，網站提交會顯示在這裡。",
+  "Download model": "下載模型",
   "Open reorders": "待處理補貨",
   "Quote intake": "詢價入口",
   "Quote requests": "詢價請求",
@@ -3055,7 +3056,7 @@ function App() {
         {view === "dashboard" && <Dashboard metrics={metrics} printers={printers} queue={queue} setView={setView} setModal={setModal} onPrinter={setSelectedPrinter} />}
         {view === "printers" && <PrintersPage printers={printers} onPrinter={setSelectedPrinter} setModal={setModal} api={mockApi} />}
         {view === "products" && <ProductsPage parts={parts} skus={skus} productionTemplates={productionTemplates} files={files} createPart={createPart} createSku={createSku} createProductionTemplate={createProductionTemplate} runProductionTemplate={runProductionTemplate} generateNameplate={generateNameplate} exportCatalog={exportCatalog} mapMaterials={mapMaterials} addToast={addToast} />}
-        {view === "orders" && <OrdersPage orders={orders} setOrders={setOrders} quoteRequests={quoteRequests} skus={skus} commerceConnectors={commerceConnectors} setCommerceConnectors={setCommerceConnectors} commerceImports={commerceImports} setCommerceImports={setCommerceImports} createOrder={createOrder} updateOrderStatus={updateOrderStatus} updateQuoteRequest={updateQuoteRequest} convertQuoteRequest={convertQuoteRequest} generateJobsForOrder={generateJobsForOrder} addToast={addToast} setBackendStatus={setBackendStatus} />}
+        {view === "orders" && <OrdersPage orders={orders} setOrders={setOrders} quoteRequests={quoteRequests} files={files} skus={skus} commerceConnectors={commerceConnectors} setCommerceConnectors={setCommerceConnectors} commerceImports={commerceImports} setCommerceImports={setCommerceImports} createOrder={createOrder} updateOrderStatus={updateOrderStatus} updateQuoteRequest={updateQuoteRequest} convertQuoteRequest={convertQuoteRequest} generateJobsForOrder={generateJobsForOrder} downloadFile={downloadFile} addToast={addToast} setBackendStatus={setBackendStatus} />}
         {view === "files" && <FilesPage files={files} folders={fileFolders} queueFile={mockApi.addQueueFromFile} setView={setView} addToast={addToast} createSampleFile={createSampleFile} createFileFolder={createFileFolder} uploadModelFile={uploadModelFile} versionFile={versionFile} downloadFile={downloadFile} deleteFile={deleteFile} />}
         {view === "queue" && <QueuePage queue={queue} setQueue={setQueue} printers={printers} addToast={addToast} scheduleJob={scheduleQueueJob} updateStatus={updateQueueStatus} updatePriority={updateQueuePriority} matchQueueJobs={matchQueueJobs} />}
         {view === "scheduler" && <SchedulerPage queue={queue} setQueue={setQueue} printers={printers} addToast={addToast} scheduleJob={scheduleQueueJob} autoScheduleJobs={autoScheduleQueueJobs} optimizeScheduleJobs={optimizeScheduleJobs} solveScheduleJobs={solveScheduleJobs} />}
@@ -3086,6 +3087,7 @@ function VersionBadge() {
 
 function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
   const [quoteDraft, setQuoteDraft] = useState({ customer: "", email: "", company: "", project: "Prototype enclosure", material: "PLA", quantity: 1, due: "Flexible", budget: 0, fileName: "", notes: "" });
+  const [quoteFile, setQuoteFile] = useState<File | null>(null);
   const [quoteStatus, setQuoteStatus] = useState("");
   const submitQuote = async () => {
     if (!quoteDraft.customer.trim() || !quoteDraft.email.trim() || !quoteDraft.project.trim()) {
@@ -3094,15 +3096,22 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
     }
     setQuoteStatus("Sending quote request...");
     try {
+      const payload = { ...quoteDraft, quantity: Number(quoteDraft.quantity || 1), budget: Number(quoteDraft.budget || 0), source: "Marketing website" };
+      const body = quoteFile ? new FormData() : JSON.stringify(payload);
+      if (quoteFile && body instanceof FormData) {
+        Object.entries(payload).forEach(([key, value]) => body.append(key, String(value ?? "")));
+        body.append("file", quoteFile, quoteFile.name);
+      }
       const response = await fetch(`${API_BASE}/api/public/quoteRequests`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...quoteDraft, quantity: Number(quoteDraft.quantity || 1), budget: Number(quoteDraft.budget || 0), source: "Marketing website" })
+        headers: quoteFile ? undefined : { "Content-Type": "application/json" },
+        body
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result?.error || "Quote request failed");
       setQuoteStatus(`Quote request ${result.quoteRequest.id} received.`);
       setQuoteDraft({ customer: "", email: "", company: "", project: "Prototype enclosure", material: "PLA", quantity: 1, due: "Flexible", budget: 0, fileName: "", notes: "" });
+      setQuoteFile(null);
     } catch {
       setQuoteStatus("Quote request could not be sent. Please contact support@3dstu.com.");
     }
@@ -3324,8 +3333,10 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
             <label>Budget<input type="number" min="0" value={quoteDraft.budget} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, budget: Number(event.target.value) }))} /></label>
             <label>File name<input value={quoteDraft.fileName} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, fileName: event.target.value }))} placeholder="model.stl / model.3mf" /></label>
             <label className="wide">Notes<textarea value={quoteDraft.notes} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, notes: event.target.value }))} /></label>
+            <label className="wide">Model file<input type="file" accept=".stl,.3mf,.gcode,.obj" onChange={(event) => setQuoteFile(event.currentTarget.files?.[0] || null)} /></label>
             <button className="primary wide" onClick={submitQuote}>Request quote</button>
-            {quoteStatus && <p className="quote-status">{quoteStatus}</p>}
+            {quoteFile && <p className="quote-status wide">Attached: {quoteFile.name} ({Math.round(quoteFile.size / 1024)} KB)</p>}
+            {quoteStatus && <p className="quote-status wide">{quoteStatus}</p>}
           </div>
         </section>
 
@@ -3710,7 +3721,7 @@ function ProductsPage({ parts, skus, productionTemplates, files, createPart, cre
   );
 }
 
-function OrdersPage({ orders, setOrders, quoteRequests, skus, commerceConnectors, setCommerceConnectors, commerceImports, setCommerceImports, createOrder, updateOrderStatus, updateQuoteRequest, convertQuoteRequest, generateJobsForOrder, addToast, setBackendStatus }: { orders: Order[]; setOrders: React.Dispatch<React.SetStateAction<Order[]>>; quoteRequests: QuoteRequest[]; skus: SKU[]; commerceConnectors: CommerceConnector[]; setCommerceConnectors: React.Dispatch<React.SetStateAction<CommerceConnector[]>>; commerceImports: CommerceImport[]; setCommerceImports: React.Dispatch<React.SetStateAction<CommerceImport[]>>; createOrder: (order: Omit<Order, "id">) => Promise<Order>; updateOrderStatus: (orderId: string, status: Order["status"]) => Promise<Order | undefined>; updateQuoteRequest: (quoteId: string, patch: Partial<Pick<QuoteRequest, "status" | "priority" | "quotedValue" | "internalNote">>) => Promise<QuoteRequest | undefined>; convertQuoteRequest: (quote: QuoteRequest) => Promise<{ quoteRequest: QuoteRequest; order: Order; orders: Order[]; quoteRequests: QuoteRequest[] }>; generateJobsForOrder: (order: Order, dryRun?: boolean) => Promise<OrderJobGenerationResult>; addToast: (message: string, type?: Toast["type"]) => void; setBackendStatus: React.Dispatch<React.SetStateAction<"local" | "connected">> }) {
+function OrdersPage({ orders, setOrders, quoteRequests, files, skus, commerceConnectors, setCommerceConnectors, commerceImports, setCommerceImports, createOrder, updateOrderStatus, updateQuoteRequest, convertQuoteRequest, generateJobsForOrder, downloadFile, addToast, setBackendStatus }: { orders: Order[]; setOrders: React.Dispatch<React.SetStateAction<Order[]>>; quoteRequests: QuoteRequest[]; files: PrintFile[]; skus: SKU[]; commerceConnectors: CommerceConnector[]; setCommerceConnectors: React.Dispatch<React.SetStateAction<CommerceConnector[]>>; commerceImports: CommerceImport[]; setCommerceImports: React.Dispatch<React.SetStateAction<CommerceImport[]>>; createOrder: (order: Omit<Order, "id">) => Promise<Order>; updateOrderStatus: (orderId: string, status: Order["status"]) => Promise<Order | undefined>; updateQuoteRequest: (quoteId: string, patch: Partial<Pick<QuoteRequest, "status" | "priority" | "quotedValue" | "internalNote">>) => Promise<QuoteRequest | undefined>; convertQuoteRequest: (quote: QuoteRequest) => Promise<{ quoteRequest: QuoteRequest; order: Order; orders: Order[]; quoteRequests: QuoteRequest[] }>; generateJobsForOrder: (order: Order, dryRun?: boolean) => Promise<OrderJobGenerationResult>; downloadFile: (file: PrintFile) => Promise<boolean>; addToast: (message: string, type?: Toast["type"]) => void; setBackendStatus: React.Dispatch<React.SetStateAction<"local" | "connected">> }) {
   const [connectorDraft, setConnectorDraft] = useState({ name: "Shopify feed", source: "Shopify" as CommerceConnector["source"], url: "https://example.com/orders.json", token: "", enabled: true });
   const [csvText, setCsvText] = useState("externalId,customer,items,due,value\nSP-1001,Demo Customer,DUCT-KIT-BLK x1,Tomorrow 17:00,680");
   const [busy, setBusy] = useState("");
@@ -3804,6 +3815,7 @@ function OrdersPage({ orders, setOrders, quoteRequests, skus, commerceConnectors
     setBusy("");
   };
   const quoteValue = (quote: QuoteRequest) => quote.quotedValue || quote.budget || Math.max(50, quote.quantity * 80);
+  const quoteAttachment = (quote: QuoteRequest) => quote.fileId ? files.find((file) => file.id === quote.fileId) : undefined;
   const markQuoted = async (quote: QuoteRequest) => {
     setBusy(`quote-${quote.id}`);
     const updated = await updateQuoteRequest(quote.id, { status: "quoted", priority: quote.priority || "Normal", quotedValue: quoteValue(quote), internalNote: quote.internalNote || "Operator quote prepared" });
@@ -3847,7 +3859,10 @@ function OrdersPage({ orders, setOrders, quoteRequests, skus, commerceConnectors
       <section className="panel">
         <PanelTitle title="Quote intake" />
         <DataTable headers={["Request", "Customer", "Material", "Qty", "Due", "Budget", "Status", "Actions"]}>
-          {quoteRequests.map((quote) => <tr key={quote.id}><td><b>{quote.project}</b><small>{quote.fileName || "No file attached"} - {quote.notes || "No notes"}</small></td><td>{quote.customer}<small>{quote.email}{quote.company ? ` - ${quote.company}` : ""}</small></td><td>{quote.material}</td><td>{quote.quantity}</td><td>{quote.due}</td><td>${quoteValue(quote)}</td><td><StatusPill status={quote.status} /></td><td><button onClick={() => markQuoted(quote)} disabled={busy === `quote-${quote.id}` || quote.status === "converted"}>{busy === `quote-${quote.id}` ? "Quoting" : "Mark quoted"}</button><button className="primary" onClick={() => acceptQuote(quote)} disabled={busy === `convert-${quote.id}` || quote.status === "converted"}>{busy === `convert-${quote.id}` ? "Converting" : "Accept / order"}</button></td></tr>)}
+          {quoteRequests.map((quote) => {
+            const attachment = quoteAttachment(quote);
+            return <tr key={quote.id}><td><b>{quote.project}</b><small>{quote.fileName || "No file attached"}{quote.fileSize ? ` - ${quote.fileSize}` : ""}{quote.estimatedGrams ? ` - ${quote.estimatedGrams}g estimate` : ""}</small><small>{quote.notes || "No notes"}</small>{attachment && <button onClick={() => downloadFile(attachment)}><Download size={14} />Download model</button>}</td><td>{quote.customer}<small>{quote.email}{quote.company ? ` - ${quote.company}` : ""}</small></td><td>{quote.material}</td><td>{quote.quantity}</td><td>{quote.due}</td><td>${quoteValue(quote)}</td><td><StatusPill status={quote.status} /></td><td><button onClick={() => markQuoted(quote)} disabled={busy === `quote-${quote.id}` || quote.status === "converted"}>{busy === `quote-${quote.id}` ? "Quoting" : "Mark quoted"}</button><button className="primary" onClick={() => acceptQuote(quote)} disabled={busy === `convert-${quote.id}` || quote.status === "converted"}>{busy === `convert-${quote.id}` ? "Converting" : "Accept / order"}</button></td></tr>;
+          })}
         </DataTable>
         {!quoteRequests.length && <p className="muted">No quote requests yet. Website submissions will appear here.</p>}
       </section>

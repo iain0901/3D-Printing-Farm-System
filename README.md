@@ -285,6 +285,7 @@ The API uses local bearer-token sessions, password hashes, optional TOTP two-fac
 ## Implemented MVP Areas
 
 - API-backed auth, signup, logout, TOTP two-factor enrollment/login/recovery/disable flows, user password changes, admin password resets, local bearer-token sessions, password hashing, role-based permissions, and scoped automation API keys with hashed secrets
+- Public quote intake with optional customer model uploads, shared file-library storage, automatic model metadata estimates, operator quote review, and quote-to-order conversion
 - Schema-versioned JSON/SQLite document persistence with automatic startup migrations, migration history, pre-migration backup files, readiness-linked data integrity checks, admin integrity reports for broken references, and configurable audit retention
 - English / Traditional Chinese / Simplified Chinese language switcher with cleaned core production translations and a Vitest translation-coverage gate for visible static UI text
 - Production cockpit dashboard answering today's tasks, due risk, idle printers, printer issues, and human todos

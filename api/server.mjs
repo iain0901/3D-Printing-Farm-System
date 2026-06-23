@@ -1203,6 +1203,9 @@ async function ensureAuthData(database, options = {}) {
     quote.budget = Number(quote.budget || 0);
     quote.notes ||= "";
     quote.fileName ||= "";
+    quote.fileId ||= "";
+    quote.fileType ||= "";
+    quote.fileSize ||= "";
     quote.source ||= "Website";
     quote.status = quoteStatusSchema.safeParse(quote.status).success ? quote.status : "new";
     quote.priority = prioritySchema.safeParse(quote.priority).success ? quote.priority : "Normal";
@@ -2748,6 +2751,52 @@ async function createParametricNameplate(database, payload, options = {}) {
   return { file, part, stlBytes: buffer.length, estimates: { grams, minutes, quote } };
 }
 
+async function createStoredModelFile(database, payload, options = {}) {
+  const workspaceId = options.workspaceId || DEFAULT_WORKSPACE_ID;
+  const filename = path.basename(payload.filename || "model.stl");
+  const buffer = payload.buffer;
+  const material = payload.material || "PLA";
+  const folder = payload.folder || "Uploads";
+  const metadata = await parseModelMetadata({ buffer, filename, material });
+  const id = payload.id || randomUUID();
+  const folderResult = ensureFileFolder(database.data, { name: folder, purpose: payload.folderPurpose || "inbox", workspaceId });
+  const stored = await storeObject(`uploads/${id}/${filename}`, buffer, { filename, type: metadata.type });
+  const quote = calculateQuote(database.data.costCatalog, { material, grams: metadata.estimateGrams, minutes: metadata.estimateMinutes });
+  const file = {
+    id,
+    workspaceId,
+    name: filename,
+    type: metadata.type,
+    folder: folderResult.folder.name,
+    size: formatBytes(buffer.length),
+    material,
+    tags: payload.tags || ["uploaded", "parsed"],
+    sliced: metadata.sliced,
+    status: metadata.status,
+    version: 1,
+    dimensions: metadata.dimensions,
+    thumbnail: filename,
+    printTime: metadata.printTime,
+    cost: quote.total,
+    layerHeight: "0.20",
+    usage: metadata.estimateGrams,
+    estimateGrams: metadata.estimateGrams,
+    estimateMinutes: metadata.estimateMinutes,
+    quote: quote.total,
+    quoteBreakdown: quote,
+    storagePath: stored.storagePath,
+    storageProvider: stored.storageProvider,
+    storageKey: stored.storageKey,
+    source: payload.source || "Upload",
+    quoteRequestId: payload.quoteRequestId || "",
+    createdAt: new Date().toISOString()
+  };
+  database.data.files.push(file);
+  folderResult.folder.fileCount = (database.data.files || []).filter((item) => item.folder === folderResult.folder.name).length;
+  folderResult.folder.updatedAt = new Date().toISOString();
+  return { file, folder: folderResult.folder, metadata };
+}
+
 async function storedFileBytes(file) {
   if (file.storagePath) {
     try {
@@ -3021,16 +3070,18 @@ function applyStripeBillingEvent(data, event) {
 function fileReferences(data, fileId) {
   const activeQueue = (data.queue || []).filter((job) => job.fileId === fileId && !["complete", "failed", "cancelled"].includes(job.status));
   const parts = (data.parts || []).filter((part) => part.fileId === fileId);
+  const quoteRequests = (data.quoteRequests || []).filter((quote) => quote.fileId === fileId && quote.status !== "converted" && quote.status !== "rejected");
   const slicerJobs = (data.slicerJobs || []).filter((job) => job.fileId === fileId && job.status === "running");
   return {
     activeQueue: activeQueue.map((job) => ({ id: job.id, file: job.file, status: job.status })),
     parts: parts.map((part) => ({ id: part.id, name: part.name })),
+    quoteRequests: quoteRequests.map((quote) => ({ id: quote.id, project: quote.project, status: quote.status })),
     slicerJobs: slicerJobs.map((job) => ({ id: job.id, status: job.status }))
   };
 }
 
 function hasReferences(references) {
-  return references.activeQueue.length || references.parts.length || references.slicerJobs.length;
+  return references.activeQueue.length || references.parts.length || references.quoteRequests.length || references.slicerJobs.length;
 }
 
 async function removeStoredFile(fileOrPath) {
@@ -4408,6 +4459,34 @@ function createReprintJob(data, sourceJob, options) {
   return { job };
 }
 
+async function parsePublicQuoteRequestPayload(request) {
+  if (!request.isMultipart?.()) return { payload: request.body || {}, upload: null };
+  const part = await request.file();
+  if (!part) return { payload: {}, upload: null };
+  const fieldValue = (name, fallback = "") => {
+    const raw = part.fields?.[name]?.value;
+    return typeof raw === "string" ? raw : fallback;
+  };
+  const filename = path.basename(part.filename || fieldValue("fileName", "model.stl"));
+  const buffer = await part.toBuffer();
+  return {
+    payload: {
+      customer: fieldValue("customer"),
+      email: fieldValue("email"),
+      company: fieldValue("company"),
+      project: fieldValue("project"),
+      material: fieldValue("material", "PLA"),
+      quantity: Number(fieldValue("quantity", "1")),
+      due: fieldValue("due", "Flexible"),
+      budget: Number(fieldValue("budget", "0")),
+      notes: fieldValue("notes"),
+      fileName: fieldValue("fileName", filename),
+      source: fieldValue("source", "Website")
+    },
+    upload: buffer.length ? { filename, buffer } : null
+  };
+}
+
 export async function openDatabase(file = process.env.LAYERPILOT_DB_PATH || path.join(process.cwd(), "api", "data", "layerpilot.db.json"), options = {}) {
   await mkdir(path.dirname(file), { recursive: true });
   const adapter = createPersistenceAdapter(file, options);
@@ -4864,15 +4943,44 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   });
 
   app.post("/api/public/quoteRequests", { config: { rateLimit: { max: 20, timeWindow: "1 minute", groupId: "quote-intake" } } }, async (request, reply) => {
-    const parsed = publicQuoteRequestSchema.safeParse(request.body || {});
+    const incoming = await parsePublicQuoteRequestPayload(request);
+    const parsed = publicQuoteRequestSchema.safeParse(incoming.payload || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid quote request payload", issues: parsed.error.issues });
     const workspace = workspaceForId(database.data, DEFAULT_WORKSPACE_ID);
     const now = new Date().toISOString();
-    const quote = { id: `qr-${randomUUID().slice(0, 8)}`, workspaceId: workspace.id, ...parsed.data, status: "new", priority: "Normal", quotedValue: 0, internalNote: "", createdAt: now, updatedAt: now };
+    const quoteId = `qr-${randomUUID().slice(0, 8)}`;
+    const uploaded = incoming.upload ? await createStoredModelFile(database, {
+      filename: incoming.upload.filename,
+      buffer: incoming.upload.buffer,
+      material: parsed.data.material,
+      folder: "Customer Quotes",
+      folderPurpose: "quote-intake",
+      tags: ["quote", "customer-upload", "parsed"],
+      source: "Quote request",
+      quoteRequestId: quoteId
+    }, { workspaceId: workspace.id }) : null;
+    const quote = {
+      id: quoteId,
+      workspaceId: workspace.id,
+      ...parsed.data,
+      fileName: uploaded?.file?.name || parsed.data.fileName,
+      fileId: uploaded?.file?.id || "",
+      fileType: uploaded?.file?.type || "",
+      fileSize: uploaded?.file?.size || "",
+      estimatedGrams: uploaded?.file?.estimateGrams || 0,
+      estimatedMinutes: uploaded?.file?.estimateMinutes || 0,
+      estimatedQuote: uploaded?.file?.quote || 0,
+      status: "new",
+      priority: "Normal",
+      quotedValue: uploaded?.file?.quote || 0,
+      internalNote: "",
+      createdAt: now,
+      updatedAt: now
+    };
     database.data.quoteRequests.unshift(quote);
-    await dispatchEvent(database, "quote_request.created", `${quote.customer} requested ${quote.project}`, { quoteRequestId: quote.id, material: quote.material, quantity: quote.quantity, source: quote.source });
+    await dispatchEvent(database, "quote_request.created", `${quote.customer} requested ${quote.project}`, { quoteRequestId: quote.id, fileId: quote.fileId, material: quote.material, quantity: quote.quantity, source: quote.source });
     await database.write();
-    return reply.code(201).send({ ok: true, quoteRequest: { id: quote.id, status: quote.status, project: quote.project, createdAt: quote.createdAt } });
+    return reply.code(201).send({ ok: true, quoteRequest: { id: quote.id, status: quote.status, project: quote.project, fileId: quote.fileId, fileName: quote.fileName, createdAt: quote.createdAt } });
   });
 
   app.post("/api/telemetry/tick", async (request, reply) => {
@@ -5642,37 +5750,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const material = typeof part.fields?.material?.value === "string" ? part.fields.material.value : "PLA";
     const folder = typeof part.fields?.folder?.value === "string" ? part.fields.folder.value : "Uploads";
     const buffer = await part.toBuffer();
-    const metadata = await parseModelMetadata({ buffer, filename, material });
-    const id = randomUUID();
-    const stored = await storeObject(`uploads/${id}/${filename}`, buffer, { filename, type: metadata.type });
-    const quote = calculateQuote(database.data.costCatalog, { material, grams: metadata.estimateGrams, minutes: metadata.estimateMinutes });
-    const file = {
-      id,
-      workspaceId: request.user.workspaceId,
-      name: filename,
-      type: metadata.type,
-      folder,
-      size: formatBytes(buffer.length),
-      material,
-      tags: ["uploaded", "parsed"],
-      sliced: metadata.sliced,
-      status: metadata.status,
-      version: 1,
-      dimensions: metadata.dimensions,
-      thumbnail: filename,
-      printTime: metadata.printTime,
-      cost: quote.total,
-      layerHeight: "0.20",
-      usage: metadata.estimateGrams,
-      estimateGrams: metadata.estimateGrams,
-      estimateMinutes: metadata.estimateMinutes,
-      quote: quote.total,
-      quoteBreakdown: quote,
-      storagePath: stored.storagePath,
-      storageProvider: stored.storageProvider,
-      storageKey: stored.storageKey
-    };
-    database.data.files.push(file);
+    const { file } = await createStoredModelFile(database, { filename, buffer, material, folder, tags: ["uploaded", "parsed"], source: "Operator upload" }, { workspaceId: request.user.workspaceId });
     database.data.events.unshift({ id: randomUUID(), type: "file.uploaded", message: `${filename} parsed and stored`, at: new Date().toISOString() });
     await database.write();
     return reply.code(201).send(file);

@@ -2023,6 +2023,52 @@ endsolid s3_store`;
     });
   });
 
+  it("stores uploaded model files from public quote requests", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const boundary = "----layerpilot-quote-upload";
+      const stl = "solid quote\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 40 0 0\nvertex 0 30 8\nendloop\nendfacet\nendsolid quote\n";
+      const field = (name, value) => `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`;
+      const fileHeader = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="quote-bracket.stl"\r\nContent-Type: model/stl\r\n\r\n`;
+      const body = Buffer.concat([
+        Buffer.from(field("customer", "Upload Customer")),
+        Buffer.from(field("email", "upload@example.com")),
+        Buffer.from(field("company", "Upload Lab")),
+        Buffer.from(field("project", "Uploaded bracket")),
+        Buffer.from(field("material", "PETG")),
+        Buffer.from(field("quantity", "2")),
+        Buffer.from(field("due", "2026-08-01")),
+        Buffer.from(field("budget", "160")),
+        Buffer.from(field("notes", "Please quote from attached STL")),
+        Buffer.from(fileHeader),
+        Buffer.from(stl),
+        Buffer.from(`\r\n--${boundary}--\r\n`)
+      ]);
+
+      const quote = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        headers: { "content-type": `multipart/form-data; boundary=${boundary}` },
+        payload: body
+      });
+      expect(quote.statusCode).toBe(201);
+      expect(quote.json().quoteRequest).toMatchObject({ project: "Uploaded bracket", fileName: "quote-bracket.stl" });
+      expect(quote.json().quoteRequest.fileId).toBeTruthy();
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      const storedQuote = persisted.quoteRequests.find((item) => item.id === quote.json().quoteRequest.id);
+      const storedFile = persisted.files.find((item) => item.id === storedQuote.fileId);
+      expect(storedQuote).toMatchObject({ fileName: "quote-bracket.stl", fileType: "STL", fileSize: expect.stringMatching(/B|KB/) });
+      expect(storedFile).toMatchObject({ name: "quote-bracket.stl", material: "PETG", folder: "Customer Quotes", quoteRequestId: storedQuote.id, status: "uploaded" });
+      expect(persisted.fileFolders.find((item) => item.name === "Customer Quotes")).toMatchObject({ purpose: "quote-intake", fileCount: 1 });
+      expect(persisted.events.some((event) => event.type === "quote_request.created" && event.data.fileId === storedFile.id)).toBe(true);
+
+      const token = await login(app);
+      const blockedDelete = await app.inject({ method: "DELETE", url: `/api/files/${storedFile.id}`, headers: auth(token) });
+      expect(blockedDelete.statusCode).toBe(409);
+      expect(blockedDelete.json().references.quoteRequests).toEqual([{ id: storedQuote.id, project: "Uploaded bracket", status: "new" }]);
+    });
+  });
+
   it("creates reusable production templates and runs them into queue jobs", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);
