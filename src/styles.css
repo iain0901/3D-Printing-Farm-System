@@ -1984,6 +1984,12 @@ button:disabled {
   margin-top: 18px;
 }
 
+.quote-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .quote-form textarea {
   min-height: 92px;
   resize: vertical;

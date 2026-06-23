@@ -233,6 +233,7 @@ type ProductionTemplate = { id: string; name: string; sku?: string; fileId: stri
 type ProductionTemplateRunResult = { template: ProductionTemplate; jobs: QueueItem[]; dryRun: boolean; queue: QueueItem[]; todos: Todo[] };
 type Order = { id: string; source: "Shopify" | "Etsy" | "Manual" | "eBay"; externalId?: string; customer: string; items: string[]; status: "received" | "queued" | "printing" | "packed" | "shipped"; due: string; value: number };
 type QuoteRequest = { id: string; customer: string; email: string; company?: string; project: string; material: string; quantity: number; due: string; budget: number; notes?: string; fileName?: string; fileId?: string; fileType?: string; fileSize?: string; estimatedGrams?: number; estimatedMinutes?: number; estimatedQuote?: number; source: string; status: "new" | "reviewing" | "quoted" | "accepted" | "converted" | "rejected"; priority: QueueItem["priority"]; quotedValue?: number; internalNote?: string; orderId?: string; createdAt?: string; updatedAt?: string };
+type PublicQuoteStatus = Pick<QuoteRequest, "id" | "status" | "project" | "material" | "quantity" | "due" | "budget" | "quotedValue" | "fileName" | "fileType" | "fileSize" | "estimatedGrams" | "estimatedMinutes" | "estimatedQuote" | "orderId" | "createdAt" | "updatedAt"> & { customerDecision?: string; customerDecisionAt?: string };
 type OrderJobGenerationResult = { order: Order; jobs: QueueItem[]; existingJobs?: QueueItem[]; missing?: Array<{ item: string; reason: string }>; skus?: SKU[]; todos?: Todo[]; dryRun?: boolean; duplicateBlocked?: boolean; stockChanges?: Array<{ sku: string; before: number; after: number; quantity: number }> };
 type CommerceConnector = { id: string; name: string; source: Order["source"] | "Generic"; url: string; enabled: boolean; hasToken?: boolean; lastStatus?: string; lastStatusCode?: number; lastError?: string; lastSyncAt?: string };
 type CommerceImport = { id: string; source: string; connectorId?: string; connectorName?: string; status: string; created: number; skipped: number; at: string; error?: string };
@@ -925,6 +926,8 @@ const zhTwTranslations: Record<string, string> = {
   "Quote status lookup": "詢價狀態查詢",
   "Tracking token": "追蹤權杖",
   "Check status": "查詢狀態",
+  "Approve quote": "接受報價",
+  "Reject quote": "拒絕報價",
   "Save the returned tracking token to check quote status after the operator reviews it.": "請保存回傳的追蹤權杖，操作員審核後可查詢詢價狀態。",
   "Quoting": "報價中",
   "Accept / order": "接受 / 轉訂單",
@@ -3097,6 +3100,7 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
   const [quoteStatus, setQuoteStatus] = useState("");
   const [quoteLookup, setQuoteLookup] = useState({ id: "", token: "" });
   const [quoteLookupStatus, setQuoteLookupStatus] = useState("");
+  const [quoteLookupResult, setQuoteLookupResult] = useState<PublicQuoteStatus | null>(null);
   const submitQuote = async () => {
     if (!quoteDraft.customer.trim() || !quoteDraft.email.trim() || !quoteDraft.project.trim()) {
       setQuoteStatus("Please add your name, email, and project.");
@@ -3120,6 +3124,7 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
       const token = result.quoteRequest?.accessToken || "";
       setQuoteStatus(token ? `Quote request ${result.quoteRequest.id} received. Tracking token: ${token}` : `Quote request ${result.quoteRequest.id} received.`);
       setQuoteLookup({ id: result.quoteRequest.id, token });
+      setQuoteLookupResult(result.quoteRequest);
       setQuoteDraft({ customer: "", email: "", company: "", project: "Prototype enclosure", material: "PLA", quantity: 1, due: "Flexible", budget: 0, fileName: "", notes: "" });
       setQuoteFile(null);
     } catch {
@@ -3137,9 +3142,30 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
       const result = await response.json();
       if (!response.ok) throw new Error(result?.error || "Quote status lookup failed");
       const quote = result.quoteRequest;
+      setQuoteLookupResult(quote);
       setQuoteLookupStatus(`${quote.id}: ${quote.status}${quote.quotedValue ? ` - quoted $${quote.quotedValue}` : ""}${quote.orderId ? ` - order ${quote.orderId}` : ""}`);
     } catch {
       setQuoteLookupStatus("Quote status could not be loaded. Check the ID and tracking token.");
+    }
+  };
+  const decideQuote = async (decision: "accepted" | "rejected") => {
+    if (!quoteLookup.id.trim() || !quoteLookup.token.trim()) {
+      setQuoteLookupStatus("Add the quote request ID and tracking token first.");
+      return;
+    }
+    setQuoteLookupStatus(decision === "accepted" ? "Approving quote..." : "Rejecting quote...");
+    try {
+      const response = await fetch(`${API_BASE}/api/public/quoteRequests/${encodeURIComponent(quoteLookup.id.trim())}/decision`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: quoteLookup.token.trim(), decision })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result?.error || "Quote decision failed");
+      setQuoteLookupResult(result.quoteRequest);
+      setQuoteLookupStatus(decision === "accepted" ? `${result.quoteRequest.id}: approved and converted to ${result.order?.id || "an order"}.` : `${result.quoteRequest.id}: rejected.`);
+    } catch {
+      setQuoteLookupStatus("Quote decision could not be saved. Check the ID and tracking token.");
     }
   };
   const metrics = [
@@ -3372,6 +3398,7 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
             <label>Quote request ID<input value={quoteLookup.id} onChange={(event) => setQuoteLookup((draft) => ({ ...draft, id: event.target.value }))} placeholder="qr-..." /></label>
             <label>Tracking token<input value={quoteLookup.token} onChange={(event) => setQuoteLookup((draft) => ({ ...draft, token: event.target.value }))} /></label>
             <button className="primary" onClick={checkQuoteStatus}>Check status</button>
+            {quoteLookupResult?.status === "quoted" && <div className="quote-actions wide"><button className="primary" onClick={() => decideQuote("accepted")}>Approve quote</button><button onClick={() => decideQuote("rejected")}>Reject quote</button></div>}
             {quoteLookupStatus && <p className="quote-status wide">{quoteLookupStatus}</p>}
           </div>
         </section>
