@@ -261,6 +261,7 @@ const quoteRequestPatchSchema = z.object({
   status: quoteStatusSchema.optional(),
   priority: prioritySchema.optional(),
   quotedValue: z.number().nonnegative().optional(),
+  validUntil: z.string().min(1).optional(),
   internalNote: z.string().max(2000).optional()
 });
 const quoteConvertSchema = z.object({
@@ -1220,6 +1221,7 @@ async function ensureAuthData(database, options = {}) {
     quote.priority = prioritySchema.safeParse(quote.priority).success ? quote.priority : "Normal";
     quote.quotedValue = Number(quote.quotedValue || 0);
     quote.internalNote ||= "";
+    quote.validUntil ||= "";
     quote.customerAccessToken ||= randomBytes(18).toString("base64url");
   }
   for (const part of database.data.parts || []) {
@@ -3612,6 +3614,7 @@ function publicQuoteSummary(quote) {
     due: quote.due,
     budget: quote.budget,
     quotedValue: quote.quotedValue || 0,
+    validUntil: quote.validUntil || "",
     fileName: quote.fileName || "",
     fileType: quote.fileType || "",
     fileSize: quote.fileSize || "",
@@ -3631,6 +3634,12 @@ function quoteTokenMatches(quote, token) {
   const expected = Buffer.from(String(quote.customerAccessToken));
   const received = Buffer.from(String(token));
   return expected.length === received.length && timingSafeEqual(expected, received);
+}
+
+function quoteExpired(quote, now = new Date()) {
+  if (!quote?.validUntil) return false;
+  const expiresAt = new Date(`${quote.validUntil}T23:59:59.999Z`);
+  return Number.isFinite(expiresAt.getTime()) && expiresAt < now;
 }
 
 function publicQuoteUrl(request, quote) {
@@ -5111,6 +5120,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!quote || !quoteTokenMatches(quote, parsed.data.token)) return reply.code(404).send({ error: "Quote request not found" });
     if (quote.orderId) return reply.code(409).send({ error: "Quote request already converted", orderId: quote.orderId });
     if (!["quoted", "accepted"].includes(quote.status)) return reply.code(409).send({ error: "Quote request is not ready for a customer decision", status: quote.status });
+    if (parsed.data.decision === "accepted" && quoteExpired(quote)) return reply.code(409).send({ error: "Quote request has expired", status: quote.status, validUntil: quote.validUntil });
     const now = new Date().toISOString();
     Object.assign(quote, {
       customerDecision: parsed.data.decision,

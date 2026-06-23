@@ -1999,10 +1999,10 @@ endsolid s3_store`;
         method: "PATCH",
         url: `/api/quoteRequests/${id}`,
         headers: auth(token),
-        payload: { status: "quoted", priority: "High", quotedValue: 720, internalNote: "Use ASA process profile" }
+        payload: { status: "quoted", priority: "High", quotedValue: 720, validUntil: "2026-07-15", internalNote: "Use ASA process profile" }
       });
       expect(quoted.statusCode).toBe(200);
-      expect(quoted.json()).toMatchObject({ status: "quoted", priority: "High", quotedValue: 720 });
+      expect(quoted.json()).toMatchObject({ status: "quoted", priority: "High", quotedValue: 720, validUntil: "2026-07-15" });
 
       const portalLink = await app.inject({
         method: "POST",
@@ -2021,7 +2021,7 @@ endsolid s3_store`;
 
       const publicStatus = await app.inject({ method: "GET", url: `/api/public/quoteRequests/${id}?token=${quote.json().quoteRequest.accessToken}` });
       expect(publicStatus.statusCode).toBe(200);
-      expect(publicStatus.json().quoteRequest).toMatchObject({ id, status: "quoted", quotedValue: 720, orderId: "" });
+      expect(publicStatus.json().quoteRequest).toMatchObject({ id, status: "quoted", quotedValue: 720, validUntil: "2026-07-15", orderId: "" });
 
       const rotatedLink = await app.inject({
         method: "POST",
@@ -2103,6 +2103,43 @@ endsolid s3_store`;
       expect(persisted.orders.find((item) => item.id === accepted.json().order.id)).toMatchObject({ quoteRequestId: id, value: 255 });
       expect(persisted.events.some((event) => event.type === "quote_request.customer_accepted")).toBe(true);
       expect(persisted.events.some((event) => event.type === "quote_request.converted" && event.data.orderId === accepted.json().order.id)).toBe(true);
+    });
+  });
+
+  it("blocks customer approval after a quote expires", async () => {
+    await withApp(async ({ app }) => {
+      const quote = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        payload: {
+          customer: "Expired Buyer",
+          email: "expired@example.com",
+          project: "Expired quote check",
+          material: "PLA",
+          quantity: 1,
+          due: "2026-07-20",
+          budget: 90,
+          notes: "Should require a fresh quote"
+        }
+      });
+      expect(quote.statusCode).toBe(201);
+      const { id, accessToken } = quote.json().quoteRequest;
+      const token = await login(app);
+      const quoted = await app.inject({
+        method: "PATCH",
+        url: `/api/quoteRequests/${id}`,
+        headers: auth(token),
+        payload: { status: "quoted", quotedValue: 88, validUntil: "2000-01-01" }
+      });
+      expect(quoted.statusCode).toBe(200);
+
+      const accepted = await app.inject({
+        method: "POST",
+        url: `/api/public/quoteRequests/${id}/decision`,
+        payload: { token: accessToken, decision: "accepted" }
+      });
+      expect(accepted.statusCode).toBe(409);
+      expect(accepted.json()).toMatchObject({ error: "Quote request has expired", validUntil: "2000-01-01" });
     });
   });
 
