@@ -1,15 +1,14 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: commit and push
+- Phase: final report
 - Started: 2026-06-24 UTC
 - Current state: inherited handoff changes are dirty and substantial; preserving them while adding focused production slices.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 9 files / 79 tests passed)
 - Current plan:
   - Add UI affordances for the new production order states.
   - Update production readiness docs and linked setup/runbook docs.
-  - Commit intended source/docs/status artifacts.
-  - Push feature branch to origin.
+  - Commit and push `CODEX_FINAL_REPORT.md`.
 - Completed:
   - Baseline QC passed.
   - Added API test for cancelling generated order work and releasing reserved material.
@@ -18,3 +17,5 @@
   - Production build passed after UI lifecycle updates.
   - Added production readiness, install, operations, and release docs.
   - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 80 tests passed).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Final report commit prepared as current `HEAD`.
