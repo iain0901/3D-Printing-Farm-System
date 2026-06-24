@@ -802,6 +802,51 @@ describe("3DSTU FarmFlow API", () => {
     });
   });
 
+  it("tracks onboarding readiness and generates redacted support snapshots", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const apiKey = await app.inject({
+        method: "POST",
+        url: "/api/apiKeys",
+        headers: auth(token),
+        payload: { name: "Support automation", scopes: ["admin:export"], enabled: true }
+      });
+      expect(apiKey.statusCode).toBe(201);
+
+      const onboarding = await app.inject({ method: "GET", url: "/api/onboarding", headers: auth(token) });
+      expect(onboarding.statusCode).toBe(200);
+      expect(onboarding.json().steps).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: "workspace", status: "complete" }),
+        expect.objectContaining({ id: "backup", status: "pending" })
+      ]));
+
+      const backup = await app.inject({
+        method: "PATCH",
+        url: "/api/onboarding/backup",
+        headers: auth(token),
+        payload: { status: "complete", note: "Export verified by owner" }
+      });
+      expect(backup.statusCode).toBe(200);
+      expect(backup.json().onboarding.steps.find((step) => step.id === "backup")).toMatchObject({ status: "complete", note: "Export verified by owner" });
+
+      const snapshot = await app.inject({ method: "POST", url: "/api/support/snapshot", headers: auth(token) });
+      expect(snapshot.statusCode).toBe(200);
+      expect(snapshot.json()).toMatchObject({
+        service: "3DSTU FarmFlow",
+        workspace: expect.objectContaining({ name: "North Campus Lab" }),
+        counts: expect.objectContaining({ printers: expect.any(Number), apiKeys: expect.any(Number) }),
+        readiness: expect.objectContaining({ onboarding: expect.objectContaining({ percent: expect.any(Number) }) })
+      });
+      const snapshotText = JSON.stringify(snapshot.json());
+      expect(snapshotText).not.toContain(apiKey.json().secret);
+      expect(snapshotText).not.toContain("scrypt$");
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.workspaceSettings.onboarding.backup).toMatchObject({ status: "complete", note: "Export verified by owner" });
+      expect(persisted.events.some((event) => event.type === "support.snapshot")).toBe(true);
+    });
+  });
+
   it("enforces audit retention policy and preserves protected admin events", async () => {
     await withApp(async ({ app, db, dbPath }) => {
       const token = await login(app);
@@ -1316,6 +1361,46 @@ endsolid delete_me`;
     });
   });
 
+  it("builds safe file previews with G-code toolpath summaries", async () => {
+    await withApp(async ({ app }) => {
+      const token = await login(app);
+      const boundary = "layerpilot-preview-boundary";
+      const gcode = [
+        ";TIME:5400",
+        "G1 X0 Y0 Z0.2 E0",
+        "G1 X20 Y0 E1.2",
+        "G1 X20 Y20 E2.4",
+        "G1 X0 Y20 E3.6",
+        "G1 X0 Y0 E4.8",
+        "G1 Z0.4",
+        "G1 X25 Y25 E5.8",
+        "; customer secret note should not be copied as source"
+      ].join("\n");
+      const uploaded = await app.inject({
+        method: "POST",
+        url: "/api/files/upload",
+        headers: { ...auth(token), "content-type": `multipart/form-data; boundary=${boundary}` },
+        payload: multipartPayload({ boundary, filename: "preview-job.gcode", content: gcode, fields: { material: "PLA", folder: "Production" } })
+      });
+      expect(uploaded.statusCode).toBe(201);
+
+      const preview = await app.inject({ method: "GET", url: `/api/files/${uploaded.json().id}/preview`, headers: auth(token) });
+      expect(preview.statusCode).toBe(200);
+      expect(preview.json()).toMatchObject({
+        type: "GCODE",
+        summary: expect.objectContaining({ printTime: "1h 30m", sliced: true }),
+        visualization: expect.objectContaining({
+          kind: "toolpath",
+          lineCount: expect.any(Number),
+          extrusionMoves: expect.any(Number),
+          sample: expect.arrayContaining([expect.objectContaining({ x: expect.any(Number), y: expect.any(Number), z: expect.any(Number) })])
+        })
+      });
+      expect(preview.json().visualization.layers.length).toBeGreaterThan(0);
+      expect(JSON.stringify(preview.json())).not.toContain("customer secret note");
+    });
+  });
+
   it("stores uploaded files in an S3-compatible object store when configured", async () => {
     const objectStorageAdapter = createFakeS3Storage();
     await withApp(async ({ app, dbPath }) => {
@@ -1395,11 +1480,12 @@ endsolid s3_store`;
   });
 
   it("schedules queue jobs and updates derived todos", async () => {
-    await withApp(async ({ app }) => {
+    await withApp(async ({ app, dbPath }) => {
       const token = await login(app);
       const scheduled = await app.inject({ method: "PATCH", url: "/api/queue/q2/schedule", headers: auth(token), payload: { printerId: "p2", scheduledStart: "13:00" } });
       expect(scheduled.statusCode).toBe(200);
-      expect(scheduled.json().job).toMatchObject({ id: "q2", printerId: "p2", stage: "scheduled" });
+      expect(scheduled.json().job).toMatchObject({ id: "q2", printerId: "p2", stage: "scheduled", reservedSpoolId: "s2", reservedGrams: 42 });
+      expect(scheduled.json().materialReservation).toMatchObject({ spoolId: "s2", grams: 42, status: "reserved" });
       expect(scheduled.json().warnings).toEqual(expect.arrayContaining(["Material conflict", "Due date risk"]));
 
       const todos = await app.inject({ method: "GET", url: "/api/todos", headers: auth(token) });
@@ -1411,6 +1497,15 @@ endsolid s3_store`;
       const diagnostics = await app.inject({ method: "GET", url: "/api/schedule/diagnostics", headers: auth(token) });
       expect(diagnostics.statusCode).toBe(200);
       expect(diagnostics.json().lanes.some((lane) => lane.jobs.some((job) => job.jobId === "q2" && job.warnings.includes("Material conflict")))).toBe(true);
+
+      const completed = await app.inject({ method: "PATCH", url: "/api/queue/q2/status", headers: auth(token), payload: { status: "complete" } });
+      expect(completed.statusCode).toBe(200);
+      expect(completed.json().materialChange).toMatchObject({ spoolId: "s2", grams: 42, remaining: 276 });
+      expect(completed.json().job.materialReservation).toMatchObject({ spoolId: "s2", grams: 42, status: "consumed" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.spools.find((spool) => spool.id === "s2")).toMatchObject({ remaining: 276, reserved: 0 });
+      expect(persisted.events.some((event) => event.type === "queue.status" && event.data.materialChange?.spoolId === "s2")).toBe(true);
     });
   });
 
@@ -1429,11 +1524,12 @@ endsolid s3_store`;
       ]));
       expect(result.json().scheduled.find((item) => item.jobId === "q2").warnings).toEqual(expect.arrayContaining(["Printer busy", "Due date risk"]));
       expect(result.json().scheduled.find((item) => item.jobId === "q2").warnings).not.toContain("Material conflict");
-      expect(result.json().jobs.find((job) => job.id === "q2")).toMatchObject({ stage: "scheduled", printerId: "p3" });
+      expect(result.json().jobs.find((job) => job.id === "q2")).toMatchObject({ stage: "scheduled", printerId: "p3", reservedSpoolId: "s2", reservedGrams: 42 });
       expect(result.json().todos.some((todo) => todo.id === "q2-schedule")).toBe(false);
 
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
       expect(persisted.queue.find((job) => job.id === "q2")).toMatchObject({ stage: "scheduled", printerId: "p3", scheduledStart: "08:45" });
+      expect(persisted.spools.find((spool) => spool.id === "s2")).toMatchObject({ reserved: 42 });
     });
   });
 
@@ -1693,6 +1789,32 @@ endsolid s3_store`;
       expect(scanned.statusCode).toBe(200);
       expect(scanned.json()).toMatchObject({ matchedBy: "nfc", usageLogged: 20, spool: { id: spool.json().id, remaining: 405, location: "Printer Bay" } });
 
+      await app.inject({ method: "PATCH", url: `/api/spools/${spool.json().id}/usage`, headers: auth(token), payload: { grams: 260 } });
+      const reorderPlan = await app.inject({
+        method: "POST",
+        url: "/api/purchaseRequests/reorderPlan",
+        headers: auth(token),
+        payload: { thresholdGrams: 250, targetGrams: 1000, quantity: 2, supplier: "QC Supplier" }
+      });
+      expect(reorderPlan.statusCode).toBe(200);
+      expect(reorderPlan.json().created).toHaveLength(1);
+      expect(reorderPlan.json().created[0]).toMatchObject({ spoolId: spool.json().id, material: "PLA", quantity: 2, supplier: "QC Supplier", status: "open" });
+
+      const ordered = await app.inject({ method: "PATCH", url: `/api/purchaseRequests/${reorderPlan.json().created[0].id}`, headers: auth(token), payload: { status: "ordered" } });
+      expect(ordered.statusCode).toBe(200);
+      expect(ordered.json()).toMatchObject({ status: "ordered" });
+
+      const received = await app.inject({
+        method: "POST",
+        url: `/api/purchaseRequests/${ordered.json().id}/receive`,
+        headers: auth(token),
+        payload: { location: "Rack Receiving QC", nfcPrefix: "LP-QC-PLA" }
+      });
+      expect(received.statusCode).toBe(200);
+      expect(received.json().spools).toHaveLength(2);
+      expect(received.json().request).toMatchObject({ status: "received", receivedSpoolIds: received.json().spools.map((item) => item.id) });
+      expect(received.json().inventory.some((item) => item.purchaseRequestId === ordered.json().id && item.location === "Rack Receiving QC")).toBe(true);
+
       const maintenance = await app.inject({
         method: "POST",
         url: "/api/maintenance",
@@ -1738,9 +1860,10 @@ endsolid s3_store`;
       expect(shipped.json()).toMatchObject({ id: order.json().id, status: "shipped" });
 
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
-      expect(persisted.spools.find((item) => item.id === spool.json().id)).toMatchObject({ remaining: 405, dry: false, location: "Printer Bay" });
+      expect(persisted.spools.find((item) => item.id === spool.json().id)).toMatchObject({ remaining: 145, dry: false, location: "Printer Bay" });
       expect(persisted.events.some((event) => event.type === "spool.labels_generated")).toBe(true);
       expect(persisted.events.some((event) => event.type === "spool.scanned_usage")).toBe(true);
+      expect(persisted.events.some((event) => event.type === "purchase_request.received")).toBe(true);
       expect(persisted.maintenance.find((item) => item.id === maintenance.json().id)).toMatchObject({ status: "done" });
       expect(persisted.maintenanceTemplates.find((item) => item.id === template.json().template.id)).toMatchObject({ title: "QC motion service" });
       expect(persisted.maintenanceReports.find((item) => item.id === report.json().report.id)).toMatchObject({ linkedJobId: report.json().job.id });
@@ -1842,6 +1965,352 @@ endsolid s3_store`;
       expect(persisted.events.some((event) => event.type === "catalog.material_mapped")).toBe(true);
       expect(persisted.skus.find((item) => item.sku === "QC-BRACKET")).toMatchObject({ stock: 1 });
       expect(persisted.queue.filter((item) => item.sourceOrderId === order.json().id)).toHaveLength(2);
+    });
+  });
+
+  it("cancels generated order work and releases reserved material", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const order = await app.inject({
+        method: "POST",
+        url: "/api/orders",
+        headers: auth(token),
+        payload: { source: "Manual", customer: "Lifecycle Customer", items: ["CAM-MOUNT-ORG x1"], status: "received", due: "Tomorrow 17:00", value: 420 }
+      });
+      expect(order.statusCode).toBe(201);
+
+      const generated = await app.inject({ method: "POST", url: `/api/orders/${order.json().id}/generate-jobs`, headers: auth(token) });
+      expect(generated.statusCode).toBe(200);
+      const jobId = generated.json().jobs[0].id;
+
+      const scheduled = await app.inject({
+        method: "PATCH",
+        url: `/api/queue/${jobId}/schedule`,
+        headers: auth(token),
+        payload: { printerId: "p3", scheduledStart: "14:00" }
+      });
+      expect(scheduled.statusCode).toBe(200);
+      expect(scheduled.json().job).toMatchObject({ id: jobId, status: "queued", stage: "needs slicing", reservedSpoolId: "s2" });
+      expect(scheduled.json().spools.find((item) => item.id === "s2")).toMatchObject({ reserved: expect.any(Number) });
+
+      const cancelled = await app.inject({ method: "PATCH", url: `/api/orders/${order.json().id}/status`, headers: auth(token), payload: { status: "cancelled" } });
+      expect(cancelled.statusCode).toBe(200);
+      expect(cancelled.json().order).toMatchObject({ id: order.json().id, status: "cancelled" });
+      expect(cancelled.json().jobs).toEqual([expect.objectContaining({ id: jobId, status: "cancelled", stage: "blocked" })]);
+      expect(cancelled.json().materialChanges).toEqual([expect.objectContaining({ spoolId: "s2" })]);
+      expect(cancelled.json().spools.find((item) => item.id === "s2")).toMatchObject({ reserved: 0, reservations: [] });
+
+      const duplicate = await app.inject({ method: "POST", url: `/api/orders/${order.json().id}/generate-jobs`, headers: auth(token) });
+      expect(duplicate.statusCode).toBe(409);
+      expect(duplicate.json()).toMatchObject({ error: "Cannot generate jobs for a terminal order" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.orders.find((item) => item.id === order.json().id)).toMatchObject({ status: "cancelled" });
+      expect(persisted.queue.find((item) => item.id === jobId)).toMatchObject({ status: "cancelled", stage: "blocked" });
+      expect(persisted.spools.find((item) => item.id === "s2")).toMatchObject({ reserved: 0, reservations: [] });
+      expect(persisted.events.some((event) => event.type === "order.status" && event.data?.status === "cancelled")).toBe(true);
+    });
+  });
+
+  it("accepts public quote requests and converts accepted quotes into orders", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const quote = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        payload: {
+          customer: "Public Customer",
+          email: "customer@example.com",
+          company: "Customer Lab",
+          project: "ASA fixture batch",
+          material: "ASA",
+          quantity: 6,
+          due: "2026-07-08",
+          budget: 780,
+          notes: "Matte black finish preferred",
+          fileName: "fixture-batch.3mf"
+        }
+      });
+      expect(quote.statusCode).toBe(201);
+      expect(quote.json()).toMatchObject({ ok: true, quoteRequest: { status: "new", project: "ASA fixture batch" } });
+      expect(quote.json().quoteRequest.accessToken).toEqual(expect.any(String));
+
+      const protectedList = await app.inject({ method: "GET", url: "/api/quoteRequests" });
+      expect(protectedList.statusCode).toBe(401);
+
+      const token = await login(app);
+      const id = quote.json().quoteRequest.id;
+      const quoted = await app.inject({
+        method: "PATCH",
+        url: `/api/quoteRequests/${id}`,
+        headers: auth(token),
+        payload: { status: "quoted", priority: "High", quotedValue: 720, validUntil: "2026-07-15", internalNote: "Use ASA process profile" }
+      });
+      expect(quoted.statusCode).toBe(200);
+      expect(quoted.json()).toMatchObject({ status: "quoted", priority: "High", quotedValue: 720, validUntil: "2026-07-15" });
+
+      const portalLink = await app.inject({
+        method: "POST",
+        url: `/api/quoteRequests/${id}/customer-link`,
+        headers: { ...auth(token), host: "farm-saas.3dstu.com", "x-forwarded-proto": "https" }
+      });
+      expect(portalLink.statusCode).toBe(200);
+      expect(portalLink.json().url).toContain("https://farm-saas.3dstu.com/?");
+      expect(portalLink.json().url).toContain(`quoteId=${id}`);
+      expect(portalLink.json().accessToken).toBe(quote.json().quoteRequest.accessToken);
+      const portalUrl = new URL(portalLink.json().url);
+      expect(portalUrl.searchParams.get("quoteToken")).toBe(quote.json().quoteRequest.accessToken);
+
+      const blockedStatus = await app.inject({ method: "GET", url: `/api/public/quoteRequests/${id}?token=wrong-token` });
+      expect(blockedStatus.statusCode).toBe(404);
+
+      const publicStatus = await app.inject({ method: "GET", url: `/api/public/quoteRequests/${id}?token=${quote.json().quoteRequest.accessToken}` });
+      expect(publicStatus.statusCode).toBe(200);
+      expect(publicStatus.json().quoteRequest).toMatchObject({ id, status: "quoted", quotedValue: 720, validUntil: "2026-07-15", orderId: "" });
+
+      const rotatedLink = await app.inject({
+        method: "POST",
+        url: `/api/quoteRequests/${id}/customer-link`,
+        headers: auth(token),
+        payload: { rotate: true }
+      });
+      expect(rotatedLink.statusCode).toBe(200);
+      expect(rotatedLink.json().accessToken).not.toBe(quote.json().quoteRequest.accessToken);
+      const oldTokenStatus = await app.inject({ method: "GET", url: `/api/public/quoteRequests/${id}?token=${quote.json().quoteRequest.accessToken}` });
+      expect(oldTokenStatus.statusCode).toBe(404);
+      const rotatedStatus = await app.inject({ method: "GET", url: `/api/public/quoteRequests/${id}?token=${rotatedLink.json().accessToken}` });
+      expect(rotatedStatus.statusCode).toBe(200);
+
+      const converted = await app.inject({
+        method: "POST",
+        url: `/api/quoteRequests/${id}/convert-order`,
+        headers: auth(token),
+        payload: { due: "2026-07-10" }
+      });
+      expect(converted.statusCode).toBe(201);
+      expect(converted.json().order).toMatchObject({ externalId: id, customer: "Public Customer / Customer Lab", items: ["ASA fixture batch x6"], status: "received", due: "2026-07-10", value: 720, quoteRequestId: id });
+      expect(converted.json().job).toBe(null);
+      expect(converted.json().quoteRequest).toMatchObject({ status: "converted", orderId: converted.json().order.id });
+
+      const duplicate = await app.inject({ method: "POST", url: `/api/quoteRequests/${id}/convert-order`, headers: auth(token) });
+      expect(duplicate.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.quoteRequests.find((item) => item.id === id)).toMatchObject({ status: "converted", orderId: converted.json().order.id });
+      expect(persisted.orders.find((item) => item.id === converted.json().order.id)).toMatchObject({ quoteRequestId: id });
+      expect(persisted.events.some((event) => event.type === "quote_request.converted")).toBe(true);
+    });
+  });
+
+  it("lets customers accept quoted requests through the public quote portal", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const quote = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        payload: {
+          customer: "Portal Buyer",
+          email: "buyer@example.com",
+          company: "Buyer Studio",
+          project: "PETG jig run",
+          material: "PETG",
+          quantity: 3,
+          due: "2026-07-18",
+          budget: 300,
+          notes: "Approve from public portal"
+        }
+      });
+      expect(quote.statusCode).toBe(201);
+      const { id, accessToken } = quote.json().quoteRequest;
+      const token = await login(app);
+      const quoted = await app.inject({
+        method: "PATCH",
+        url: `/api/quoteRequests/${id}`,
+        headers: auth(token),
+        payload: { status: "quoted", quotedValue: 255, priority: "Normal" }
+      });
+      expect(quoted.statusCode).toBe(200);
+
+      const accepted = await app.inject({
+        method: "POST",
+        url: `/api/public/quoteRequests/${id}/decision`,
+        payload: { token: accessToken, decision: "accepted", note: "Customer approved" }
+      });
+      expect(accepted.statusCode).toBe(201);
+      expect(accepted.json().quoteRequest).toMatchObject({ id, status: "converted", quotedValue: 255, customerDecision: "accepted" });
+      expect(accepted.json().order).toMatchObject({ status: "received", value: 255, due: "2026-07-18" });
+      expect(accepted.json().job).toBe(null);
+
+      const duplicate = await app.inject({ method: "POST", url: `/api/public/quoteRequests/${id}/decision`, payload: { token: accessToken, decision: "accepted" } });
+      expect(duplicate.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.quoteRequests.find((item) => item.id === id)).toMatchObject({ status: "converted", orderId: accepted.json().order.id, customerDecisionNote: "Customer approved" });
+      expect(persisted.orders.find((item) => item.id === accepted.json().order.id)).toMatchObject({ quoteRequestId: id, value: 255 });
+      expect(persisted.events.some((event) => event.type === "quote_request.customer_accepted")).toBe(true);
+      expect(persisted.events.some((event) => event.type === "quote_request.converted" && event.data.orderId === accepted.json().order.id)).toBe(true);
+    });
+  });
+
+  it("blocks customer approval after a quote expires", async () => {
+    await withApp(async ({ app }) => {
+      const quote = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        payload: {
+          customer: "Expired Buyer",
+          email: "expired@example.com",
+          project: "Expired quote check",
+          material: "PLA",
+          quantity: 1,
+          due: "2026-07-20",
+          budget: 90,
+          notes: "Should require a fresh quote"
+        }
+      });
+      expect(quote.statusCode).toBe(201);
+      const { id, accessToken } = quote.json().quoteRequest;
+      const token = await login(app);
+      const quoted = await app.inject({
+        method: "PATCH",
+        url: `/api/quoteRequests/${id}`,
+        headers: auth(token),
+        payload: { status: "quoted", quotedValue: 88, validUntil: "2000-01-01" }
+      });
+      expect(quoted.statusCode).toBe(200);
+
+      const accepted = await app.inject({
+        method: "POST",
+        url: `/api/public/quoteRequests/${id}/decision`,
+        payload: { token: accessToken, decision: "accepted" }
+      });
+      expect(accepted.statusCode).toBe(409);
+      expect(accepted.json()).toMatchObject({ error: "Quote request has expired", validUntil: "2000-01-01" });
+    });
+  });
+
+  it("lets customers request quote changes without converting the order", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const quote = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        payload: {
+          customer: "Revision Buyer",
+          email: "revision@example.com",
+          project: "Fixture revision",
+          material: "PETG",
+          quantity: 2,
+          due: "2026-07-24",
+          budget: 140,
+          notes: "Needs operator review"
+        }
+      });
+      expect(quote.statusCode).toBe(201);
+      const { id, accessToken } = quote.json().quoteRequest;
+      const token = await login(app);
+      const quoted = await app.inject({
+        method: "PATCH",
+        url: `/api/quoteRequests/${id}`,
+        headers: auth(token),
+        payload: { status: "quoted", quotedValue: 128, validUntil: "2026-08-01" }
+      });
+      expect(quoted.statusCode).toBe(200);
+
+      const revision = await app.inject({
+        method: "POST",
+        url: `/api/public/quoteRequests/${id}/decision`,
+        payload: { token: accessToken, decision: "revision", note: "Please quote a black PETG version instead." }
+      });
+      expect(revision.statusCode).toBe(200);
+      expect(revision.json().quoteRequest).toMatchObject({ id, status: "reviewing", customerDecision: "revision", customerDecisionNote: "Please quote a black PETG version instead.", orderId: "" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.quoteRequests.find((item) => item.id === id)).toMatchObject({ status: "reviewing", customerDecision: "revision" });
+      expect(persisted.orders.some((order) => order.quoteRequestId === id)).toBe(false);
+      expect(persisted.events.some((event) => event.type === "quote_request.revision_requested" && event.data.quoteRequestId === id)).toBe(true);
+    });
+  });
+
+  it("stores uploaded model files from public quote requests", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const boundary = "----layerpilot-quote-upload";
+      const stl = "solid quote\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 40 0 0\nvertex 0 30 8\nendloop\nendfacet\nendsolid quote\n";
+      const field = (name, value) => `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`;
+      const fileHeader = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="quote-bracket.stl"\r\nContent-Type: model/stl\r\n\r\n`;
+      const body = Buffer.concat([
+        Buffer.from(field("customer", "Upload Customer")),
+        Buffer.from(field("email", "upload@example.com")),
+        Buffer.from(field("company", "Upload Lab")),
+        Buffer.from(field("project", "Uploaded bracket")),
+        Buffer.from(field("material", "PETG")),
+        Buffer.from(field("quantity", "2")),
+        Buffer.from(field("due", "2026-08-01")),
+        Buffer.from(field("budget", "160")),
+        Buffer.from(field("notes", "Please quote from attached STL")),
+        Buffer.from(fileHeader),
+        Buffer.from(stl),
+        Buffer.from(`\r\n--${boundary}--\r\n`)
+      ]);
+
+      const quote = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        headers: { "content-type": `multipart/form-data; boundary=${boundary}` },
+        payload: body
+      });
+      expect(quote.statusCode).toBe(201);
+      expect(quote.json().quoteRequest).toMatchObject({ project: "Uploaded bracket", fileName: "quote-bracket.stl" });
+      expect(quote.json().quoteRequest.fileId).toBeTruthy();
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      const storedQuote = persisted.quoteRequests.find((item) => item.id === quote.json().quoteRequest.id);
+      const storedFile = persisted.files.find((item) => item.id === storedQuote.fileId);
+      expect(storedQuote).toMatchObject({ fileName: "quote-bracket.stl", fileType: "STL", fileSize: expect.stringMatching(/B|KB/) });
+      expect(storedFile).toMatchObject({ name: "quote-bracket.stl", material: "PETG", folder: "Customer Quotes", quoteRequestId: storedQuote.id, status: "uploaded" });
+      expect(persisted.fileFolders.find((item) => item.name === "Customer Quotes")).toMatchObject({ purpose: "quote-intake", fileCount: 1 });
+      expect(persisted.events.some((event) => event.type === "quote_request.created" && event.data.fileId === storedFile.id)).toBe(true);
+
+      const token = await login(app);
+      const blockedDelete = await app.inject({ method: "DELETE", url: `/api/files/${storedFile.id}`, headers: auth(token) });
+      expect(blockedDelete.statusCode).toBe(409);
+      expect(blockedDelete.json().references.quoteRequests).toEqual([{ id: storedQuote.id, project: "Uploaded bracket", status: "new" }]);
+
+      const converted = await app.inject({ method: "POST", url: `/api/quoteRequests/${storedQuote.id}/convert-order`, headers: auth(token), payload: { due: "2026-08-02" } });
+      expect(converted.statusCode).toBe(201);
+      expect(converted.json().order).toMatchObject({ externalId: storedQuote.id, status: "queued", quoteRequestId: storedQuote.id, due: "2026-08-02" });
+      expect(converted.json().job).toMatchObject({ fileId: storedFile.id, sourceOrderId: converted.json().order.id, sourceQuoteRequestId: storedQuote.id, material: "PETG", stage: "needs slicing" });
+      expect(converted.json().queue.some((job) => job.id === converted.json().job.id)).toBe(true);
+      expect(converted.json().todos.length).toBeGreaterThan(0);
+
+      const queueProtectedDelete = await app.inject({ method: "DELETE", url: `/api/files/${storedFile.id}`, headers: auth(token) });
+      expect(queueProtectedDelete.statusCode).toBe(409);
+      expect(queueProtectedDelete.json().references.activeQueue).toEqual([expect.objectContaining({ id: converted.json().job.id, status: "queued" })]);
+    });
+  });
+
+  it("creates reusable production templates and runs them into queue jobs", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/productionTemplates",
+        headers: auth(token),
+        payload: { name: "QC replenishment recipe", sku: "QC-BRACKET", fileId: "f1", material: "PLA", color: "Black", priority: "High", printerId: "p1", dueOffsetDays: 3, quantity: 2, time: "2h 15m", cost: 44, notes: "Run before weekend pickup" }
+      });
+      expect(created.statusCode).toBe(201);
+      expect(created.json()).toMatchObject({ name: "QC replenishment recipe", fileId: "f1", quantity: 2, runCount: 0 });
+
+      const dryRun = await app.inject({ method: "POST", url: `/api/productionTemplates/${created.json().id}/run`, headers: auth(token), payload: { dryRun: true, quantity: 1 } });
+      expect(dryRun.statusCode).toBe(200);
+      expect(dryRun.json()).toMatchObject({ dryRun: true, jobs: [expect.objectContaining({ sourceTemplateId: created.json().id, fileId: "f1", priority: "High" })] });
+
+      const committed = await app.inject({ method: "POST", url: `/api/productionTemplates/${created.json().id}/run`, headers: auth(token), payload: { quantity: 3, due: "2026-07-01" } });
+      expect(committed.statusCode).toBe(200);
+      expect(committed.json().jobs).toHaveLength(3);
+      expect(committed.json().jobs[0]).toMatchObject({ sourceTemplateId: created.json().id, due: "2026-07-01", added: "Template: QC replenishment recipe" });
+      expect(committed.json().queue.filter((job) => job.sourceTemplateId === created.json().id)).toHaveLength(3);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.productionTemplates.find((item) => item.id === created.json().id)).toMatchObject({ runCount: 3 });
+      expect(persisted.events.some((event) => event.type === "production_template.run")).toBe(true);
     });
   });
 
@@ -2270,10 +2739,36 @@ endsolid s3_store`;
         method: "PATCH",
         url: "/api/history/q1",
         headers: auth(token),
-        payload: { note: "QC passed after dimensional check", issueTag: "Dimensional variance", issueSeverity: "Medium", failureReason: "Corner lifted 0.2mm" }
+        payload: {
+          note: "QC passed after dimensional check",
+          issueTag: "Dimensional variance",
+          issueSeverity: "Medium",
+          failureReason: "Corner lifted 0.2mm",
+          failureCategory: "Adhesion",
+          rootCause: "Front-left bed corner was cool",
+          correctiveAction: "Clean plate and raise first-layer bed target",
+          wasteGrams: 24,
+          wasteSpoolId: "s1",
+          deductWasteFromInventory: true
+        }
       });
       expect(annotated.statusCode).toBe(200);
-      expect(annotated.json().historyRecord).toMatchObject({ id: "q1", note: "Corner lifted 0.2mm", issueTag: "Dimensional variance", issueSeverity: "Medium", failureReason: "Corner lifted 0.2mm" });
+      expect(annotated.json().historyRecord).toMatchObject({
+        id: "q1",
+        note: "Corner lifted 0.2mm",
+        issueTag: "Dimensional variance",
+        issueSeverity: "Medium",
+        failureReason: "Corner lifted 0.2mm",
+        failureCategory: "Adhesion",
+        rootCause: "Front-left bed corner was cool",
+        correctiveAction: "Clean plate and raise first-layer bed target",
+        wasteGrams: 24,
+        wasteCost: 0.2,
+        wasteSpoolId: "s1"
+      });
+      expect(annotated.json().wasteInventory).toMatchObject({ spoolId: "s1", before: 742, after: 718, grams: 24 });
+      expect(annotated.json().analytics).toMatchObject({ wasteGrams: 24, wasteCost: 0.2, failureCategories: { Adhesion: 1 } });
+      expect(annotated.json().analytics.printerReliability.find((printer) => printer.printerId === "p1")).toMatchObject({ wasteGrams: 24, wasteCost: 0.2 });
 
       const reprint = await app.inject({
         method: "POST",
@@ -2303,7 +2798,9 @@ endsolid s3_store`;
 
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
       expect(persisted.queue.some((job) => job.sourceJobId === "q1" && job.status === "queued")).toBe(true);
-      expect(persisted.queue.find((job) => job.id === "q1")).toMatchObject({ note: "QC passed after dimensional check", issueTag: "Dimensional variance", issueSeverity: "Medium", failureReason: "Corner lifted 0.2mm" });
+      expect(persisted.queue.find((job) => job.id === "q1")).toMatchObject({ note: "QC passed after dimensional check", issueTag: "Dimensional variance", issueSeverity: "Medium", failureReason: "Corner lifted 0.2mm", failureCategory: "Adhesion", wasteGrams: 24, wasteCost: 0.2, wasteSpoolId: "s1" });
+      expect(persisted.spools.find((spool) => spool.id === "s1")).toMatchObject({ remaining: 718 });
+      expect(persisted.queue.find((job) => job.sourceJobId === "q1")).not.toHaveProperty("wasteGrams");
       expect(persisted.events.some((event) => event.type === "history.annotated" && event.data.jobId === "q1")).toBe(true);
       expect(persisted.events.some((event) => event.type === "queue.reprint")).toBe(true);
       expect(persisted.events.some((event) => event.type === "admin.export")).toBe(true);
@@ -2458,8 +2955,17 @@ endsolid s3_store`;
 
         const tested = await app.inject({ method: "POST", url: `/api/bridges/${saved.json().id}/test`, headers: auth(token) });
         expect(tested.statusCode).toBe(200);
+        expect(tested.json()).toMatchObject({
+          ok: true,
+          diagnostic: expect.objectContaining({
+            ok: true,
+            latencyMs: expect.any(Number),
+            checks: expect.arrayContaining([expect.objectContaining({ name: "Status endpoint", status: "passed" })])
+          })
+        });
         expect(tested.json().printer).toMatchObject({ id: "p2", status: "idle", nozzle: 24, bed: 22 });
         expect(tested.json().bridge.apiKey).toBeUndefined();
+        expect(JSON.stringify(tested.json())).not.toContain("secret");
 
         const syncAll = await app.inject({ method: "POST", url: "/api/bridges/sync", headers: auth(token) });
         expect(syncAll.statusCode).toBe(200);
@@ -2471,6 +2977,7 @@ endsolid s3_store`;
         expect(bridges.json().some((bridge) => bridge.apiKey)).toBe(false);
         const persisted = JSON.parse(await readFile(dbPath, "utf8"));
         expect(persisted.events.some((event) => event.type === "bridge.poll")).toBe(true);
+        expect(persisted.bridges.find((bridge) => bridge.id === saved.json().id).lastDiagnostics.ok).toBe(true);
       } finally {
         global.fetch = originalFetch;
       }

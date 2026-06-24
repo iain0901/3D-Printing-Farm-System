@@ -1,0 +1,58 @@
+# Production Readiness Checklist
+
+Use this checklist before treating a 3DSTU FarmFlow instance as production.
+
+## Required Gate
+
+- [ ] `npm run qc` passes on the release branch.
+- [ ] `scripts/ubuntu-deploy.sh doctor` passes on the target host.
+- [ ] `LAYERPILOT_ADMIN_EMAIL` and `LAYERPILOT_ADMIN_PASSWORD` are set to real owner credentials.
+- [ ] `LAYERPILOT_DISABLE_DEFAULT_USERS=true` and `LAYERPILOT_DISABLE_DEMO_LOGIN=true` are set for customer production.
+- [ ] `LAYERPILOT_WORKER_TOKEN` and `LAYERPILOT_METRICS_TOKEN` are unique strong values.
+- [ ] `.env` is not committed and is readable only by the deployment user.
+- [ ] `/api/readiness` reports `ok: true`.
+- [ ] `npm run smoke:prod` passes against the live URL.
+
+## Access Control
+
+- [ ] At least one Owner account exists and can log in.
+- [ ] Admin and Owner users enroll TOTP when `requireAdmin2fa` is enabled.
+- [ ] Operator accounts have only the permissions needed for daily production.
+- [ ] API keys have the minimum required scopes.
+- [ ] API key IP/CIDR allowlists are enabled when automation runs from fixed networks.
+
+## Production Workflows
+
+- [ ] Orders can be created from manual entry, CSV, connector import, or quote conversion.
+- [ ] SKU-linked orders can dry-run job generation before committing queue jobs.
+- [ ] Cancelled orders stop linked active generated jobs and release material reservations.
+- [ ] Queue jobs can be scheduled, started, paused, completed, failed, or cancelled.
+- [ ] Spool inventory shows remaining, reserved, and available material.
+- [ ] Maintenance templates and problem reports are configured for the fleet.
+- [ ] Hardware bridges are tested for every connected printer before live work.
+
+## Data And Recovery
+
+- [ ] Persistent data is stored in the Docker volume or configured database path.
+- [ ] Local uploaded model storage or S3-compatible storage is configured intentionally.
+- [ ] `scripts/ubuntu-backup.sh backup` creates a verified archive.
+- [ ] `scripts/ubuntu-backup.sh restore-drill <archive>` succeeds without touching production data.
+- [ ] `layerpilot-backup.timer` is enabled on Ubuntu production hosts.
+- [ ] Restore and rollback responsibility is assigned to a named operator.
+
+## Monitoring And Operations
+
+- [ ] Nginx or equivalent reverse proxy terminates HTTPS.
+- [ ] WebSocket and SSE proxy headers are configured.
+- [ ] `layerpilot-ops-check.timer` is enabled or an equivalent monitor is configured.
+- [ ] `/api/metrics` is scraped with a metrics token or scoped API key.
+- [ ] Disk free space is monitored for the data volume and backup destination.
+- [ ] Support bundle generation is tested and reviewed for redaction.
+
+## Known Release Blockers
+
+- Missing production domain or TLS certificate.
+- Missing owner/admin credentials or weak production tokens.
+- No verified backup and restore drill.
+- Hardware bridges not validated against the actual printer fleet.
+- External integrations such as Stripe, S3, MQTT, or commerce feeds not configured when required by the customer workflow.

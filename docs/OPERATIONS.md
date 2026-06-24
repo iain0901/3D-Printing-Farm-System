@@ -1,0 +1,73 @@
+# Operations Runbook
+
+This runbook covers routine production operation for a 3DSTU FarmFlow VPS.
+
+## Daily Checks
+
+- Open the dashboard and review printer state, blocked jobs, due-risk work, and low inventory.
+- Check `/api/readiness` or the ops-check timer result.
+- Confirm the latest backup exists and was verified.
+- Review failed webhook, notification, MQTT, commerce, and bridge delivery logs.
+- Resolve generated todos for slicing, scheduling, material, maintenance, and exceptions.
+
+## Order And Queue Handling
+
+- Use dry-run job generation before committing SKU-linked orders.
+- Use Hold when an order should stop progressing but remain recoverable.
+- Use Cancel when the customer or operator stops the order. Cancelled orders cascade to linked non-terminal generated jobs and release reserved filament.
+- Use Complete only after all fulfillment work is done.
+- Use queue job cancellation for single-job exceptions that should not cancel the whole order.
+
+## Printer Bridges
+
+- Test each bridge after credential or network changes.
+- A failed diagnostic should move the printer to a safe offline state.
+- Do not expose printer bridge credentials in support bundles or screenshots.
+- Keep manual bridge mode for machines that cannot be controlled safely.
+
+## Backup And Restore
+
+Create and verify a backup:
+
+```bash
+scripts/ubuntu-backup.sh backup
+scripts/ubuntu-backup.sh list
+```
+
+Run a restore drill without touching production:
+
+```bash
+scripts/ubuntu-backup.sh restore-drill /path/to/layerpilot-data-YYYYmmdd-HHMMSS.tgz
+```
+
+Restore production only after confirming the target instance should be replaced:
+
+```bash
+scripts/ubuntu-backup.sh restore /path/to/layerpilot-data-YYYYmmdd-HHMMSS.tgz
+```
+
+The restore command creates a pre-restore safeguard archive unless `LAYERPILOT_PRE_RESTORE_BACKUP=false` is explicitly set.
+
+## Updates And Rollback
+
+Normal update:
+
+```bash
+scripts/ubuntu-deploy.sh update
+```
+
+Rollback:
+
+```bash
+scripts/ubuntu-deploy.sh rollback /path/to/layerpilot-data-YYYYmmdd-HHMMSS.tgz
+```
+
+After either operation, run readiness and smoke checks.
+
+## Support Bundle
+
+```bash
+scripts/ubuntu-deploy.sh support-bundle
+```
+
+Review the generated archive before sharing it. The bundle redacts common secret names, but operators remain responsible for checking customer-sensitive data.

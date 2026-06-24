@@ -1,5 +1,6 @@
 ﻿/// <reference types="vite/client" />
 import type * as React from "react";
+import packageJson from "../package.json";
 import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
@@ -65,6 +66,8 @@ import {
   XAxis,
   YAxis
 } from "recharts";
+
+const APP_VERSION = packageJson.version;
 
 type View =
   | "dashboard"
@@ -134,6 +137,28 @@ type PrintFile = {
   usage: number;
 };
 type FileFolder = { id: string; name: string; parent?: string; purpose: "inbox" | "production" | "review" | "archive" | "sample"; fileCount?: number; createdAt?: string; updatedAt?: string };
+type FilePreview = {
+  fileId: string;
+  generatedAt: string;
+  name: string;
+  type: string;
+  material: string;
+  summary: { dimensions: [number, number, number]; size: string; estimateGrams: number; estimateMinutes: number; printTime: string; quote: number; sliced: boolean; status: string };
+  buildPlate: { width: number; depth: number; height: number; occupancyPercent: number; fit: string };
+  visualization: {
+    kind: "toolpath" | "bounding-box";
+    lineCount?: number;
+    motionCommands?: number;
+    extrusionMoves?: number;
+    travelMoves?: number;
+    totalExtrusion?: number;
+    layers?: Array<{ z: number; moves: number; extrusion: number }>;
+    sample?: Array<{ x: number; y: number; z: number; extrusion?: number }>;
+    extents: { min: number[]; max: number[] };
+  };
+  compatiblePrinters: Array<{ id: string; name: string; status: string; buildVolume: [number, number, number] }>;
+  warnings: string[];
+};
 
 type QueueItem = {
   id: string;
@@ -151,6 +176,9 @@ type QueueItem = {
   assignee: string;
   scheduledStart?: string;
   scheduleWarnings?: string[];
+  reservedSpoolId?: string;
+  reservedGrams?: number;
+  materialReservation?: Record<string, string | number | boolean | undefined>;
   time: string;
   cost: number;
   added: string;
@@ -163,12 +191,18 @@ type Spool = {
   brand: string;
   remaining: number;
   weight: number;
+  reserved?: number;
+  reservations?: Array<{ jobId: string; file?: string; grams: number; material?: string; scheduledStart?: string }>;
   location: string;
   dry: boolean;
   nfc: string;
 };
 type SpoolLabelExport = { generatedAt: string; count: number; rows: Array<Record<string, string | number>>; csv: string; html: string };
 type SpoolScanResult = { spool: Spool; matchedBy: string; usageLogged: number; warnings: string[]; spools?: Spool[] };
+type Severity = "Low" | "Medium" | "High" | "Urgent";
+type PurchaseRequest = { id: string; spoolId?: string; material: string; color: string; brand: string; quantity: number; targetGrams: number; supplier: string; priority: Severity; status: "open" | "ordered" | "received" | "cancelled"; due: string; note?: string; receivedAt?: string; receivedSpoolIds?: string[]; createdAt?: string; updatedAt?: string };
+type ReorderPlanResult = { created: PurchaseRequest[]; skipped: Array<{ spoolId: string; material: string; reason: string }>; thresholdGrams: number; purchaseRequests: PurchaseRequest[] };
+type PurchaseReceiveResult = { request: PurchaseRequest; spools: Spool[]; purchaseRequests: PurchaseRequest[]; inventory: Spool[] };
 
 type MaintenanceJob = {
   id: string;
@@ -177,7 +211,7 @@ type MaintenanceJob = {
   status: "scheduled" | "in progress" | "done" | "blocked";
   due: string;
   progress: string;
-  severity: "Low" | "Medium" | "High" | "Urgent";
+  severity: Severity;
 };
 type MaintenanceTemplate = { id: string; title: string; printerModel: string; intervalDays: number; tasks: string[]; severity: MaintenanceJob["severity"]; createdAt?: string; updatedAt?: string };
 type MaintenanceReport = { id: string; title: string; printer: string; description: string; severity: MaintenanceJob["severity"]; status: "open" | "triaged" | "closed"; linkedJobId?: string; createdAt?: string; updatedAt?: string; createdBy?: string };
@@ -189,16 +223,27 @@ type Webhook = { id: string; name: string; url: string; events: string[]; enable
 type WebhookDelivery = { id: string; webhookId: string; webhookName: string; eventId: string; eventType: string; url: string; status: string; statusCode: number; at: string; error?: string };
 type NotificationChannel = { id: string; name: string; type: "slack" | "discord" | "custom" | "email"; url: string; events: string[]; enabled: boolean; recipients: string[]; hasToken?: boolean; lastStatus?: string; lastStatusCode?: number; lastSentAt?: string };
 type NotificationDelivery = { id: string; channelId: string; channelName: string; channelType: string; eventId: string; eventType: string; url: string; status: string; statusCode: number; at: string; error?: string };
-type Bridge = { id: string; printerId: string; kind: "octoprint" | "moonraker" | "manual"; name: string; baseUrl: string; enabled: boolean; hasApiKey?: boolean; lastStatus?: string; lastError?: string; lastSyncAt?: string };
+type BridgeDiagnosticCheck = { name: string; status: "passed" | "warning" | "failed"; detail: string; recommendation?: string };
+type BridgeDiagnostic = { ok: boolean; generatedAt: string; kind: Bridge["kind"]; baseUrl: string; latencyMs: number; status?: Partial<Printer> | null; checks: BridgeDiagnosticCheck[]; summary: string; recommendation: string };
+type Bridge = { id: string; printerId: string; kind: "octoprint" | "moonraker" | "prusalink" | "manual"; name: string; baseUrl: string; enabled: boolean; hasApiKey?: boolean; lastStatus?: string; lastError?: string; lastSyncAt?: string; lastDiagnostics?: BridgeDiagnostic };
 type Toast = { id: string; message: string; type: "success" | "info" | "warning" };
 type Part = { id: string; name: string; fileId: string; material: string; process: string; plates: number; variants: string[]; status: "ready" | "needs profile" | "draft" };
 type SKU = { id: string; sku: string; title: string; parts: string[]; variants: string[]; price: number; stock: number; channel: string };
-type Order = { id: string; source: "Shopify" | "Etsy" | "Manual" | "eBay"; externalId?: string; customer: string; items: string[]; status: "received" | "queued" | "printing" | "packed" | "shipped"; due: string; value: number };
+type ProductionTemplate = { id: string; name: string; sku?: string; fileId: string; material: string; color: string; priority: QueueItem["priority"]; stage: TaskStage; printerId?: string; process: string; dueOffsetDays: number; quantity: number; time: string; cost: number; notes?: string; runCount?: number; lastRunAt?: string; createdAt?: string; updatedAt?: string };
+type ProductionTemplateRunResult = { template: ProductionTemplate; jobs: QueueItem[]; dryRun: boolean; queue: QueueItem[]; todos: Todo[] };
+type OrderStatus = "received" | "queued" | "printing" | "on_hold" | "packed" | "shipped" | "completed" | "cancelled";
+type Order = { id: string; source: "Shopify" | "Etsy" | "Manual" | "eBay"; externalId?: string; customer: string; items: string[]; status: OrderStatus; due: string; value: number };
+type OrderStatusUpdateResult = Order & { order?: Order; jobs?: QueueItem[]; materialChanges?: Array<{ spoolId: string; grams: number; material: string }>; spools?: Spool[]; todos?: Todo[] };
+type QuoteRequest = { id: string; customer: string; email: string; company?: string; project: string; material: string; quantity: number; due: string; budget: number; notes?: string; fileName?: string; fileId?: string; fileType?: string; fileSize?: string; estimatedGrams?: number; estimatedMinutes?: number; estimatedQuote?: number; source: string; status: "new" | "reviewing" | "quoted" | "accepted" | "converted" | "rejected"; priority: QueueItem["priority"]; quotedValue?: number; validUntil?: string; internalNote?: string; orderId?: string; customerDecision?: string; customerDecisionNote?: string; customerAccessToken?: string; portalLinkGeneratedAt?: string; createdAt?: string; updatedAt?: string };
+type PublicQuoteStatus = Pick<QuoteRequest, "id" | "status" | "project" | "material" | "quantity" | "due" | "budget" | "quotedValue" | "validUntil" | "fileName" | "fileType" | "fileSize" | "estimatedGrams" | "estimatedMinutes" | "estimatedQuote" | "orderId" | "createdAt" | "updatedAt"> & { customerDecision?: string; customerDecisionAt?: string; customerDecisionNote?: string };
 type OrderJobGenerationResult = { order: Order; jobs: QueueItem[]; existingJobs?: QueueItem[]; missing?: Array<{ item: string; reason: string }>; skus?: SKU[]; todos?: Todo[]; dryRun?: boolean; duplicateBlocked?: boolean; stockChanges?: Array<{ sku: string; before: number; after: number; quantity: number }> };
 type CommerceConnector = { id: string; name: string; source: Order["source"] | "Generic"; url: string; enabled: boolean; hasToken?: boolean; lastStatus?: string; lastStatusCode?: number; lastError?: string; lastSyncAt?: string };
 type CommerceImport = { id: string; source: string; connectorId?: string; connectorName?: string; status: string; created: number; skipped: number; at: string; error?: string };
 type HotDropMode = "Upload Only" | "Direct Print" | "Auto-Queue";
-type WorkspaceSettings = { organizationName: string; defaultLocation: string; units: "metric" | "imperial"; currency: string; timezone: string; theme: "system" | "light" | "dark"; requireAdmin2fa: boolean; auditLogRetention: boolean; auditLogRetentionDays: number; restrictApiByIp: boolean; allowedApiIps: string[]; storageLimitGb: number; hotDropMode: HotDropMode; plan: string };
+type OnboardingStep = { id: string; title: string; description: string; status: "pending" | "complete" | "skipped"; autoComplete: boolean; note?: string; updatedAt?: string; updatedBy?: string };
+type OnboardingStatus = { generatedAt: string; workspace: { id: string; name: string; plan: string }; progress: { complete: number; total: number; percent: number }; steps: OnboardingStep[] };
+type SupportSnapshot = { service: string; generatedAt: string; generatedBy: string; workspace: { id: string; name: string; plan: string }; counts: Record<string, number>; readiness: { onboarding: OnboardingStatus["progress"]; integrityWarnings: number; storageLimitGb: number }; onboarding: OnboardingStatus; analytics: Partial<AnalyticsSummary> };
+type WorkspaceSettings = { organizationName: string; defaultLocation: string; units: "metric" | "imperial"; currency: string; timezone: string; theme: "system" | "light" | "dark"; requireAdmin2fa: boolean; auditLogRetention: boolean; auditLogRetentionDays: number; restrictApiByIp: boolean; allowedApiIps: string[]; storageLimitGb: number; hotDropMode: HotDropMode; plan: string; onboarding?: Record<string, { status: "pending" | "complete" | "skipped"; note?: string; updatedAt?: string; updatedBy?: string }> };
 type BillingTier = { id: string; name: string; storageLimitGb: number; monthlyPrice: number; currency: string; features: string[]; isCustom?: boolean };
 type BillingSummary = { status: string; plan: BillingTier; tiers: BillingTier[]; storage: { usedBytes: number; used: string; usedGb: number; limitGb: number; percent: number; files: number; storedFiles: number }; portalMode: "internal" | "external" | "stripe"; invoices: Array<{ id: string; provider?: string; plan: string; amount: number; currency: string; status: string; at: string; note?: string }>; sessions: Array<{ id: string; mode: string; provider?: string; status: string; url: string; createdAt: string; expiresAt: string }> };
 type RestoreSummary = { dryRun: boolean; restored?: boolean; collectionCounts: Record<string, number>; users: number; printers: number; queue: number; files: number; storagePathsStripped: number; filePayloadsRestored?: number; warnings: string[] };
@@ -211,21 +256,22 @@ type Addon = { id: string; name: string; description: string; category: string; 
 type Language = "en" | "zh-TW" | "zh-CN";
 type Todo = { id: string; title: string; owner: string; source: string; severity: "Low" | "Medium" | "High" | "Urgent"; due: string; kind: "slicing" | "scheduling" | "material" | "size" | "post" | "exception"; status?: "open" | "claimed" | "snoozed"; actionNote?: string; claimedBy?: string; snoozeUntil?: string };
 type TodoAction = { id: string; todoId: string; todoTitle: string; todoKind: Todo["kind"]; action: "claim" | "complete" | "snooze" | "reopen"; owner: string; note?: string; snoozeUntil?: string; createdBy?: string; at: string };
-type AnalyticsSummary = { jobs: number; active: number; queued: number; completed: number; failed: number; successRate: number; utilization: number; cost: number; printHours: number; materialMix: Record<string, number>; daily: Array<{ day: string; jobs: number; hours: number; success: number }> };
-type HistoryRecord = { id: string; fileId?: string; file: string; printerId?: string; printer: string; status: JobStatus; duration: string; material: string; cost: number; date: string; note: string; issueTag?: string; issueSeverity?: string; flaggedAt?: string; failureReason?: string; sourceOrderId?: string };
+type AnalyticsSummary = { jobs: number; active: number; queued: number; completed: number; failed: number; successRate: number; utilization: number; cost: number; printHours: number; wasteGrams?: number; wasteCost?: number; failureCategories?: Record<string, number>; rootCauses?: Array<{ label: string; count: number }>; printerReliability?: Array<{ printerId: string; printer: string; finished: number; failed: number; successRate: number; wasteGrams: number; wasteCost: number }>; materialMix: Record<string, number>; daily: Array<{ day: string; jobs: number; hours: number; success: number }> };
+type HistoryRecord = { id: string; fileId?: string; file: string; printerId?: string; printer: string; status: JobStatus; duration: string; material: string; cost: number; date: string; note: string; issueTag?: string; issueSeverity?: string; flaggedAt?: string; failureReason?: string; failureCategory?: string; rootCause?: string; correctiveAction?: string; wasteGrams?: number; wasteCost?: number; wasteSpoolId?: string; wasteInventoryDeductedAt?: string; sourceOrderId?: string };
 type SlicerJob = { id: string; fileId: string; sourceFile: string; printerId: string; printer: string; profileId?: string; profile?: string; status: "running" | "complete" | "failed"; engine: "internal" | "external"; settings: { material: string; layerHeight: string; infill: number; supports: boolean }; outputName?: string; outputSize?: string; outputPath?: string; warning?: string; error?: string; createdAt: string; completedAt?: string };
 type AuditEvent = { id: string; type: string; message: string; at: string; data?: Record<string, unknown> };
 type AutoScheduleResult = {
   strategy?: "material-color" | "load-balance" | "due-priority" | "constraint-balanced-cost" | "constraint-due-risk" | "constraint-changeover-min";
   dryRun?: boolean;
   solver?: { engine: string; objective: "balanced-cost" | "due-risk" | "changeover-min"; feasible: boolean; bounded: boolean; result: number; variables: number };
-  scheduled: Array<{ jobId: string; file: string; printerId: string; printer: string; scheduledStart: string; durationMinutes: number; changeCost: number; score: number; warnings: string[]; slot?: number; objective?: string }>;
+  scheduled: Array<{ jobId: string; file: string; printerId: string; printer: string; scheduledStart: string; durationMinutes: number; changeCost: number; score: number; warnings: string[]; slot?: number; objective?: string; materialReservation?: QueueItem["materialReservation"] | null }>;
   skipped: Array<{ jobId: string; file: string; reason: string }>;
   jobs: QueueItem[];
+  spools?: Spool[];
 };
 type OptimizeScheduleStrategy = "material-color" | "load-balance" | "due-priority";
 type ConstraintObjective = "balanced-cost" | "due-risk" | "changeover-min";
-type QueueMatchResult = { dryRun: boolean; maxActiveSlots: number; activeSlots: number; openSlots: number; matches: Array<{ jobId: string; file: string; printerId: string; printer: string; scheduledStart?: string; priority: QueueItem["priority"]; material: string; warnings: string[]; score: number }>; skipped: Array<{ jobId: string; file: string; reason: string }>; jobs: QueueItem[]; printers: Printer[]; todos: Todo[] };
+type QueueMatchResult = { dryRun: boolean; maxActiveSlots: number; activeSlots: number; openSlots: number; matches: Array<{ jobId: string; file: string; printerId: string; printer: string; scheduledStart?: string; priority: QueueItem["priority"]; material: string; warnings: string[]; score: number }>; skipped: Array<{ jobId: string; file: string; reason: string }>; jobs: QueueItem[]; printers: Printer[]; spools?: Spool[]; todos: Todo[] };
 type HotDropResult = { mode: HotDropMode; file: Partial<PrintFile>; folder: FileFolder; stlBytes: number; job?: QueueItem | null; match?: QueueMatchResult | null; files: Partial<PrintFile>[]; folders: FileFolder[]; queue: QueueItem[]; printers: Printer[]; todos: Todo[] };
 type ParametricNameplateDraft = { text: string; width: number; height: number; thickness: number; material: string; feature: "keyholes" | "magnet pockets" | "plain plate"; createPart: boolean };
 type ParametricNameplateResult = { file: PrintFile; part?: Part | null; estimates: { grams: number; minutes: number; quote: { total: number } }; stlBytes: number; files?: PrintFile[]; parts?: Part[] };
@@ -272,6 +318,7 @@ const zhTwTranslations: Record<string, string> = {
   "Notifications": "通知",
   "Settings": "設定",
   "Hot Drop": "快速投放",
+  "Go-live readiness": "上線準備度",
   "Drop demo files here": "投放 Demo 檔案",
   "Run hot drop": "執行快速投放",
   "Print Farm Trial": "打印農場試用",
@@ -398,6 +445,9 @@ const zhTwTranslations: Record<string, string> = {
   "Filament inventory": "線材庫存",
   "Add spool": "新增線材捲",
   "Low stock": "低庫存",
+  "Low available stock": "可用庫存偏低",
+  "Reserved": "已預留",
+  "Available": "可用",
   "Dry storage": "乾燥儲存",
   "Machine profiles": "機器設定檔",
   "Process presets": "製程預設",
@@ -405,6 +455,7 @@ const zhTwTranslations: Record<string, string> = {
   "Import Orca profile": "匯入 Orca 設定檔",
   "Sync Bambu profiles": "同步 Bambu 設定檔",
   "Export": "匯出",
+  "Hold": "暫停",
   "Complete": "完成",
   "Progress": "進度",
   "Severity": "嚴重度",
@@ -434,8 +485,10 @@ const zhTwTranslations: Record<string, string> = {
   "ready": "就緒",
   "draft": "草稿",
   "received": "已接單",
+  "on_hold": "暫停中",
   "packed": "已包裝",
   "shipped": "已出貨",
+  "completed": "已完成",
   "matched": "已匹配",
   "waiting": "等待中",
   "Rush": "急件",
@@ -498,8 +551,10 @@ const zhTwTranslations: Record<string, string> = {
   "Configure": "設定",
   "Confirm new password": "確認新密碼",
   "Connector save failed. Check URL, role, or API status.": "連接器儲存失敗，請檢查 URL、角色或 API 狀態。",
+  "Creating": "建立中",
   "Constraint solve": "限制式求解",
   "Controls": "控制",
+  "Converting": "轉換中",
   "Cooldown": "冷卻",
   "Copy this key now. It will only be shown once.": "請立即複製此金鑰，它只會顯示一次。",
   "Cost catalog": "成本目錄",
@@ -520,6 +575,9 @@ const zhTwTranslations: Record<string, string> = {
   "Dry run": "試算",
   "Due window hours": "交期視窗小時數",
   "Due-risk solve": "交期風險求解",
+  "Checking": "檢查中",
+  "Create jobs": "建立任務",
+  "Creating reorders": "建立補貨中",
   "Duplicate generation blocked": "已阻擋重複生成",
   "Dynamic model parameters": "動態模型參數",
   "Email provider webhook": "Email 服務 Webhook",
@@ -540,6 +598,7 @@ const zhTwTranslations: Record<string, string> = {
   "Flag": "標記",
   "Forge A1": "Forge A1",
   "Generated preview": "已產生預覽",
+  "Generate reorder plan": "生成補貨計畫",
   "Handling labor": "處理人力",
   "Height mm": "高度 mm",
   "Home axes": "歸零軸向",
@@ -549,11 +608,27 @@ const zhTwTranslations: Record<string, string> = {
   "Integrations and API": "整合與 API",
   "Invite teammate": "邀請隊友",
   "Invite user": "邀請使用者",
+  "Loading go-live checklist": "正在載入上線檢查清單",
+  "Workspace readiness will appear here": "工作區準備狀態會顯示在這裡",
   "Jobs and print hours": "任務與打印時數",
+  "History jobs": "歷史任務",
+  "Print jobs": "打印任務",
+  "Success rate": "成功率",
+  "Utilization": "稼動率",
+  "Cost": "成本",
+  "Waste": "耗損",
+  "Waste cost": "耗損成本",
+  "Failure intelligence": "失敗智慧",
+  "Waste by printer": "各設備耗損",
+  "No failure records yet": "尚無失敗紀錄",
+  "Flag failed prints from history": "從歷史紀錄標記失敗打印",
+  "Flagged": "已標記",
+  "Root cause": "根因",
   "Jobs that still need slicing or already have a slot are left untouched.": "仍需切片或已有時段的任務會保持不變。",
   "Keep production moving": "保持生產運作",
   "Keyholes": "鑰匙孔",
   "3DSTU FarmFlow": "3DSTU FarmFlow",
+  "Add a spool before creating a purchase request": "建立採購請求前請先新增線材捲",
   "Loaded filament": "已載入線材",
   "Log 20g usage": "記錄使用 20g",
   "Log 20g usage on scan": "掃描時記錄使用 20g",
@@ -567,6 +642,7 @@ const zhTwTranslations: Record<string, string> = {
   "Manual": "手動",
   "Manual profile": "手動設定檔",
   "Mark rush": "標記急件",
+  "Mark quoted": "標記已報價",
   "Match queue now": "立即匹配佇列",
   "Matching inspector": "匹配檢查器",
   "Material compatibility": "材料相容性",
@@ -635,6 +711,7 @@ const zhTwTranslations: Record<string, string> = {
   "Queue records stay available for audit and reporting after archiving.": "封存後佇列紀錄仍可用於稽核與報表。",
   "Refresh": "重新整理",
   "Reprint": "重新打印",
+  "Reopen": "重新開啟",
   "Reprint added locally": "重新打印已暫存於本機",
   "Reprint added to queue": "重新打印已加入佇列",
   "Require 2FA for admins": "管理員必須使用 2FA",
@@ -672,6 +749,8 @@ const zhTwTranslations: Record<string, string> = {
   "Spool added": "線材捲已新增",
   "Spool scan did not match inventory": "線材捲掃描未匹配庫存",
   "Spool scanner": "線材捲掃描器",
+  "Support snapshot generated": "支援快照已產生",
+  "Support snapshot failed. Owner/admin export access is required.": "支援快照失敗，需要擁有者/管理員匯出權限。",
   "Success trend": "成功率趨勢",
   "Sync all": "全部同步",
   "Team and permissions": "團隊與權限",
@@ -723,7 +802,212 @@ const zhTwTranslations: Record<string, string> = {
   "Fallback enabled": "已啟用備援",
   "Exact profile required": "必須使用精確設定檔",
   "Paid orders can override classroom and low-priority queues when due dates are close.": "付費訂單在交期接近時可優先於教室與低優先佇列。",
-  "hour due window": "小時交期視窗"
+  "hour due window": "小時交期視窗",
+  "3D printing farm operating system": "3D 打印農場作業系統",
+  "Plan every printer, file, material, and operator from one production control layer.": "從同一個生產控制層規劃每台打印機、檔案、材料與操作員。",
+  "Open App": "開啟系統",
+  "Contact 3DSTU": "聯絡 3DSTU",
+  "Live production signals": "即時生產訊號",
+  "Active queue": "進行中佇列",
+  "Automated todos": "自動待辦",
+  "Printer states": "打印機狀態",
+  "Built for real print-farm operations": "為真實打印農場營運打造",
+  "One system for the work between orders and machines.": "用一套系統串起訂單與機器之間的所有工作。",
+  "Order to production": "訂單到生產",
+  "Turn commerce or manual jobs into structured queue items.": "將電商或手動任務轉成結構化佇列項目。",
+  "Scheduling intelligence": "智慧排單",
+  "Match material, size, due date, and printer state before production starts.": "在生產開始前匹配材料、尺寸、交期與打印機狀態。",
+  "Human exception handling": "人工例外處理",
+  "Generate todos for slicing, material changes, post-processing, and late work.": "自動產生切片、換料、後處理與逾期工作的待辦。",
+  "Operational backbone": "營運骨幹",
+  "Keep files, versions, maintenance, roles, audit logs, and backups together.": "集中管理檔案、版本、維護、角色、稽核紀錄與備份。",
+  "Deployment ready": "可部署上線",
+  "Docker, Ubuntu, Nginx, HTTPS, backups, and health checks are part of the repo.": "Docker、Ubuntu、Nginx、HTTPS、備份與健康檢查都已納入倉庫。",
+  "Professional setup available": "提供專業建置服務",
+  "3DSTU support snapshot": "3DSTU 支援快照",
+  "Creates a redacted operational snapshot for support without passwords, tokens, API key hashes, or billing secrets.": "建立遮蔽敏感資訊的營運支援快照，不包含密碼、Token、API key hash 或付款機密。",
+  "G-code toolpath": "G-code 路徑",
+  "Compatible printers": "相容打印機",
+  "No matching printer": "沒有相符打印機",
+  "Check material and build volume": "檢查材料與成型尺寸",
+  "Generate": "產生",
+  "Generating": "產生中",
+  "Go-live checklist update failed. Check role or API status.": "上線檢查清單更新失敗，請檢查角色或 API 狀態。",
+  "Need installation, training, or technical support?": "需要安裝、訓練或技術支援嗎？",
+  "Website sections": "網站段落",
+  "Platform": "平台",
+  "Workflow": "流程",
+  "Operations": "營運",
+  "Support": "支援",
+  "Today's queue": "今日佇列",
+  "jobs structured by status, material, and due risk": "依狀態、材料與交期風險結構化的任務",
+  "Operator todos": "操作員待辦",
+  "generated from production state instead of manual reminders": "由生產狀態自動產生，而非手動提醒",
+  "Deployment track": "部署軌道",
+  "Docker, HTTPS, backups, health checks, and audit logs": "Docker、HTTPS、備份、健康檢查與稽核紀錄",
+  "Production control for serious 3D printing teams.": "為專業 3D 打印團隊打造的生產控制系統。",
+  "3DSTU FarmFlow connects orders, files, materials, printers, operators, alerts, and backups into one deployable SaaS platform for real print-farm operations.": "3DSTU FarmFlow 將訂單、檔案、材料、打印機、操作員、警報與備份整合成一套可部署的 SaaS 平台，服務真實打印農場營運。",
+  "Talk to 3DSTU": "聯絡 3DSTU",
+  "Built for": "適用於",
+  "Print farms": "打印農場",
+  "Service bureaus": "代工服務商",
+  "Makerspaces": "創客空間",
+  "School labs": "學校實驗室",
+  "Factory prototyping teams": "工廠打樣團隊",
+  "Why it exists": "為什麼需要它",
+  "A print farm does not need another task list. It needs an operating layer.": "打印農場不需要另一個任務清單，而是需要一個作業控制層。",
+  "From order chaos to machine-ready work": "把混亂訂單變成可上機工作",
+  "Every job carries the production facts that matter: model file, material, color, nozzle, build volume, due date, slicing state, operator owner, printer match, and exception history.": "每個任務都帶著真正影響生產的資料：模型檔、材料、顏色、噴嘴、成形尺寸、交期、切片狀態、負責操作員、打印機匹配與異常歷史。",
+  "Humans handle exceptions, not repetitive tracking": "人處理例外，不處理重複追蹤",
+  "Todos are generated when state changes: slicing needed, scheduling needed, material mismatch, maintenance risk, completion pickup, post-processing, or late-work escalation.": "狀態變更時自動產生待辦：需要切片、需要排單、材料不符、維護風險、完成取件、後處理或逾期升級。",
+  "Deployment is part of the product": "部署就是產品的一部分",
+  "The repo includes Docker deployment, Nginx and HTTPS guidance, health checks, backups, restore preview, audit trails, and support paths for customer farms.": "倉庫包含 Docker 部署、Nginx 與 HTTPS 指引、健康檢查、備份、還原預覽、稽核軌跡，以及客戶農場的支援路徑。",
+  "Operating workflow": "作業流程",
+  "One flow from intake to completed print.": "從接單到完成打印的一條流程。",
+  "FarmFlow is designed around the production decisions that cost time when they live in chat, spreadsheets, slicer notes, and memory.": "FarmFlow 圍繞那些散落在聊天、試算表、切片備註和人腦記憶中、最耗時間的生產決策而設計。",
+  "Intake": "接單",
+  "Bring in manual, CSV, webhook, or commerce orders and turn them into structured production jobs.": "匯入手動、CSV、Webhook 或電商訂單，轉成結構化生產任務。",
+  "Validate": "驗證",
+  "Check model files, material needs, print volume, slicing state, and quote assumptions before the job reaches a machine.": "在任務上機前檢查模型檔、材料需求、打印尺寸、切片狀態與報價假設。",
+  "Drag jobs onto printers or run automated matching with material, color, nozzle, capacity, and due-date constraints.": "將任務拖到打印機，或依材料、顏色、噴嘴、產能與交期限制進行自動匹配。",
+  "Produce": "生產",
+  "Track printer state, operator actions, file versions, maintenance, alerts, and exception todos in one control layer.": "在同一控制層追蹤打印機狀態、操作員動作、檔案版本、維護、警報與例外待辦。",
+  "Close the loop": "閉環",
+  "Archive job history, reprint from previous work, export reports, restore backups, and keep customer operations traceable.": "封存任務歷史、從舊任務重印、匯出報表、還原備份，並保持客戶營運可追溯。",
+  "Platform depth": "平台深度",
+  "Built around the real constraints of printers, people, files, and delivery promises.": "圍繞打印機、人員、檔案與交付承諾的真實限制打造。",
+  "Queue intelligence": "佇列智慧",
+  "Status-driven jobs, rush flags, due windows, commerce imports, CSV intake, SKU mapping, and reprint history.": "狀態驅動任務、急件標記、交期視窗、電商匯入、CSV 接單、SKU 對應與重印歷史。",
+  "Scheduling engine": "排單引擎",
+  "Drag-and-drop planning, dry-run matching, material conflicts, volume checks, due-risk warnings, and load balancing.": "拖曳排程、試算匹配、材料衝突、尺寸檢查、交期風險警告與負載平衡。",
+  "File operations": "檔案作業",
+  "STL, 3MF, and G-code uploads, model metadata, generated thumbnails, stored versions, slicer profiles, and G-code outputs.": "STL、3MF 與 G-code 上傳、模型資料、縮圖生成、版本儲存、切片設定檔與 G-code 輸出。",
+  "Fleet control": "設備控制",
+  "Printer states, bridge configs, OctoPrint/Moonraker-style sync, API actions, telemetry, and maintenance workflows.": "打印機狀態、橋接設定、OctoPrint/Moonraker 類型同步、API 動作、遙測與維護流程。",
+  "Team execution": "團隊執行",
+  "Role permissions, automatic todos, 2FA, audit logs, notifications, webhooks, Slack, Discord, and email channels.": "角色權限、自動待辦、2FA、稽核紀錄、通知、Webhook、Slack、Discord 與 Email 通道。",
+  "Business layer": "商業層",
+  "Cost catalog, storage usage, billing hooks, quote assumptions, backups, restore previews, and customer-ready deployment.": "成本目錄、儲存用量、帳務掛鉤、報價假設、備份、還原預覽與客戶可用部署。",
+  "See the work that needs attention before it becomes expensive.": "在問題變昂貴前，看見需要注意的工作。",
+  "Which jobs are due today, late, blocked, or waiting for slicing.": "哪些任務今日到期、逾期、被阻擋或等待切片。",
+  "Which printers are idle, printing, paused, offline, in error, or under maintenance.": "哪些打印機閒置、打印中、暫停、離線、異常或維護中。",
+  "Which material changes, build-volume conflicts, or due-date risks need a person.": "哪些換料、成形尺寸衝突或交期風險需要人工處理。",
+  "Which operators have actionable work generated from the production state.": "哪些操作員有由生產狀態產生的可執行工作。",
+  "3D printing production scheduling workspace": "3D 打印生產排程工作區",
+  "3DSTU customer model": "3DSTU 客戶模式",
+  "Free for 3DSTU farm customers, source-available with commercial-use boundaries.": "免費提供給 3DSTU 農場客戶使用，原始碼可見並設有商業使用邊界。",
+  "Use it to run your farm": "用它營運你的農場",
+  "Customers can self-host, operate production, and earn from their own printing services.": "客戶可以自架、營運生產，並從自己的打印服務中獲利。",
+  "Protect the platform": "保護平台",
+  "The license does not allow selling the script, modified source, clones, or hosted resale services.": "授權不允許販售腳本、修改後原始碼、複製品或託管轉售服務。",
+  "Get expert setup": "取得專家建置",
+  "Professional installation, technical setup, and training are available from 3DSTU.": "3DSTU 可提供專業安裝、技術設定與訓練。",
+  "Need installation, training, custom integration, or technical support?": "需要安裝、訓練、自訂整合或技術支援嗎？",
+  "Contact the 3DSTU team for deployment support, farm onboarding, connector planning, and production workflow design.": "聯絡 3DSTU 團隊取得部署支援、農場導入、連接器規劃與生產流程設計。",
+  "Designed for": "適用於",
+  "Docs": "文檔",
+  "GitHub": "GitHub",
+  "Install": "安裝",
+  "Roadmap": "路線圖",
+  "Project home": "專案首頁",
+  "PrusaLink": "PrusaLink",
+  "Connect Prusa printers through the local PrusaLink HTTP API.": "透過本機 PrusaLink HTTP API 連接 Prusa 打印機。",
+  "GitHub repository": "GitHub 倉庫",
+  "Source, releases, deployment scripts, issue tracking, and project documentation live in the public repository.": "原始碼、版本、部署腳本、問題追蹤與專案文檔都放在公開倉庫。",
+  "Open GitHub": "開啟 GitHub",
+  "Current version": "目前版本",
+  "System version": "系統版本",
+  "Manual recipe": "手動配方",
+  "Mark ordered": "標記已下單",
+  "Material purchasing": "材料採購",
+  "No production templates yet": "尚無生產範本",
+  "No purchase requests yet. Generate a reorder plan from low-stock spools.": "尚無採購請求，請從低庫存線材生成補貨計畫。",
+  "No quote requests yet. Website submissions will appear here.": "尚無詢價請求，網站提交會顯示在這裡。",
+  "No quote expiry": "未設定報價有效期",
+  "Download model": "下載模型",
+  "Open reorders": "待處理補貨",
+  "Copy portal link": "複製入口連結",
+  "Rotate link": "輪換連結",
+  "Rotating": "輪換中",
+  "Customer portal link copied": "客戶入口連結已複製",
+  "Customer portal link ready": "客戶入口連結已建立",
+  "Customer portal link could not be created. Check API status.": "無法建立客戶入口連結，請檢查 API 狀態。",
+  "Customer quote intake": "客戶詢價入口",
+  "Send print requirements into the production pipeline.": "將打印需求送入生產流程。",
+  "Company": "公司",
+  "Project": "專案",
+  "Budget": "預算",
+  "Due date": "交期",
+  "File name": "檔案名稱",
+  "Quantity": "數量",
+  "Notes": "備註",
+  "Request quote": "送出詢價",
+  "Quote": "報價",
+  "model.stl / model.3mf": "model.stl / model.3mf",
+  "qr-...": "qr-...",
+  "Quote intake": "詢價入口",
+  "Quote requests": "詢價請求",
+  "Quote request ID": "詢價單 ID",
+  "Quote status lookup": "詢價狀態查詢",
+  "Quote valid until": "報價有效至",
+  "Requesting quote changes...": "正在送出修改要求...",
+  "Tracking token": "追蹤權杖",
+  "Check status": "查詢狀態",
+  "Approve quote": "接受報價",
+  "Reject quote": "拒絕報價",
+  "Request changes": "要求修改",
+  "Save the returned tracking token to check quote status after the operator reviews it.": "請保存回傳的追蹤權杖，操作員審核後可查詢詢價狀態。",
+  "Quoting": "報價中",
+  "Accept / order": "接受 / 轉訂單",
+  "New quotes": "新詢價",
+  "Purchase request": "採購請求",
+  "Qty": "數量",
+  "Receive": "收貨",
+  "Receiving": "收貨中",
+  "Save template": "儲存範本",
+  "Save a reusable recipe from the file library, then run it into the print queue whenever a customer or stock batch repeats.": "從檔案庫儲存可重複使用的配方，當客戶訂單或庫存批次重複時即可送入打印佇列。",
+  "Saving template": "儲存範本中",
+  "Templates": "範本",
+  "Upload a model file before saving a template": "儲存範本前請先上傳模型檔",
+  "Public deployment": "公開部署",
+  "Production domain": "正式網域",
+  "Documentation and install path": "文檔與安裝路徑",
+  "Run it locally, deploy it with Docker, or operate it behind Nginx and HTTPS on Ubuntu.": "可以本機執行、使用 Docker 部署，或在 Ubuntu 上搭配 Nginx 與 HTTPS 營運。",
+  "Clone": "複製",
+  "Deploy": "部署",
+  "Verify": "驗證",
+  "git clone the repository and copy .env.example to .env.": "git clone 倉庫，並將 .env.example 複製成 .env。",
+  "Set admin credentials, public URL, worker token, metrics token, and production security flags.": "設定管理員帳密、公開 URL、worker token、metrics token 與正式環境安全開關。",
+  "Start Docker Compose or run the Ubuntu deployment scripts for Nginx, HTTPS, backups, and ops checks.": "啟動 Docker Compose，或執行 Ubuntu 部署腳本設定 Nginx、HTTPS、備份與營運檢查。",
+  "Run QC, readiness, smoke checks, backup drills, and then push the versioned release to GitHub.": "執行 QC、readiness、smoke check、備份演練，然後將版本化 release 推到 GitHub。",
+  "View install guide": "查看安裝指南",
+  "View operations runbook": "查看營運手冊",
+  "Competitive roadmap": "競品吸收路線圖",
+  "What we are absorbing from the print-farm ecosystem.": "我們正在吸收 3D 打印農場生態系的優點。",
+  "FDM Monster": "FDM Monster",
+  "Multi-protocol printer connectors, batch printing, grid-based printer layout, backups, and thumbnails.": "多協議打印機連接、批量打印、網格化設備佈局、備份與縮圖。",
+  "OctoFarm": "OctoFarm",
+  "Single-pane monitoring for many OctoPrint instances and websocket-driven farm status.": "多個 OctoPrint 實例的單一面板監控與 WebSocket 農場狀態。",
+  "Spoolman": "Spoolman",
+  "Filament inventory, spool usage tracking, and automatic weight deduction through Klipper/Moonraker-style integrations.": "線材庫存、線材捲用量追蹤，以及透過 Klipper/Moonraker 類整合自動扣重。",
+  "Obico and PrintWatch": "Obico 與 PrintWatch",
+  "AI failure detection, camera-driven monitoring, anomaly alerts, and remote printer visibility.": "AI 失敗偵測、攝影機監控、異常警報與遠端設備可視化。",
+  "FilaOps, LayerlyOS, Daedalus, runsodin, PrintStream": "FilaOps、LayerlyOS、Daedalus、runsodin、PrintStream",
+  "ERP/MRP depth, no-cloud MES/SCADA positioning, profitability analytics, PWA, shared libraries, and plugin systems.": "ERP/MRP 深度、無雲端 MES/SCADA 定位、盈利分析、PWA、共享檔案庫與插件系統。",
+  "Next build priorities": "下一階段開發重點",
+  "Printer bridge hardening": "打印機橋接強化",
+  "Connector test harnesses for OctoPrint, Moonraker/Klipper, PrusaLink, Bambu LAN, Creality, and Snapmaker-style devices.": "為 OctoPrint、Moonraker/Klipper、PrusaLink、Bambu LAN、Creality 與 Snapmaker 類設備建立連接器測試框架。",
+  "Material automation": "材料自動化",
+  "Reserve spools for scheduled work, deduct usage from completed prints, and warn before a job runs out of material.": "為已排程任務預留線材，完成打印後扣除用量，並在材料不足前警告。",
+  "Failure and waste intelligence": "失敗與耗損智慧",
+  "Track failed prints, wasted filament, root causes, reprint cost, and printer-specific reliability trends.": "追蹤失敗打印、浪費線材、根因、重印成本與各設備可靠度趨勢。",
+  "File and preview depth": "檔案與預覽深度",
+  "Add richer STL/3MF previews, G-code visualization, slicing presets, and reusable production templates.": "加入更完整的 STL/3MF 預覽、G-code 視覺化、切片預設與可重用生產範本。",
+  "Docs in repository": "倉庫文檔",
+  "Installation guide": "安裝指南",
+  "Operations runbook": "營運手冊",
+  "Roadmap document": "路線圖文檔",
+  "From MVP shell toward production-grade operations.": "? MVP ????????????"
 };
 
 const traditionalToSimplifiedPairs = [
@@ -784,7 +1068,7 @@ function localizeText(value: string, language: Language) {
 function applyLanguage(language: Language) {
   document.documentElement.lang = language;
   const ignored = new Set(["SCRIPT", "STYLE", "SVG", "PATH", "CODE", "SELECT", "OPTION", "TEXTAREA"]);
-  const root = document.querySelector(".auth-page, .app-shell") || document.body;
+  const root = document.querySelector(".marketing-site, .auth-page, .app-shell") || document.body;
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   const nodes: Text[] = [];
   while (walker.nextNode()) nodes.push(walker.currentNode as Text);
@@ -1032,6 +1316,7 @@ const auditSeed = [
 const integrations = [
   ["OctoPrint", "Connect USB printers through an OctoPrint plugin.", "Ready"],
   ["Klipper / Moonraker", "Stream status and send controls over a local bridge.", "Ready"],
+  ["PrusaLink", "Connect Prusa printers through the local PrusaLink HTTP API.", "Ready"],
   ["Cura", "Send sliced files from Cura into the cloud library.", "Available"],
   ["OrcaSlicer", "Push plate exports to selected folders and queues.", "Available"],
   ["Slack", "Notify channels when jobs complete or fail.", "Connected"],
@@ -1197,6 +1482,7 @@ function applyTodoActions(todos: Todo[], actions: TodoAction[]) {
 
 function App() {
   const [language, setLanguage] = useState<Language>("en");
+  const [showMarketing, setShowMarketing] = useState(() => !Boolean(window.localStorage.getItem("layerpilot-token")) && window.location.hash !== "#app");
   const [authToken, setAuthToken] = useState(() => window.localStorage.getItem("layerpilot-token") || "");
   const [authed, setAuthed] = useState(() => Boolean(window.localStorage.getItem("layerpilot-token")));
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -1208,12 +1494,15 @@ function App() {
   const [queue, setQueue] = useState(initialQueue);
   const [todoActions, setTodoActions] = useState<TodoAction[]>([]);
   const [spools, setSpools] = useState(initialSpools);
+  const [purchaseRequests, setPurchaseRequests] = useState<PurchaseRequest[]>([]);
   const [maintenance, setMaintenance] = useState(initialMaintenance);
   const [maintenanceTemplates, setMaintenanceTemplates] = useState<MaintenanceTemplate[]>([]);
   const [maintenanceReports, setMaintenanceReports] = useState<MaintenanceReport[]>([]);
   const [users, setUsers] = useState(teamSeed);
   const [parts, setParts] = useState(partSeed);
   const [skus, setSkus] = useState(skuSeed);
+  const [productionTemplates, setProductionTemplates] = useState<ProductionTemplate[]>([]);
+  const [quoteRequests, setQuoteRequests] = useState<QuoteRequest[]>([]);
   const [orders, setOrders] = useState(orderSeed);
   const [profiles, setProfiles] = useState(profileSeed);
   const [profileDefaults, setProfileDefaults] = useState<ProfileDefaults>({ Machine: "prof-1", Process: "prof-2", Filament: "" });
@@ -1356,11 +1645,12 @@ function App() {
     const localWarnings = currentJob ? getScheduleWarnings(currentJob, printer) : [];
     setQueue((items) => items.map((item) => item.id === jobId ? { ...item, printerId: printer.id, printer: printer.name, scheduledStart: item.scheduledStart || scheduledStart, scheduleWarnings: localWarnings, stage: item.stage === "needs slicing" ? "needs slicing" : "scheduled" } : item));
     try {
-      const scheduled = await apiRequest<{ job: QueueItem; warnings?: string[] }>(`/api/queue/${jobId}/schedule`, {
+      const scheduled = await apiRequest<{ job: QueueItem; warnings?: string[]; spools?: Spool[] }>(`/api/queue/${jobId}/schedule`, {
         method: "PATCH",
         body: JSON.stringify({ printerId: printer.id, scheduledStart })
       });
       setQueue((items) => items.map((item) => item.id === jobId ? scheduled.job : item));
+      if (scheduled.spools) setSpools(scheduled.spools);
       setBackendStatus("connected");
       return scheduled.warnings || scheduled.job.scheduleWarnings || [];
     } catch {
@@ -1376,6 +1666,7 @@ function App() {
         body: JSON.stringify({ includeBusyPrinters: true, respectMaterial: true, respectBuildVolume: true, startMinute: 8 * 60 })
       });
       setQueue((items) => items.map((item) => result.jobs.find((job) => job.id === item.id) || item));
+      if (result.spools) setSpools(result.spools);
       setBackendStatus("connected");
       return result;
     } catch {
@@ -1422,6 +1713,7 @@ function App() {
         body: JSON.stringify({ strategy, includeBusyPrinters: true, respectMaterial: true, respectBuildVolume: true, startMinute: 8 * 60 })
       });
       setQueue((items) => items.map((item) => result.jobs.find((job) => job.id === item.id) || item));
+      if (result.spools) setSpools(result.spools);
       setBackendStatus("connected");
       return result;
     } catch {
@@ -1459,6 +1751,7 @@ function App() {
         body: JSON.stringify({ objective, includeBusyPrinters: true, respectMaterial: true, respectBuildVolume: true, startMinute: 8 * 60, maxJobs: 80 })
       });
       setQueue((items) => items.map((item) => result.jobs.find((job) => job.id === item.id) || item));
+      if (result.spools) setSpools(result.spools);
       setBackendStatus("connected");
       return result;
     } catch {
@@ -1481,6 +1774,7 @@ function App() {
       if (!dryRun) {
         setQueue((items) => items.map((item) => result.jobs.find((job) => job.id === item.id) || item));
         setPrinters(result.printers);
+        if (result.spools) setSpools(result.spools);
       }
       setBackendStatus("connected");
       return result;
@@ -1505,11 +1799,12 @@ function App() {
   const updateQueueStatus = async (jobId: string, status: JobStatus) => {
     setQueue((items) => items.map((job) => job.id === jobId ? { ...job, status } : job));
     try {
-      const updated = await apiRequest<{ job: QueueItem }>(`/api/queue/${jobId}/status`, {
+      const updated = await apiRequest<{ job: QueueItem; spools?: Spool[] }>(`/api/queue/${jobId}/status`, {
         method: "PATCH",
         body: JSON.stringify({ status })
       });
       setQueue((items) => items.map((job) => job.id === jobId ? updated.job : job));
+      if (updated.spools) setSpools(updated.spools);
       setBackendStatus("connected");
     } catch {
       setBackendStatus("local");
@@ -1550,16 +1845,73 @@ function App() {
   const updateOrderStatus = async (orderId: string, status: Order["status"]) => {
     setOrders((items) => items.map((order) => order.id === orderId ? { ...order, status } : order));
     try {
-      const updated = await apiRequest<Order>(`/api/orders/${orderId}/status`, {
+      const updated = await apiRequest<OrderStatusUpdateResult>(`/api/orders/${orderId}/status`, {
         method: "PATCH",
         body: JSON.stringify({ status })
       });
-      setOrders((items) => items.map((order) => order.id === orderId ? updated : order));
+      const nextOrder = updated.order || updated;
+      setOrders((items) => items.map((order) => order.id === orderId ? nextOrder : order));
+      if (updated.jobs?.length) {
+        setQueue((items) => items.map((job) => updated.jobs?.find((updatedJob) => updatedJob.id === job.id) || job));
+      }
+      if (updated.spools) setSpools(updated.spools);
+      setBackendStatus("connected");
+      return nextOrder;
+    } catch {
+      setBackendStatus("local");
+      return orders.find((order) => order.id === orderId);
+    }
+  };
+
+  const updateQuoteRequest = async (quoteId: string, patch: Partial<Pick<QuoteRequest, "status" | "priority" | "quotedValue" | "validUntil" | "internalNote">>) => {
+    setQuoteRequests((items) => items.map((quote) => quote.id === quoteId ? { ...quote, ...patch } : quote));
+    try {
+      const updated = await apiRequest<QuoteRequest>(`/api/quoteRequests/${quoteId}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch)
+      });
+      setQuoteRequests((items) => items.map((quote) => quote.id === quoteId ? updated : quote));
       setBackendStatus("connected");
       return updated;
     } catch {
       setBackendStatus("local");
-      return orders.find((order) => order.id === orderId);
+      return quoteRequests.find((quote) => quote.id === quoteId);
+    }
+  };
+
+  const createQuotePortalLink = async (quote: QuoteRequest, rotate = false) => {
+    try {
+      const result = await apiRequest<{ quoteRequest: QuoteRequest; url: string; accessToken: string }>(`/api/quoteRequests/${quote.id}/customer-link`, {
+        method: "POST",
+        body: JSON.stringify({ rotate })
+      });
+      setQuoteRequests((items) => items.map((item) => item.id === quote.id ? result.quoteRequest : item));
+      setBackendStatus("connected");
+      return result;
+    } catch {
+      setBackendStatus("local");
+      return null;
+    }
+  };
+
+  const convertQuoteRequest = async (quote: QuoteRequest) => {
+    try {
+      const result = await apiRequest<{ quoteRequest: QuoteRequest; order: Order; job?: QueueItem | null; orders: Order[]; quoteRequests: QuoteRequest[]; queue?: QueueItem[]; todos?: Todo[] }>(`/api/quoteRequests/${quote.id}/convert-order`, {
+        method: "POST",
+        body: JSON.stringify({ due: quote.due, value: quote.quotedValue || quote.budget || 0, createJob: true })
+      });
+      setQuoteRequests(result.quoteRequests);
+      setOrders(result.orders);
+      if (result.queue) setQueue(result.queue);
+      setBackendStatus("connected");
+      return result;
+    } catch {
+      const order: Order = { id: `local-${crypto.randomUUID().slice(0, 8)}`, source: "Manual", externalId: quote.id, customer: quote.company ? `${quote.customer} / ${quote.company}` : quote.customer, items: [`${quote.project} x${quote.quantity}`], status: "received", due: quote.due, value: quote.quotedValue || quote.budget || 0 };
+      const updated = { ...quote, status: "converted" as const, orderId: order.id };
+      setQuoteRequests((items) => items.map((item) => item.id === quote.id ? updated : item));
+      setOrders((items) => [order, ...items]);
+      setBackendStatus("local");
+      return { quoteRequest: updated, order, orders: [order, ...orders], quoteRequests: quoteRequests.map((item) => item.id === quote.id ? updated : item) };
     }
   };
 
@@ -1629,6 +1981,108 @@ function App() {
     setSpools(result.spools || spools.map((spool) => spool.id === result.spool.id ? result.spool : spool));
     setBackendStatus("connected");
     return result;
+  };
+
+  const createPurchaseRequest = async (draft: Omit<PurchaseRequest, "id">) => {
+    const fallback: PurchaseRequest = { ...draft, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    try {
+      const created = await apiRequest<PurchaseRequest>("/api/purchaseRequests", {
+        method: "POST",
+        body: JSON.stringify(draft)
+      });
+      setPurchaseRequests((items) => [created, ...items.filter((item) => item.id !== created.id)]);
+      setBackendStatus("connected");
+      return created;
+    } catch {
+      setPurchaseRequests((items) => [fallback, ...items]);
+      setBackendStatus("local");
+      return fallback;
+    }
+  };
+
+  const generateReorderPlan = async (options: { thresholdGrams?: number; targetGrams?: number; quantity?: number } = {}) => {
+    try {
+      const result = await apiRequest<ReorderPlanResult>("/api/purchaseRequests/reorderPlan", {
+        method: "POST",
+        body: JSON.stringify(options)
+      });
+      setPurchaseRequests(result.purchaseRequests);
+      setBackendStatus("connected");
+      return result;
+    } catch {
+      const existingOpen = new Set(purchaseRequests.filter((request) => ["open", "ordered"].includes(request.status) && request.spoolId).map((request) => request.spoolId));
+      const threshold = options.thresholdGrams || 250;
+      const created = spools
+        .filter((spool) => Math.max(0, Number(spool.remaining || 0) - Number(spool.reserved || 0)) < threshold && !existingOpen.has(spool.id))
+        .map((spool): PurchaseRequest => ({
+          id: crypto.randomUUID(),
+          spoolId: spool.id,
+          material: spool.material,
+          color: spool.color,
+          brand: spool.brand,
+          quantity: options.quantity || 1,
+          targetGrams: options.targetGrams || spool.weight || 1000,
+          supplier: "Preferred supplier",
+          priority: "High",
+          status: "open",
+          due: "This week",
+          note: "Local reorder request",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }));
+      setPurchaseRequests((items) => [...created, ...items]);
+      setBackendStatus("local");
+      return { created, skipped: [], thresholdGrams: threshold, purchaseRequests: [...created, ...purchaseRequests] };
+    }
+  };
+
+  const updatePurchaseRequest = async (requestId: string, patch: Partial<PurchaseRequest>) => {
+    setPurchaseRequests((items) => items.map((request) => request.id === requestId ? { ...request, ...patch } : request));
+    try {
+      const updated = await apiRequest<PurchaseRequest>(`/api/purchaseRequests/${requestId}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch)
+      });
+      setPurchaseRequests((items) => items.map((request) => request.id === requestId ? updated : request));
+      setBackendStatus("connected");
+      return updated;
+    } catch {
+      setBackendStatus("local");
+      return purchaseRequests.find((request) => request.id === requestId);
+    }
+  };
+
+  const receivePurchaseRequest = async (requestId: string, location = "Rack Receiving") => {
+    try {
+      const result = await apiRequest<PurchaseReceiveResult>(`/api/purchaseRequests/${requestId}/receive`, {
+        method: "POST",
+        body: JSON.stringify({ location })
+      });
+      setPurchaseRequests(result.purchaseRequests);
+      setSpools(result.inventory);
+      setBackendStatus("connected");
+      return result;
+    } catch {
+      const request = purchaseRequests.find((item) => item.id === requestId);
+      if (!request) throw new Error("Purchase request not found");
+      const now = new Date().toISOString();
+      const newSpools = Array.from({ length: request.quantity || 1 }, (_, index): Spool => ({
+        id: crypto.randomUUID(),
+        material: request.material,
+        color: request.color,
+        brand: request.brand,
+        remaining: request.targetGrams,
+        weight: request.targetGrams,
+        location,
+        dry: true,
+        nfc: `LP-${request.material.toUpperCase()}-${index + 1}`
+      }));
+      const updated = { ...request, status: "received" as const, receivedAt: now, receivedSpoolIds: newSpools.map((spool) => spool.id), updatedAt: now };
+      setSpools((items) => [...items, ...newSpools]);
+      setPurchaseRequests((items) => items.map((item) => item.id === requestId ? updated : item));
+      setBackendStatus("local");
+      return { request: updated, spools: newSpools, purchaseRequests: purchaseRequests.map((item) => item.id === requestId ? updated : item), inventory: [...spools, ...newSpools] };
+    }
   };
 
   const actOnTodo = async (todoId: string, action: TodoAction["action"], payload: Partial<Pick<TodoAction, "owner" | "note" | "snoozeUntil">> = {}) => {
@@ -1847,6 +2301,63 @@ function App() {
       setSkus((items) => [...items, fallback]);
       setBackendStatus("local");
       return fallback;
+    }
+  };
+
+  const createProductionTemplate = async (draft: Omit<ProductionTemplate, "id">) => {
+    const fallback: ProductionTemplate = { ...draft, id: crypto.randomUUID(), runCount: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    try {
+      const created = await apiRequest<ProductionTemplate>("/api/productionTemplates", {
+        method: "POST",
+        body: JSON.stringify(draft)
+      });
+      setProductionTemplates((items) => [created, ...items.filter((item) => item.id !== created.id)]);
+      setBackendStatus("connected");
+      return created;
+    } catch {
+      setProductionTemplates((items) => [fallback, ...items]);
+      setBackendStatus("local");
+      return fallback;
+    }
+  };
+
+  const runProductionTemplate = async (template: ProductionTemplate, options: { quantity?: number; dryRun?: boolean } = {}) => {
+    try {
+      const result = await apiRequest<ProductionTemplateRunResult>(`/api/productionTemplates/${template.id}/run`, {
+        method: "POST",
+        body: JSON.stringify(options)
+      });
+      if (Array.isArray(result.queue)) setQueue(result.queue);
+      setProductionTemplates((items) => items.map((item) => item.id === result.template.id ? result.template : item));
+      setBackendStatus("connected");
+      return result;
+    } catch {
+      const jobs: QueueItem[] = Array.from({ length: options.quantity || template.quantity || 1 }, (_, index) => {
+        const file = files.find((item) => item.id === template.fileId);
+        return {
+          id: crypto.randomUUID(),
+          fileId: template.fileId,
+          file: `${template.name}${(options.quantity || template.quantity || 1) > 1 ? ` #${index + 1}` : ""}`,
+          printerId: template.printerId || "",
+          printer: template.printerId || "Unassigned",
+          status: "queued",
+          priority: template.priority,
+          stage: template.stage,
+          material: template.material || file?.material || "PLA",
+          color: template.color || "Any",
+          due: new Date(Date.now() + template.dueOffsetDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+          dimensions: file?.dimensions || [100, 100, 50],
+          assignee: "Scheduler",
+          time: template.time,
+          cost: template.cost,
+          added: `Template: ${template.name}`,
+          sourceTemplateId: template.id,
+          sourceSku: template.sku || ""
+        };
+      });
+      if (!options.dryRun) setQueue((items) => [...items, ...jobs]);
+      setBackendStatus("local");
+      return { template, jobs, dryRun: Boolean(options.dryRun), queue: options.dryRun ? queue : [...queue, ...jobs], todos };
     }
   };
 
@@ -2520,12 +3031,15 @@ function App() {
     if (Array.isArray(data.queue)) setQueue(data.queue as QueueItem[]);
     if (Array.isArray(data.todoActions)) setTodoActions(data.todoActions as TodoAction[]);
     if (Array.isArray(data.spools)) setSpools(data.spools as Spool[]);
+    if (Array.isArray(data.purchaseRequests)) setPurchaseRequests(data.purchaseRequests as PurchaseRequest[]);
     if (Array.isArray(data.maintenance)) setMaintenance(data.maintenance as MaintenanceJob[]);
     if (Array.isArray(data.maintenanceTemplates)) setMaintenanceTemplates(data.maintenanceTemplates as MaintenanceTemplate[]);
     if (Array.isArray(data.maintenanceReports)) setMaintenanceReports(data.maintenanceReports as MaintenanceReport[]);
     if (Array.isArray(data.users)) setUsers(data.users as User[]);
     if (Array.isArray(data.parts)) setParts(data.parts as Part[]);
     if (Array.isArray(data.skus)) setSkus(data.skus as SKU[]);
+    if (Array.isArray(data.productionTemplates)) setProductionTemplates(data.productionTemplates as ProductionTemplate[]);
+    if (Array.isArray(data.quoteRequests)) setQuoteRequests(data.quoteRequests as QuoteRequest[]);
     if (Array.isArray(data.orders)) setOrders(data.orders as Order[]);
     if (Array.isArray(data.profiles)) setProfiles(data.profiles as Profile[]);
     if (data.profileDefaults && typeof data.profileDefaults === "object") setProfileDefaults(data.profileDefaults as ProfileDefaults);
@@ -2587,7 +3101,9 @@ function App() {
     return () => source.close();
   }, [authed, authToken]);
 
-  if (!authed) return <AuthScreen onLogin={authenticate} language={language} setLanguage={setLanguage} />;
+  if (!authed && showMarketing) return <MarketingSite onOpenApp={() => { window.location.hash = "app"; setShowMarketing(false); }} />;
+
+  if (!authed) return <><AuthScreen onLogin={authenticate} language={language} setLanguage={setLanguage} /><VersionBadge /></>;
 
   return (
     <div className="app-shell">
@@ -2596,14 +3112,14 @@ function App() {
         <Topbar setMobileNav={setMobileNav} setView={setView} notifications={notifications.length} onLogout={logout} language={language} setLanguage={setLanguage} backendStatus={backendStatus} />
         {view === "dashboard" && <Dashboard metrics={metrics} printers={printers} queue={queue} setView={setView} setModal={setModal} onPrinter={setSelectedPrinter} />}
         {view === "printers" && <PrintersPage printers={printers} onPrinter={setSelectedPrinter} setModal={setModal} api={mockApi} />}
-        {view === "products" && <ProductsPage parts={parts} skus={skus} files={files} createPart={createPart} createSku={createSku} generateNameplate={generateNameplate} exportCatalog={exportCatalog} mapMaterials={mapMaterials} addToast={addToast} />}
-        {view === "orders" && <OrdersPage orders={orders} setOrders={setOrders} skus={skus} commerceConnectors={commerceConnectors} setCommerceConnectors={setCommerceConnectors} commerceImports={commerceImports} setCommerceImports={setCommerceImports} createOrder={createOrder} updateOrderStatus={updateOrderStatus} generateJobsForOrder={generateJobsForOrder} addToast={addToast} setBackendStatus={setBackendStatus} />}
+        {view === "products" && <ProductsPage parts={parts} skus={skus} productionTemplates={productionTemplates} files={files} createPart={createPart} createSku={createSku} createProductionTemplate={createProductionTemplate} runProductionTemplate={runProductionTemplate} generateNameplate={generateNameplate} exportCatalog={exportCatalog} mapMaterials={mapMaterials} addToast={addToast} />}
+        {view === "orders" && <OrdersPage orders={orders} setOrders={setOrders} quoteRequests={quoteRequests} files={files} skus={skus} commerceConnectors={commerceConnectors} setCommerceConnectors={setCommerceConnectors} commerceImports={commerceImports} setCommerceImports={setCommerceImports} createOrder={createOrder} updateOrderStatus={updateOrderStatus} updateQuoteRequest={updateQuoteRequest} createQuotePortalLink={createQuotePortalLink} convertQuoteRequest={convertQuoteRequest} generateJobsForOrder={generateJobsForOrder} downloadFile={downloadFile} addToast={addToast} setBackendStatus={setBackendStatus} />}
         {view === "files" && <FilesPage files={files} folders={fileFolders} queueFile={mockApi.addQueueFromFile} setView={setView} addToast={addToast} createSampleFile={createSampleFile} createFileFolder={createFileFolder} uploadModelFile={uploadModelFile} versionFile={versionFile} downloadFile={downloadFile} deleteFile={deleteFile} />}
         {view === "queue" && <QueuePage queue={queue} setQueue={setQueue} printers={printers} addToast={addToast} scheduleJob={scheduleQueueJob} updateStatus={updateQueueStatus} updatePriority={updateQueuePriority} matchQueueJobs={matchQueueJobs} />}
         {view === "scheduler" && <SchedulerPage queue={queue} setQueue={setQueue} printers={printers} addToast={addToast} scheduleJob={scheduleQueueJob} autoScheduleJobs={autoScheduleQueueJobs} optimizeScheduleJobs={optimizeScheduleJobs} solveScheduleJobs={solveScheduleJobs} />}
         {view === "todos" && <TodosPage todos={todos} queue={queue} printers={printers} currentUser={currentUser} actOnTodo={actOnTodo} addToast={addToast} />}
         {view === "slicer" && <SlicerPage files={files} printers={printers} slicerJobs={slicerJobs} addToast={addToast} runSlicerJob={runSlicerJob} />}
-        {view === "filament" && <FilamentPage spools={spools} createSpool={createSpool} updateSpool={updateSpool} logSpoolUsage={logSpoolUsage} generateSpoolLabels={generateSpoolLabels} scanSpool={scanSpool} addToast={addToast} />}
+        {view === "filament" && <FilamentPage spools={spools} purchaseRequests={purchaseRequests} createSpool={createSpool} updateSpool={updateSpool} logSpoolUsage={logSpoolUsage} generateSpoolLabels={generateSpoolLabels} scanSpool={scanSpool} createPurchaseRequest={createPurchaseRequest} generateReorderPlan={generateReorderPlan} updatePurchaseRequest={updatePurchaseRequest} receivePurchaseRequest={receivePurchaseRequest} addToast={addToast} />}
         {view === "profiles" && <ProfilesPage profiles={profiles} profileDefaults={profileDefaults} profileMatchingPolicy={profileMatchingPolicy} createProfile={createProfile} importProfiles={importProfiles} archiveProfile={archiveProfile} setDefaultProfile={setDefaultProfile} saveProfilePolicy={saveProfilePolicy} addToast={addToast} />}
         {view === "analytics" && <AnalyticsPage addToast={addToast} />}
         {view === "history" && <HistoryPage setQueue={setQueue} printers={printers} addToast={addToast} setBackendStatus={setBackendStatus} />}
@@ -2613,10 +3129,349 @@ function App() {
         {view === "addons" && <AddonsPage addons={addons} updateAddon={updateAddon} addToast={addToast} costCatalog={costCatalog} saveCostCatalog={saveCostCatalog} />}
         {view === "notifications" && <NotificationsPage notifications={notifications} setNotifications={setNotifications} channels={notificationChannels} setChannels={setNotificationChannels} deliveries={notificationDeliveries} setDeliveries={setNotificationDeliveries} addToast={addToast} />}
         {view === "settings" && <SettingsPage settings={workspaceSettings} setSettings={setWorkspaceSettings} addToast={addToast} setBackendStatus={setBackendStatus} currentUser={currentUser} changeOwnPassword={changeOwnPassword} setupTwoFactor={setupTwoFactor} enableTwoFactor={enableTwoFactor} disableTwoFactor={disableTwoFactor} />}
+        <VersionBadge />
       </main>
       {selectedPrinter && <PrinterDrawer printer={selectedPrinter} onClose={() => setSelectedPrinter(null)} api={mockApi} />}
       {modal === "add-printer" && <AddPrinterModal onClose={() => setModal(null)} onAdd={async (printer) => { const created = await createPrinter(printer); setModal(null); addToast(`${created.name} added to printer fleet`); }} />}
       <ToastStack toasts={toasts} />
+    </div>
+  );
+}
+
+function VersionBadge() {
+  return <footer className="version-badge"><span>System version</span> <strong data-i18n-ignore>v{APP_VERSION}</strong></footer>;
+}
+
+function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
+  const initialQuoteLookup = () => {
+    const params = new URLSearchParams(window.location.search);
+    return { id: params.get("quoteId") || "", token: params.get("quoteToken") || "" };
+  };
+  const [quoteDraft, setQuoteDraft] = useState({ customer: "", email: "", company: "", project: "Prototype enclosure", material: "PLA", quantity: 1, due: "Flexible", budget: 0, fileName: "", notes: "" });
+  const [quoteFile, setQuoteFile] = useState<File | null>(null);
+  const [quoteStatus, setQuoteStatus] = useState("");
+  const [quoteLookup, setQuoteLookup] = useState(initialQuoteLookup);
+  const [quoteLookupStatus, setQuoteLookupStatus] = useState("");
+  const [quoteLookupResult, setQuoteLookupResult] = useState<PublicQuoteStatus | null>(null);
+  const submitQuote = async () => {
+    if (!quoteDraft.customer.trim() || !quoteDraft.email.trim() || !quoteDraft.project.trim()) {
+      setQuoteStatus("Please add your name, email, and project.");
+      return;
+    }
+    setQuoteStatus("Sending quote request...");
+    try {
+      const payload = { ...quoteDraft, quantity: Number(quoteDraft.quantity || 1), budget: Number(quoteDraft.budget || 0), source: "Marketing website" };
+      const body = quoteFile ? new FormData() : JSON.stringify(payload);
+      if (quoteFile && body instanceof FormData) {
+        Object.entries(payload).forEach(([key, value]) => body.append(key, String(value ?? "")));
+        body.append("file", quoteFile, quoteFile.name);
+      }
+      const response = await fetch(`${API_BASE}/api/public/quoteRequests`, {
+        method: "POST",
+        headers: quoteFile ? undefined : { "Content-Type": "application/json" },
+        body
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result?.error || "Quote request failed");
+      const token = result.quoteRequest?.accessToken || "";
+      setQuoteStatus(token ? `Quote request ${result.quoteRequest.id} received. Tracking token: ${token}` : `Quote request ${result.quoteRequest.id} received.`);
+      setQuoteLookup({ id: result.quoteRequest.id, token });
+      setQuoteLookupResult(result.quoteRequest);
+      setQuoteDraft({ customer: "", email: "", company: "", project: "Prototype enclosure", material: "PLA", quantity: 1, due: "Flexible", budget: 0, fileName: "", notes: "" });
+      setQuoteFile(null);
+    } catch {
+      setQuoteStatus("Quote request could not be sent. Please contact support@3dstu.com.");
+    }
+  };
+  const checkQuoteStatus = async () => {
+    if (!quoteLookup.id.trim() || !quoteLookup.token.trim()) {
+      setQuoteLookupStatus("Add the quote request ID and tracking token first.");
+      return;
+    }
+    setQuoteLookupStatus("Checking quote status...");
+    try {
+      const response = await fetch(`${API_BASE}/api/public/quoteRequests/${encodeURIComponent(quoteLookup.id.trim())}?token=${encodeURIComponent(quoteLookup.token.trim())}`);
+      const result = await response.json();
+      if (!response.ok) throw new Error(result?.error || "Quote status lookup failed");
+      const quote = result.quoteRequest;
+      setQuoteLookupResult(quote);
+      setQuoteLookupStatus(`${quote.id}: ${quote.status}${quote.quotedValue ? ` - quoted $${quote.quotedValue}` : ""}${quote.validUntil ? ` - valid until ${quote.validUntil}` : ""}${quote.orderId ? ` - order ${quote.orderId}` : ""}`);
+    } catch {
+      setQuoteLookupStatus("Quote status could not be loaded. Check the ID and tracking token.");
+    }
+  };
+  const decideQuote = async (decision: "accepted" | "rejected" | "revision") => {
+    if (!quoteLookup.id.trim() || !quoteLookup.token.trim()) {
+      setQuoteLookupStatus("Add the quote request ID and tracking token first.");
+      return;
+    }
+    setQuoteLookupStatus(decision === "accepted" ? "Approving quote..." : decision === "rejected" ? "Rejecting quote..." : "Requesting quote changes...");
+    try {
+      const response = await fetch(`${API_BASE}/api/public/quoteRequests/${encodeURIComponent(quoteLookup.id.trim())}/decision`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: quoteLookup.token.trim(), decision, note: decision === "revision" ? "Customer requested changes from the quote portal." : "" })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result?.error || "Quote decision failed");
+      setQuoteLookupResult(result.quoteRequest);
+      setQuoteLookupStatus(decision === "accepted" ? `${result.quoteRequest.id}: approved and converted to ${result.order?.id || "an order"}.` : decision === "revision" ? `${result.quoteRequest.id}: changes requested. The operator will review it again.` : `${result.quoteRequest.id}: rejected.`);
+    } catch {
+      setQuoteLookupStatus("Quote decision could not be saved. Check the ID and tracking token.");
+    }
+  };
+  useEffect(() => {
+    if (quoteLookup.id && quoteLookup.token) void checkQuoteStatus();
+  }, []);
+  const metrics = [
+    ["Today\'s queue", "48", "jobs structured by status, material, and due risk"],
+    ["Printer states", "6", "idle, printing, paused, offline, error, maintenance"],
+    ["Operator todos", "12", "generated from production state instead of manual reminders"],
+    ["Deployment track", "24/7", "Docker, HTTPS, backups, health checks, and audit logs"]
+  ];
+  const workflow = [
+    ["Intake", "Bring in manual, CSV, webhook, or commerce orders and turn them into structured production jobs."],
+    ["Validate", "Check model files, material needs, print volume, slicing state, and quote assumptions before the job reaches a machine."],
+    ["Schedule", "Drag jobs onto printers or run automated matching with material, color, nozzle, capacity, and due-date constraints."],
+    ["Produce", "Track printer state, operator actions, file versions, maintenance, alerts, and exception todos in one control layer."],
+    ["Close the loop", "Archive job history, reprint from previous work, export reports, restore backups, and keep customer operations traceable."]
+  ];
+  const capabilities = [
+    ["Queue intelligence", "Status-driven jobs, rush flags, due windows, commerce imports, CSV intake, SKU mapping, and reprint history."],
+    ["Scheduling engine", "Drag-and-drop planning, dry-run matching, material conflicts, volume checks, due-risk warnings, and load balancing."],
+    ["File operations", "STL, 3MF, and G-code uploads, model metadata, generated thumbnails, stored versions, slicer profiles, and G-code outputs."],
+    ["Fleet control", "Printer states, bridge configs, OctoPrint/Moonraker-style sync, API actions, telemetry, and maintenance workflows."],
+    ["Team execution", "Role permissions, automatic todos, 2FA, audit logs, notifications, webhooks, Slack, Discord, and email channels."],
+    ["Business layer", "Cost catalog, storage usage, billing hooks, quote assumptions, backups, restore previews, and customer-ready deployment."]
+  ];
+  const audiences = ["Print farms", "Service bureaus", "Makerspaces", "School labs", "Factory prototyping teams"];
+  const installSteps = [
+    ["Clone", "git clone the repository and copy .env.example to .env."],
+    ["Configure", "Set admin credentials, public URL, worker token, metrics token, and production security flags."],
+    ["Deploy", "Start Docker Compose or run the Ubuntu deployment scripts for Nginx, HTTPS, backups, and ops checks."],
+    ["Verify", "Run QC, readiness, smoke checks, backup drills, and then push the versioned release to GitHub."]
+  ];
+  const competitorSignals = [
+    ["FDM Monster", "Multi-protocol printer connectors, batch printing, grid-based printer layout, backups, and thumbnails."],
+    ["OctoFarm", "Single-pane monitoring for many OctoPrint instances and websocket-driven farm status."],
+    ["Spoolman", "Filament inventory, spool usage tracking, and automatic weight deduction through Klipper/Moonraker-style integrations."],
+    ["Obico and PrintWatch", "AI failure detection, camera-driven monitoring, anomaly alerts, and remote printer visibility."],
+    ["FilaOps, LayerlyOS, Daedalus, runsodin, PrintStream", "ERP/MRP depth, no-cloud MES/SCADA positioning, profitability analytics, PWA, shared libraries, and plugin systems."]
+  ];
+  const buildPriorities = [
+    ["Printer bridge hardening", "Connector test harnesses for OctoPrint, Moonraker/Klipper, PrusaLink, Bambu LAN, Creality, and Snapmaker-style devices."],
+    ["Material automation", "Reserve spools for scheduled work, deduct usage from completed prints, and warn before a job runs out of material."],
+    ["Failure and waste intelligence", "Track failed prints, wasted filament, root causes, reprint cost, and printer-specific reliability trends."],
+    ["File and preview depth", "Add richer STL/3MF previews, G-code visualization, slicing presets, and reusable production templates."]
+  ];
+  return (
+    <div className="marketing-site" data-i18n-ignore>
+      <header className="marketing-nav">
+        <a className="brand-lockup" href="#top" aria-label="3DSTU FarmFlow home"><Layers /><span>3DSTU FarmFlow</span></a>
+        <nav className="marketing-links" aria-label="Website sections">
+          <a href="#platform">Platform</a>
+          <a href="#workflow">Workflow</a>
+          <a href="#operations">Operations</a>
+          <a href="#docs">Docs</a>
+          <a href="#github">GitHub</a>
+          <a href="#roadmap">Roadmap</a>
+          <a href="#quote">Quote</a>
+          <a href="#support">Support</a>
+        </nav>
+        <div className="marketing-nav-actions">
+          <a href="https://github.com/iain0901/3D-Printing-Farm-System" target="_blank" rel="noreferrer">GitHub</a>
+          <button onClick={onOpenApp}>Open App</button>
+        </div>
+      </header>
+
+      <main id="top">
+        <section className="marketing-hero">
+          <div className="marketing-hero-media" aria-hidden="true"></div>
+          <div className="marketing-hero-shade" aria-hidden="true"></div>
+          <div className="marketing-hero-content">
+            <p className="eyebrow">3D printing farm operating system</p>
+            <h1>Production control for serious 3D printing teams.</h1>
+            <p>3DSTU FarmFlow connects orders, files, materials, printers, operators, alerts, and backups into one deployable SaaS platform for real print-farm operations.</p>
+            <div className="marketing-actions">
+              <button className="primary" onClick={onOpenApp}>Open App</button>
+              <a className="ghost-link" href="mailto:support@3dstu.com">Talk to 3DSTU</a>
+            </div>
+          </div>
+          <div className="marketing-hero-strip">
+            {metrics.map(([label, value, detail]) => <article key={label}><span>{label}</span><strong>{value}</strong><p>{detail}</p></article>)}
+          </div>
+        </section>
+
+        <section className="audience-strip" aria-label="Designed for">
+          <span>Built for</span>
+          {audiences.map((audience) => <b key={audience}>{audience}</b>)}
+        </section>
+
+        <section className="marketing-section platform-section" id="platform">
+          <div className="section-kicker">
+            <p className="eyebrow">Why it exists</p>
+            <h2>A print farm does not need another task list. It needs an operating layer.</h2>
+          </div>
+          <div className="platform-grid">
+            <article>
+              <h3>From order chaos to machine-ready work</h3>
+              <p>Every job carries the production facts that matter: model file, material, color, nozzle, build volume, due date, slicing state, operator owner, printer match, and exception history.</p>
+            </article>
+            <article>
+              <h3>Humans handle exceptions, not repetitive tracking</h3>
+              <p>Todos are generated when state changes: slicing needed, scheduling needed, material mismatch, maintenance risk, completion pickup, post-processing, or late-work escalation.</p>
+            </article>
+            <article>
+              <h3>Deployment is part of the product</h3>
+              <p>The repo includes Docker deployment, Nginx and HTTPS guidance, health checks, backups, restore preview, audit trails, and support paths for customer farms.</p>
+            </article>
+          </div>
+        </section>
+
+        <section className="workflow-section" id="workflow">
+          <div className="workflow-copy">
+            <p className="eyebrow">Operating workflow</p>
+            <h2>One flow from intake to completed print.</h2>
+            <p>FarmFlow is designed around the production decisions that cost time when they live in chat, spreadsheets, slicer notes, and memory.</p>
+          </div>
+          <div className="workflow-steps">
+            {workflow.map(([title, body], index) => <article key={title}><span>{String(index + 1).padStart(2, "0")}</span><h3>{title}</h3><p>{body}</p></article>)}
+          </div>
+        </section>
+
+        <section className="marketing-section capability-section">
+          <div className="section-kicker">
+            <p className="eyebrow">Platform depth</p>
+            <h2>Built around the real constraints of printers, people, files, and delivery promises.</h2>
+          </div>
+          <div className="capability-grid">
+            {capabilities.map(([title, body]) => <article key={title}><h3>{title}</h3><p>{body}</p></article>)}
+          </div>
+        </section>
+
+        <section className="operations-section" id="operations">
+          <div className="operations-image">
+            <img src="/marketing/farmflow-scheduling-workspace.webp" alt="3D printing production scheduling workspace" />
+          </div>
+          <div className="operations-copy">
+            <p className="eyebrow">Production cockpit</p>
+            <h2>See the work that needs attention before it becomes expensive.</h2>
+            <ul>
+              <li>Which jobs are due today, late, blocked, or waiting for slicing.</li>
+              <li>Which printers are idle, printing, paused, offline, in error, or under maintenance.</li>
+              <li>Which material changes, build-volume conflicts, or due-date risks need a person.</li>
+              <li>Which operators have actionable work generated from the production state.</li>
+            </ul>
+          </div>
+        </section>
+
+        <section className="marketing-section customer-section">
+          <p className="eyebrow">3DSTU customer model</p>
+          <h2>Free for 3DSTU farm customers, source-available with commercial-use boundaries.</h2>
+          <div className="customer-grid">
+            <article><h3>Use it to run your farm</h3><p>Customers can self-host, operate production, and earn from their own printing services.</p></article>
+            <article><h3>Protect the platform</h3><p>The license does not allow selling the script, modified source, clones, or hosted resale services.</p></article>
+            <article><h3>Get expert setup</h3><p>Professional installation, technical setup, and training are available from 3DSTU.</p></article>
+          </div>
+        </section>
+
+        <section className="project-section" id="github">
+          <div className="project-copy">
+            <p className="eyebrow">Project home</p>
+            <h2>GitHub repository</h2>
+            <p>Source, releases, deployment scripts, issue tracking, and project documentation live in the public repository.</p>
+            <div className="project-actions">
+              <a className="primary-link" href="https://github.com/iain0901/3D-Printing-Farm-System" target="_blank" rel="noreferrer">Open GitHub</a>
+              <a href="https://github.com/iain0901/3D-Printing-Farm-System/tree/main/docs" target="_blank" rel="noreferrer">Docs in repository</a>
+            </div>
+          </div>
+          <div className="repo-card">
+            <span>Current version</span><strong data-i18n-ignore>{APP_VERSION}</strong>
+            <span>Public deployment</span><strong data-i18n-ignore>farm-saas.3dstu.com</strong>
+            <span>Production domain</span><strong data-i18n-ignore>github.com/iain0901/3D-Printing-Farm-System</strong>
+          </div>
+        </section>
+
+        <section className="marketing-section docs-section" id="docs">
+          <div className="section-kicker">
+            <p className="eyebrow">Documentation and install path</p>
+            <h2>Run it locally, deploy it with Docker, or operate it behind Nginx and HTTPS on Ubuntu.</h2>
+          </div>
+          <div className="install-steps">
+            {installSteps.map(([title, body], index) => <article key={title}><span>{index + 1}</span><h3>{title}</h3><p>{body}</p></article>)}
+          </div>
+          <div className="doc-links">
+            <a href="https://github.com/iain0901/3D-Printing-Farm-System/blob/main/docs/INSTALL.md" target="_blank" rel="noreferrer">View install guide</a>
+            <a href="https://github.com/iain0901/3D-Printing-Farm-System/blob/main/docs/OPERATIONS.md" target="_blank" rel="noreferrer">View operations runbook</a>
+            <a href="https://github.com/iain0901/3D-Printing-Farm-System/blob/main/docs/ROADMAP.md" target="_blank" rel="noreferrer">Roadmap document</a>
+          </div>
+        </section>
+
+        <section className="marketing-section roadmap-section" id="roadmap">
+          <div className="section-kicker">
+            <p className="eyebrow">Competitive roadmap</p>
+            <h2>What we are absorbing from the print-farm ecosystem.</h2>
+          </div>
+          <div className="signal-grid">
+            {competitorSignals.map(([title, body]) => <article key={title}><h3>{title}</h3><p>{body}</p></article>)}
+          </div>
+          <div className="section-kicker priority-kicker">
+            <p className="eyebrow">Next build priorities</p>
+            <h2>From MVP shell toward production-grade operations.</h2>
+          </div>
+          <div className="priority-list">
+            {buildPriorities.map(([title, body]) => <article key={title}><h3>{title}</h3><p>{body}</p></article>)}
+          </div>
+        </section>
+
+        <section className="marketing-section quote-section" id="quote">
+          <div className="section-kicker">
+            <p className="eyebrow">Customer quote intake</p>
+            <h2>Send print requirements into the production pipeline.</h2>
+          </div>
+          <div className="quote-form">
+            <label>Name<input value={quoteDraft.customer} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, customer: event.target.value }))} /></label>
+            <label>Email<input type="email" value={quoteDraft.email} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, email: event.target.value }))} /></label>
+            <label>Company<input value={quoteDraft.company} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, company: event.target.value }))} /></label>
+            <label>Project<input value={quoteDraft.project} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, project: event.target.value }))} /></label>
+            <label>Material<select value={quoteDraft.material} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, material: event.target.value }))}>{["PLA", "PETG", "ASA", "TPU", "Resin"].map((item) => <option key={item}>{item}</option>)}</select></label>
+            <label>Quantity<input type="number" min="1" value={quoteDraft.quantity} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, quantity: Number(event.target.value) }))} /></label>
+            <label>Due date<input value={quoteDraft.due} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, due: event.target.value }))} /></label>
+            <label>Budget<input type="number" min="0" value={quoteDraft.budget} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, budget: Number(event.target.value) }))} /></label>
+            <label>File name<input value={quoteDraft.fileName} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, fileName: event.target.value }))} placeholder="model.stl / model.3mf" /></label>
+            <label className="wide">Notes<textarea value={quoteDraft.notes} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, notes: event.target.value }))} /></label>
+            <label className="wide">Model file<input type="file" accept=".stl,.3mf,.gcode,.obj" onChange={(event) => setQuoteFile(event.currentTarget.files?.[0] || null)} /></label>
+            <button className="primary wide" onClick={submitQuote}>Request quote</button>
+            {quoteFile && <p className="quote-status wide">Attached: {quoteFile.name} ({Math.round(quoteFile.size / 1024)} KB)</p>}
+            {quoteStatus && <p className="quote-status wide">{quoteStatus}</p>}
+          </div>
+          <div className="quote-form quote-lookup">
+            <div className="wide">
+              <p className="eyebrow">Quote status lookup</p>
+              <p className="muted">Save the returned tracking token to check quote status after the operator reviews it.</p>
+            </div>
+            <label>Quote request ID<input value={quoteLookup.id} onChange={(event) => setQuoteLookup((draft) => ({ ...draft, id: event.target.value }))} placeholder="qr-..." /></label>
+            <label>Tracking token<input value={quoteLookup.token} onChange={(event) => setQuoteLookup((draft) => ({ ...draft, token: event.target.value }))} /></label>
+            <button className="primary" onClick={checkQuoteStatus}>Check status</button>
+            {quoteLookupResult?.validUntil && <p className="quote-status wide">Quote valid until {quoteLookupResult.validUntil}</p>}
+            {quoteLookupResult?.status === "quoted" && <div className="quote-actions wide"><button className="primary" onClick={() => decideQuote("accepted")}>Approve quote</button><button onClick={() => decideQuote("revision")}>Request changes</button><button onClick={() => decideQuote("rejected")}>Reject quote</button></div>}
+            {quoteLookupStatus && <p className="quote-status wide">{quoteLookupStatus}</p>}
+          </div>
+        </section>
+
+        <section className="marketing-contact" id="support">
+          <div>
+            <p className="eyebrow">Professional setup available</p>
+            <h2>Need installation, training, custom integration, or technical support?</h2>
+            <p>Contact the 3DSTU team for deployment support, farm onboarding, connector planning, and production workflow design.</p>
+          </div>
+          <div className="contact-actions">
+            <a href="mailto:support@3dstu.com">support@3dstu.com</a>
+            <button onClick={onOpenApp}>Open App</button>
+          </div>
+        </section>
+      </main>
+      <VersionBadge />
     </div>
   );
 }
@@ -2831,14 +3686,15 @@ function PrintersPage({ printers, onPrinter, setModal, api }: { printers: Printe
   );
 }
 
-function ProductsPage({ parts, skus, files, createPart, createSku, generateNameplate, exportCatalog, mapMaterials, addToast }: { parts: Part[]; skus: SKU[]; files: PrintFile[]; createPart: (part: Omit<Part, "id">) => Promise<Part>; createSku: (sku: Omit<SKU, "id">) => Promise<SKU>; generateNameplate: (draft: ParametricNameplateDraft) => Promise<ParametricNameplateResult>; exportCatalog: () => Promise<CatalogExportResult>; mapMaterials: () => Promise<MaterialMapResult>; addToast: (message: string, type?: Toast["type"]) => void }) {
-  const [tab, setTab] = useState<"parts" | "skus" | "builder">("parts");
+function ProductsPage({ parts, skus, productionTemplates, files, createPart, createSku, createProductionTemplate, runProductionTemplate, generateNameplate, exportCatalog, mapMaterials, addToast }: { parts: Part[]; skus: SKU[]; productionTemplates: ProductionTemplate[]; files: PrintFile[]; createPart: (part: Omit<Part, "id">) => Promise<Part>; createSku: (sku: Omit<SKU, "id">) => Promise<SKU>; createProductionTemplate: (template: Omit<ProductionTemplate, "id">) => Promise<ProductionTemplate>; runProductionTemplate: (template: ProductionTemplate, options?: { quantity?: number; dryRun?: boolean }) => Promise<ProductionTemplateRunResult>; generateNameplate: (draft: ParametricNameplateDraft) => Promise<ParametricNameplateResult>; exportCatalog: () => Promise<CatalogExportResult>; mapMaterials: () => Promise<MaterialMapResult>; addToast: (message: string, type?: Toast["type"]) => void }) {
+  const [tab, setTab] = useState<"parts" | "skus" | "templates" | "builder">("parts");
   const [nameplate, setNameplate] = useState<ParametricNameplateDraft>({ text: "3DSTU FarmFlow", width: 120, height: 42, thickness: 3, material: "PLA", feature: "keyholes", createPart: true });
   const [generated, setGenerated] = useState<ParametricNameplateResult | null>(null);
   const [generating, setGenerating] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [mapping, setMapping] = useState<MaterialMapResult | null>(null);
   const [mappingBusy, setMappingBusy] = useState(false);
+  const [templateBusy, setTemplateBusy] = useState("");
   const addPart = async () => {
     const file = files.find((item) => item.type !== "GCODE") || files[0];
     await createPart({ name: "Hot-swappable jig", fileId: file.id, material: "Any PLA", process: "0.20mm Production", plates: 1, variants: ["Text", "Color"], status: "draft" });
@@ -2869,11 +3725,42 @@ function ProductsPage({ parts, skus, files, createPart, createSku, generateNamep
     setMappingBusy(false);
     addToast(`${result.changed} material labels normalized`, result.unmapped ? "warning" : "success");
   };
+  const saveTemplate = async () => {
+    const file = files.find((item) => item.status === "approved" || item.sliced) || files[0];
+    if (!file) return addToast("Upload a model file before saving a template", "warning");
+    const sku = skus[0];
+    setTemplateBusy("save");
+    const created = await createProductionTemplate({
+      name: `${file.name.replace(/\.[^.]+$/, "")} production`,
+      sku: sku?.sku || "",
+      fileId: file.id,
+      material: file.material || "PLA",
+      color: "Any",
+      priority: "Normal",
+      stage: file.sliced ? "needs scheduling" : "needs slicing",
+      printerId: "",
+      process: "0.20mm Production",
+      dueOffsetDays: 2,
+      quantity: 1,
+      time: file.printTime || "1h 00m",
+      cost: file.cost || 0,
+      notes: "Reusable production recipe"
+    });
+    setTemplateBusy("");
+    addToast(`${created.name} saved as a production template`);
+  };
+  const runTemplate = async (template: ProductionTemplate, dryRun = false) => {
+    setTemplateBusy(`${dryRun ? "dry" : "run"}-${template.id}`);
+    const result = await runProductionTemplate(template, { dryRun, quantity: template.quantity });
+    setTemplateBusy("");
+    addToast(dryRun ? `${result.jobs.length} jobs checked from ${template.name}` : `${result.jobs.length} jobs added from ${template.name}`, dryRun ? "info" : "success");
+  };
   return (
     <Page title="Products" kicker="Parts, SKUs, variants, and parametric production">
       <div className="quickbar">
         <button className={tab === "parts" ? "selected" : ""} onClick={() => setTab("parts")}><Package size={16} />Parts</button>
         <button className={tab === "skus" ? "selected" : ""} onClick={() => setTab("skus")}><Tag size={16} />SKUs</button>
+        <button className={tab === "templates" ? "selected" : ""} onClick={() => setTab("templates")}><Archive size={16} />Templates</button>
         <button className={tab === "builder" ? "selected" : ""} onClick={() => setTab("builder")}><Wand2 size={16} />Parametric builder</button>
       </div>
       {tab === "parts" && (
@@ -2891,6 +3778,39 @@ function ProductsPage({ parts, skus, files, createPart, createSku, generateNamep
           <DataTable headers={["SKU", "Product", "Linked parts", "Variants", "Channel", "Stock", "Price"]}>
             {skus.map((sku) => <tr key={sku.id}><td><code>{sku.sku}</code></td><td><b>{sku.title}</b></td><td>{sku.parts.join(", ")}</td><td>{sku.variants.join(", ")}</td><td>{sku.channel}</td><td>{sku.stock}</td><td>${sku.price}</td></tr>)}
           </DataTable>
+        </>
+      )}
+      {tab === "templates" && (
+        <>
+          <div className="quickbar"><button className="primary" onClick={saveTemplate} disabled={templateBusy === "save"}><Save size={16} />{templateBusy === "save" ? "Saving template" : "Save template"}</button></div>
+          <div className="template-grid">
+            {productionTemplates.map((template) => {
+              const file = files.find((item) => item.id === template.fileId);
+              const busyRun = templateBusy === `run-${template.id}`;
+              const busyDry = templateBusy === `dry-${template.id}`;
+              return (
+                <article className="template-card" key={template.id}>
+                  <div>
+                    <span>{template.sku || "Manual recipe"}</span>
+                    <h3>{template.name}</h3>
+                    <p>{file?.name || template.fileId}</p>
+                  </div>
+                  <div className="template-meta">
+                    <span><b>{template.quantity}</b> jobs</span>
+                    <span>{template.material} / {template.color}</span>
+                    <span>Due +{template.dueOffsetDays}d</span>
+                    <span>{template.time}</span>
+                  </div>
+                  <div className="template-actions">
+                    <button onClick={() => runTemplate(template, true)} disabled={busyDry || busyRun}>{busyDry ? "Checking" : "Dry run"}</button>
+                    <button className="primary" onClick={() => runTemplate(template)} disabled={busyDry || busyRun}>{busyRun ? "Creating" : "Create jobs"}</button>
+                  </div>
+                  <small>{template.runCount || 0} jobs created{template.lastRunAt ? ` - last run ${template.lastRunAt.slice(0, 10)}` : ""}</small>
+                </article>
+              );
+            })}
+            {!productionTemplates.length && <section className="panel empty-state"><Archive size={26} /><h3>No production templates yet</h3><p>Save a reusable recipe from the file library, then run it into the print queue whenever a customer or stock batch repeats.</p></section>}
+          </div>
         </>
       )}
       {tab === "builder" && (
@@ -2920,11 +3840,12 @@ function ProductsPage({ parts, skus, files, createPart, createSku, generateNamep
   );
 }
 
-function OrdersPage({ orders, setOrders, skus, commerceConnectors, setCommerceConnectors, commerceImports, setCommerceImports, createOrder, updateOrderStatus, generateJobsForOrder, addToast, setBackendStatus }: { orders: Order[]; setOrders: React.Dispatch<React.SetStateAction<Order[]>>; skus: SKU[]; commerceConnectors: CommerceConnector[]; setCommerceConnectors: React.Dispatch<React.SetStateAction<CommerceConnector[]>>; commerceImports: CommerceImport[]; setCommerceImports: React.Dispatch<React.SetStateAction<CommerceImport[]>>; createOrder: (order: Omit<Order, "id">) => Promise<Order>; updateOrderStatus: (orderId: string, status: Order["status"]) => Promise<Order | undefined>; generateJobsForOrder: (order: Order, dryRun?: boolean) => Promise<OrderJobGenerationResult>; addToast: (message: string, type?: Toast["type"]) => void; setBackendStatus: React.Dispatch<React.SetStateAction<"local" | "connected">> }) {
+function OrdersPage({ orders, setOrders, quoteRequests, files, skus, commerceConnectors, setCommerceConnectors, commerceImports, setCommerceImports, createOrder, updateOrderStatus, updateQuoteRequest, createQuotePortalLink, convertQuoteRequest, generateJobsForOrder, downloadFile, addToast, setBackendStatus }: { orders: Order[]; setOrders: React.Dispatch<React.SetStateAction<Order[]>>; quoteRequests: QuoteRequest[]; files: PrintFile[]; skus: SKU[]; commerceConnectors: CommerceConnector[]; setCommerceConnectors: React.Dispatch<React.SetStateAction<CommerceConnector[]>>; commerceImports: CommerceImport[]; setCommerceImports: React.Dispatch<React.SetStateAction<CommerceImport[]>>; createOrder: (order: Omit<Order, "id">) => Promise<Order>; updateOrderStatus: (orderId: string, status: Order["status"]) => Promise<Order | undefined>; updateQuoteRequest: (quoteId: string, patch: Partial<Pick<QuoteRequest, "status" | "priority" | "quotedValue" | "validUntil" | "internalNote">>) => Promise<QuoteRequest | undefined>; createQuotePortalLink: (quote: QuoteRequest, rotate?: boolean) => Promise<{ quoteRequest: QuoteRequest; url: string; accessToken: string } | null>; convertQuoteRequest: (quote: QuoteRequest) => Promise<{ quoteRequest: QuoteRequest; order: Order; job?: QueueItem | null; orders: Order[]; quoteRequests: QuoteRequest[]; queue?: QueueItem[]; todos?: Todo[] }>; generateJobsForOrder: (order: Order, dryRun?: boolean) => Promise<OrderJobGenerationResult>; downloadFile: (file: PrintFile) => Promise<boolean>; addToast: (message: string, type?: Toast["type"]) => void; setBackendStatus: React.Dispatch<React.SetStateAction<"local" | "connected">> }) {
   const [connectorDraft, setConnectorDraft] = useState({ name: "Shopify feed", source: "Shopify" as CommerceConnector["source"], url: "https://example.com/orders.json", token: "", enabled: true });
   const [csvText, setCsvText] = useState("externalId,customer,items,due,value\nSP-1001,Demo Customer,DUCT-KIT-BLK x1,Tomorrow 17:00,680");
   const [busy, setBusy] = useState("");
   const [jobPlan, setJobPlan] = useState<OrderJobGenerationResult | null>(null);
+  const newQuotes = quoteRequests.filter((quote) => quote.status === "new" || quote.status === "reviewing");
   const saveConnector = async () => {
     setBusy("save");
     try {
@@ -3012,9 +3933,48 @@ function OrdersPage({ orders, setOrders, skus, commerceConnectors, setCommerceCo
     addToast(`${order.id} generated ${result.jobs.length} queue jobs${missing}${duplicate}`, result.jobs.length ? "success" : "warning");
     setBusy("");
   };
+  const quoteValue = (quote: QuoteRequest) => quote.quotedValue || quote.budget || Math.max(50, quote.quantity * 80);
+  const quoteAttachment = (quote: QuoteRequest) => quote.fileId ? files.find((file) => file.id === quote.fileId) : undefined;
+  const copyPortalLink = async (quote: QuoteRequest, rotate = false) => {
+    setBusy(`${rotate ? "rotate" : "portal"}-${quote.id}`);
+    const result = await createQuotePortalLink(quote, rotate);
+    setBusy("");
+    if (!result) {
+      addToast("Customer portal link could not be created. Check API status.", "warning");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(result.url);
+      addToast("Customer portal link copied", "success");
+    } catch {
+      addToast(`Customer portal link ready: ${result.url}`, "info");
+    }
+  };
+  const markQuoted = async (quote: QuoteRequest) => {
+    setBusy(`quote-${quote.id}`);
+    const defaultValidUntil = quote.validUntil || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const updated = await updateQuoteRequest(quote.id, { status: "quoted", priority: quote.priority || "Normal", quotedValue: quoteValue(quote), validUntil: defaultValidUntil, internalNote: quote.internalNote || "Operator quote prepared" });
+    setBusy("");
+    addToast(updated ? `${quote.id} quoted at $${updated.quotedValue || quoteValue(quote)}` : `${quote.id} quote saved locally`, updated ? "success" : "warning");
+  };
+  const acceptQuote = async (quote: QuoteRequest) => {
+    setBusy(`convert-${quote.id}`);
+    const result = await convertQuoteRequest({ ...quote, status: quote.status === "new" ? "quoted" : quote.status, quotedValue: quoteValue(quote) });
+    setBusy("");
+    addToast(result.job ? `${quote.id} converted to ${result.order.id} and queued ${result.job.id}` : `${quote.id} converted to ${result.order.id}`);
+  };
+  const terminalOrder = (order: Order) => order.status === "completed" || order.status === "cancelled";
+  const setOrderLifecycleStatus = async (order: Order, status: Order["status"], label: string) => {
+    setBusy(`${status}-${order.id}`);
+    const updated = await updateOrderStatus(order.id, status);
+    setBusy("");
+    addToast(updated ? `${order.id} ${label}` : `${order.id} status saved locally`, updated ? "success" : "warning");
+  };
   return (
     <Page title="Orders" kicker="Commerce intake, SKU mapping, and production fulfillment">
       <div className="metric-grid">
+        <Metric label="Quote requests" value={`${quoteRequests.length}`} icon={FilePlus2} tone="teal" />
+        <Metric label="New quotes" value={`${newQuotes.length}`} icon={Sparkles} tone="orange" />
         <Metric label="Received" value={`${orders.filter((order) => order.status === "received").length}`} icon={ShoppingBag} />
         <Metric label="Queued" value={`${orders.filter((order) => order.status === "queued").length}`} icon={ClipboardList} tone="orange" />
         <Metric label="Printing" value={`${orders.filter((order) => order.status === "printing").length}`} icon={Activity} tone="teal" />
@@ -3039,6 +3999,16 @@ function OrdersPage({ orders, setOrders, skus, commerceConnectors, setCommerceCo
         </section>
       </div>
       <section className="panel">
+        <PanelTitle title="Quote intake" />
+        <DataTable headers={["Request", "Customer", "Material", "Qty", "Due", "Budget", "Status", "Actions"]}>
+          {quoteRequests.map((quote) => {
+            const attachment = quoteAttachment(quote);
+            return <tr key={quote.id}><td><b>{quote.project}</b><small>{quote.fileName || "No file attached"}{quote.fileSize ? ` - ${quote.fileSize}` : ""}{quote.estimatedGrams ? ` - ${quote.estimatedGrams}g estimate` : ""}</small><small>{quote.customerDecisionNote || quote.notes || "No notes"}</small>{attachment && <button onClick={() => downloadFile(attachment)}><Download size={14} />Download model</button>}</td><td>{quote.customer}<small>{quote.email}{quote.company ? ` - ${quote.company}` : ""}</small></td><td>{quote.material}</td><td>{quote.quantity}</td><td>{quote.due}<small>{quote.validUntil ? `Quote valid until ${quote.validUntil}` : "No quote expiry"}</small></td><td>${quoteValue(quote)}</td><td><StatusPill status={quote.status} /></td><td><button onClick={() => copyPortalLink(quote)} disabled={busy === `portal-${quote.id}`}>{busy === `portal-${quote.id}` ? "Creating" : "Copy portal link"}</button><button onClick={() => copyPortalLink(quote, true)} disabled={busy === `rotate-${quote.id}`}>{busy === `rotate-${quote.id}` ? "Rotating" : "Rotate link"}</button><button onClick={() => markQuoted(quote)} disabled={busy === `quote-${quote.id}` || quote.status === "converted"}>{busy === `quote-${quote.id}` ? "Quoting" : "Mark quoted"}</button><button className="primary" onClick={() => acceptQuote(quote)} disabled={busy === `convert-${quote.id}` || quote.status === "converted"}>{busy === `convert-${quote.id}` ? "Converting" : "Accept / order"}</button></td></tr>;
+          })}
+        </DataTable>
+        {!quoteRequests.length && <p className="muted">No quote requests yet. Website submissions will appear here.</p>}
+      </section>
+      <section className="panel">
         <PanelTitle title="Commerce feeds" action={<button onClick={importSample}><Plus size={16} />Add sample order</button>} />
         <DataTable headers={["Name", "Source", "URL", "Status", "Token", "Enabled", "Last sync", "Actions"]}>
           {commerceConnectors.map((connector) => <tr key={connector.id}><td><b>{connector.name}</b></td><td><StatusPill status={connector.source} /></td><td><code>{connector.url}</code></td><td><StatusPill status={connector.lastStatus || "not synced"} /></td><td>{connector.hasToken ? "Stored" : "None"}</td><td>{connector.enabled ? "Yes" : "No"}</td><td>{connector.lastSyncAt || "Never"}</td><td><button onClick={() => testConnector(connector)} disabled={busy === `test-${connector.id}`}>Test</button><button className="primary" onClick={() => importConnector(connector)} disabled={busy === `import-${connector.id}` || !connector.enabled}><Download size={14} />Import</button></td></tr>)}
@@ -3046,7 +4016,7 @@ function OrdersPage({ orders, setOrders, skus, commerceConnectors, setCommerceCo
         {!commerceConnectors.length && <p className="muted">No commerce feeds yet. Save one above or use CSV intake.</p>}
       </section>
       <DataTable headers={["Order", "Source", "Customer", "Items", "Status", "Due", "Value", "Actions"]}>
-        {orders.map((order) => <tr key={order.id}><td><b>{order.id}</b><small>{order.externalId ? `External ${order.externalId}` : "Manual record"}</small></td><td>{order.source}</td><td>{order.customer}</td><td>{order.items.join(", ")}</td><td><StatusPill status={order.status} /></td><td>{order.due}</td><td>${order.value}</td><td><button onClick={() => planOrderJobs(order)} disabled={busy === `plan-${order.id}`}>Plan jobs</button><button className="primary" onClick={() => commitOrderJobs(order)} disabled={busy === `generate-${order.id}`}>Generate jobs</button><button onClick={() => updateOrderStatus(order.id, "shipped").then(() => addToast(`${order.id} shipped`))}>Ship</button></td></tr>)}
+        {orders.map((order) => <tr key={order.id}><td><b>{order.id}</b><small>{order.externalId ? `External ${order.externalId}` : "Manual record"}</small></td><td>{order.source}</td><td>{order.customer}</td><td>{order.items.join(", ")}</td><td><StatusPill status={order.status} /></td><td>{order.due}</td><td>${order.value}</td><td><button onClick={() => planOrderJobs(order)} disabled={busy === `plan-${order.id}` || terminalOrder(order)}>Plan jobs</button><button className="primary" onClick={() => commitOrderJobs(order)} disabled={busy === `generate-${order.id}` || terminalOrder(order)}>Generate jobs</button><button onClick={() => setOrderLifecycleStatus(order, "on_hold", "placed on hold")} disabled={busy === `on_hold-${order.id}` || terminalOrder(order)}>Hold</button><button onClick={() => setOrderLifecycleStatus(order, "shipped", "shipped")} disabled={busy === `shipped-${order.id}` || terminalOrder(order)}>Ship</button><button onClick={() => setOrderLifecycleStatus(order, "completed", "completed")} disabled={busy === `completed-${order.id}` || terminalOrder(order)}>Complete</button><button onClick={() => setOrderLifecycleStatus(order, "cancelled", "cancelled")} disabled={busy === `cancelled-${order.id}` || terminalOrder(order)}>Cancel</button></td></tr>)}
       </DataTable>
       {jobPlan && (
         <section className="panel">
@@ -3078,6 +4048,8 @@ function FilesPage({ files, folders, queueFile, setView, addToast, createSampleF
   const [material, setMaterial] = useState("PLA");
   const [uploading, setUploading] = useState(false);
   const [working, setWorking] = useState("");
+  const [preview, setPreview] = useState<FilePreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState("");
   const visible = files.filter((f) => (type === "All" || f.type === type) && f.name.toLowerCase().includes(query.toLowerCase()));
   const addSample = async () => {
     setWorking("sample");
@@ -3108,6 +4080,18 @@ function FilesPage({ files, folders, queueFile, setView, addToast, createSampleF
     const ok = await deleteFile(file.id);
     addToast(ok ? `${file.name} deleted` : `${file.name} is still referenced; remove jobs or parts first`, ok ? "success" : "warning");
   };
+  const openPreview = async (file: PrintFile) => {
+    setPreviewLoading(file.id);
+    try {
+      const result = await apiRequest<FilePreview>(`/api/files/${file.id}/preview`);
+      setPreview(result);
+      addToast(`${file.name} preview ready`, "success");
+    } catch {
+      addToast(`${file.name} preview failed`, "warning");
+    } finally {
+      setPreviewLoading("");
+    }
+  };
   return (
     <Page title="Cloud files" kicker="Library, folders, slicing and queue actions">
       <div className="toolbar">
@@ -3120,9 +4104,66 @@ function FilesPage({ files, folders, queueFile, setView, addToast, createSampleF
       </div>
       <div className="folder-strip">{folders.slice(0, 6).map((folder) => <span key={folder.id}>{folder.name}<small>{folder.fileCount || files.filter((file) => file.folder === folder.name).length}</small></span>)}</div>
       <DataTable headers={["Model", "Folder", "Material", "Status", "Version", "Dimensions", "Estimate", "Actions"]}>
-        {visible.map((file) => <tr key={file.id}><td><div className="model-cell"><span className="model-thumb">{file.thumbnail.slice(0, 2).toUpperCase()}</span><div><b>{file.name}</b><small>{file.type} - {file.size} - {file.tags.join(", ")}</small></div></div></td><td>{file.folder}</td><td>{file.material}</td><td><StatusPill status={file.status} /></td><td>v{file.version}</td><td>{file.dimensions.join(" x ")} mm</td><td>{file.printTime}<small>{file.usage}g - ${file.cost} quote</small></td><td><button onClick={() => queueFile(file)}>Queue</button><button onClick={() => setView("slicer")}>Slice</button><button onClick={() => versionFile(file.id)}>New version</button><button onClick={() => download(file)}><Download size={14} /></button><button onClick={() => remove(file)}><Trash2 size={14} /></button></td></tr>)}
+        {visible.map((file) => <tr key={file.id}><td><div className="model-cell"><span className="model-thumb">{file.thumbnail.slice(0, 2).toUpperCase()}</span><div><b>{file.name}</b><small>{file.type} - {file.size} - {file.tags.join(", ")}</small></div></div></td><td>{file.folder}</td><td>{file.material}</td><td><StatusPill status={file.status} /></td><td>v{file.version}</td><td>{file.dimensions.join(" x ")} mm</td><td>{file.printTime}<small>{file.usage}g - ${file.cost} quote</small></td><td><button onClick={() => openPreview(file)}>{previewLoading === file.id ? "Loading" : "Preview"}</button><button onClick={() => queueFile(file)}>Queue</button><button onClick={() => setView("slicer")}>Slice</button><button onClick={() => versionFile(file.id)}>New version</button><button onClick={() => download(file)}><Download size={14} /></button><button onClick={() => remove(file)}><Trash2 size={14} /></button></td></tr>)}
       </DataTable>
+      {preview && <FilePreviewDrawer preview={preview} onClose={() => setPreview(null)} />}
     </Page>
+  );
+}
+
+function FilePreviewDrawer({ preview, onClose }: { preview: FilePreview; onClose: () => void }) {
+  const sample = preview.visualization.sample || [];
+  const maxX = Math.max(1, preview.buildPlate.width, preview.visualization.extents.max[0] || preview.summary.dimensions[0]);
+  const maxY = Math.max(1, preview.buildPlate.depth, preview.visualization.extents.max[1] || preview.summary.dimensions[1]);
+  const points = sample.slice(0, 160).map((point, index) => {
+    const left = Math.max(0, Math.min(100, (point.x / maxX) * 100));
+    const top = Math.max(0, Math.min(100, (point.y / maxY) * 100));
+    return <i key={`${point.x}-${point.y}-${point.z}-${index}`} style={{ left: `${left}%`, top: `${top}%`, opacity: point.extrusion ? 0.88 : 0.35 }} />;
+  });
+  const boxWidth = Math.max(4, Math.min(100, (preview.summary.dimensions[0] / preview.buildPlate.width) * 100));
+  const boxDepth = Math.max(4, Math.min(100, (preview.summary.dimensions[1] / preview.buildPlate.depth) * 100));
+  const layers = preview.visualization.layers || [];
+  return (
+    <div className="drawer-backdrop" onClick={onClose}>
+      <aside className="drawer file-preview-drawer" onClick={(event) => event.stopPropagation()}>
+        <button className="icon close" onClick={onClose}><X size={18} /></button>
+        <h2>{preview.name}</h2>
+        <p>{preview.type} - {preview.material} - generated {new Date(preview.generatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>
+        <div className="metric-grid">
+          <Metric label="Dimensions" value={`${preview.summary.dimensions.join(" x ")} mm`} icon={Box} />
+          <Metric label="Estimate" value={preview.summary.printTime} icon={CalendarClock} tone="teal" />
+          <Metric label="Material" value={`${preview.summary.estimateGrams}g`} icon={Database} tone="orange" />
+          <Metric label="Plate use" value={`${preview.buildPlate.occupancyPercent}%`} icon={Gauge} tone={preview.buildPlate.occupancyPercent > 100 ? "red" : "green"} />
+        </div>
+        <section className="preview-plate">
+          <div className="plate-canvas">
+            <span className="model-footprint" style={{ width: `${boxWidth}%`, height: `${boxDepth}%` }} />
+            {points}
+          </div>
+          <small>{preview.buildPlate.fit} - {preview.buildPlate.width} x {preview.buildPlate.depth} x {preview.buildPlate.height} mm reference</small>
+        </section>
+        {preview.visualization.kind === "toolpath" && <section className="panel flat-panel">
+          <PanelTitle title="G-code toolpath" />
+          <div className="preview-stats">
+            <span>{preview.visualization.lineCount || 0} lines</span>
+            <span>{preview.visualization.motionCommands || 0} moves</span>
+            <span>{preview.visualization.extrusionMoves || 0} extrusion moves</span>
+            <span>{preview.visualization.totalExtrusion || 0} E</span>
+          </div>
+          <div className="layer-bars">
+            {layers.slice(0, 32).map((layer) => <span key={layer.z} title={`Z${layer.z} - ${layer.moves} moves`} style={{ height: `${Math.max(8, Math.min(100, layer.moves * 2))}%` }} />)}
+          </div>
+        </section>}
+        <section className="panel flat-panel">
+          <PanelTitle title="Compatible printers" />
+          <div className="event-feed">
+            {preview.compatiblePrinters.map((printer) => <div key={printer.id}><StatusDot status={printer.status} /><span>{printer.name}<small>{printer.buildVolume.join(" x ")} mm</small></span><em>{printer.status}</em></div>)}
+            {!preview.compatiblePrinters.length && <div><StatusDot status="failed" /><span>No matching printer</span><em>Check material and build volume</em></div>}
+          </div>
+        </section>
+        {preview.warnings.length > 0 && <div className="notice warning"><AlertTriangle size={18} /><span>{preview.warnings.join(" ")}</span></div>}
+      </aside>
+    </div>
   );
 }
 
@@ -3432,15 +4473,45 @@ function SlicerPage({ files, printers, slicerJobs, addToast, runSlicerJob }: { f
   );
 }
 
-function FilamentPage({ spools, createSpool, updateSpool, logSpoolUsage, generateSpoolLabels, scanSpool, addToast }: { spools: Spool[]; createSpool: (spool: Omit<Spool, "id">) => Promise<Spool>; updateSpool: (spoolId: string, patch: Partial<Spool>) => Promise<Spool | undefined>; logSpoolUsage: (spoolId: string, grams?: number) => Promise<Spool | undefined>; generateSpoolLabels: (ids?: string[]) => Promise<SpoolLabelExport>; scanSpool: (code: string, options?: { grams?: number; location?: string }) => Promise<SpoolScanResult>; addToast: (message: string, type?: Toast["type"]) => void }) {
-  const [busy, setBusy] = useState<"labels" | "scan" | null>(null);
+function FilamentPage({ spools, purchaseRequests, createSpool, updateSpool, logSpoolUsage, generateSpoolLabels, scanSpool, createPurchaseRequest, generateReorderPlan, updatePurchaseRequest, receivePurchaseRequest, addToast }: { spools: Spool[]; purchaseRequests: PurchaseRequest[]; createSpool: (spool: Omit<Spool, "id">) => Promise<Spool>; updateSpool: (spoolId: string, patch: Partial<Spool>) => Promise<Spool | undefined>; logSpoolUsage: (spoolId: string, grams?: number) => Promise<Spool | undefined>; generateSpoolLabels: (ids?: string[]) => Promise<SpoolLabelExport>; scanSpool: (code: string, options?: { grams?: number; location?: string }) => Promise<SpoolScanResult>; createPurchaseRequest: (request: Omit<PurchaseRequest, "id">) => Promise<PurchaseRequest>; generateReorderPlan: (options?: { thresholdGrams?: number; targetGrams?: number; quantity?: number }) => Promise<ReorderPlanResult>; updatePurchaseRequest: (requestId: string, patch: Partial<PurchaseRequest>) => Promise<PurchaseRequest | undefined>; receivePurchaseRequest: (requestId: string, location?: string) => Promise<PurchaseReceiveResult>; addToast: (message: string, type?: Toast["type"]) => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
   const [scanCode, setScanCode] = useState(spools[0]?.nfc || "");
   const [scanLocation, setScanLocation] = useState("");
   const [logUsageOnScan, setLogUsageOnScan] = useState(true);
   const [lastScan, setLastScan] = useState<SpoolScanResult | null>(null);
+  const reservedGrams = (spool: Spool) => Math.round(Number(spool.reserved || 0) || (spool.reservations || []).reduce((sum, item) => sum + Number(item.grams || 0), 0));
+  const availableGrams = (spool: Spool) => Math.max(0, Math.round(Number(spool.remaining || 0) - reservedGrams(spool)));
+  const lowStockSpools = spools.filter((spool) => availableGrams(spool) < 250);
+  const openPurchaseRequests = purchaseRequests.filter((request) => request.status === "open" || request.status === "ordered");
   const addSpool = async () => {
     await createSpool({ material: "PLA", color: "#0ea5e9", brand: "Demo", remaining: 1000, weight: 1000, location: "Rack New", dry: true, nfc: "LP-NEW" });
     addToast("Spool added");
+  };
+  const createManualPurchase = async () => {
+    const spool = lowStockSpools[0] || spools[0];
+    if (!spool) return addToast("Add a spool before creating a purchase request", "warning");
+    setBusy("manual-request");
+    const request = await createPurchaseRequest({ spoolId: spool.id, material: spool.material, color: spool.color, brand: spool.brand, quantity: 1, targetGrams: spool.weight || 1000, supplier: "Preferred supplier", priority: "High", status: "open", due: "This week", note: `Manual reorder for ${spool.location}` });
+    setBusy(null);
+    addToast(`${request.material} purchase request created`);
+  };
+  const createReorders = async () => {
+    setBusy("reorder-plan");
+    const result = await generateReorderPlan({ thresholdGrams: 250, targetGrams: 1000, quantity: 1 });
+    setBusy(null);
+    addToast(`${result.created.length} reorder requests created${result.skipped.length ? `, ${result.skipped.length} skipped` : ""}`, result.created.length ? "success" : "info");
+  };
+  const markOrdered = async (request: PurchaseRequest) => {
+    setBusy(`ordered-${request.id}`);
+    await updatePurchaseRequest(request.id, { status: "ordered" });
+    setBusy(null);
+    addToast(`${request.material} request marked ordered`);
+  };
+  const receiveRequest = async (request: PurchaseRequest) => {
+    setBusy(`receive-${request.id}`);
+    const result = await receivePurchaseRequest(request.id, "Rack Receiving");
+    setBusy(null);
+    addToast(`${result.spools.length} ${request.material} spools received`);
   };
   const downloadLabels = async () => {
     setBusy("labels");
@@ -3472,7 +4543,13 @@ function FilamentPage({ spools, createSpool, updateSpool, logSpoolUsage, generat
   };
   return (
     <Page title="Filament inventory" kicker="Track spools, color, storage, low stock and NFC labels">
-      <div className="quickbar"><button className="primary" onClick={addSpool}><Plus size={16} />Add spool</button><button onClick={downloadLabels} disabled={busy === "labels"}><FileCode2 size={16} />{busy === "labels" ? "Generating labels" : "Generate labels"}</button></div>
+      <div className="metric-grid">
+        <Metric label="Spools" value={`${spools.length}`} icon={CircleDot} />
+        <Metric label="Low stock" value={`${lowStockSpools.length}`} icon={AlertTriangle} tone="orange" />
+        <Metric label="Open reorders" value={`${openPurchaseRequests.length}`} icon={ShoppingBag} tone="teal" />
+        <Metric label="Reserved" value={`${spools.reduce((sum, spool) => sum + reservedGrams(spool), 0)}g`} icon={Database} tone="gray" />
+      </div>
+      <div className="quickbar"><button className="primary" onClick={addSpool}><Plus size={16} />Add spool</button><button onClick={downloadLabels} disabled={busy === "labels"}><FileCode2 size={16} />{busy === "labels" ? "Generating labels" : "Generate labels"}</button><button onClick={createReorders} disabled={busy === "reorder-plan"}><ShoppingBag size={16} />{busy === "reorder-plan" ? "Creating reorders" : "Generate reorder plan"}</button><button onClick={createManualPurchase} disabled={busy === "manual-request"}><Plus size={16} />Purchase request</button></div>
       <section className="panel scanner-panel">
         <PanelTitle title="Spool scanner" />
         <div className="settings-grid">
@@ -3483,8 +4560,44 @@ function FilamentPage({ spools, createSpool, updateSpool, logSpoolUsage, generat
         <div className="quickbar"><button className="primary" onClick={runScan} disabled={busy === "scan"}><CircleDot size={16} />{busy === "scan" ? "Scanning" : "Scan spool"}</button></div>
         {lastScan && <div className={`notice ${lastScan.warnings.length ? "warning" : "success"}`}><Check size={18} /><span>{lastScan.spool.material} - {lastScan.spool.brand} matched by {lastScan.matchedBy}. Remaining {lastScan.spool.remaining}g. {lastScan.warnings.join(", ")}</span></div>}
       </section>
+      <section className="panel">
+        <PanelTitle title="Material purchasing" />
+        <DataTable headers={["Material", "Supplier", "Qty", "Priority", "Status", "Due", "Actions"]}>
+          {purchaseRequests.map((request) => (
+            <tr key={request.id}>
+              <td><b>{request.material}</b><small>{request.brand} - {request.targetGrams}g - {request.note || "Reorder request"}</small></td>
+              <td>{request.supplier}</td>
+              <td>{request.quantity}</td>
+              <td><StatusPill status={request.priority} /></td>
+              <td><StatusPill status={request.status} /></td>
+              <td>{request.due}</td>
+              <td><button onClick={() => markOrdered(request)} disabled={request.status !== "open" || busy === `ordered-${request.id}`}>{busy === `ordered-${request.id}` ? "Updating" : "Mark ordered"}</button><button className="primary" onClick={() => receiveRequest(request)} disabled={request.status === "received" || request.status === "cancelled" || busy === `receive-${request.id}`}>{busy === `receive-${request.id}` ? "Receiving" : "Receive"}</button></td>
+            </tr>
+          ))}
+        </DataTable>
+        {!purchaseRequests.length && <p className="muted">No purchase requests yet. Generate a reorder plan from low-stock spools.</p>}
+      </section>
       <div className="spool-grid">
-        {spools.map((spool) => <div className="spool-card" key={spool.id}><div className="spool-color" style={{ background: spool.color }} /><h3>{spool.material} - {spool.brand}</h3><p>{spool.location} - {spool.nfc}</p><div className="progress"><span style={{ width: `${(spool.remaining / spool.weight) * 100}%` }} /></div><strong>{spool.remaining}g / {spool.weight}g</strong>{spool.remaining < 150 && <em className="warning-text">Low stock</em>}<label className="check-row"><input type="checkbox" checked={spool.dry} onChange={(e) => updateSpool(spool.id, { dry: e.target.checked })} />Dry storage</label><button onClick={() => logSpoolUsage(spool.id, 20).then(() => addToast("20g usage logged"))}>Log 20g usage</button></div>)}
+        {spools.map((spool) => {
+          const reserved = reservedGrams(spool);
+          const available = availableGrams(spool);
+          return (
+            <div className="spool-card" key={spool.id}>
+              <div className="spool-color" style={{ background: spool.color }} />
+              <h3>{spool.material} - {spool.brand}</h3>
+              <p>{spool.location} - {spool.nfc}</p>
+              <div className="progress"><span style={{ width: `${(spool.remaining / spool.weight) * 100}%` }} /></div>
+              <strong>{spool.remaining}g / {spool.weight}g</strong>
+              <div className="spool-stats">
+                <span>Reserved <b>{reserved}g</b></span>
+                <span>Available <b>{available}g</b></span>
+              </div>
+              {available < 150 && <em className="warning-text">{reserved > 0 ? "Low available stock" : "Low stock"}</em>}
+              <label className="check-row"><input type="checkbox" checked={spool.dry} onChange={(e) => updateSpool(spool.id, { dry: e.target.checked })} />Dry storage</label>
+              <button onClick={() => logSpoolUsage(spool.id, 20).then(() => addToast("20g usage logged"))}>Log 20g usage</button>
+            </div>
+          );
+        })}
       </div>
     </Page>
   );
@@ -3761,7 +4874,7 @@ function AnalyticsPage({ addToast }: { addToast: (message: string, type?: Toast[
     ? Object.entries(analytics.materialMix).map(([name, value], index) => ({ name, value, color: ["#2563eb", "#f97316", "#14b8a6", "#64748b", "#16a34a"][index % 5] }))
     : materialData;
   const exportCsv = () => {
-    const summary = analytics || { jobs: 217, completed: 208, failed: 9, successRate: 96, utilization: 64, cost: 1245, printHours: 337, active: 0, queued: 0, materialMix: {}, daily: rows };
+    const summary = analytics || { jobs: 217, completed: 208, failed: 9, successRate: 96, utilization: 64, cost: 1245, printHours: 337, wasteGrams: 0, wasteCost: 0, active: 0, queued: 0, materialMix: {}, daily: rows };
     downloadCsvFile("layerpilot-analytics.csv", [
       { metric: "jobs", value: summary.jobs },
       { metric: "completed", value: summary.completed },
@@ -3769,17 +4882,34 @@ function AnalyticsPage({ addToast }: { addToast: (message: string, type?: Toast[
       { metric: "successRate", value: summary.successRate },
       { metric: "utilization", value: summary.utilization },
       { metric: "cost", value: summary.cost },
-      { metric: "printHours", value: summary.printHours }
+      { metric: "printHours", value: summary.printHours },
+      { metric: "wasteGrams", value: summary.wasteGrams || 0 },
+      { metric: "wasteCost", value: summary.wasteCost || 0 }
     ]);
     addToast("Analytics CSV exported", "info");
   };
   return (
     <Page title="Analytics" kicker="Success, utilization, material, cost and exports">
       <div className="toolbar"><select><option>Past 7 days</option><option>Past month</option><option>Custom range</option></select><select><option>All printers</option><option>Forge A1</option><option>Print Farm</option></select><select><option>All materials</option><option>PLA</option><option>PETG</option></select><button onClick={exportCsv}><Download size={16} />Export CSV</button></div>
-      <div className="metric-grid"><Metric label="Print jobs" value={String(analytics?.jobs ?? 217)} icon={ClipboardList} /><Metric label="Success rate" value={`${analytics?.successRate ?? 96}%`} icon={Check} tone="green" /><Metric label="Utilization" value={`${analytics?.utilization ?? 64}%`} icon={Gauge} tone="teal" /><Metric label="Cost" value={`$${analytics?.cost ?? 1245}`} icon={Database} tone="orange" /></div>
+      <div className="metric-grid"><Metric label="Print jobs" value={String(analytics?.jobs ?? 217)} icon={ClipboardList} /><Metric label="Success rate" value={`${analytics?.successRate ?? 96}%`} icon={Check} tone="green" /><Metric label="Utilization" value={`${analytics?.utilization ?? 64}%`} icon={Gauge} tone="teal" /><Metric label="Cost" value={`$${analytics?.cost ?? 1245}`} icon={Database} tone="orange" /><Metric label="Waste" value={`${analytics?.wasteGrams ?? 0}g`} icon={AlertTriangle} tone="red" /></div>
       <div className="split">
         <section className="panel"><PanelTitle title="Jobs and print hours" /><ResponsiveContainer width="100%" height={280}><BarChart data={rows}><CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" /><XAxis dataKey="day" /><YAxis /><Tooltip /><Bar dataKey="jobs" fill="#2563eb" /><Bar dataKey="hours" fill="#14b8a6" /></BarChart></ResponsiveContainer></section>
         <section className="panel"><PanelTitle title="Material mix" /><ResponsiveContainer width="100%" height={280}><PieChart><Pie data={mix} dataKey="value" nameKey="name" outerRadius={90} label>{mix.map((entry) => <Cell key={entry.name} fill={entry.color} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer></section>
+      </div>
+      <div className="split">
+        <section className="panel">
+          <PanelTitle title="Failure intelligence" action={<strong>${analytics?.wasteCost ?? 0} waste cost</strong>} />
+          <div className="event-feed">
+            {(analytics?.rootCauses || []).map((cause) => <div key={cause.label}><StatusDot status="failed" /><span>{cause.label}</span><em>{cause.count} job{cause.count === 1 ? "" : "s"}</em></div>)}
+            {!(analytics?.rootCauses || []).length && <div><StatusDot status="queued" /><span>No failure records yet</span><em>Flag failed prints from history</em></div>}
+          </div>
+        </section>
+        <section className="panel">
+          <PanelTitle title="Waste by printer" />
+          <div className="event-feed">
+            {(analytics?.printerReliability || []).slice(0, 6).map((printer) => <div key={printer.printerId}><StatusDot status={printer.successRate >= 95 ? "complete" : "failed"} /><span>{printer.printer}</span><em>{printer.successRate}% success - {printer.wasteGrams}g waste - ${printer.wasteCost}</em></div>)}
+          </div>
+        </section>
       </div>
       <section className="panel"><PanelTitle title="Success trend" /><ResponsiveContainer width="100%" height={220}><LineChart data={rows}><CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" /><XAxis dataKey="day" /><YAxis domain={[80, 100]} /><Tooltip /><Line type="monotone" dataKey="success" stroke="#16a34a" strokeWidth={3} /></LineChart></ResponsiveContainer></section>
     </Page>
@@ -3814,7 +4944,7 @@ function HistoryPage({ setQueue, printers, addToast, setBackendStatus }: { setQu
     setQueue((items) => [...items, { id: crypto.randomUUID(), fileId: "history", file: item.file, printerId: printer.id, printer: printer.name, status: "queued", priority: "Normal", stage: "needs scheduling", material: item.material, color: "Any", due: "Tomorrow 12:00", dimensions: [120, 90, 45], assignee: "Scheduler", time: item.duration, cost: item.cost, added: "Just now" }]);
     addToast("Reprint added locally");
   };
-  const updateHistory = async (item: HistoryRecord, patch: Partial<Pick<HistoryRecord, "note" | "issueTag" | "issueSeverity" | "failureReason">>, label: string) => {
+  const updateHistory = async (item: HistoryRecord, patch: Partial<HistoryRecord>, label: string) => {
     setHistory((records) => records.map((record) => record.id === item.id ? { ...record, ...patch } : record));
     if (item.id.startsWith("seed-")) {
       addToast(`${label} saved locally`, "warning");
@@ -3837,12 +4967,17 @@ function HistoryPage({ setQueue, printers, addToast, setBackendStatus }: { setQu
   const flagIssue = (item: HistoryRecord) => updateHistory(item, {
     issueTag: "Needs review",
     issueSeverity: item.status === "failed" ? "High" : "Medium",
-    failureReason: item.failureReason || item.note || "Operator flagged for review"
+    failureReason: item.failureReason || item.note || "Operator flagged for review",
+    failureCategory: item.failureCategory || "Print quality",
+    rootCause: item.rootCause || item.failureReason || item.note || "Operator flagged for review",
+    correctiveAction: item.correctiveAction || "Review setup, material condition, and first-layer result before reprint",
+    wasteGrams: item.wasteGrams || Math.max(1, Math.round(item.cost || 1))
   }, "Issue tag");
   return (
     <Page title="Print history" kicker="Review, annotate, and reprint previous jobs">
-      <DataTable headers={["File", "Printer", "Status", "Duration", "Material", "Cost", "Date", "Notes", "Actions"]}>
-        {history.map((job) => <tr key={job.id}><td><b>{job.file}</b>{job.issueTag && <small>{job.issueTag} - {job.issueSeverity || "Medium"}</small>}</td><td>{job.printer}</td><td><StatusPill status={job.status} /></td><td>{job.duration}</td><td>{job.material}</td><td>${job.cost}</td><td>{job.date}</td><td><input defaultValue={job.note} onBlur={(event) => event.target.value !== job.note && updateHistory(job, { note: event.target.value }, "History note")} /></td><td><button onClick={() => reprint(job)}>Reprint</button><button onClick={() => flagIssue(job)}>Flag</button></td></tr>)}
+      <div className="metric-grid"><Metric label="History jobs" value={String(history.length)} icon={ListChecks} /><Metric label="Flagged" value={String(history.filter((job) => job.issueTag || job.failureReason).length)} icon={AlertTriangle} tone="orange" /><Metric label="Waste" value={`${history.reduce((sum, job) => sum + Number(job.wasteGrams || 0), 0)}g`} icon={Database} tone="red" /><Metric label="Waste cost" value={`$${Math.round(history.reduce((sum, job) => sum + Number(job.wasteCost || 0), 0) * 100) / 100}`} icon={Gauge} tone="orange" /></div>
+      <DataTable headers={["File", "Printer", "Status", "Duration", "Material", "Waste", "Root cause", "Date", "Notes", "Actions"]}>
+        {history.map((job) => <tr key={job.id}><td><b>{job.file}</b>{job.issueTag && <small>{job.issueTag} - {job.issueSeverity || "Medium"}</small>}</td><td>{job.printer}</td><td><StatusPill status={job.status} /></td><td>{job.duration}</td><td>{job.material}</td><td>{Number(job.wasteGrams || 0)}g<small>${Number(job.wasteCost || 0)}</small></td><td>{job.rootCause || job.failureCategory || "None"}{job.correctiveAction && <small>{job.correctiveAction}</small>}</td><td>{job.date}</td><td><input defaultValue={job.note} onBlur={(event) => event.target.value !== job.note && updateHistory(job, { note: event.target.value }, "History note")} /></td><td><button onClick={() => reprint(job)}>Reprint</button><button onClick={() => flagIssue(job)}>Flag</button></td></tr>)}
       </DataTable>
     </Page>
   );
@@ -3926,6 +5061,7 @@ function IntegrationsPage({ apiKeys, setApiKeys, webhooks, setWebhooks, webhookD
   const [webhookDraft, setWebhookDraft] = useState({ name: "Production events", url: "https://webhook.site/layerpilot", events: "order.status,order.jobs_generated,queue.status,printer.status,spool.usage" });
   const [apiKeyDraft, setApiKeyDraft] = useState({ name: "Farm scheduler", scopes: "queue:write,files:write,orders:write" });
   const [newApiSecret, setNewApiSecret] = useState("");
+  const [bridgeDiagnostic, setBridgeDiagnostic] = useState<BridgeDiagnostic | null>(bridges.find((bridge) => bridge.lastDiagnostics)?.lastDiagnostics || null);
   const saveBridge = async () => {
     try {
       const saved = await apiRequest<Bridge>("/api/bridges", {
@@ -3940,10 +5076,11 @@ function IntegrationsPage({ apiKeys, setApiKeys, webhooks, setWebhooks, webhookD
   };
   const testBridge = async (bridge: Bridge) => {
     try {
-      const tested = await apiRequest<{ bridge: Bridge; printer: Printer }>(`/api/bridges/${bridge.id}/test`, { method: "POST" });
+      const tested = await apiRequest<{ ok: boolean; bridge: Bridge; printer: Printer; diagnostic: BridgeDiagnostic }>(`/api/bridges/${bridge.id}/test`, { method: "POST" });
       setBridges((items) => items.map((item) => item.id === bridge.id ? tested.bridge : item));
       setPrinters((items) => items.map((item) => item.id === tested.printer.id ? tested.printer : item));
-      addToast(`${bridge.name} connected`, "success");
+      setBridgeDiagnostic(tested.diagnostic);
+      addToast(tested.ok ? `${bridge.name} connected` : `${bridge.name} diagnostic failed`, tested.ok ? "success" : "warning");
     } catch {
       setBridges((items) => items.map((item) => item.id === bridge.id ? { ...item, lastStatus: "error" } : item));
       addToast(`${bridge.name} connection failed`, "warning");
@@ -4025,7 +5162,7 @@ function IntegrationsPage({ apiKeys, setApiKeys, webhooks, setWebhooks, webhookD
         <PanelTitle title="Printer bridges" action={<><button onClick={syncBridges}><RefreshCw size={16} />Sync all</button><button className="primary" onClick={saveBridge}><Save size={16} />Save bridge</button></>} />
         <div className="toolbar">
           <select value={bridgeDraft.printerId} onChange={(event) => setBridgeDraft({ ...bridgeDraft, printerId: event.target.value })}>{printers.map((printer) => <option key={printer.id} value={printer.id}>{printer.name}</option>)}</select>
-          <select value={bridgeDraft.kind} onChange={(event) => setBridgeDraft({ ...bridgeDraft, kind: event.target.value as Bridge["kind"] })}><option value="octoprint">OctoPrint</option><option value="moonraker">Moonraker</option><option value="manual">Manual</option></select>
+          <select value={bridgeDraft.kind} onChange={(event) => setBridgeDraft({ ...bridgeDraft, kind: event.target.value as Bridge["kind"] })}><option value="octoprint">OctoPrint</option><option value="moonraker">Moonraker</option><option value="prusalink">PrusaLink</option><option value="manual">Manual</option></select>
           <input value={bridgeDraft.name} onChange={(event) => setBridgeDraft({ ...bridgeDraft, name: event.target.value })} placeholder="Bridge name" />
           <input value={bridgeDraft.baseUrl} onChange={(event) => setBridgeDraft({ ...bridgeDraft, baseUrl: event.target.value })} placeholder="http://octopi.local" />
           <input type="password" value={bridgeDraft.apiKey} onChange={(event) => setBridgeDraft({ ...bridgeDraft, apiKey: event.target.value })} placeholder="API key or access token" />
@@ -4033,6 +5170,20 @@ function IntegrationsPage({ apiKeys, setApiKeys, webhooks, setWebhooks, webhookD
         <DataTable headers={["Bridge", "Printer", "Kind", "URL", "Key", "Last status", "Last sync", "Actions"]}>
           {bridges.map((bridge) => <tr key={bridge.id}><td><b>{bridge.name}</b></td><td>{printers.find((printer) => printer.id === bridge.printerId)?.name || bridge.printerId}</td><td><StatusPill status={bridge.kind} /></td><td><code>{bridge.baseUrl}</code></td><td>{bridge.hasApiKey ? "Stored" : "None"}</td><td><StatusPill status={bridge.lastStatus || "not tested"} /></td><td>{bridge.lastSyncAt ? new Date(bridge.lastSyncAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Never"}</td><td><button onClick={() => testBridge(bridge)}><RefreshCw size={14} />Test sync</button></td></tr>)}
         </DataTable>
+        {bridgeDiagnostic && <div className={`diagnostic-card ${bridgeDiagnostic.ok ? "pass" : "fail"}`}>
+          <div>
+            <b>{bridgeDiagnostic.summary}</b>
+            <span>{bridgeDiagnostic.kind} - {bridgeDiagnostic.baseUrl} - {bridgeDiagnostic.latencyMs}ms</span>
+          </div>
+          <em>{bridgeDiagnostic.recommendation}</em>
+          <div className="diagnostic-grid">
+            {bridgeDiagnostic.checks.map((check) => <div key={`${check.name}-${check.detail}`} className={`diagnostic-check ${check.status}`}>
+              <StatusDot status={check.status === "passed" ? "complete" : check.status === "warning" ? "queued" : "failed"} />
+              <span><b>{check.name}</b>{check.detail}</span>
+              {check.recommendation && <small>{check.recommendation}</small>}
+            </div>)}
+          </div>
+        </div>}
       </section>
       <div className="split">
         <section className="panel">
@@ -4139,6 +5290,9 @@ function SettingsPage({ settings, setSettings, addToast, setBackendStatus, curre
   const [restoreBackup, setRestoreBackup] = useState<Record<string, unknown> | null>(null);
   const [restoreSummary, setRestoreSummary] = useState<RestoreSummary | null>(null);
   const [restoreBusy, setRestoreBusy] = useState(false);
+  const [onboarding, setOnboarding] = useState<OnboardingStatus | null>(null);
+  const [supportSnapshot, setSupportSnapshot] = useState<SupportSnapshot | null>(null);
+  const [supportBusy, setSupportBusy] = useState(false);
   const refreshBilling = async () => {
     try {
       const summary = await apiRequest<BillingSummary>("/api/billing");
@@ -4155,6 +5309,10 @@ function SettingsPage({ settings, setSettings, addToast, setBackendStatus, curre
   }, [settings.allowedApiIps]);
   useEffect(() => {
     refreshBilling();
+    apiRequest<OnboardingStatus>("/api/onboarding").then((result) => {
+      setOnboarding(result);
+      setBackendStatus("connected");
+    }).catch(() => setBackendStatus("local"));
   }, []);
   const saveSettings = async (patch: Partial<WorkspaceSettings>, label = "Settings") => {
     setSettings((current) => ({ ...current, ...patch }));
@@ -4307,6 +5465,37 @@ function SettingsPage({ settings, setSettings, addToast, setBackendStatus, curre
       addToast("Billing session could not be created", "warning");
     }
   };
+  const updateOnboardingStep = async (step: OnboardingStep, status: OnboardingStep["status"]) => {
+    try {
+      const result = await apiRequest<{ settings: WorkspaceSettings; onboarding: OnboardingStatus }>(`/api/onboarding/${step.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status, note: step.note || "" })
+      });
+      setSettings(result.settings);
+      setOnboarding(result.onboarding);
+      setBackendStatus("connected");
+      addToast(`${step.title} marked ${status}`, status === "complete" ? "success" : "info");
+    } catch {
+      setBackendStatus("local");
+      addToast("Go-live checklist update failed. Check role or API status.", "warning");
+    }
+  };
+  const generateSupportSnapshot = async () => {
+    setSupportBusy(true);
+    try {
+      const snapshot = await apiRequest<SupportSnapshot>("/api/support/snapshot", { method: "POST" });
+      setSupportSnapshot(snapshot);
+      setOnboarding(snapshot.onboarding);
+      downloadTextFile(`3dstu-farmflow-support-${Date.now()}.json`, JSON.stringify(snapshot, null, 2), "application/json");
+      setBackendStatus("connected");
+      addToast("Support snapshot generated", "success");
+    } catch {
+      setBackendStatus("local");
+      addToast("Support snapshot failed. Owner/admin export access is required.", "warning");
+    } finally {
+      setSupportBusy(false);
+    }
+  };
   const storage = billing?.storage || { used: "0 B", usedGb: 0, limitGb: settings.storageLimitGb, percent: 0, files: 0, storedFiles: 0, usedBytes: 0 };
   const currentPlanId = billing?.plan.id || "";
   return (
@@ -4324,6 +5513,22 @@ function SettingsPage({ settings, setSettings, addToast, setBackendStatus, curre
           </select></label>
           <div className="quickbar"><button onClick={managePlan}>Manage plan</button><button onClick={() => exportWorkspace()}><Download size={16} />Export backup</button><button onClick={() => exportWorkspace(true)}><Download size={16} />Export full backup</button></div>
           {billing?.invoices.length ? <div className="event-feed billing-feed">{billing.invoices.slice(0, 3).map((invoice) => <div key={invoice.id}><StatusDot status={invoice.status === "paid" ? "complete" : "queued"} /><span>{invoice.plan} - {invoice.currency} {invoice.amount}</span><em>{invoice.status} - {invoice.at.slice(0, 10)}</em></div>)}</div> : <p className="muted">No billing records yet.</p>}
+        </section>
+        <section className="panel">
+          <PanelTitle title="Go-live readiness" action={<strong>{onboarding?.progress.percent ?? 0}%</strong>} />
+          <div className="progress large"><span style={{ width: `${onboarding?.progress.percent ?? 0}%` }} /></div>
+          <div className="event-feed onboarding-feed">
+            {(onboarding?.steps || []).map((step) => <div key={step.id}><StatusDot status={step.status === "complete" ? "complete" : step.status === "skipped" ? "queued" : "failed"} /><span><b>{step.title}</b> - {step.description}</span><em>{step.status}{step.note ? ` - ${step.note}` : ""}</em><button onClick={() => updateOnboardingStep(step, step.status === "complete" ? "pending" : "complete")}>{step.status === "complete" ? "Reopen" : "Complete"}</button></div>)}
+            {!onboarding && <div><StatusDot status="queued" /><span>Loading go-live checklist</span><em>Workspace readiness will appear here</em></div>}
+          </div>
+        </section>
+        <section className="panel">
+          <PanelTitle title="3DSTU support snapshot" action={<button onClick={generateSupportSnapshot} disabled={supportBusy}><Download size={16} />{supportBusy ? "Generating" : "Generate"}</button>} />
+          <p>Creates a redacted operational snapshot for support without passwords, tokens, API key hashes, or billing secrets.</p>
+          {supportSnapshot && <div className="event-feed billing-feed">
+            <div><StatusDot status="complete" /><span>{supportSnapshot.workspace.name}</span><em>{supportSnapshot.generatedAt}</em></div>
+            <div><StatusDot status="queued" /><span>{supportSnapshot.counts.printers} printers, {supportSnapshot.counts.files} files, {supportSnapshot.counts.queue} queue jobs</span><em>{supportSnapshot.readiness.onboarding.percent}% go-live ready</em></div>
+          </div>}
         </section>
         <section className="panel">
           <PanelTitle title="Backup restore" />
@@ -4455,4 +5660,3 @@ function ToastStack({ toasts }: { toasts: Toast[] }) {
 }
 
 export default App;
-

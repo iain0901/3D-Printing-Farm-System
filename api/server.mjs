@@ -16,7 +16,7 @@ import { Low } from "lowdb";
 import mqtt from "mqtt";
 import { z } from "zod";
 import Stripe from "stripe";
-import { fetchBridgeStatus, sendBridgeCommand } from "./hardware-bridge.mjs";
+import { diagnoseBridge, fetchBridgeStatus, sendBridgeCommand } from "./hardware-bridge.mjs";
 import { formatBytes, parseModelMetadata } from "./model-metadata.mjs";
 import { createObjectStorage, defaultStorageRoot } from "./object-storage.mjs";
 import { createPersistenceAdapter } from "./persistence.mjs";
@@ -25,7 +25,7 @@ import { seedData } from "./seed.mjs";
 
 const execFileAsync = promisify(execFile);
 
-const COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "orders", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns"];
+const COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "orders", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns"];
 const RESTORABLE_EXTRA_KEYS = ["users", "workspaces", "workspaceSettings", "costCatalog", "profileDefaults", "profileMatchingPolicy", "billingSessions", "invoices", "dataMeta"];
 const RESTORABLE_KEYS = [...COLLECTIONS, ...RESTORABLE_EXTRA_KEYS];
 const defaultCostCatalog = {
@@ -57,7 +57,7 @@ const defaultAuthRateLimit = { max: 8, timeWindow: "1 minute", groupId: "auth" }
 const defaultSensitiveRateLimit = { max: 30, timeWindow: "1 minute" };
 const CURRENT_SCHEMA_VERSION = 4;
 const DEFAULT_WORKSPACE_ID = "ws-default";
-const TENANT_COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "orders", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns", "billingSessions", "invoices"];
+const TENANT_COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "orders", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns", "billingSessions", "invoices"];
 const printerStatusSchema = z.enum(["idle", "printing", "paused", "offline", "error", "maintenance"]);
 const jobStatusSchema = z.enum(["queued", "printing", "paused", "complete", "failed", "cancelled"]);
 const prioritySchema = z.enum(["Rush", "High", "Normal", "Low"]);
@@ -65,7 +65,8 @@ const taskStageSchema = z.enum(["needs slicing", "needs scheduling", "scheduled"
 const roleSchema = z.enum(["Owner", "Admin", "Operator", "Viewer", "Student"]);
 const maintenanceStatusSchema = z.enum(["scheduled", "in progress", "done", "blocked"]);
 const severitySchema = z.enum(["Low", "Medium", "High", "Urgent"]);
-const orderStatusSchema = z.enum(["received", "queued", "printing", "packed", "shipped"]);
+const orderStatusSchema = z.enum(["received", "queued", "printing", "on_hold", "packed", "shipped", "completed", "cancelled"]);
+const terminalOrderStatuses = new Set(["completed", "cancelled"]);
 const commerceSourceSchema = z.enum(["Shopify", "Etsy", "Manual", "eBay", "Generic"]);
 const authSchema = z.object({
   email: z.string().email(),
@@ -178,6 +179,32 @@ const spoolScanSchema = z.object({
   grams: z.number().positive().optional(),
   location: z.string().min(1).optional()
 });
+const purchaseStatusSchema = z.enum(["open", "ordered", "received", "cancelled"]);
+const purchaseRequestSchema = z.object({
+  spoolId: z.string().min(1).optional().default(""),
+  material: z.string().min(1),
+  color: z.string().min(1).default("Any"),
+  brand: z.string().min(1).default("Generic"),
+  quantity: z.number().int().positive().max(100).default(1),
+  targetGrams: z.number().positive().max(10000).default(1000),
+  supplier: z.string().min(1).default("Preferred supplier"),
+  priority: severitySchema.default("Medium"),
+  status: purchaseStatusSchema.default("open"),
+  due: z.string().min(1).default("This week"),
+  note: z.string().max(1000).optional().default("")
+});
+const purchaseRequestPatchSchema = purchaseRequestSchema.partial();
+const purchaseReorderPlanSchema = z.object({
+  thresholdGrams: z.number().nonnegative().max(10000).default(250),
+  targetGrams: z.number().positive().max(10000).default(1000),
+  quantity: z.number().int().positive().max(50).default(1),
+  supplier: z.string().min(1).default("Preferred supplier")
+}).default({});
+const purchaseReceiveSchema = z.object({
+  location: z.string().min(1).default("Rack Receiving"),
+  dry: z.boolean().default(true),
+  nfcPrefix: z.string().min(1).optional()
+}).default({});
 const maintenanceSchema = z.object({
   title: z.string().min(1),
   printer: z.string().min(1),
@@ -216,6 +243,40 @@ const orderSchema = z.object({
   status: orderStatusSchema.default("received"),
   due: z.string().min(1).default("Tomorrow 17:00"),
   value: z.number().nonnegative().default(0)
+});
+const quoteStatusSchema = z.enum(["new", "reviewing", "quoted", "accepted", "converted", "rejected"]);
+const publicQuoteRequestSchema = z.object({
+  customer: z.string().min(1).max(120),
+  email: z.string().email(),
+  company: z.string().max(120).optional().default(""),
+  project: z.string().min(1).max(160),
+  material: z.string().min(1).default("PLA"),
+  quantity: z.number().int().positive().max(10000).default(1),
+  due: z.string().min(1).default("Flexible"),
+  budget: z.number().nonnegative().default(0),
+  notes: z.string().max(2000).optional().default(""),
+  fileName: z.string().max(160).optional().default(""),
+  source: z.string().min(1).default("Website")
+});
+const quoteRequestPatchSchema = z.object({
+  status: quoteStatusSchema.optional(),
+  priority: prioritySchema.optional(),
+  quotedValue: z.number().nonnegative().optional(),
+  validUntil: z.string().min(1).optional(),
+  internalNote: z.string().max(2000).optional()
+});
+const quoteConvertSchema = z.object({
+  due: z.string().min(1).optional(),
+  value: z.number().nonnegative().optional(),
+  createJob: z.boolean().default(true)
+}).default({});
+const quoteCustomerLinkSchema = z.object({
+  rotate: z.boolean().default(false)
+}).default({});
+const publicQuoteDecisionSchema = z.object({
+  token: z.string().min(12),
+  decision: z.enum(["accepted", "rejected", "revision"]),
+  note: z.string().max(1000).optional().default("")
 });
 const commerceConnectorSchema = z.object({
   name: z.string().min(1),
@@ -338,6 +399,29 @@ const skuPatchSchema = z.object({
   stock: z.number().int().nonnegative().optional(),
   channel: z.string().min(1).optional()
 });
+const productionTemplateSchema = z.object({
+  name: z.string().min(1),
+  sku: z.string().optional().default(""),
+  fileId: z.string().min(1),
+  material: z.string().min(1),
+  color: z.string().min(1).default("Any"),
+  priority: prioritySchema.default("Normal"),
+  stage: taskStageSchema.default("needs scheduling"),
+  printerId: z.string().optional().default(""),
+  process: z.string().min(1).default("0.20mm Production"),
+  dueOffsetDays: z.number().int().min(0).max(365).default(2),
+  quantity: z.number().int().positive().max(500).default(1),
+  time: z.string().min(1).default("1h 00m"),
+  cost: z.number().nonnegative().default(0),
+  notes: z.string().max(1000).optional().default("")
+});
+const productionTemplatePatchSchema = productionTemplateSchema.partial();
+const productionTemplateRunSchema = z.object({
+  quantity: z.number().int().positive().max(500).optional(),
+  due: z.string().min(1).optional(),
+  printerId: z.string().min(1).optional(),
+  dryRun: z.boolean().default(false)
+}).default({});
 const orderJobGenerationSchema = z.object({
   dryRun: z.boolean().default(false),
   allowDuplicate: z.boolean().default(false)
@@ -413,7 +497,7 @@ const queueCreateSchema = z.object({
 });
 const bridgeSchema = z.object({
   printerId: z.string().min(1),
-  kind: z.enum(["octoprint", "moonraker", "manual"]),
+  kind: z.enum(["octoprint", "moonraker", "prusalink", "manual"]),
   name: z.string().min(1),
   baseUrl: z.string().min(1),
   apiKey: z.string().optional().default(""),
@@ -451,6 +535,12 @@ const workspaceSettingsSchema = z.object({
   storageLimitGb: z.number().positive().default(10),
   hotDropMode: z.enum(["Upload Only", "Direct Print", "Auto-Queue"]).default("Direct Print"),
   plan: z.string().min(1).default("Print Farm Trial"),
+  onboarding: z.record(z.string(), z.object({
+    status: z.enum(["pending", "complete", "skipped"]).default("pending"),
+    note: z.string().max(500).default(""),
+    updatedAt: z.string().optional(),
+    updatedBy: z.string().optional()
+  })).default({}),
   stripeCustomerId: z.string().min(1).optional(),
   stripeSubscriptionId: z.string().min(1).optional()
 });
@@ -464,6 +554,10 @@ const workspaceRecordSchema = z.object({
   settings: workspaceSettingsSchema
 });
 const workspaceSettingsPatchSchema = workspaceSettingsSchema.partial();
+const onboardingStepPatchSchema = z.object({
+  status: z.enum(["pending", "complete", "skipped"]).default("complete"),
+  note: z.string().max(500).optional().default("")
+});
 const billingPlanPatchSchema = z.object({
   planId: z.string().min(1)
 });
@@ -497,7 +591,14 @@ const historyPatchSchema = z.object({
   note: z.string().max(1000).optional(),
   issueTag: z.string().max(80).optional(),
   issueSeverity: severitySchema.optional(),
-  failureReason: z.string().max(1000).optional()
+  failureReason: z.string().max(1000).optional(),
+  failureCategory: z.string().max(80).optional(),
+  rootCause: z.string().max(1000).optional(),
+  correctiveAction: z.string().max(1000).optional(),
+  wasteGrams: z.number().nonnegative().optional(),
+  wasteCost: z.number().nonnegative().optional(),
+  wasteSpoolId: z.string().min(1).optional(),
+  deductWasteFromInventory: z.boolean().optional()
 });
 const adminRestoreSchema = z.object({
   backup: z.record(z.string(), z.unknown()),
@@ -786,7 +887,7 @@ function applyDataMigrations(data) {
     applied.push({ version: 2, name: "account security metadata", appliedAt: now });
   }
   if (fromVersion < 3) {
-    for (const collection of ["printers", "files", "fileFolders", "queue", "spools", "maintenance", "maintenanceTemplates", "parts", "skus", "orders", "profiles", "webhooks", "notificationChannels", "commerceConnectors", "bridges", "events"]) {
+    for (const collection of ["printers", "files", "fileFolders", "queue", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "parts", "skus", "productionTemplates", "quoteRequests", "orders", "profiles", "webhooks", "notificationChannels", "commerceConnectors", "bridges", "events"]) {
       for (const item of ensureArray(data, collection)) {
         item.id ||= randomUUID();
         item.createdAt ||= item.at || item.updatedAt || now;
@@ -840,6 +941,7 @@ async function buildDataIntegrityReport(data, options = {}) {
   const printerIds = ids(data.printers);
   const fileIds = ids(data.files);
   const userIds = ids(data.users);
+  const spoolIds = ids(data.spools);
   const partNames = new Set((data.parts || []).map((part) => String(part.name || "").toLowerCase()).filter(Boolean));
   const seenEmails = new Set();
   for (const user of data.users || []) {
@@ -873,6 +975,13 @@ async function buildDataIntegrityReport(data, options = {}) {
     for (const partName of sku.parts || []) {
       if (!partNames.has(String(partName).toLowerCase())) warnings.push({ code: "sku.part_missing", message: `${sku.sku || sku.id} references missing part ${partName}` });
     }
+  }
+  for (const request of data.purchaseRequests || []) {
+    if (request.spoolId && !spoolIds.has(request.spoolId)) warnings.push({ code: "purchase_request.spool_missing", message: `${request.material || request.id} reorder references missing spool ${request.spoolId}` });
+  }
+  for (const template of data.productionTemplates || []) {
+    if (template.fileId && !fileIds.has(template.fileId)) warnings.push({ code: "production_template.file_missing", message: `${template.name || template.id} references missing file ${template.fileId}` });
+    if (template.printerId && !printerIds.has(template.printerId)) warnings.push({ code: "production_template.printer_missing", message: `${template.name || template.id} references missing printer ${template.printerId}` });
   }
   for (const bridge of data.bridges || []) {
     if (bridge.printerId && !printerIds.has(bridge.printerId)) warnings.push({ code: "bridge.printer_missing", message: `${bridge.name || bridge.id} references missing printer ${bridge.printerId}` });
@@ -1002,6 +1111,9 @@ async function ensureAuthData(database, options = {}) {
   database.data.todoActions ||= [];
   database.data.maintenanceTemplates ||= [];
   database.data.maintenanceReports ||= [];
+  database.data.productionTemplates ||= [];
+  database.data.purchaseRequests ||= [];
+  database.data.quoteRequests ||= [];
   database.data.webhooks ||= [];
   database.data.webhookDeliveries ||= [];
   database.data.notificationChannels ||= [];
@@ -1064,6 +1176,19 @@ async function ensureAuthData(database, options = {}) {
     spool.dry = spool.dry ?? true;
     spool.nfc ||= `LP-${String(spool.material || "SPOOL").toUpperCase()}-${String(spool.id || randomUUID()).slice(0, 4)}`;
   }
+  for (const request of database.data.purchaseRequests || []) {
+    request.material ||= "PLA";
+    request.color ||= "Any";
+    request.brand ||= "Generic";
+    request.quantity = Math.max(1, Number(request.quantity || 1));
+    request.targetGrams = Math.max(1, Number(request.targetGrams || 1000));
+    request.supplier ||= "Preferred supplier";
+    request.priority = severitySchema.safeParse(request.priority).success ? request.priority : "Medium";
+    request.status = purchaseStatusSchema.safeParse(request.status).success ? request.status : "open";
+    request.due ||= "This week";
+    request.note ||= "";
+    request.spoolId ||= "";
+  }
   for (const job of database.data.maintenance || []) {
     job.status = maintenanceStatusSchema.safeParse(job.status).success ? job.status : "scheduled";
     job.progress ||= job.status === "done" ? "Complete" : "0/4";
@@ -1077,6 +1202,28 @@ async function ensureAuthData(database, options = {}) {
     order.status = orderStatusSchema.safeParse(order.status).success ? order.status : "received";
     order.due ||= "Tomorrow 17:00";
     order.value = Number(order.value || 0);
+  }
+  for (const quote of database.data.quoteRequests || []) {
+    quote.customer ||= "Unknown customer";
+    quote.email ||= "unknown@example.com";
+    quote.company ||= "";
+    quote.project ||= "3D print request";
+    quote.material ||= "PLA";
+    quote.quantity = Math.max(1, Number(quote.quantity || 1));
+    quote.due ||= "Flexible";
+    quote.budget = Number(quote.budget || 0);
+    quote.notes ||= "";
+    quote.fileName ||= "";
+    quote.fileId ||= "";
+    quote.fileType ||= "";
+    quote.fileSize ||= "";
+    quote.source ||= "Website";
+    quote.status = quoteStatusSchema.safeParse(quote.status).success ? quote.status : "new";
+    quote.priority = prioritySchema.safeParse(quote.priority).success ? quote.priority : "Normal";
+    quote.quotedValue = Number(quote.quotedValue || 0);
+    quote.internalNote ||= "";
+    quote.validUntil ||= "";
+    quote.customerAccessToken ||= randomBytes(18).toString("base64url");
   }
   for (const part of database.data.parts || []) {
     part.process ||= "0.20mm Production";
@@ -1103,6 +1250,19 @@ async function ensureAuthData(database, options = {}) {
     sku.price = Number(sku.price || 0);
     sku.stock = Number(sku.stock || 0);
     sku.channel ||= "Manual";
+  }
+  for (const template of database.data.productionTemplates || []) {
+    template.sku ||= "";
+    template.color ||= "Any";
+    template.priority = prioritySchema.safeParse(template.priority).success ? template.priority : "Normal";
+    template.stage = taskStageSchema.safeParse(template.stage).success ? template.stage : "needs scheduling";
+    template.printerId ||= "";
+    template.process ||= "0.20mm Production";
+    template.dueOffsetDays = Number.isFinite(Number(template.dueOffsetDays)) ? Number(template.dueOffsetDays) : 2;
+    template.quantity = Math.max(1, Number(template.quantity || 1));
+    template.time ||= "1h 00m";
+    template.cost = Number(template.cost || 0);
+    template.notes ||= "";
   }
   for (const webhook of database.data.webhooks || []) {
     webhook.name ||= "Webhook";
@@ -1839,6 +1999,77 @@ function findSpoolByCode(spools, code) {
     .some((candidate) => String(candidate).trim().toLowerCase() === normalized));
 }
 
+function buildPurchaseRequestFromSpool(spool, options = {}, workspaceId = DEFAULT_WORKSPACE_ID) {
+  const now = new Date().toISOString();
+  return {
+    id: randomUUID(),
+    workspaceId,
+    spoolId: spool.id,
+    material: spool.material || "PLA",
+    color: spool.color || "Any",
+    brand: spool.brand || "Generic",
+    quantity: options.quantity || 1,
+    targetGrams: options.targetGrams || Number(spool.weight || 1000),
+    supplier: options.supplier || "Preferred supplier",
+    priority: Number(spoolAvailableGrams(spool)) <= 0 ? "Urgent" : "High",
+    status: "open",
+    due: "This week",
+    note: `Auto-generated because available inventory is ${Math.round(spoolAvailableGrams(spool))}g.`,
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+function createReorderPlan(data, workspaceId, options = {}) {
+  const normalized = purchaseReorderPlanSchema.parse(options || {});
+  const workspaceData = scopedWorkspaceData(data, workspaceId);
+  const existingOpen = new Set((workspaceData.purchaseRequests || [])
+    .filter((request) => ["open", "ordered"].includes(request.status) && request.spoolId)
+    .map((request) => request.spoolId));
+  const created = [];
+  const skipped = [];
+  for (const spool of workspaceData.spools || []) {
+    const available = spoolAvailableGrams(spool);
+    if (available >= normalized.thresholdGrams) continue;
+    if (existingOpen.has(spool.id)) {
+      skipped.push({ spoolId: spool.id, material: spool.material, reason: "open request exists" });
+      continue;
+    }
+    const request = buildPurchaseRequestFromSpool(spool, normalized, workspaceId);
+    data.purchaseRequests.unshift(request);
+    existingOpen.add(spool.id);
+    created.push(request);
+  }
+  return { created, skipped, thresholdGrams: normalized.thresholdGrams, purchaseRequests: scopedWorkspaceData(data, workspaceId).purchaseRequests };
+}
+
+function receivePurchaseRequest(data, requestId, workspaceId, options = {}) {
+  const normalized = purchaseReceiveSchema.parse(options || {});
+  const request = (data.purchaseRequests || []).find((item) => item.id === requestId && itemInWorkspace(item, workspaceId));
+  if (!request) return { error: "Purchase request not found", statusCode: 404 };
+  if (request.status === "cancelled") return { error: "Cancelled purchase request cannot be received", statusCode: 409 };
+  const now = new Date().toISOString();
+  const prefix = String(normalized.nfcPrefix || `LP-${request.material}`).toUpperCase().replace(/[^A-Z0-9-]+/g, "-").replace(/-+$/g, "");
+  const spools = Array.from({ length: Number(request.quantity || 1) }, (_, index) => ({
+    id: randomUUID(),
+    workspaceId,
+    material: request.material,
+    color: request.color || "Any",
+    brand: request.brand || "Generic",
+    remaining: Number(request.targetGrams || 1000),
+    weight: Number(request.targetGrams || 1000),
+    location: normalized.location,
+    dry: normalized.dry,
+    nfc: `${prefix}-${String(Date.now()).slice(-5)}-${index + 1}`,
+    purchaseRequestId: request.id,
+    createdAt: now,
+    updatedAt: now
+  }));
+  data.spools.push(...spools);
+  Object.assign(request, { status: "received", receivedAt: now, receivedSpoolIds: spools.map((spool) => spool.id), updatedAt: now });
+  return { request, spools, purchaseRequests: scopedWorkspaceData(data, workspaceId).purchaseRequests, inventory: scopedWorkspaceData(data, workspaceId).spools };
+}
+
 function buildCatalogExport(data) {
   const parts = data.parts || [];
   const files = data.files || [];
@@ -2190,6 +2421,136 @@ async function statStoredObject(file) {
   return 0;
 }
 
+function parseAxisValue(line, axis) {
+  const match = line.match(new RegExp(`\\b${axis}([-+\\d.]+)`, "i"));
+  if (!match) return null;
+  const value = Number(match[1]);
+  return Number.isFinite(value) ? value : null;
+}
+
+function buildGcodePreview(buffer) {
+  const text = buffer.toString("utf8");
+  const lines = text.split(/\r?\n/);
+  const position = { x: 0, y: 0, z: 0, e: 0 };
+  const bounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity, minZ: Infinity, maxZ: -Infinity };
+  const layers = new Map();
+  const sample = [];
+  let motionCommands = 0;
+  let extrusionMoves = 0;
+  let travelMoves = 0;
+  let totalExtrusion = 0;
+  for (const rawLine of lines) {
+    const line = rawLine.split(";")[0].trim();
+    if (!/^(G0|G1)\b/i.test(line)) continue;
+    const next = { ...position };
+    const x = parseAxisValue(line, "X");
+    const y = parseAxisValue(line, "Y");
+    const z = parseAxisValue(line, "Z");
+    const e = parseAxisValue(line, "E");
+    if (x !== null) next.x = x;
+    if (y !== null) next.y = y;
+    if (z !== null) next.z = z;
+    if (e !== null) next.e = e;
+    if (x === null && y === null && z === null && e === null) continue;
+    motionCommands += 1;
+    const extrusion = Math.max(0, next.e - position.e);
+    totalExtrusion += extrusion;
+    if (extrusion > 0) extrusionMoves += 1;
+    else travelMoves += 1;
+    bounds.minX = Math.min(bounds.minX, next.x);
+    bounds.maxX = Math.max(bounds.maxX, next.x);
+    bounds.minY = Math.min(bounds.minY, next.y);
+    bounds.maxY = Math.max(bounds.maxY, next.y);
+    bounds.minZ = Math.min(bounds.minZ, next.z);
+    bounds.maxZ = Math.max(bounds.maxZ, next.z);
+    const layerKey = next.z.toFixed(2);
+    const layer = layers.get(layerKey) || { z: Number(layerKey), moves: 0, extrusion: 0 };
+    layer.moves += 1;
+    layer.extrusion += extrusion;
+    layers.set(layerKey, layer);
+    if (sample.length < 420 && (extrusion > 0 || sample.length % 4 === 0)) {
+      sample.push({ x: Math.round(next.x * 100) / 100, y: Math.round(next.y * 100) / 100, z: Math.round(next.z * 100) / 100, extrusion: Math.round(extrusion * 1000) / 1000 });
+    }
+    Object.assign(position, next);
+  }
+  const hasBounds = Number.isFinite(bounds.minX) && Number.isFinite(bounds.maxX);
+  const extents = hasBounds
+    ? {
+        min: [bounds.minX, bounds.minY, bounds.minZ].map((value) => Math.round(value * 100) / 100),
+        max: [bounds.maxX, bounds.maxY, bounds.maxZ].map((value) => Math.round(value * 100) / 100)
+      }
+    : { min: [0, 0, 0], max: [0, 0, 0] };
+  return {
+    kind: "toolpath",
+    lineCount: lines.length,
+    motionCommands,
+    extrusionMoves,
+    travelMoves,
+    totalExtrusion: Math.round(totalExtrusion * 1000) / 1000,
+    layers: [...layers.values()].sort((a, b) => a.z - b.z).map((layer) => ({ ...layer, extrusion: Math.round(layer.extrusion * 1000) / 1000 })).slice(0, 240),
+    sample,
+    extents
+  };
+}
+
+async function buildFilePreview(file, buffer, data) {
+  const metadata = buffer ? await parseModelMetadata({ buffer, filename: file.name, material: file.material }) : null;
+  const dimensions = metadata?.dimensions || file.dimensions || [100, 100, 50];
+  const [width, depth, height] = dimensions.map((value) => Number(value) || 0);
+  const plate = { width: 256, depth: 256, height: 256 };
+  const occupancyPercent = Math.min(999, Math.round((width * depth) / (plate.width * plate.depth) * 100));
+  const warnings = [];
+  if (!buffer) warnings.push("Stored bytes are unavailable; preview is based on recorded metadata only.");
+  if (width > plate.width || depth > plate.depth || height > plate.height) warnings.push("Model exceeds the default 256 x 256 x 256 mm preview plate.");
+  if (file.type !== "GCODE" && !file.sliced) warnings.push("Model is not sliced yet; run a slicer profile before production.");
+  const visualization = file.type === "GCODE" && buffer
+    ? buildGcodePreview(buffer)
+    : {
+        kind: "bounding-box",
+        extents: { min: [0, 0, 0], max: dimensions },
+        vertices: [
+          [0, 0, 0],
+          [width, 0, 0],
+          [width, depth, 0],
+          [0, depth, 0],
+          [0, 0, height],
+          [width, 0, height],
+          [width, depth, height],
+          [0, depth, height]
+        ]
+      };
+  const compatiblePrinters = (data.printers || []).filter((printer) => {
+    const volume = printer.buildVolume || [0, 0, 0];
+    return volume[0] >= width && volume[1] >= depth && volume[2] >= height && (!file.material || (printer.compatibleMaterials || []).includes(file.material));
+  }).map((printer) => ({ id: printer.id, name: printer.name, status: printer.status, buildVolume: printer.buildVolume }));
+  if (!compatiblePrinters.length) warnings.push("No current printer matches both material and build-volume requirements.");
+  return {
+    fileId: file.id,
+    generatedAt: new Date().toISOString(),
+    name: file.name,
+    type: file.type,
+    material: file.material,
+    summary: {
+      dimensions,
+      size: file.size,
+      estimateGrams: metadata?.estimateGrams || file.estimateGrams || file.usage || 0,
+      estimateMinutes: metadata?.estimateMinutes || file.estimateMinutes || 0,
+      printTime: metadata?.printTime || file.printTime || "0h 00m",
+      quote: file.quote || file.cost || 0,
+      sliced: Boolean(file.sliced),
+      status: file.status
+    },
+    buildPlate: {
+      ...plate,
+      occupancyPercent,
+      fit: width <= plate.width && depth <= plate.depth && height <= plate.height ? "fits default plate" : "oversize on default plate"
+    },
+    visualization,
+    compatiblePrinters,
+    warnings
+  };
+}
+
 function triangleNormal(a, b, c) {
   const ux = b[0] - a[0];
   const uy = b[1] - a[1];
@@ -2401,6 +2762,52 @@ async function createParametricNameplate(database, payload, options = {}) {
     database.data.parts.push(part);
   }
   return { file, part, stlBytes: buffer.length, estimates: { grams, minutes, quote } };
+}
+
+async function createStoredModelFile(database, payload, options = {}) {
+  const workspaceId = options.workspaceId || DEFAULT_WORKSPACE_ID;
+  const filename = path.basename(payload.filename || "model.stl");
+  const buffer = payload.buffer;
+  const material = payload.material || "PLA";
+  const folder = payload.folder || "Uploads";
+  const metadata = await parseModelMetadata({ buffer, filename, material });
+  const id = payload.id || randomUUID();
+  const folderResult = ensureFileFolder(database.data, { name: folder, purpose: payload.folderPurpose || "inbox", workspaceId });
+  const stored = await storeObject(`uploads/${id}/${filename}`, buffer, { filename, type: metadata.type });
+  const quote = calculateQuote(database.data.costCatalog, { material, grams: metadata.estimateGrams, minutes: metadata.estimateMinutes });
+  const file = {
+    id,
+    workspaceId,
+    name: filename,
+    type: metadata.type,
+    folder: folderResult.folder.name,
+    size: formatBytes(buffer.length),
+    material,
+    tags: payload.tags || ["uploaded", "parsed"],
+    sliced: metadata.sliced,
+    status: metadata.status,
+    version: 1,
+    dimensions: metadata.dimensions,
+    thumbnail: filename,
+    printTime: metadata.printTime,
+    cost: quote.total,
+    layerHeight: "0.20",
+    usage: metadata.estimateGrams,
+    estimateGrams: metadata.estimateGrams,
+    estimateMinutes: metadata.estimateMinutes,
+    quote: quote.total,
+    quoteBreakdown: quote,
+    storagePath: stored.storagePath,
+    storageProvider: stored.storageProvider,
+    storageKey: stored.storageKey,
+    source: payload.source || "Upload",
+    quoteRequestId: payload.quoteRequestId || "",
+    createdAt: new Date().toISOString()
+  };
+  database.data.files.push(file);
+  folderResult.folder.fileCount = (database.data.files || []).filter((item) => item.folder === folderResult.folder.name).length;
+  folderResult.folder.updatedAt = new Date().toISOString();
+  return { file, folder: folderResult.folder, metadata };
 }
 
 async function storedFileBytes(file) {
@@ -2676,16 +3083,18 @@ function applyStripeBillingEvent(data, event) {
 function fileReferences(data, fileId) {
   const activeQueue = (data.queue || []).filter((job) => job.fileId === fileId && !["complete", "failed", "cancelled"].includes(job.status));
   const parts = (data.parts || []).filter((part) => part.fileId === fileId);
+  const quoteRequests = (data.quoteRequests || []).filter((quote) => quote.fileId === fileId && quote.status !== "converted" && quote.status !== "rejected");
   const slicerJobs = (data.slicerJobs || []).filter((job) => job.fileId === fileId && job.status === "running");
   return {
     activeQueue: activeQueue.map((job) => ({ id: job.id, file: job.file, status: job.status })),
     parts: parts.map((part) => ({ id: part.id, name: part.name })),
+    quoteRequests: quoteRequests.map((quote) => ({ id: quote.id, project: quote.project, status: quote.status })),
     slicerJobs: slicerJobs.map((job) => ({ id: job.id, status: job.status }))
   };
 }
 
 function hasReferences(references) {
-  return references.activeQueue.length || references.parts.length || references.slicerJobs.length;
+  return references.activeQueue.length || references.parts.length || references.quoteRequests.length || references.slicerJobs.length;
 }
 
 async function removeStoredFile(fileOrPath) {
@@ -3166,10 +3575,180 @@ function createJobFromPart({ order, sku, part, file, printer, copyIndex }) {
   };
 }
 
+function createJobFromQuote({ quote, order, file, printer, workspaceData }) {
+  const job = {
+    id: randomUUID(),
+    workspaceId: quote.workspaceId || order.workspaceId || DEFAULT_WORKSPACE_ID,
+    fileId: file.id,
+    file: `${quote.project} x${quote.quantity}`,
+    printerId: printer.id,
+    printer: printer.name,
+    status: "queued",
+    priority: quote.priority || "Normal",
+    stage: file.sliced ? "needs scheduling" : "needs slicing",
+    material: quote.material || file.material || "PLA",
+    color: "Any",
+    due: order.due || quote.due || "Flexible",
+    dimensions: file.dimensions || [100, 100, 50],
+    assignee: "Scheduler",
+    time: file.printTime || "1h 00m",
+    cost: Number(order.value || quote.quotedValue || quote.estimatedQuote || file.cost || 0),
+    added: `Quote ${quote.id}`,
+    sourceOrderId: order.id,
+    sourceQuoteRequestId: quote.id,
+    estimateGrams: file.estimateGrams || file.usage || quote.estimatedGrams || 0,
+    estimateMinutes: file.estimateMinutes || quote.estimatedMinutes || 0
+  };
+  job.scheduleWarnings = getScheduleWarnings(workspaceData, job, printer);
+  return job;
+}
+
+function publicQuoteSummary(quote) {
+  return {
+    id: quote.id,
+    status: quote.status,
+    project: quote.project,
+    customer: quote.customer,
+    company: quote.company || "",
+    material: quote.material,
+    quantity: quote.quantity,
+    due: quote.due,
+    budget: quote.budget,
+    quotedValue: quote.quotedValue || 0,
+    validUntil: quote.validUntil || "",
+    fileName: quote.fileName || "",
+    fileType: quote.fileType || "",
+    fileSize: quote.fileSize || "",
+    estimatedGrams: quote.estimatedGrams || 0,
+    estimatedMinutes: quote.estimatedMinutes || 0,
+    estimatedQuote: quote.estimatedQuote || 0,
+    orderId: quote.orderId || "",
+    customerDecision: quote.customerDecision || "",
+    customerDecisionAt: quote.customerDecisionAt || "",
+    customerDecisionNote: quote.customerDecisionNote || "",
+    createdAt: quote.createdAt,
+    updatedAt: quote.updatedAt
+  };
+}
+
+function quoteTokenMatches(quote, token) {
+  if (!quote?.customerAccessToken || !token) return false;
+  const expected = Buffer.from(String(quote.customerAccessToken));
+  const received = Buffer.from(String(token));
+  return expected.length === received.length && timingSafeEqual(expected, received);
+}
+
+function quoteExpired(quote, now = new Date()) {
+  if (!quote?.validUntil) return false;
+  const expiresAt = new Date(`${quote.validUntil}T23:59:59.999Z`);
+  return Number.isFinite(expiresAt.getTime()) && expiresAt < now;
+}
+
+function publicQuoteUrl(request, quote) {
+  const configured = process.env.LAYERPILOT_PUBLIC_URL || "";
+  const forwardedProto = String(request.headers["x-forwarded-proto"] || "").split(",")[0].trim();
+  const forwardedHost = String(request.headers["x-forwarded-host"] || "").split(",")[0].trim();
+  const host = forwardedHost || request.headers.host || "127.0.0.1:8797";
+  const base = (configured || `${forwardedProto || "http"}://${host}`).replace(/\/+$/, "");
+  const params = new URLSearchParams({ quoteId: quote.id, quoteToken: quote.customerAccessToken || "" });
+  return `${base}/?${params.toString()}#quote`;
+}
+
+function convertQuoteToProduction(data, quote, { workspaceId, due, value, createJob = true, reviewedBy = "system" } = {}) {
+  if (quote.orderId) return { error: "Quote request already converted", statusCode: 409, orderId: quote.orderId };
+  const now = new Date().toISOString();
+  const targetWorkspaceId = workspaceId || quote.workspaceId || DEFAULT_WORKSPACE_ID;
+  const order = {
+    id: `ord-${1000 + data.orders.length + 1}`,
+    workspaceId: targetWorkspaceId,
+    source: "Manual",
+    externalId: quote.id,
+    customer: quote.company ? `${quote.customer} / ${quote.company}` : quote.customer,
+    items: [`${quote.project} x${quote.quantity}`],
+    status: "received",
+    due: due || quote.due || "Flexible",
+    value: Number(value ?? quote.quotedValue ?? quote.budget ?? 0),
+    quoteRequestId: quote.id,
+    updatedAt: now
+  };
+  data.orders.push(order);
+  const scoped = scopedWorkspaceData(data, targetWorkspaceId);
+  const file = quote.fileId ? scoped.files.find((item) => item.id === quote.fileId) : null;
+  const printer = scoped.printers.find((item) => item.status === "idle") || scoped.printers.find((item) => item.status !== "offline" && item.status !== "maintenance") || scoped.printers[0];
+  const job = createJob && file && printer ? createJobFromQuote({ quote, order, file, printer, workspaceData: scoped }) : null;
+  if (job) {
+    data.queue.push(job);
+    order.status = "queued";
+    order.updatedAt = now;
+  }
+  Object.assign(quote, { status: "converted", orderId: order.id, convertedAt: now, updatedAt: now, reviewedBy });
+  const nextScoped = scopedWorkspaceData(data, targetWorkspaceId);
+  return { quoteRequest: quote, order, job, orders: nextScoped.orders, quoteRequests: nextScoped.quoteRequests, queue: nextScoped.queue, todos: deriveTodos(nextScoped) };
+}
+
+function dueFromOffset(days = 2) {
+  const date = new Date(Date.now() + Number(days || 0) * 24 * 60 * 60 * 1000);
+  return date.toISOString().slice(0, 10);
+}
+
+function createJobsFromProductionTemplate(data, templateId, options = {}) {
+  const normalized = productionTemplateRunSchema.parse(options || {});
+  const template = (data.productionTemplates || []).find((item) => item.id === templateId);
+  if (!template) return { error: "Production template not found", statusCode: 404 };
+  if (options.workspaceId && !itemInWorkspace(template, options.workspaceId)) return { error: "Production template not found", statusCode: 404 };
+  const workspaceId = template.workspaceId || DEFAULT_WORKSPACE_ID;
+  const workspaceData = scopedWorkspaceData(data, workspaceId);
+  const file = workspaceData.files.find((item) => item.id === template.fileId);
+  if (!file) return { error: "Template linked file not found", statusCode: 404 };
+  const printer = normalized.printerId
+    ? workspaceData.printers.find((item) => item.id === normalized.printerId)
+    : template.printerId
+      ? workspaceData.printers.find((item) => item.id === template.printerId)
+      : workspaceData.printers.find((item) => item.status === "idle") || workspaceData.printers.find((item) => item.status !== "offline" && item.status !== "maintenance") || workspaceData.printers[0];
+  if (!printer) return { error: "Printer not found", statusCode: 404 };
+  const quantity = normalized.quantity || template.quantity || 1;
+  const due = normalized.due || dueFromOffset(template.dueOffsetDays);
+  const jobs = Array.from({ length: quantity }, (_, index) => {
+    const job = {
+      id: randomUUID(),
+      workspaceId,
+      fileId: file.id,
+      file: `${template.name}${quantity > 1 ? ` #${index + 1}` : ""}`,
+      printerId: printer.id,
+      printer: printer.name,
+      status: "queued",
+      priority: template.priority || "Normal",
+      stage: template.stage || (file.sliced ? "needs scheduling" : "needs slicing"),
+      material: template.material || file.material || "PLA",
+      color: template.color || "Any",
+      due,
+      dimensions: file.dimensions || [100, 100, 50],
+      assignee: "Scheduler",
+      time: template.time || file.printTime || "1h 00m",
+      cost: Number(template.cost || file.cost || 0),
+      added: `Template: ${template.name}`,
+      sourceTemplateId: template.id,
+      sourceSku: template.sku || "",
+      process: template.process || ""
+    };
+    job.scheduleWarnings = getScheduleWarnings(workspaceData, job, printer);
+    return job;
+  });
+  if (!normalized.dryRun) {
+    data.queue.push(...jobs);
+    template.lastRunAt = new Date().toISOString();
+    template.runCount = Number(template.runCount || 0) + jobs.length;
+    template.updatedAt = template.lastRunAt;
+  }
+  const nextWorkspaceData = scopedWorkspaceData(data, workspaceId);
+  return { template: { ...template }, jobs, dryRun: normalized.dryRun, queue: nextWorkspaceData.queue, todos: deriveTodos(nextWorkspaceData) };
+}
+
 export function generateJobsForOrder(data, orderId, options = {}) {
   const normalized = orderJobGenerationSchema.parse(options);
   const order = data.orders.find((item) => item.id === orderId);
   if (!order) return { error: "Order not found", statusCode: 404 };
+  if (terminalOrderStatuses.has(order.status)) return { error: "Cannot generate jobs for a terminal order", statusCode: 409, order };
   const workspaceId = order.workspaceId || DEFAULT_WORKSPACE_ID;
   const workspaceData = scopedWorkspaceData(data, workspaceId);
   const existingJobs = (data.queue || []).filter((job) => itemInWorkspace(job, workspaceId) && job.sourceOrderId === order.id && !["cancelled", "failed"].includes(job.status));
@@ -3215,8 +3794,152 @@ export function generateJobsForOrder(data, orderId, options = {}) {
   return { order: normalized.dryRun ? { ...order } : order, jobs, missing, skus: nextWorkspaceData.skus, todos: deriveTodos(nextWorkspaceData), dryRun: normalized.dryRun, duplicateBlocked: false, existingJobs: [], stockChanges };
 }
 
+function applyOrderStatusChange(data, order, status) {
+  const workspaceId = order.workspaceId || DEFAULT_WORKSPACE_ID;
+  const workspaceData = scopedWorkspaceData(data, workspaceId);
+  const now = new Date().toISOString();
+  const linkedJobs = (data.queue || []).filter((job) => itemInWorkspace(job, workspaceId) && job.sourceOrderId === order.id);
+  const changedJobs = [];
+  const materialChanges = [];
+  order.status = status;
+  order.updatedAt = now;
+  if (status === "cancelled") {
+    for (const job of linkedJobs) {
+      if (["complete", "failed", "cancelled"].includes(job.status)) continue;
+      job.status = "cancelled";
+      job.stage = "blocked";
+      job.updatedAt = now;
+      job.completedAt = now;
+      const materialChange = releaseJobMaterialReservation(workspaceData, job);
+      if (materialChange) materialChanges.push(materialChange);
+      changedJobs.push(job);
+    }
+  }
+  if (status === "on_hold") {
+    for (const job of linkedJobs) {
+      if (job.status !== "queued") continue;
+      job.stage = "blocked";
+      job.updatedAt = now;
+      changedJobs.push(job);
+    }
+  }
+  if (status === "completed") {
+    order.completedAt = now;
+  }
+  return { order, jobs: changedJobs, materialChanges, spools: workspaceData.spools, todos: deriveTodos(workspaceData) };
+}
+
 function priorityWeight(priority) {
   return { Rush: 0, High: 1, Normal: 2, Low: 3 }[priority] ?? 2;
+}
+
+function materialKey(value = "") {
+  return String(value || "").trim().toLowerCase();
+}
+
+function jobEstimateGrams(data, job) {
+  const direct = Number(job.estimateGrams ?? job.estimatedGrams ?? job.usage ?? job.grams ?? 0);
+  const file = data.files?.find((item) => item.id === job.fileId);
+  const fromFile = Number(file?.estimateGrams ?? file?.usage ?? 0);
+  const fromCost = Number(job.cost || 0) > 0 ? Number(job.cost) : 0;
+  return Math.max(1, Math.round(direct || fromFile || fromCost || parseDurationMinutes(job.time) * 0.35));
+}
+
+function normalizeSpoolReservations(spool) {
+  spool.reservations = Array.isArray(spool.reservations) ? spool.reservations.filter((item) => item && item.jobId) : [];
+  spool.reserved = Math.max(0, Math.round(spool.reservations.reduce((sum, item) => sum + Number(item.grams || 0), 0)));
+  return spool.reserved;
+}
+
+function spoolAvailableGrams(spool) {
+  return Math.max(0, Number(spool.remaining || 0) - normalizeSpoolReservations(spool));
+}
+
+function jobReservationCovers(data, job) {
+  if (!job.reservedSpoolId || !job.reservedGrams) return false;
+  const spool = data.spools?.find((item) => item.id === job.reservedSpoolId);
+  return !!spool && materialKey(spool.material) === materialKey(job.material) && Number(job.reservedGrams || 0) >= jobEstimateGrams(data, job);
+}
+
+function findReservableSpool(data, job) {
+  if (!Array.isArray(data.spools) || materialKey(job.material) === "auto matched") return null;
+  const requiredGrams = jobEstimateGrams(data, job);
+  return data.spools
+    .filter((spool) => materialKey(spool.material) === materialKey(job.material) && spoolAvailableGrams(spool) >= requiredGrams)
+    .sort((a, b) => Number(b.dry === true) - Number(a.dry === true) || spoolAvailableGrams(a) - spoolAvailableGrams(b))[0] || null;
+}
+
+function hasMaterialCoverage(data, job) {
+  if (materialKey(job.material) === "auto matched") return true;
+  if (jobReservationCovers(data, job)) return true;
+  return !!findReservableSpool(data, job);
+}
+
+function releaseJobMaterialReservation(data, job) {
+  if (!job?.reservedSpoolId) return null;
+  const spool = data.spools?.find((item) => item.id === job.reservedSpoolId);
+  const released = { spoolId: job.reservedSpoolId, grams: Number(job.reservedGrams || 0), material: job.material };
+  if (spool) {
+    spool.reservations = (spool.reservations || []).filter((item) => item.jobId !== job.id);
+    normalizeSpoolReservations(spool);
+    spool.updatedAt = new Date().toISOString();
+  }
+  delete job.reservedSpoolId;
+  delete job.reservedGrams;
+  job.materialReservation = job.materialReservation ? { ...job.materialReservation, status: "released", releasedAt: new Date().toISOString() } : undefined;
+  return released;
+}
+
+function reserveJobMaterial(data, job) {
+  releaseJobMaterialReservation(data, job);
+  if (["complete", "cancelled", "failed"].includes(job.status)) return null;
+  const spool = findReservableSpool(data, job);
+  if (!spool) {
+    job.materialReservation = {
+      status: "missing",
+      material: job.material,
+      requiredGrams: jobEstimateGrams(data, job),
+      checkedAt: new Date().toISOString()
+    };
+    return null;
+  }
+  const grams = jobEstimateGrams(data, job);
+  const reservation = {
+    jobId: job.id,
+    file: job.file,
+    grams,
+    material: job.material,
+    printerId: job.printerId,
+    scheduledStart: job.scheduledStart,
+    at: new Date().toISOString()
+  };
+  spool.reservations = [...(spool.reservations || []), reservation];
+  normalizeSpoolReservations(spool);
+  spool.updatedAt = reservation.at;
+  job.reservedSpoolId = spool.id;
+  job.reservedGrams = grams;
+  job.materialReservation = { ...reservation, spoolId: spool.id, spoolLocation: spool.location, status: "reserved" };
+  return job.materialReservation;
+}
+
+function consumeJobMaterialReservation(data, job) {
+  if (!job?.reservedSpoolId) return null;
+  const spool = data.spools?.find((item) => item.id === job.reservedSpoolId);
+  const grams = Math.max(1, Math.round(Number(job.reservedGrams || 0) || jobEstimateGrams(data, job)));
+  const consumedAt = new Date().toISOString();
+  const consumed = { spoolId: job.reservedSpoolId, grams, material: job.material, consumedAt };
+  if (spool) {
+    spool.remaining = Math.max(0, Number(spool.remaining || 0) - grams);
+    spool.reservations = (spool.reservations || []).filter((item) => item.jobId !== job.id);
+    normalizeSpoolReservations(spool);
+    spool.updatedAt = consumedAt;
+    consumed.remaining = spool.remaining;
+    consumed.spoolLocation = spool.location;
+  }
+  delete job.reservedSpoolId;
+  delete job.reservedGrams;
+  job.materialReservation = { ...(job.materialReservation || {}), ...consumed, status: "consumed" };
+  return consumed;
 }
 
 export function getScheduleWarnings(data, job, printer, scheduledStart = job.scheduledStart) {
@@ -3227,6 +3950,7 @@ export function getScheduleWarnings(data, job, printer, scheduledStart = job.sch
   if (printer.status === "maintenance") warnings.push("In maintenance");
   if ((printer.status === "printing" || printer.status === "paused") && job.status === "queued") warnings.push("Printer busy");
   if (hasMaterialConflict(job, printer)) warnings.push("Material conflict");
+  if (!hasMaterialCoverage(data, job)) warnings.push("Insufficient material");
   if (exceedsVolume(job.dimensions, printer.buildVolume)) warnings.push("Size mismatch");
   if (isDueRisk(job)) warnings.push("Due date risk");
   const overlap = scheduledStart
@@ -3346,6 +4070,7 @@ export function optimizeScheduleQueue(data, options = {}) {
     job.scheduledStart = scheduledStart;
     job.stage = "scheduled";
     job.optimizationStrategy = normalized.strategy;
+    const materialReservation = reserveJobMaterial(data, job);
     job.scheduleWarnings = getScheduleWarnings(data, job, selected.printer, scheduledStart);
     laneAvailability[selected.printer.id] = selected.startMinute + parseDurationMinutes(job.time);
     scheduled.push({
@@ -3359,6 +4084,7 @@ export function optimizeScheduleQueue(data, options = {}) {
       scheduledStart,
       durationMinutes: parseDurationMinutes(job.time),
       changeCost: selected.changeCost,
+      materialReservation,
       score: Math.round(selected.score),
       warnings: job.scheduleWarnings,
       alternatives: ranked.slice(0, 3).map((item) => ({
@@ -3369,7 +4095,7 @@ export function optimizeScheduleQueue(data, options = {}) {
       }))
     });
   }
-  return { strategy: normalized.strategy, scheduled, skipped, jobs: scheduled.map((item) => data.queue.find((job) => job.id === item.jobId)).filter(Boolean), diagnostics: buildScheduleDiagnostics(data), todos: deriveTodos(data) };
+  return { strategy: normalized.strategy, scheduled, skipped, jobs: scheduled.map((item) => data.queue.find((job) => job.id === item.jobId)).filter(Boolean), spools: data.spools || [], diagnostics: buildScheduleDiagnostics(data), todos: deriveTodos(data) };
 }
 
 function isSolverHardBlocked(options, warnings) {
@@ -3418,6 +4144,7 @@ export function constraintScheduleQueue(data, options = {}) {
       job.optimizationStrategy = `constraint-${normalized.objective}`;
       job.solverObjective = normalized.objective;
       job.solverSlot = assignment.slot;
+      reserveJobMaterial(data, job);
       job.scheduleWarnings = warnings;
     }
     scheduled.push({
@@ -3432,6 +4159,7 @@ export function constraintScheduleQueue(data, options = {}) {
       scheduledStart,
       durationMinutes: parseDurationMinutes(job.time),
       changeCost: assignment.candidate.changeCost,
+      materialReservation: job.materialReservation || null,
       slot: assignment.slot,
       score: Math.round(assignment.cost),
       warnings,
@@ -3451,6 +4179,7 @@ export function constraintScheduleQueue(data, options = {}) {
     scheduled,
     skipped,
     jobs: normalized.dryRun ? [] : scheduled.map((item) => data.queue.find((job) => job.id === item.jobId)).filter(Boolean),
+    spools: data.spools || [],
     diagnostics: buildScheduleDiagnostics(data),
     todos: deriveTodos(data)
   };
@@ -3517,6 +4246,7 @@ export function matchQueueNow(data, options = {}) {
       job.stage = "printing";
       job.startedAt = now;
       job.updatedAt = now;
+      reserveJobMaterial(data, job);
       job.scheduleWarnings = match.warnings;
       printer.status = "printing";
       printer.job = job.file;
@@ -3535,6 +4265,7 @@ export function matchQueueNow(data, options = {}) {
     skipped,
     jobs: matches.map((match) => data.queue.find((job) => job.id === match.jobId)).filter(Boolean),
     printers: data.printers,
+    spools: data.spools || [],
     todos: deriveTodos(data)
   };
 }
@@ -3561,6 +4292,7 @@ export function autoScheduleQueue(data, options = {}) {
     job.printer = selected.printer.name;
     job.scheduledStart = scheduledStart;
     job.stage = "scheduled";
+    const materialReservation = reserveJobMaterial(data, job);
     job.scheduleWarnings = getScheduleWarnings(data, job, selected.printer, scheduledStart);
     laneAvailability[selected.printer.id] = selected.startMinute + parseDurationMinutes(job.time);
     scheduled.push({
@@ -3571,6 +4303,7 @@ export function autoScheduleQueue(data, options = {}) {
       scheduledStart,
       durationMinutes: parseDurationMinutes(job.time),
       changeCost: selected.changeCost,
+      materialReservation,
       score: Math.round(selected.score),
       warnings: job.scheduleWarnings,
       alternatives: ranked.slice(0, 3).map((item) => ({
@@ -3581,7 +4314,7 @@ export function autoScheduleQueue(data, options = {}) {
       }))
     });
   }
-  return { scheduled, skipped, jobs: scheduled.map((item) => data.queue.find((job) => job.id === item.jobId)).filter(Boolean), diagnostics: buildScheduleDiagnostics(data), todos: deriveTodos(data) };
+  return { scheduled, skipped, jobs: scheduled.map((item) => data.queue.find((job) => job.id === item.jobId)).filter(Boolean), spools: data.spools || [], diagnostics: buildScheduleDiagnostics(data), todos: deriveTodos(data) };
 }
 
 export function buildScheduleDiagnostics(data) {
@@ -3629,6 +4362,45 @@ function dayLabel(value = "") {
   return text.split(/\s+/)[0] || "Backlog";
 }
 
+function materialWasteCost(data, material, grams) {
+  const catalog = costCatalogSchema.parse({ ...defaultCostCatalog, ...(data.costCatalog || {}) });
+  const materialRate = catalog.materialRates[material] ?? catalog.materialRates[Object.keys(catalog.materialRates).find((key) => String(material || "").toLowerCase().includes(key.toLowerCase())) || "PLA"] ?? 1;
+  return Math.round(Number(grams || 0) / 100 * materialRate * 100) / 100;
+}
+
+function failureAnalytics(data) {
+  const queue = data.queue || [];
+  const printers = data.printers || [];
+  const failedJobs = queue.filter((job) => job.status === "failed" || job.status === "cancelled" || Number(job.wasteGrams || 0) > 0 || job.failureReason || job.failureCategory);
+  const wasteGrams = Math.round(failedJobs.reduce((sum, job) => sum + Number(job.wasteGrams || 0), 0));
+  const wasteCost = Math.round(failedJobs.reduce((sum, job) => sum + Number(job.wasteCost ?? materialWasteCost(data, job.material, job.wasteGrams || 0)), 0) * 100) / 100;
+  const rootCauseRows = Object.entries(groupCount(failedJobs, (job) => job.rootCause || job.failureReason || "Unclassified"))
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+    .slice(0, 8);
+  return {
+    wasteGrams,
+    wasteCost,
+    failureCategories: groupCount(failedJobs, (job) => job.failureCategory || job.issueTag || (job.status === "cancelled" ? "Cancelled" : "Print failure")),
+    rootCauses: rootCauseRows,
+    printerReliability: printers.map((printer) => {
+      const jobs = queue.filter((job) => job.printerId === printer.id || job.printer === printer.name);
+      const finished = jobs.filter((job) => ["complete", "failed", "cancelled"].includes(job.status));
+      const failed = jobs.filter((job) => job.status === "failed" || job.status === "cancelled");
+      const printerWasteGrams = Math.round(jobs.reduce((sum, job) => sum + Number(job.wasteGrams || 0), 0));
+      return {
+        printerId: printer.id,
+        printer: printer.name,
+        finished: finished.length,
+        failed: failed.length,
+        successRate: finished.length ? Math.round((finished.length - failed.length) / finished.length * 100) : 100,
+        wasteGrams: printerWasteGrams,
+        wasteCost: Math.round(jobs.reduce((sum, job) => sum + Number(job.wasteCost ?? materialWasteCost(data, job.material, job.wasteGrams || 0)), 0) * 100) / 100
+      };
+    })
+  };
+}
+
 export function buildAnalytics(data) {
   const queue = data.queue || [];
   const printers = data.printers || [];
@@ -3663,6 +4435,7 @@ export function buildAnalytics(data) {
     cost: queue.reduce((sum, job) => sum + Number(job.cost || 0), 0),
     printHours: Math.round(totalDuration / 60),
     materialMix: groupCount(queue, (job) => job.material),
+    ...failureAnalytics(data),
     printerLoad: printers.map((printer) => ({
       printerId: printer.id,
       printer: printer.name,
@@ -3673,6 +4446,108 @@ export function buildAnalytics(data) {
     })),
     daily
   };
+}
+
+const onboardingTemplates = [
+  { id: "workspace", title: "Workspace identity", description: "Organization name, default location, timezone, and currency are configured." },
+  { id: "team", title: "Team access", description: "At least one additional team member or API automation identity is configured." },
+  { id: "security", title: "Security posture", description: "Admin 2FA policy, audit retention, and optional API IP restrictions are reviewed." },
+  { id: "printers", title: "Printer fleet", description: "At least one printer exists and can be used by the scheduler." },
+  { id: "materials", title: "Material inventory", description: "At least one spool is registered for material planning." },
+  { id: "files", title: "File library", description: "A model or G-code file exists in the workspace library." },
+  { id: "production", title: "Production queue", description: "At least one queue job exists for schedule and workflow validation." },
+  { id: "automation", title: "Automation channels", description: "API keys, webhooks, notifications, or printer bridges are configured." },
+  { id: "backup", title: "Backup drill", description: "A workspace export or restore drill has been performed." },
+  { id: "support", title: "Support handoff", description: "A redacted support snapshot can be generated for 3DSTU support." }
+];
+
+function buildOnboarding(data) {
+  const settings = data.workspaceSettings || {};
+  const manual = settings.onboarding || {};
+  const checks = {
+    workspace: Boolean(settings.organizationName && settings.defaultLocation && settings.timezone && settings.currency),
+    team: (data.users || []).length > 1 || (data.apiKeys || []).length > 0,
+    security: settings.requireAdmin2fa === true && settings.auditLogRetention !== false,
+    printers: (data.printers || []).length > 0,
+    materials: (data.spools || []).length > 0,
+    files: (data.files || []).length > 0,
+    production: (data.queue || []).length > 0,
+    automation: Boolean((data.apiKeys || []).length || (data.webhooks || []).length || (data.notificationChannels || []).length || (data.bridges || []).length),
+    backup: Boolean((data.events || []).some((event) => ["admin.export", "admin.restore"].includes(event.type)) || manual.backup?.status === "complete"),
+    support: Boolean(manual.support?.status === "complete")
+  };
+  const steps = onboardingTemplates.map((template) => {
+    const saved = manual[template.id] || {};
+    const autoComplete = checks[template.id] === true;
+    const status = saved.status === "skipped" ? "skipped" : autoComplete ? "complete" : saved.status || "pending";
+    return {
+      ...template,
+      status,
+      autoComplete,
+      note: saved.note || "",
+      updatedAt: saved.updatedAt || "",
+      updatedBy: saved.updatedBy || ""
+    };
+  });
+  const complete = steps.filter((step) => step.status === "complete" || step.status === "skipped").length;
+  return {
+    generatedAt: new Date().toISOString(),
+    workspace: {
+      id: settings.workspaceId || DEFAULT_WORKSPACE_ID,
+      name: settings.organizationName || "Workspace",
+      plan: settings.plan || "Print Farm Trial"
+    },
+    progress: {
+      complete,
+      total: steps.length,
+      percent: Math.round(complete / Math.max(1, steps.length) * 100)
+    },
+    steps
+  };
+}
+
+function redactSupportValue(value, key = "") {
+  if (/count$/i.test(key) || /^apiKeys$/i.test(key)) return value;
+  if (/password|secret|token|authorization|stripe|hash/i.test(key) || /^apiKey$/i.test(key)) return "REDACTED";
+  if (Array.isArray(value)) return value.map((item) => redactSupportValue(item, key));
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([entryKey, entryValue]) => [entryKey, redactSupportValue(entryValue, entryKey)]));
+  return value;
+}
+
+async function buildSupportSnapshot(data, user) {
+  const scoped = workspaceScopeForUser(data, user);
+  const onboarding = buildOnboarding(scoped);
+  const integrity = await buildDataIntegrityReport(scoped);
+  return redactSupportValue({
+    service: "3DSTU FarmFlow",
+    generatedAt: new Date().toISOString(),
+    generatedBy: user.email,
+    workspace: onboarding.workspace,
+    version: process.env.npm_package_version || "",
+    schemaVersion: data.dataMeta?.schemaVersion || 0,
+    counts: {
+      printers: scoped.printers.length,
+      users: scoped.users.length,
+      files: scoped.files.length,
+      queue: scoped.queue.length,
+      spools: scoped.spools.length,
+      purchaseRequests: scoped.purchaseRequests.length,
+      productionTemplates: scoped.productionTemplates.length,
+      quoteRequests: scoped.quoteRequests.length,
+      orders: scoped.orders.length,
+      webhooks: scoped.webhooks.length,
+      apiKeys: scoped.apiKeys.length
+    },
+    readiness: {
+      onboarding: onboarding.progress,
+      integrityWarnings: integrity.warnings.length,
+      storageLimitGb: scoped.workspaceSettings?.storageLimitGb || 0
+    },
+    analytics: buildAnalytics(scoped),
+    onboarding,
+    recentEvents: (scoped.events || []).slice(0, 20).map((event) => ({ type: event.type, message: event.message, at: event.at, data: event.data || {} })),
+    settings: scoped.workspaceSettings
+  });
 }
 
 export function buildPrintHistory(data) {
@@ -3694,6 +4569,13 @@ export function buildPrintHistory(data) {
       issueSeverity: job.issueSeverity || "",
       flaggedAt: job.flaggedAt || "",
       failureReason: job.failureReason || "",
+      failureCategory: job.failureCategory || "",
+      rootCause: job.rootCause || "",
+      correctiveAction: job.correctiveAction || "",
+      wasteGrams: Number(job.wasteGrams || 0),
+      wasteCost: Number(job.wasteCost ?? materialWasteCost(data, job.material, job.wasteGrams || 0)),
+      wasteSpoolId: job.wasteSpoolId || "",
+      wasteInventoryDeductedAt: job.wasteInventoryDeductedAt || "",
       sourceOrderId: job.sourceOrderId || ""
     }))
     .sort((a, b) => String(b.date).localeCompare(String(a.date)));
@@ -3720,6 +4602,14 @@ function createReprintJob(data, sourceJob, options) {
     scheduleWarnings: [],
     completedAt: undefined,
     failureReason: undefined,
+    failureCategory: undefined,
+    rootCause: undefined,
+    correctiveAction: undefined,
+    wasteGrams: undefined,
+    wasteCost: undefined,
+    wasteSpoolId: undefined,
+    wasteInventoryDeductedAt: undefined,
+    wasteInventoryDeductedGrams: undefined,
     added: `Reprint from ${sourceJob.id}`,
     sourceJobId: sourceJob.id,
     updatedAt: new Date().toISOString()
@@ -3727,6 +4617,34 @@ function createReprintJob(data, sourceJob, options) {
   job.scheduleWarnings = getScheduleWarnings(workspaceData, job, printer);
   data.queue.push(job);
   return { job };
+}
+
+async function parsePublicQuoteRequestPayload(request) {
+  if (!request.isMultipart?.()) return { payload: request.body || {}, upload: null };
+  const part = await request.file();
+  if (!part) return { payload: {}, upload: null };
+  const fieldValue = (name, fallback = "") => {
+    const raw = part.fields?.[name]?.value;
+    return typeof raw === "string" ? raw : fallback;
+  };
+  const filename = path.basename(part.filename || fieldValue("fileName", "model.stl"));
+  const buffer = await part.toBuffer();
+  return {
+    payload: {
+      customer: fieldValue("customer"),
+      email: fieldValue("email"),
+      company: fieldValue("company"),
+      project: fieldValue("project"),
+      material: fieldValue("material", "PLA"),
+      quantity: Number(fieldValue("quantity", "1")),
+      due: fieldValue("due", "Flexible"),
+      budget: Number(fieldValue("budget", "0")),
+      notes: fieldValue("notes"),
+      fileName: fieldValue("fileName", filename),
+      source: fieldValue("source", "Website")
+    },
+    upload: buffer.length ? { filename, buffer } : null
+  };
 }
 
 export async function openDatabase(file = process.env.LAYERPILOT_DB_PATH || path.join(process.cwd(), "api", "data", "layerpilot.db.json"), options = {}) {
@@ -3903,7 +4821,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
 
   app.addHook("preHandler", async (request, reply) => {
     const routePath = request.url.split("?")[0];
-    const publicRoute = routePath === "/api/health" || routePath === "/api/readiness" || routePath === "/api/metrics" && hasValidMetricsToken(request) || routePath === "/api/internal/worker-broadcast" && hasValidWorkerToken(request) || routePath === "/api/billing/webhook/stripe" || routePath.startsWith("/api/auth/") || serveStatic && !routePath.startsWith("/api/");
+    const publicRoute = routePath === "/api/health" || routePath === "/api/readiness" || routePath === "/api/metrics" && hasValidMetricsToken(request) || routePath === "/api/internal/worker-broadcast" && hasValidWorkerToken(request) || routePath === "/api/billing/webhook/stripe" || routePath === "/api/public/quoteRequests" || routePath.startsWith("/api/public/quoteRequests/") || routePath.startsWith("/api/auth/") || serveStatic && !routePath.startsWith("/api/");
     if (publicRoute) return;
     const { session, user, apiKey } = userFromRequest(database, request);
     if (!user) return reply.code(401).send({ error: "Authentication required" });
@@ -4124,6 +5042,26 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   app.get("/api/apiKeys", async (request) => (scopedWorkspaceData(database.data, request.user.workspaceId).apiKeys || []).map(sanitizeApiKey));
   app.get("/api/addons", async (request) => (scopedWorkspaceData(database.data, request.user.workspaceId).addons || []).map(sanitizeAddon));
   app.get("/api/workspaceSettings", async (request) => scopedWorkspaceData(database.data, request.user.workspaceId).workspaceSettings);
+  app.get("/api/onboarding", async (request) => buildOnboarding(workspaceScopeForUser(database.data, request.user)));
+  app.patch("/api/onboarding/:id", async (request, reply) => {
+    if (!hasPermission(request.user, "settings:write")) return reply.code(403).send({ error: "Missing permission: settings:write" });
+    const parsed = onboardingStepPatchSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid onboarding step", issues: parsed.error.issues });
+    const current = workspaceScopeForUser(database.data, request.user).workspaceSettings || {};
+    const onboarding = { ...(current.onboarding || {}) };
+    onboarding[request.params.id] = { ...parsed.data, updatedAt: new Date().toISOString(), updatedBy: request.user.email };
+    const settings = updateWorkspaceSettings(database.data, request.user.workspaceId, { onboarding });
+    await dispatchEvent(database, "onboarding.updated", `${request.params.id} -> ${parsed.data.status}`, { workspaceId: request.user.workspaceId, stepId: request.params.id, status: parsed.data.status });
+    await database.write();
+    return { settings, onboarding: buildOnboarding(workspaceScopeForUser(database.data, request.user)) };
+  });
+  app.post("/api/support/snapshot", async (request, reply) => {
+    if (!hasPermission(request.user, "admin:export")) return reply.code(403).send({ error: "Missing permission: admin:export" });
+    const snapshot = await buildSupportSnapshot(database.data, request.user);
+    await dispatchEvent(database, "support.snapshot", `${request.user.email} generated support snapshot`, { workspaceId: request.user.workspaceId, generatedAt: snapshot.generatedAt, onboarding: snapshot.readiness.onboarding });
+    await database.write();
+    return snapshot;
+  });
   app.get("/api/billing", async (request) => buildBillingSummary(workspaceScopeForUser(database.data, request.user), { stripeClient }));
   app.get("/api/costCatalog", async () => database.data.costCatalog);
 
@@ -4162,6 +5100,92 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const todos = deriveTodos(workspaceScopeForUser(database.data, request.user));
     broadcastRealtime(database, "state", { reason: "todo.action", state: realtimeState(database.data), action });
     return { action, todo: todos.find((todo) => todo.id === existing.id) || null, todos, todoActions: workspaceScopeForUser(database.data, request.user).todoActions };
+  });
+
+  app.post("/api/public/quoteRequests", { config: { rateLimit: { max: 20, timeWindow: "1 minute", groupId: "quote-intake" } } }, async (request, reply) => {
+    const incoming = await parsePublicQuoteRequestPayload(request);
+    const parsed = publicQuoteRequestSchema.safeParse(incoming.payload || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid quote request payload", issues: parsed.error.issues });
+    const workspace = workspaceForId(database.data, DEFAULT_WORKSPACE_ID);
+    const now = new Date().toISOString();
+    const quoteId = `qr-${randomUUID().slice(0, 8)}`;
+    const uploaded = incoming.upload ? await createStoredModelFile(database, {
+      filename: incoming.upload.filename,
+      buffer: incoming.upload.buffer,
+      material: parsed.data.material,
+      folder: "Customer Quotes",
+      folderPurpose: "quote-intake",
+      tags: ["quote", "customer-upload", "parsed"],
+      source: "Quote request",
+      quoteRequestId: quoteId
+    }, { workspaceId: workspace.id }) : null;
+    const quote = {
+      id: quoteId,
+      workspaceId: workspace.id,
+      customerAccessToken: randomBytes(18).toString("base64url"),
+      ...parsed.data,
+      fileName: uploaded?.file?.name || parsed.data.fileName,
+      fileId: uploaded?.file?.id || "",
+      fileType: uploaded?.file?.type || "",
+      fileSize: uploaded?.file?.size || "",
+      estimatedGrams: uploaded?.file?.estimateGrams || 0,
+      estimatedMinutes: uploaded?.file?.estimateMinutes || 0,
+      estimatedQuote: uploaded?.file?.quote || 0,
+      status: "new",
+      priority: "Normal",
+      quotedValue: uploaded?.file?.quote || 0,
+      internalNote: "",
+      createdAt: now,
+      updatedAt: now
+    };
+    database.data.quoteRequests.unshift(quote);
+    await dispatchEvent(database, "quote_request.created", `${quote.customer} requested ${quote.project}`, { quoteRequestId: quote.id, fileId: quote.fileId, material: quote.material, quantity: quote.quantity, source: quote.source });
+    await database.write();
+    return reply.code(201).send({ ok: true, quoteRequest: { ...publicQuoteSummary(quote), fileId: quote.fileId, accessToken: quote.customerAccessToken } });
+  });
+
+  app.get("/api/public/quoteRequests/:id", { config: { rateLimit: { max: 60, timeWindow: "1 minute", groupId: "quote-portal" } } }, async (request, reply) => {
+    const token = request.query?.token;
+    const quote = database.data.quoteRequests.find((item) => item.id === request.params.id && itemInWorkspace(item, DEFAULT_WORKSPACE_ID));
+    if (!quote || !quoteTokenMatches(quote, token)) return reply.code(404).send({ error: "Quote request not found" });
+    return { ok: true, quoteRequest: publicQuoteSummary(quote) };
+  });
+
+  app.post("/api/public/quoteRequests/:id/decision", { config: { rateLimit: { max: 20, timeWindow: "1 minute", groupId: "quote-portal-decision" } } }, async (request, reply) => {
+    const parsed = publicQuoteDecisionSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid quote decision payload", issues: parsed.error.issues });
+    const quote = database.data.quoteRequests.find((item) => item.id === request.params.id && itemInWorkspace(item, DEFAULT_WORKSPACE_ID));
+    if (!quote || !quoteTokenMatches(quote, parsed.data.token)) return reply.code(404).send({ error: "Quote request not found" });
+    if (quote.orderId) return reply.code(409).send({ error: "Quote request already converted", orderId: quote.orderId });
+    if (!["quoted", "accepted"].includes(quote.status)) return reply.code(409).send({ error: "Quote request is not ready for a customer decision", status: quote.status });
+    if (parsed.data.decision === "accepted" && quoteExpired(quote)) return reply.code(409).send({ error: "Quote request has expired", status: quote.status, validUntil: quote.validUntil });
+    const now = new Date().toISOString();
+    Object.assign(quote, {
+      customerDecision: parsed.data.decision,
+      customerDecisionAt: now,
+      customerDecisionNote: parsed.data.note,
+      updatedAt: now
+    });
+    if (parsed.data.decision === "rejected") {
+      Object.assign(quote, { status: "rejected", rejectedAt: now });
+      await dispatchEvent(database, "quote_request.customer_rejected", `${quote.id} rejected by customer`, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, quoteRequestId: quote.id });
+      await database.write();
+      return { ok: true, quoteRequest: publicQuoteSummary(quote) };
+    }
+    if (parsed.data.decision === "revision") {
+      Object.assign(quote, { status: "reviewing", revisionRequestedAt: now, reviewedBy: quote.email });
+      await dispatchEvent(database, "quote_request.revision_requested", `${quote.id} revision requested by customer`, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, quoteRequestId: quote.id });
+      await database.write();
+      return { ok: true, quoteRequest: publicQuoteSummary(quote) };
+    }
+    Object.assign(quote, { status: "accepted", acceptedAt: now });
+    await dispatchEvent(database, "quote_request.customer_accepted", `${quote.id} accepted by customer`, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, quoteRequestId: quote.id, quotedValue: quote.quotedValue || 0 });
+    const result = convertQuoteToProduction(database.data, quote, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, due: quote.due, value: quote.quotedValue || quote.budget || 0, createJob: true, reviewedBy: quote.email });
+    if (result.error) return reply.code(result.statusCode || 400).send({ error: result.error, orderId: result.orderId });
+    await dispatchEvent(database, "quote_request.converted", `${quote.id} converted to ${result.order.id}`, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, quoteRequestId: quote.id, orderId: result.order.id, value: result.order.value });
+    if (result.job) await dispatchEvent(database, "queue.created", `${result.job.file} queued from quote`, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, jobId: result.job.id, fileId: result.job.fileId, orderId: result.order.id, quoteRequestId: quote.id, material: result.job.material });
+    await database.write();
+    return reply.code(201).send({ ok: true, quoteRequest: publicQuoteSummary(quote), order: { id: result.order.id, status: result.order.status, due: result.order.due, value: result.order.value }, job: result.job ? { id: result.job.id, status: result.job.status, stage: result.job.stage, printer: result.job.printer } : null });
   });
 
   app.post("/api/telemetry/tick", async (request, reply) => {
@@ -4282,17 +5306,43 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const now = new Date().toISOString();
     if (parsed.data.note !== undefined) job.note = parsed.data.note;
     if (parsed.data.failureReason !== undefined) job.failureReason = parsed.data.failureReason;
+    if (parsed.data.failureCategory !== undefined) job.failureCategory = parsed.data.failureCategory;
+    if (parsed.data.rootCause !== undefined) job.rootCause = parsed.data.rootCause;
+    if (parsed.data.correctiveAction !== undefined) job.correctiveAction = parsed.data.correctiveAction;
+    if (parsed.data.wasteGrams !== undefined) {
+      job.wasteGrams = Math.round(parsed.data.wasteGrams);
+      job.wasteCost = parsed.data.wasteCost !== undefined ? Math.round(parsed.data.wasteCost * 100) / 100 : materialWasteCost(workspaceScopeForUser(database.data, request.user), job.material, job.wasteGrams);
+    } else if (parsed.data.wasteCost !== undefined) {
+      job.wasteCost = Math.round(parsed.data.wasteCost * 100) / 100;
+    }
+    if (parsed.data.wasteSpoolId !== undefined) job.wasteSpoolId = parsed.data.wasteSpoolId;
     if (parsed.data.issueTag !== undefined) {
       job.issueTag = parsed.data.issueTag;
       if (parsed.data.issueTag) job.flaggedAt = now;
     }
     if (parsed.data.issueSeverity !== undefined) job.issueSeverity = parsed.data.issueSeverity;
+    let wasteInventory = null;
+    if (parsed.data.deductWasteFromInventory && Number(job.wasteGrams || 0) > 0 && !job.wasteInventoryDeductedAt) {
+      const scoped = workspaceScopeForUser(database.data, request.user);
+      const targetSpool = (job.wasteSpoolId || parsed.data.wasteSpoolId)
+        ? database.data.spools.find((spool) => spool.id === (job.wasteSpoolId || parsed.data.wasteSpoolId) && itemInWorkspace(spool, request.user.workspaceId))
+        : scoped.spools.find((spool) => materialKey(spool.material) === materialKey(job.material));
+      if (targetSpool) {
+        const before = Number(targetSpool.remaining || 0);
+        targetSpool.remaining = Math.max(0, before - Number(job.wasteGrams || 0));
+        targetSpool.updatedAt = now;
+        job.wasteSpoolId = targetSpool.id;
+        job.wasteInventoryDeductedAt = now;
+        job.wasteInventoryDeductedGrams = Number(job.wasteGrams || 0);
+        wasteInventory = { spoolId: targetSpool.id, before, after: targetSpool.remaining, grams: Number(job.wasteGrams || 0) };
+      }
+    }
     job.updatedAt = now;
-    await dispatchEvent(database, "history.annotated", `${job.file} history updated`, { workspaceId: request.user.workspaceId, jobId: job.id, issueTag: job.issueTag || "", issueSeverity: job.issueSeverity || "" });
+    await dispatchEvent(database, "history.annotated", `${job.file} history updated`, { workspaceId: request.user.workspaceId, jobId: job.id, issueTag: job.issueTag || "", issueSeverity: job.issueSeverity || "", failureCategory: job.failureCategory || "", wasteGrams: Number(job.wasteGrams || 0), wasteCost: Number(job.wasteCost || 0), wasteInventory });
     await database.write();
     const history = buildPrintHistory(workspaceScopeForUser(database.data, request.user));
     const historyRecord = history.find((item) => item.id === job.id);
-    return { job, historyRecord, history };
+    return { job, historyRecord, history, analytics: buildAnalytics(workspaceScopeForUser(database.data, request.user)), spools: workspaceScopeForUser(database.data, request.user).spools, wasteInventory };
   });
 
   app.post("/api/history/:id/reprint", async (request, reply) => {
@@ -4905,37 +5955,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const material = typeof part.fields?.material?.value === "string" ? part.fields.material.value : "PLA";
     const folder = typeof part.fields?.folder?.value === "string" ? part.fields.folder.value : "Uploads";
     const buffer = await part.toBuffer();
-    const metadata = await parseModelMetadata({ buffer, filename, material });
-    const id = randomUUID();
-    const stored = await storeObject(`uploads/${id}/${filename}`, buffer, { filename, type: metadata.type });
-    const quote = calculateQuote(database.data.costCatalog, { material, grams: metadata.estimateGrams, minutes: metadata.estimateMinutes });
-    const file = {
-      id,
-      workspaceId: request.user.workspaceId,
-      name: filename,
-      type: metadata.type,
-      folder,
-      size: formatBytes(buffer.length),
-      material,
-      tags: ["uploaded", "parsed"],
-      sliced: metadata.sliced,
-      status: metadata.status,
-      version: 1,
-      dimensions: metadata.dimensions,
-      thumbnail: filename,
-      printTime: metadata.printTime,
-      cost: quote.total,
-      layerHeight: "0.20",
-      usage: metadata.estimateGrams,
-      estimateGrams: metadata.estimateGrams,
-      estimateMinutes: metadata.estimateMinutes,
-      quote: quote.total,
-      quoteBreakdown: quote,
-      storagePath: stored.storagePath,
-      storageProvider: stored.storageProvider,
-      storageKey: stored.storageKey
-    };
-    database.data.files.push(file);
+    const { file } = await createStoredModelFile(database, { filename, buffer, material, folder, tags: ["uploaded", "parsed"], source: "Operator upload" }, { workspaceId: request.user.workspaceId });
     database.data.events.unshift({ id: randomUUID(), type: "file.uploaded", message: `${filename} parsed and stored`, at: new Date().toISOString() });
     await database.write();
     return reply.code(201).send(file);
@@ -4968,6 +5988,20 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     reply.header("content-disposition", `attachment; filename="${path.basename(file.name, path.extname(file.name)) || file.id}.layerpilot.json"`);
     reply.type("application/json");
     return JSON.stringify({ exportedAt: new Date().toISOString(), file }, null, 2);
+  });
+
+  app.get("/api/files/:id/preview", async (request, reply) => {
+    const file = database.data.files.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
+    if (!file) return reply.code(404).send({ error: "File not found" });
+    let buffer = null;
+    if (file.storagePath || file.storageKey) {
+      try {
+        buffer = await readStoredObject(file);
+      } catch {
+        buffer = null;
+      }
+    }
+    return buildFilePreview(file, buffer, workspaceScopeForUser(database.data, request.user));
   });
 
   app.delete("/api/files/:id", async (request, reply) => {
@@ -5070,6 +6104,55 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     return spool;
   });
 
+  app.post("/api/purchaseRequests", async (request, reply) => {
+    if (!hasPermission(request.user, "inventory:write")) return reply.code(403).send({ error: "Missing permission: inventory:write" });
+    const parsed = purchaseRequestSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid purchase request payload", issues: parsed.error.issues });
+    if (parsed.data.spoolId && !database.data.spools.some((spool) => spool.id === parsed.data.spoolId && itemInWorkspace(spool, request.user.workspaceId))) return reply.code(404).send({ error: "Linked spool not found" });
+    const now = new Date().toISOString();
+    const purchaseRequest = { id: randomUUID(), workspaceId: request.user.workspaceId, ...parsed.data, createdAt: now, updatedAt: now };
+    database.data.purchaseRequests.unshift(purchaseRequest);
+    await dispatchEvent(database, "purchase_request.created", `${purchaseRequest.material} reorder request created`, { purchaseRequestId: purchaseRequest.id, material: purchaseRequest.material, quantity: purchaseRequest.quantity });
+    await database.write();
+    return reply.code(201).send(purchaseRequest);
+  });
+
+  app.post("/api/purchaseRequests/reorderPlan", async (request, reply) => {
+    if (!hasPermission(request.user, "inventory:write")) return reply.code(403).send({ error: "Missing permission: inventory:write" });
+    const parsed = purchaseReorderPlanSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid reorder plan payload", issues: parsed.error.issues });
+    const result = createReorderPlan(database.data, request.user.workspaceId, parsed.data);
+    await dispatchEvent(database, "purchase_request.reorder_plan", `${result.created.length} reorder requests created`, { created: result.created.map((item) => item.id), skipped: result.skipped.length, thresholdGrams: result.thresholdGrams });
+    await database.write();
+    return result;
+  });
+
+  app.patch("/api/purchaseRequests/:id", async (request, reply) => {
+    if (!hasPermission(request.user, "inventory:write")) return reply.code(403).send({ error: "Missing permission: inventory:write" });
+    const parsed = purchaseRequestPatchSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid purchase request update", issues: parsed.error.issues });
+    if (parsed.data.spoolId && !database.data.spools.some((spool) => spool.id === parsed.data.spoolId && itemInWorkspace(spool, request.user.workspaceId))) return reply.code(404).send({ error: "Linked spool not found" });
+    const purchaseRequest = database.data.purchaseRequests.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
+    if (!purchaseRequest) return reply.code(404).send({ error: "Purchase request not found" });
+    const rawPatch = request.body && typeof request.body === "object" ? request.body : {};
+    const patch = Object.fromEntries(Object.entries(parsed.data).filter(([key]) => Object.prototype.hasOwnProperty.call(rawPatch, key)));
+    Object.assign(purchaseRequest, patch, { updatedAt: new Date().toISOString() });
+    await dispatchEvent(database, "purchase_request.updated", `${purchaseRequest.material} reorder request ${purchaseRequest.status}`, { purchaseRequestId: purchaseRequest.id, status: purchaseRequest.status });
+    await database.write();
+    return purchaseRequest;
+  });
+
+  app.post("/api/purchaseRequests/:id/receive", async (request, reply) => {
+    if (!hasPermission(request.user, "inventory:write")) return reply.code(403).send({ error: "Missing permission: inventory:write" });
+    const parsed = purchaseReceiveSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid receive payload", issues: parsed.error.issues });
+    const result = receivePurchaseRequest(database.data, request.params.id, request.user.workspaceId, parsed.data);
+    if (result.error) return reply.code(result.statusCode || 400).send({ error: result.error });
+    await dispatchEvent(database, "purchase_request.received", `${result.spools.length} ${result.request.material} spools received`, { purchaseRequestId: result.request.id, spoolIds: result.spools.map((spool) => spool.id) });
+    await database.write();
+    return result;
+  });
+
   app.post("/api/maintenance", async (request, reply) => {
     if (!hasPermission(request.user, "maintenance:write")) return reply.code(403).send({ error: "Missing permission: maintenance:write" });
     const parsed = maintenanceSchema.safeParse(request.body);
@@ -5151,17 +6234,59 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     return reply.code(201).send(order);
   });
 
+  app.patch("/api/quoteRequests/:id", async (request, reply) => {
+    if (!hasPermission(request.user, "orders:write")) return reply.code(403).send({ error: "Missing permission: orders:write" });
+    const parsed = quoteRequestPatchSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid quote request update", issues: parsed.error.issues });
+    const quote = database.data.quoteRequests.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
+    if (!quote) return reply.code(404).send({ error: "Quote request not found" });
+    Object.assign(quote, parsed.data, { updatedAt: new Date().toISOString(), reviewedBy: request.user.email });
+    await dispatchEvent(database, "quote_request.updated", `${quote.id} -> ${quote.status}`, { quoteRequestId: quote.id, status: quote.status, quotedValue: quote.quotedValue || 0 });
+    await database.write();
+    return quote;
+  });
+
+  app.post("/api/quoteRequests/:id/customer-link", async (request, reply) => {
+    if (!hasPermission(request.user, "orders:write")) return reply.code(403).send({ error: "Missing permission: orders:write" });
+    const parsed = quoteCustomerLinkSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid quote customer link payload", issues: parsed.error.issues });
+    const quote = database.data.quoteRequests.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
+    if (!quote) return reply.code(404).send({ error: "Quote request not found" });
+    if (parsed.data.rotate || !quote.customerAccessToken) quote.customerAccessToken = randomBytes(18).toString("base64url");
+    quote.portalLinkGeneratedAt = new Date().toISOString();
+    quote.portalLinkGeneratedBy = request.user.email;
+    quote.updatedAt = quote.portalLinkGeneratedAt;
+    const url = publicQuoteUrl(request, quote);
+    await dispatchEvent(database, parsed.data.rotate ? "quote_request.portal_link_rotated" : "quote_request.portal_link_generated", `${quote.id} customer portal link ${parsed.data.rotate ? "rotated" : "generated"}`, { workspaceId: request.user.workspaceId, quoteRequestId: quote.id });
+    await database.write();
+    return { quoteRequest: quote, url, accessToken: quote.customerAccessToken };
+  });
+
+  app.post("/api/quoteRequests/:id/convert-order", async (request, reply) => {
+    if (!hasPermission(request.user, "orders:write")) return reply.code(403).send({ error: "Missing permission: orders:write" });
+    const parsed = quoteConvertSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid quote conversion payload", issues: parsed.error.issues });
+    const quote = database.data.quoteRequests.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
+    if (!quote) return reply.code(404).send({ error: "Quote request not found" });
+    if (quote.orderId) return reply.code(409).send({ error: "Quote request already converted", orderId: quote.orderId });
+    const result = convertQuoteToProduction(database.data, quote, { workspaceId: request.user.workspaceId, due: parsed.data.due, value: parsed.data.value, createJob: parsed.data.createJob, reviewedBy: request.user.email });
+    if (result.error) return reply.code(result.statusCode || 400).send({ error: result.error, orderId: result.orderId });
+    await dispatchEvent(database, "quote_request.converted", `${quote.id} converted to ${result.order.id}`, { workspaceId: request.user.workspaceId, quoteRequestId: quote.id, orderId: result.order.id, value: result.order.value });
+    if (result.job) await dispatchEvent(database, "queue.created", `${result.job.file} queued from quote`, { workspaceId: request.user.workspaceId, jobId: result.job.id, fileId: result.job.fileId, orderId: result.order.id, quoteRequestId: quote.id, material: result.job.material });
+    await database.write();
+    return reply.code(201).send(result);
+  });
+
   app.patch("/api/orders/:id/status", async (request, reply) => {
     if (!hasPermission(request.user, "orders:write")) return reply.code(403).send({ error: "Missing permission: orders:write" });
     const parsed = z.object({ status: orderStatusSchema }).safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Invalid order status", issues: parsed.error.issues });
     const order = database.data.orders.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!order) return reply.code(404).send({ error: "Order not found" });
-    order.status = parsed.data.status;
-    order.updatedAt = new Date().toISOString();
-    await dispatchEvent(database, "order.status", `${order.id} -> ${order.status}`, { orderId: order.id, status: order.status });
+    const result = applyOrderStatusChange(database.data, order, parsed.data.status);
+    await dispatchEvent(database, "order.status", `${order.id} -> ${order.status}`, { workspaceId: request.user.workspaceId, orderId: order.id, status: order.status, jobs: result.jobs.map((job) => job.id), materialChanges: result.materialChanges });
     await database.write();
-    return order;
+    return { ...result.order, order: result.order, jobs: result.jobs, materialChanges: result.materialChanges, spools: result.spools, todos: result.todos };
   });
 
   app.post("/api/parts", async (request, reply) => {
@@ -5187,6 +6312,49 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     database.data.events.unshift({ id: randomUUID(), type: "part.updated", message: part.name, at: part.updatedAt });
     await database.write();
     return part;
+  });
+
+  app.post("/api/productionTemplates", async (request, reply) => {
+    if (!hasPermission(request.user, "catalog:write")) return reply.code(403).send({ error: "Missing permission: catalog:write" });
+    const parsed = productionTemplateSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid production template payload", issues: parsed.error.issues });
+    const file = database.data.files.find((item) => item.id === parsed.data.fileId && itemInWorkspace(item, request.user.workspaceId));
+    if (!file) return reply.code(404).send({ error: "Linked file not found" });
+    if (parsed.data.printerId && !database.data.printers.some((item) => item.id === parsed.data.printerId && itemInWorkspace(item, request.user.workspaceId))) return reply.code(404).send({ error: "Printer not found" });
+    const duplicate = database.data.productionTemplates.some((item) => itemInWorkspace(item, request.user.workspaceId) && item.name.toLowerCase() === parsed.data.name.toLowerCase());
+    if (duplicate) return reply.code(409).send({ error: "Production template already exists" });
+    const template = { id: randomUUID(), workspaceId: request.user.workspaceId, ...parsed.data, runCount: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    database.data.productionTemplates.unshift(template);
+    await dispatchEvent(database, "production_template.created", `${template.name} template saved`, { templateId: template.id, fileId: template.fileId, sku: template.sku });
+    await database.write();
+    return reply.code(201).send(template);
+  });
+
+  app.patch("/api/productionTemplates/:id", async (request, reply) => {
+    if (!hasPermission(request.user, "catalog:write")) return reply.code(403).send({ error: "Missing permission: catalog:write" });
+    const parsed = productionTemplatePatchSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid production template update", issues: parsed.error.issues });
+    if (parsed.data.fileId && !database.data.files.some((item) => item.id === parsed.data.fileId && itemInWorkspace(item, request.user.workspaceId))) return reply.code(404).send({ error: "Linked file not found" });
+    if (parsed.data.printerId && !database.data.printers.some((item) => item.id === parsed.data.printerId && itemInWorkspace(item, request.user.workspaceId))) return reply.code(404).send({ error: "Printer not found" });
+    const template = database.data.productionTemplates.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
+    if (!template) return reply.code(404).send({ error: "Production template not found" });
+    Object.assign(template, parsed.data, { updatedAt: new Date().toISOString() });
+    await dispatchEvent(database, "production_template.updated", `${template.name} template updated`, { templateId: template.id });
+    await database.write();
+    return template;
+  });
+
+  app.post("/api/productionTemplates/:id/run", async (request, reply) => {
+    if (!hasPermission(request.user, "catalog:write") || !hasPermission(request.user, "queue:write")) return reply.code(403).send({ error: "Missing permission: catalog:write and queue:write" });
+    const parsed = productionTemplateRunSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid production template run payload", issues: parsed.error.issues });
+    const result = createJobsFromProductionTemplate(database.data, request.params.id, { ...parsed.data, workspaceId: request.user.workspaceId });
+    if (result.error) return reply.code(result.statusCode || 400).send({ error: result.error });
+    if (!result.dryRun) {
+      await dispatchEvent(database, "production_template.run", `${result.jobs.length} jobs created from ${result.template.name}`, { templateId: result.template.id, jobs: result.jobs.map((job) => job.id) });
+      await database.write();
+    }
+    return result;
   });
 
   app.post("/api/profiles", async (request, reply) => {
@@ -5361,7 +6529,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const bridge = existing || { id: randomUUID(), workspaceId: request.user.workspaceId, lastStatus: "not tested" };
     Object.assign(bridge, parsed.data, { updatedAt: new Date().toISOString() });
     if (!existing) database.data.bridges.push(bridge);
-    printer.connection = parsed.data.kind === "octoprint" ? "OctoPrint" : parsed.data.kind === "moonraker" ? "Klipper / Moonraker" : "Manual bridge";
+    printer.connection = parsed.data.kind === "octoprint" ? "OctoPrint" : parsed.data.kind === "moonraker" ? "Klipper / Moonraker" : parsed.data.kind === "prusalink" ? "PrusaLink" : "Manual bridge";
     database.data.events.unshift({ id: randomUUID(), workspaceId: request.user.workspaceId, type: "bridge.saved", message: `${bridge.name} saved for ${printer.name}`, data: { workspaceId: request.user.workspaceId }, at: new Date().toISOString() });
     await database.write();
     return reply.code(existing ? 200 : 201).send(sanitizeBridge(bridge));
@@ -5380,22 +6548,22 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!bridge) return reply.code(404).send({ error: "Bridge not found" });
     const printer = database.data.printers.find((item) => item.id === bridge.printerId && itemInWorkspace(item, request.user.workspaceId));
     if (!printer) return reply.code(404).send({ error: "Printer not found" });
-    try {
-      const status = await fetchBridgeStatus(bridge);
-      applyBridgeStatus(printer, status);
+    const diagnostic = await diagnoseBridge(bridge);
+    bridge.lastDiagnostics = diagnostic;
+    bridge.lastSyncAt = diagnostic.generatedAt;
+    if (diagnostic.ok) {
+      if (diagnostic.status) applyBridgeStatus(printer, diagnostic.status);
       bridge.lastStatus = "connected";
-      bridge.lastSyncAt = new Date().toISOString();
-      database.data.events.unshift({ id: randomUUID(), workspaceId: request.user.workspaceId, type: "bridge.connected", message: `${bridge.name} connected`, data: { workspaceId: request.user.workspaceId }, at: bridge.lastSyncAt });
-      await database.write();
-      return { bridge: sanitizeBridge(bridge), printer, status };
-    } catch (error) {
+      bridge.lastError = "";
+      database.data.events.unshift({ id: randomUUID(), workspaceId: request.user.workspaceId, type: "bridge.connected", message: `${bridge.name} connected`, data: { workspaceId: request.user.workspaceId, diagnostic: { ok: true, latencyMs: diagnostic.latencyMs } }, at: bridge.lastSyncAt });
+    } else {
       bridge.lastStatus = "error";
-      bridge.lastError = error instanceof Error ? error.message : "Bridge test failed";
-      bridge.lastSyncAt = new Date().toISOString();
-      if (printer) printer.status = "offline";
-      await database.write();
-      return reply.code(502).send({ error: bridge.lastError, bridge: sanitizeBridge(bridge), printer });
+      bridge.lastError = diagnostic.summary || "Bridge test failed";
+      printer.status = "offline";
+      database.data.events.unshift({ id: randomUUID(), workspaceId: request.user.workspaceId, type: "bridge.diagnostic_failed", message: `${bridge.name} diagnostic failed`, data: { workspaceId: request.user.workspaceId, diagnostic: { ok: false, latencyMs: diagnostic.latencyMs, recommendation: diagnostic.recommendation } }, at: bridge.lastSyncAt });
     }
+    await database.write();
+    return { ok: diagnostic.ok, bridge: sanitizeBridge(bridge), printer, status: diagnostic.status, diagnostic };
   });
 
   app.post("/api/printers/:id/sync", async (request, reply) => {
@@ -5442,14 +6610,16 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!job) return reply.code(404).send({ error: "Queue job not found" });
     const printer = database.data.printers.find((item) => item.id === parsed.data.printerId && itemInWorkspace(item, request.user.workspaceId));
     if (!printer) return reply.code(404).send({ error: "Printer not found" });
+    const scoped = workspaceScopeForUser(database.data, request.user);
     job.printerId = printer.id;
     job.printer = printer.name;
     job.scheduledStart = parsed.data.scheduledStart;
     if (job.stage !== "needs slicing") job.stage = "scheduled";
-    job.scheduleWarnings = getScheduleWarnings(workspaceScopeForUser(database.data, request.user), job, printer, parsed.data.scheduledStart);
-    database.data.events.unshift({ id: randomUUID(), workspaceId: request.user.workspaceId, type: "queue.scheduled", message: `${job.file} on ${printer.name}`, data: { workspaceId: request.user.workspaceId }, at: new Date().toISOString() });
+    const materialReservation = reserveJobMaterial(scoped, job);
+    job.scheduleWarnings = getScheduleWarnings(scoped, job, printer, parsed.data.scheduledStart);
+    database.data.events.unshift({ id: randomUUID(), workspaceId: request.user.workspaceId, type: "queue.scheduled", message: `${job.file} on ${printer.name}`, data: { workspaceId: request.user.workspaceId, materialReservation }, at: new Date().toISOString() });
     await database.write();
-    return { job, warnings: job.scheduleWarnings, todos: deriveTodos(workspaceScopeForUser(database.data, request.user)) };
+    return { job, warnings: job.scheduleWarnings, materialReservation, spools: scoped.spools, todos: deriveTodos(workspaceScopeForUser(database.data, request.user)) };
   });
 
   app.patch("/api/queue/:id/status", async (request, reply) => {
@@ -5458,13 +6628,19 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsed.success) return reply.code(400).send({ error: "Invalid queue status", issues: parsed.error.issues });
     const job = database.data.queue.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!job) return reply.code(404).send({ error: "Queue job not found" });
+    const scoped = workspaceScopeForUser(database.data, request.user);
     job.status = parsed.data.status;
     if (parsed.data.status === "printing") job.stage = "printing";
     if (parsed.data.status === "complete") job.stage = "post processing";
     if (parsed.data.status === "failed") job.stage = "blocked";
-    await dispatchEvent(database, "queue.status", `${job.file} -> ${job.status}`, { workspaceId: request.user.workspaceId, jobId: job.id, status: job.status, stage: job.stage });
+    const materialChange = parsed.data.status === "complete"
+      ? consumeJobMaterialReservation(scoped, job)
+      : ["failed", "cancelled"].includes(parsed.data.status)
+        ? releaseJobMaterialReservation(scoped, job)
+        : null;
+    await dispatchEvent(database, "queue.status", `${job.file} -> ${job.status}`, { workspaceId: request.user.workspaceId, jobId: job.id, status: job.status, stage: job.stage, materialChange });
     await database.write();
-    return { job, todos: deriveTodos(workspaceScopeForUser(database.data, request.user)) };
+    return { job, materialChange, spools: scoped.spools, todos: deriveTodos(workspaceScopeForUser(database.data, request.user)) };
   });
 
   app.patch("/api/queue/:id/priority", async (request, reply) => {

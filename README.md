@@ -1,5 +1,7 @@
 # 3DSTU FarmFlow
 
+[![CI](https://github.com/iain0901/3D-Printing-Farm-System/actions/workflows/ci.yml/badge.svg)](https://github.com/iain0901/3D-Printing-Farm-System/actions/workflows/ci.yml)
+
 3DSTU FarmFlow is an original 3D printing production operating system MVP for studios, labs, and small print farms. It focuses on structured tasks, model files, printer capability matching, scheduling, automatic todos, and exception-driven operations.
 
 Localized documentation:
@@ -10,6 +12,16 @@ Localized documentation:
 - [简体中文许可](LICENSE.zh-CN.md)
 
 For professional technical support or installation services, contact `support@3dstu.com`.
+
+Project links:
+
+- Website: https://farm-saas.3dstu.com
+- GitHub: https://github.com/iain0901/3D-Printing-Farm-System
+- Installation guide: docs/INSTALL.md
+- Operations runbook: docs/OPERATIONS.md
+- Product roadmap: docs/ROADMAP.md
+- Release runbook: docs/RELEASE.md
+
 
 ## License
 
@@ -42,7 +54,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Then open `http://127.0.0.1:8797`. Compose starts an API/web service plus a `layerpilot-worker` background service from the same image. The web container serves the built React app and Fastify API, runs as the non-root `node` user, uses `no-new-privileges`, has a 30-second graceful stop window, per-service JSON log rotation, and exposes a container healthcheck against `/api/health`. The worker runs telemetry ticks and OctoPrint/Moonraker polling, then notifies the API over an internal worker-token endpoint so WebSocket/SSE clients receive fresh state. Data is stored in the `layerpilot-data` Docker volume at `/data/layerpilot.db.json`, and uploaded model files are stored under `/data/storage` by default. Set `LAYERPILOT_OBJECT_STORAGE_PROVIDER=s3` to use S3-compatible object storage instead.
+Then open `http://127.0.0.1:8797`. Compose starts an API/web service plus a `layerpilot-worker` background service from the same image. The web container serves the built React app and Fastify API, runs as the non-root `node` user, uses `no-new-privileges`, has a 30-second graceful stop window, per-service JSON log rotation, and exposes a container healthcheck against `/api/health`. The worker runs telemetry ticks and OctoPrint, Moonraker, and PrusaLink polling, then notifies the API over an internal worker-token endpoint so WebSocket/SSE clients receive fresh state. Data is stored in the `layerpilot-data` Docker volume at `/data/layerpilot.db.json`, and uploaded model files are stored under `/data/storage` by default. Set `LAYERPILOT_OBJECT_STORAGE_PROVIDER=s3` to use S3-compatible object storage instead.
 
 ## Deploy On Ubuntu
 
@@ -244,6 +256,10 @@ npm run qc
 
 This runs the TypeScript/Vite production build plus API tests.
 
+GitHub Actions runs the same QC gate on every push to `main` and every pull request. Release discipline and VPS deployment evidence are documented in `docs/RELEASE.md`.
+
+Before using a customer deployment for live production, complete the checklist in `docs/PRODUCTION_READINESS.md`.
+
 ## Open Source Stack
 
 - React, Vite, TypeScript, Recharts, and Lucide React for the app experience.
@@ -256,7 +272,7 @@ This runs the TypeScript/Vite production build plus API tests.
 - Stripe's official Node SDK for optional subscription checkout, billing portal sessions, and Stripe-compatible billing webhook handling.
 - MQTT.js for publishing production events to broker-backed automation systems.
 - Zod for API payload validation.
-- Native `fetch` bridge adapters for OctoPrint and Moonraker/Klipper HTTP APIs.
+- Native `fetch` bridge adapters for OctoPrint, Moonraker/Klipper, and PrusaLink HTTP APIs.
 - Vitest for QC coverage of backend health, readiness and Prometheus-style metrics, Docker/Compose deployment packaging, production Owner bootstrap, default-user disabling, schema migration metadata, pre-migration backups, admin data-integrity checks, security headers, sensitive-route rate limiting, validation, persistence, scoped API key auth, API key IP/CIDR allowlist enforcement, TOTP two-factor auth enrollment/login/recovery-code consumption/disable flows, team invites, role updates, user password changes, admin password resets, workspace settings persistence, audit retention policy pruning, API-backed billing/storage usage, local and S3-compatible object storage flows, plan changes, internal/external/Stripe billing sessions, Stripe-compatible webhook updates, printer creation/capability updates, catalog operations, API-backed cost catalog and quote calculation, API-backed add-on marketplace status/config persistence, MQTT event delivery and secret-safe add-on responses, PWA manifest/service-worker/offline asset builds, authenticated WebSocket realtime state/event delivery, profile creation/import/update/archive/defaults/matching policy, SKU-to-job expansion, inventory operations, spool label generation and scan-code usage logging, maintenance workflows, maintenance templates and problem reports, order intake/status updates, file upload/download/delete with reference protection and storage cleanup, stored sample STL generation, file folder persistence, full backup export/restore with stored model bytes, commerce feed/CSV import, webhook delivery, notification channel delivery, realtime telemetry ticks, bridge polling sync, API-backed slicer jobs with stored G-code output and default profile resolution, scheduling warnings, automatic scheduling, material/color batching, load-balance optimization, constraint-solver scheduling with dry-run safety, queue matching dry-runs and committed production starts, persisted generated-todo actions, analytics/history annotation/reprint/admin export/restore, audit query/export permissions, hardware bridge adapters, and derived todos.
 
 ## Demo Login
@@ -271,6 +287,7 @@ The API uses local bearer-token sessions, password hashes, optional TOTP two-fac
 ## Implemented MVP Areas
 
 - API-backed auth, signup, logout, TOTP two-factor enrollment/login/recovery/disable flows, user password changes, admin password resets, local bearer-token sessions, password hashing, role-based permissions, and scoped automation API keys with hashed secrets
+- Public quote intake with optional customer model uploads, shared file-library storage, automatic model metadata estimates, operator quote review, quote validity windows, customer tracking tokens, public status lookup, shareable/rotatable quote portal links, customer accept/reject/revision decisions, quote-to-order conversion, and attached-model handoff into the production queue
 - Schema-versioned JSON/SQLite document persistence with automatic startup migrations, migration history, pre-migration backup files, readiness-linked data integrity checks, admin integrity reports for broken references, and configurable audit retention
 - English / Traditional Chinese / Simplified Chinese language switcher with cleaned core production translations and a Vitest translation-coverage gate for visible static UI text
 - Production cockpit dashboard answering today's tasks, due risk, idle printers, printer issues, and human todos
@@ -293,8 +310,8 @@ The API uses local bearer-token sessions, password hashes, optional TOTP two-fac
 - Team users with API-backed invites, temporary passwords, admin password reset, password-reset-required indicators, role/location updates, owner-protection guardrails, permissions, and organization/location fields
 - Signup-created workspace tenancy with schema-versioned workspace records, scoped state/list APIs, scoped users/API keys/settings/billing/export/audit reads, and workspace-tagged production objects for small-team SaaS isolation.
 - Integrations, API-backed scoped API key creation/disable flow, API-backed webhook configuration, test delivery, production-event webhook delivery, and delivery log
-- API-backed OctoPrint and Moonraker bridge configuration, key-safe bridge listing, connection tests, manual sync, background polling sync, status broadcasting, and bridge-aware printer actions with persisted local state transitions
-- Production background worker process for telemetry ticks and OctoPrint/Moonraker polling, with durable worker heartbeat metadata and internal token-protected API rebroadcasts for WebSocket/SSE clients
+- API-backed OctoPrint, Moonraker, and PrusaLink bridge configuration, key-safe bridge listing, connection tests, manual sync, background polling sync, status broadcasting, and bridge-aware printer actions with persisted local state transitions
+- Production background worker process for telemetry ticks and OctoPrint/Moonraker/PrusaLink polling, with durable worker heartbeat metadata and internal token-protected API rebroadcasts for WebSocket/SSE clients
 - Authenticated WebSocket realtime channel for production state snapshots, events, heartbeats, telemetry ticks, bridge sync updates, and notification delivery updates, with the browser console using WebSocket first and SSE as a fallback
 - Add-ons marketplace with commerce connectors, API-backed cost catalog, API-backed audit timeline, CSV export, manual audit-retention enforcement, configurable MQTT event publishing, and mobile console toggles
 - PWA mobile console assets with installable manifest, maskable SVG icon, production service worker registration, static app-shell caching, offline fallback page, and API network-only handling to avoid stale production data
@@ -304,10 +321,10 @@ The API uses local bearer-token sessions, password hashes, optional TOTP two-fac
 
 ## Current Integration Boundaries
 
-- Printer hardware can be driven through OctoPrint/Moonraker bridges when configured; otherwise demo telemetry uses API timers in single-process mode or the Docker worker process in production-style deployments.
+- Printer hardware can be driven through OctoPrint, Moonraker, or PrusaLink bridges when configured; otherwise demo telemetry uses API timers in single-process mode or the Docker worker process in production-style deployments.
 - API routes are real Fastify endpoints with schema-versioned JSON or SQLite-backed document persistence, automatic startup migrations, pre-migration backups, workspace/tenant scoping migrations, signup-created isolated workspaces, data-integrity reports, security headers, route-level throttling for sensitive actions, auth, TOTP two-factor challenges, production Owner bootstrap, optional default-user disabling, readiness checks, protected Prometheus-style metrics, role checks, scoped API key auth with optional IP/CIDR allowlist enforcement, Docker-ready static frontend/PWA serving, server-sent event streaming, WebSocket realtime state, backend telemetry ticks, worker broadcasts, multipart upload, model metadata extraction, parametric STL generation, generated sample STL storage, S3-compatible object storage, file folder persistence, stored file download/delete, full backup file-byte export/restore, spool label exports, spool scan-code usage logging, profile defaults, profile matching policy, maintenance templates, maintenance problem reports, billing/storage usage, plan management, optional Stripe checkout/portal/webhook subscription sync, cost catalog quote calculation, SKU catalog export, material mapping, audit log query/export, safe admin backup restore, and validation for printer creation, files, parts, SKUs, order-to-job dry-runs and commits, stock previews, duplicate generation blocking, queue creation, queue matching dry-runs, committed production starts, queue scheduling with warnings, automatic scheduling, material/color schedule batching, load-balance optimization, constraint-solver scheduling, schedule diagnostics, generated todo actions, queue status/priority, printer status, printer action state transitions, slicer jobs, slicing status, webhook delivery, notification channel delivery, analytics, print history annotations, reprint generation, admin exports, and derived todos.
 - Some offline fallback paths still use local state for instant feedback when the local API is unavailable.
-- OctoPrint and Klipper/Moonraker bridges can be configured, tested, manually synced, background-polled, broadcast to the realtime stream, and used for basic printer actions through the local API. Webhooks, notification channels, and the MQTT Event Stream add-on can be configured and delivered for matching production events. Commerce connectors can test and import JSON/CSV order feeds with stored bearer tokens hidden from the UI. Cloud-bridge and some marketplace integrations still have UI flows but do not transmit external data yet.
+- OctoPrint, Klipper/Moonraker, and PrusaLink bridges can be configured, tested, manually synced, background-polled, broadcast to the realtime stream, and used for basic printer actions through the local API. Webhooks, notification channels, and the MQTT Event Stream add-on can be configured and delivered for matching production events. Commerce connectors can test and import JSON/CSV order feeds with stored bearer tokens hidden from the UI. Cloud-bridge and some marketplace integrations still have UI flows but do not transmit external data yet.
 
 ## Suggested Real Integrations Later
 
@@ -317,3 +334,7 @@ The API uses local bearer-token sessions, password hashes, optional TOTP two-fac
 - Move long-running external slicer jobs into isolated worker containers when production farms need queued asynchronous slicing at scale.
 - Add Stripe signature verification against raw webhook bodies if the deployment exposes webhooks directly to the public internet rather than through a trusted edge proxy that injects `x-layerpilot-billing-webhook-secret`.
 - Add organization-level RBAC on the backend.
+
+## Recommended GitHub topics
+
+`print-farm`, `3d-printing`, `saas`, `self-hosted`, `manufacturing`, `production-planning`, `printer-tools`, `inventory-management`, `job-queue`, `docker`, `typescript`, `react`.
