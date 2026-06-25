@@ -11,7 +11,7 @@
   - `11e2e36` `docs: update codex round 2 report`
   - `705032a` `docs: finalize codex round 2 status`
   - Current `HEAD` `docs: record final round 2 push`
-  - Current round 3 commit: `feat: harden persisted user sessions`
+  - `0f03c57` `feat: harden persisted user sessions`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
