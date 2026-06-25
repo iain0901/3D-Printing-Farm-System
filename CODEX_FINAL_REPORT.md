@@ -43,6 +43,7 @@
   - Current `HEAD` `feat: add idempotent filament purchasing`
   - `dabbdc2` `feat: add idempotent inventory writes`
   - Current `HEAD` `docs: record codex round 21 push`
+  - Current `HEAD` `feat: add idempotent maintenance workflows`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -100,6 +101,9 @@
   - Round 21 targeted `npm run test -- api/server.test.mjs -t "idempotent spool"`: passed, 3 tests passed.
   - Round 21 targeted `npm run test -- api/server.test.mjs`: passed, 82 tests passed.
   - Round 21 final `npm run qc`: passed, build passed, Vitest 10 files / 99 tests passed.
+  - Round 22 targeted `npm run test -- api/server.test.mjs -t "idempotent maintenance"`: passed, 3 tests passed.
+  - Round 22 targeted `npm run test -- api/server.test.mjs`: passed, 85 tests passed.
+  - Round 22 final `npm run qc`: passed, build passed, Vitest 10 files / 102 tests passed.
 
 ## Completed Features
 
@@ -173,6 +177,9 @@
 - Added idempotent replay/conflict protection for inventory spool creation, explicit spool usage logging, and scan-based spool usage/location writes.
 - Added regression coverage proving inventory retries replay without duplicate spools, double filament consumption, or duplicate inventory audit events.
 - Documented inventory `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for maintenance job creation, maintenance template saves, and maintenance problem-report intake.
+- Added regression coverage proving maintenance retries replay without duplicate maintenance jobs, duplicate templates/update events, duplicate reports, or duplicate linked jobs.
+- Documented maintenance `Idempotency-Key` usage in README, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -195,6 +202,7 @@
 - The built-in public quote UI now sends idempotency headers for quote intake and customer accept/reject/revision decisions; embedded third-party forms still need their own per-attempt key generation.
 - Filament purchasing idempotency now protects reorder-plan and receive retries; broader inventory write coverage should still be added only after route-specific replay and response review.
 - Inventory idempotency now protects spool creation, usage logging, and scan-based usage retries; broader inventory write coverage should still be added only after route-specific replay and response review.
+- Maintenance idempotency now protects job creation, template saves, and problem-report intake retries; broader maintenance update coverage should still be added only after route-specific replay and response review.
 - Idempotency replay records are intentionally omitted from shared state and admin exports; retry clients should use fresh keys after workspace export/restore rather than expecting replay cache continuity.
 - Audit context now covers the highest-impact production scheduling/queue/bridge/file-version operator actions; remaining lower-risk direct event writes should be migrated only with route-specific delivery and notification review.
 - Ops-check authenticated verification requires valid Owner/Admin credentials or a dedicated smoke account configured in `.env`; otherwise it warns and continues with unauthenticated host checks.

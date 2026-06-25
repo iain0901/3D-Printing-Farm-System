@@ -2553,6 +2553,134 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent maintenance job creation without adding duplicate jobs", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const headers = { ...auth(token), "idempotency-key": "maintenance-job-retry-001" };
+      const payload = { title: "Retry rail service", printer: "Forge R1", status: "scheduled", due: "Monday", progress: "0/3", severity: "High" };
+
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/maintenance",
+        headers,
+        payload
+      });
+      expect(created.statusCode).toBe(201);
+
+      const replay = await app.inject({
+        method: "POST",
+        url: "/api/maintenance",
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(201);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(created.json());
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/maintenance",
+        headers,
+        payload: { ...payload, printer: "Forge R2" }
+      });
+      expect(conflict.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.maintenance.filter((item) => item.title === "Retry rail service")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "maintenance.created" && event.message.includes("Retry rail service"))).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "maintenance-job-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/maintenance",
+        statusCode: 201,
+        replayCount: 1
+      });
+    });
+  });
+
+  it("replays idempotent maintenance template saves without duplicate update events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const headers = { ...auth(token), "idempotency-key": "maintenance-template-retry-001" };
+      const payload = { title: "Retry motion service", printerModel: "FDM fleet", intervalDays: 30, tasks: ["Inspect belts", "Lubricate rails"], severity: "Medium" };
+
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/maintenance/templates",
+        headers,
+        payload
+      });
+      expect(created.statusCode).toBe(201);
+      expect(created.json()).toMatchObject({ created: true, template: { title: "Retry motion service" } });
+
+      const replay = await app.inject({
+        method: "POST",
+        url: "/api/maintenance/templates",
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(201);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(created.json());
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.maintenanceTemplates.filter((item) => item.title === "Retry motion service")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "maintenance_template.created" && event.message.includes("Retry motion service"))).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "maintenance_template.updated" && event.message.includes("Retry motion service"))).toHaveLength(0);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "maintenance-template-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/maintenance/templates",
+        statusCode: 201,
+        replayCount: 1
+      });
+    });
+  });
+
+  it("replays idempotent maintenance reports without duplicate linked jobs", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const headers = { ...auth(token), "idempotency-key": "maintenance-report-retry-001" };
+      const payload = { title: "Retry hotend clog", printer: "Forge R3", description: "No extrusion during startup", severity: "High", createJob: true };
+
+      const reported = await app.inject({
+        method: "POST",
+        url: "/api/maintenance/reports",
+        headers,
+        payload
+      });
+      expect(reported.statusCode).toBe(201);
+      expect(reported.json().report).toMatchObject({ title: "Retry hotend clog", linkedJobId: reported.json().job.id });
+
+      const replay = await app.inject({
+        method: "POST",
+        url: "/api/maintenance/reports",
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(201);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(reported.json());
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/maintenance/reports",
+        headers,
+        payload: { ...payload, createJob: false }
+      });
+      expect(conflict.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.maintenanceReports.filter((item) => item.title === "Retry hotend clog")).toHaveLength(1);
+      expect(persisted.maintenance.filter((item) => item.title === "Retry hotend clog")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "maintenance_report.created" && event.message.includes("Retry hotend clog"))).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "maintenance-report-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/maintenance/reports",
+        statusCode: 201,
+        replayCount: 1
+      });
+    });
+  });
+
   it("persists catalog records and generates order jobs from SKU-linked parts", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);

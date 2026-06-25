@@ -1,16 +1,25 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 21 pushed
+- Phase: round 22 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 21 inventory idempotency hardening is implemented, verified, committed, and ready on `origin/codex/production-saas-completion-20260624`.
+- Current state: Round 22 maintenance workflow idempotency hardening is in progress on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 96 tests passed)
 - Current plan:
-  - Add persisted idempotency replay/conflict protection for retry-prone spool create, spool usage, and spool scan writes.
-  - Cover retries so they do not duplicate spools, double-consume filament, or duplicate inventory audit events.
-  - Document supported inventory idempotency routes, run targeted tests and full QC, then commit and push.
+  - Add persisted idempotency replay/conflict protection for retry-prone maintenance job, template, and problem-report writes.
+  - Cover retries so they do not duplicate maintenance jobs, reports, linked jobs, templates, or audit events.
+  - Document supported maintenance idempotency routes, run targeted tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 22 repo inspection started at 2026-06-25T05:00:32Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent maintenance workflow retries for job creation, template save, and problem-report intake.
+  - Added failing regression coverage proving maintenance job, template, and problem-report retries need replay semantics.
+  - Added maintenance job, template, and report create routes to the persisted `Idempotency-Key` allowlist.
+  - Documented maintenance workflow idempotency in README, operations, and production-readiness docs.
+  - Targeted maintenance idempotency test passed: `npm run test -- api/server.test.mjs -t "idempotent maintenance"` (3 tests).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (85 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 102 tests passed).
   - Round 21 repo inspection started at 2026-06-25T04:50:27Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: idempotent inventory write retries for spool creation, usage logging, and scan-based usage/location updates.
