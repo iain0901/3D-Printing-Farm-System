@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 85 implementation committed; push pending
+- Phase: round 85 committed and pushed
 - Started: 2026-06-24 UTC
-- Current state: Round 85 queue lifecycle retry-safety evidence is implemented, verified, and committed on `codex/production-saas-completion-20260624`; push pending.
+- Current state: Round 85 queue lifecycle retry-safety evidence is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
   - Add regression coverage proving queue schedule, priority, complete, and cancel retries replay without duplicate material reservations, material consumption/release, or audit events.
@@ -20,6 +20,8 @@
   - Full API suite passed: `npm run test -- api/server.test.mjs` (134 tests).
   - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed).
   - Committed round 85 implementation/status/docs as `cb73ea0` (`test: cover queue lifecycle retries`).
+  - Committed round 85 status/final report as `1e5b5ab` (`docs: record codex round 85 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
   - Round 84 repo inspection started at 2026-06-25T17:54:24Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route list, idempotency allowlist, audit dispatcher usage, quote/order/catalog routes, and existing quote/catalog tests before editing.
   - Selected production-readiness slice: actor-aware audit context for remaining quote, order, part, and SKU configuration/lifecycle events so customer quote decisions, operator reviews, production order status changes, generated jobs, and catalog setup are traceable to the authenticated workspace/operator without exposing portal bearer tokens or customer/internal notes.
