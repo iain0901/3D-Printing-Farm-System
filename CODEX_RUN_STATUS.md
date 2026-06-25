@@ -1,17 +1,28 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 83 committed and pushed
+- Phase: round 84 verified; preparing commit
 - Started: 2026-06-24 UTC
-- Current state: Round 83 production configuration audit context hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 84 quote/order/catalog audit context hardening is implemented and verified on `codex/production-saas-completion-20260624`; commit and push pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage proving slicer profile and production-template configuration/run audit events include workspace/operator context without storing full profile settings or generated queue response bodies.
-  - Replace bare profile and production-template audit writes with actor-aware compact audit records.
-  - Document profile/template audit evidence review in README, operations, and production-readiness docs.
-  - Run targeted profile/template tests, full API tests, and full QC, then commit and push.
+  - Add regression coverage proving operator-driven quote updates, quote portal-link generation/rotation, order lifecycle/job generation, and part/SKU setup audit events include workspace/operator context without storing customer notes, portal tokens, or bulky generated job payloads.
+  - Replace remaining bare quote/order/catalog audit writes with actor-aware compact audit records.
+  - Document quote/order/catalog audit evidence review in README, operations, and production-readiness docs.
+  - Run targeted quote/order/catalog audit tests, full API tests, and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 84 repo inspection started at 2026-06-25T17:54:24Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route list, idempotency allowlist, audit dispatcher usage, quote/order/catalog routes, and existing quote/catalog tests before editing.
+  - Selected production-readiness slice: actor-aware audit context for remaining quote, order, part, and SKU configuration/lifecycle events so customer quote decisions, operator reviews, production order status changes, generated jobs, and catalog setup are traceable to the authenticated workspace/operator without exposing portal bearer tokens or customer/internal notes.
+  - Added regression coverage requiring operator quote update, quote portal-link rotation, quote conversion, order create/status/job-generation, and part/SKU setup audit events to include workspace/operator context and compact metadata without portal access tokens or quote notes.
+  - Targeted quote/order/catalog audit regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "operator context for quote, order, and catalog audit events"` (missing actor metadata on `quote_request.updated`).
+  - Replaced remaining bare operator quote/order lifecycle audit writes with actor-aware compact records and tightened order job-generation plus part/SKU setup event metadata.
+  - Targeted quote/order/catalog audit coverage passed: `npm run test -- api/server.test.mjs -t "operator context for quote, order, and catalog audit events"` (1 test).
+  - Broader quote/order/catalog coverage passed: `npm run test -- api/server.test.mjs -t "quote request|catalog configuration|order work|operator context for quote"` (6 tests).
+  - Documented quote/order/catalog audit evidence review in README, operations, and production-readiness docs.
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (133 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 152 tests passed).
   - Round 83 repo inspection started at 2026-06-25T17:45:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route list, audit dispatcher, production-template/profile routes, and existing profile/template tests before editing.
   - Selected production-readiness slice: actor-aware audit context for slicer profile and production-template configuration/run events so changes affecting generated production jobs and slicer selection are traceable to the authenticated workspace/operator without dumping full settings or queue response bodies.

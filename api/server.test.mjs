@@ -5348,6 +5348,145 @@ endsolid s3_store`;
     });
   });
 
+  it("records operator context for quote, order, and catalog audit events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const quote = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        payload: {
+          customer: "Audit Buyer",
+          email: "quote-audit@example.com",
+          company: "Audit Studio",
+          project: "Operator quote audit",
+          material: "PETG",
+          quantity: 4,
+          due: "2026-08-18",
+          budget: 440,
+          notes: "Customer note that should not be copied into operator audit metadata"
+        }
+      });
+      expect(quote.statusCode).toBe(201);
+      const quoteId = quote.json().quoteRequest.id;
+
+      const reviewed = await app.inject({
+        method: "PATCH",
+        url: `/api/quoteRequests/${quoteId}`,
+        headers: auth(token),
+        payload: {
+          status: "quoted",
+          priority: "High",
+          quotedValue: 410,
+          validUntil: "2026-08-30",
+          internalNote: "Internal quote note that should stay out of audit metadata"
+        }
+      });
+      expect(reviewed.statusCode).toBe(200);
+
+      const linked = await app.inject({
+        method: "POST",
+        url: `/api/quoteRequests/${quoteId}/customer-link`,
+        headers: auth(token),
+        payload: { rotate: true }
+      });
+      expect(linked.statusCode).toBe(200);
+      expect(linked.json().accessToken).toBeTruthy();
+
+      const converted = await app.inject({
+        method: "POST",
+        url: `/api/quoteRequests/${quoteId}/convert-order`,
+        headers: auth(token),
+        payload: { due: "2026-08-20", value: 410 }
+      });
+      expect(converted.statusCode).toBe(201);
+
+      const order = await app.inject({
+        method: "POST",
+        url: "/api/orders",
+        headers: auth(token),
+        payload: { source: "Manual", customer: "Audit Order Customer", items: ["CAM-MOUNT-ORG x1"], status: "received", due: "Tomorrow 10:00", value: 180 }
+      });
+      expect(order.statusCode).toBe(201);
+
+      const generated = await app.inject({
+        method: "POST",
+        url: `/api/orders/${order.json().id}/generate-jobs`,
+        headers: auth(token)
+      });
+      expect(generated.statusCode).toBe(200);
+
+      const held = await app.inject({
+        method: "PATCH",
+        url: `/api/orders/${order.json().id}/status`,
+        headers: auth(token),
+        payload: { status: "on_hold" }
+      });
+      expect(held.statusCode).toBe(200);
+
+      const part = await app.inject({
+        method: "POST",
+        url: "/api/parts",
+        headers: auth(token),
+        payload: { name: "Audit setup bracket", fileId: "f2", material: "PETG", process: "0.20mm Production", plates: 1, variants: ["Black"], status: "ready" }
+      });
+      expect(part.statusCode).toBe(201);
+
+      const sku = await app.inject({
+        method: "POST",
+        url: "/api/skus",
+        headers: auth(token),
+        payload: { sku: "AUDIT-BRACKET", title: "Audit Bracket", parts: ["Audit setup bracket"], variants: ["Black"], price: 52, stock: 6, channel: "Manual" }
+      });
+      expect(sku.statusCode).toBe(201);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      const eventFor = (type, predicate = () => true) => persisted.events.find((event) => event.type === type && predicate(event));
+      const expectedEvents = [
+        eventFor("quote_request.updated", (event) => event.data?.quoteRequestId === quoteId),
+        eventFor("quote_request.portal_link_rotated", (event) => event.data?.quoteRequestId === quoteId),
+        eventFor("quote_request.converted", (event) => event.data?.quoteRequestId === quoteId && event.data?.orderId === converted.json().order.id),
+        eventFor("order.created", (event) => event.data?.orderId === order.json().id),
+        eventFor("order.jobs_generated", (event) => event.data?.orderId === order.json().id),
+        eventFor("order.status", (event) => event.data?.orderId === order.json().id && event.data?.status === "on_hold"),
+        eventFor("part.created", (event) => event.data?.partId === part.json().id),
+        eventFor("sku.created", (event) => event.data?.skuId === sku.json().id)
+      ];
+      for (const event of expectedEvents) {
+        expect(event).toMatchObject({
+          workspaceId: "ws-default",
+          data: expect.objectContaining({
+            workspaceId: "ws-default",
+            actorEmail: "demo@layerpilot.test",
+            actorType: "user"
+          })
+        });
+      }
+      for (const event of expectedEvents) {
+        const data = JSON.stringify(event.data);
+        expect(data).not.toContain(linked.json().accessToken);
+        expect(data).not.toContain("Customer note that should not be copied");
+        expect(data).not.toContain("Internal quote note that should stay out");
+      }
+      expect(eventFor("quote_request.updated", (event) => event.data?.quoteRequestId === quoteId).data).toMatchObject({
+        quoteRequestId: quoteId,
+        status: "quoted",
+        priority: "High",
+        quotedValue: 410,
+        validUntil: "2026-08-30"
+      });
+      expect(eventFor("quote_request.portal_link_rotated", (event) => event.data?.quoteRequestId === quoteId).data).toMatchObject({
+        quoteRequestId: quoteId,
+        rotated: true,
+        hasCustomerAccessToken: true
+      });
+      expect(eventFor("order.jobs_generated", (event) => event.data?.orderId === order.json().id).data).toMatchObject({
+        orderId: order.json().id,
+        jobCount: generated.json().jobs.length,
+        jobs: generated.json().jobs.map((job) => job.id)
+      });
+    });
+  });
+
   it("lets customers accept quoted requests through the public quote portal", async () => {
     await withApp(async ({ app, dbPath }) => {
       const quote = await app.inject({

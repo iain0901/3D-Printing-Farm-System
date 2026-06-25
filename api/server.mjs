@@ -7595,7 +7595,15 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsed.success) return reply.code(400).send({ error: "Invalid order payload", issues: parsed.error.issues });
     const order = { id: `ord-${1000 + database.data.orders.length + 1}`, workspaceId: request.user.workspaceId, ...parsed.data, updatedAt: new Date().toISOString() };
     database.data.orders.push(order);
-    await dispatchEvent(database, "order.created", `${order.id} from ${order.source}`, { orderId: order.id, source: order.source, customer: order.customer }, { actor: request.user, at: order.updatedAt });
+    await dispatchEvent(database, "order.created", `${order.id} from ${order.source}`, {
+      workspaceId: request.user.workspaceId,
+      orderId: order.id,
+      source: order.source,
+      customer: order.customer,
+      itemCount: order.items.length,
+      status: order.status,
+      value: order.value
+    }, { actor: request.user, at: order.updatedAt });
     await database.write();
     return reply.code(201).send(order);
   });
@@ -7607,7 +7615,15 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const quote = database.data.quoteRequests.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!quote) return reply.code(404).send({ error: "Quote request not found" });
     Object.assign(quote, parsed.data, { updatedAt: new Date().toISOString(), reviewedBy: request.user.email });
-    await dispatchEvent(database, "quote_request.updated", `${quote.id} -> ${quote.status}`, { quoteRequestId: quote.id, status: quote.status, quotedValue: quote.quotedValue || 0 });
+    await dispatchEvent(database, "quote_request.updated", `${quote.id} -> ${quote.status}`, {
+      workspaceId: request.user.workspaceId,
+      quoteRequestId: quote.id,
+      status: quote.status,
+      priority: quote.priority,
+      quotedValue: quote.quotedValue || 0,
+      validUntil: quote.validUntil || "",
+      hasFile: Boolean(quote.fileId)
+    }, { actor: request.user });
     await database.write();
     return quote;
   });
@@ -7623,7 +7639,13 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     quote.portalLinkGeneratedBy = request.user.email;
     quote.updatedAt = quote.portalLinkGeneratedAt;
     const url = publicQuoteUrl(request, quote);
-    await dispatchEvent(database, parsed.data.rotate ? "quote_request.portal_link_rotated" : "quote_request.portal_link_generated", `${quote.id} customer portal link ${parsed.data.rotate ? "rotated" : "generated"}`, { workspaceId: request.user.workspaceId, quoteRequestId: quote.id });
+    await dispatchEvent(database, parsed.data.rotate ? "quote_request.portal_link_rotated" : "quote_request.portal_link_generated", `${quote.id} customer portal link ${parsed.data.rotate ? "rotated" : "generated"}`, {
+      workspaceId: request.user.workspaceId,
+      quoteRequestId: quote.id,
+      rotated: parsed.data.rotate,
+      hasCustomerAccessToken: Boolean(quote.customerAccessToken),
+      portalLinkGeneratedAt: quote.portalLinkGeneratedAt
+    }, { actor: request.user });
     await database.write();
     return { quoteRequest: quote, url, accessToken: quote.customerAccessToken };
   });
@@ -7637,8 +7659,21 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (quote.orderId) return reply.code(409).send({ error: "Quote request already converted", orderId: quote.orderId });
     const result = convertQuoteToProduction(database.data, quote, { workspaceId: request.user.workspaceId, due: parsed.data.due, value: parsed.data.value, createJob: parsed.data.createJob, reviewedBy: request.user.email });
     if (result.error) return reply.code(result.statusCode || 400).send({ error: result.error, orderId: result.orderId });
-    await dispatchEvent(database, "quote_request.converted", `${quote.id} converted to ${result.order.id}`, { workspaceId: request.user.workspaceId, quoteRequestId: quote.id, orderId: result.order.id, value: result.order.value });
-    if (result.job) await dispatchEvent(database, "queue.created", `${result.job.file} queued from quote`, { workspaceId: request.user.workspaceId, jobId: result.job.id, fileId: result.job.fileId, orderId: result.order.id, quoteRequestId: quote.id, material: result.job.material });
+    await dispatchEvent(database, "quote_request.converted", `${quote.id} converted to ${result.order.id}`, {
+      workspaceId: request.user.workspaceId,
+      quoteRequestId: quote.id,
+      orderId: result.order.id,
+      value: result.order.value,
+      createdJob: Boolean(result.job)
+    }, { actor: request.user });
+    if (result.job) await dispatchEvent(database, "queue.created", `${result.job.file} queued from quote`, {
+      workspaceId: request.user.workspaceId,
+      jobId: result.job.id,
+      fileId: result.job.fileId,
+      orderId: result.order.id,
+      quoteRequestId: quote.id,
+      material: result.job.material
+    }, { actor: request.user });
     await database.write();
     return reply.code(201).send(result);
   });
@@ -7650,7 +7685,14 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const order = database.data.orders.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!order) return reply.code(404).send({ error: "Order not found" });
     const result = applyOrderStatusChange(database.data, order, parsed.data.status);
-    await dispatchEvent(database, "order.status", `${order.id} -> ${order.status}`, { workspaceId: request.user.workspaceId, orderId: order.id, status: order.status, jobs: result.jobs.map((job) => job.id), materialChanges: result.materialChanges });
+    await dispatchEvent(database, "order.status", `${order.id} -> ${order.status}`, {
+      workspaceId: request.user.workspaceId,
+      orderId: order.id,
+      status: order.status,
+      jobCount: result.jobs.length,
+      jobs: result.jobs.map((job) => job.id),
+      materialChanges: result.materialChanges
+    }, { actor: request.user });
     await database.write();
     return { ...result.order, order: result.order, jobs: result.jobs, materialChanges: result.materialChanges, spools: result.spools, todos: result.todos };
   });
@@ -7662,7 +7704,16 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!database.data.files.some((file) => file.id === parsed.data.fileId && itemInWorkspace(file, request.user.workspaceId))) return reply.code(404).send({ error: "Linked file not found" });
     const part = { id: randomUUID(), workspaceId: request.user.workspaceId, ...parsed.data, updatedAt: new Date().toISOString() };
     database.data.parts.push(part);
-    await dispatchEvent(database, "part.created", part.name, { partId: part.id, fileId: part.fileId, material: part.material }, { actor: request.user, at: part.updatedAt });
+    await dispatchEvent(database, "part.created", part.name, {
+      workspaceId: request.user.workspaceId,
+      partId: part.id,
+      fileId: part.fileId,
+      material: part.material,
+      process: part.process,
+      plates: part.plates,
+      status: part.status,
+      variantCount: part.variants.length
+    }, { actor: request.user, at: part.updatedAt });
     await database.write();
     return reply.code(201).send(part);
   });
@@ -7675,7 +7726,16 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const part = database.data.parts.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!part) return reply.code(404).send({ error: "Part not found" });
     Object.assign(part, parsed.data, { updatedAt: new Date().toISOString() });
-    await dispatchEvent(database, "part.updated", part.name, { partId: part.id, fileId: part.fileId, material: part.material }, { actor: request.user, at: part.updatedAt });
+    await dispatchEvent(database, "part.updated", part.name, {
+      workspaceId: request.user.workspaceId,
+      partId: part.id,
+      fileId: part.fileId,
+      material: part.material,
+      process: part.process,
+      plates: part.plates,
+      status: part.status,
+      variantCount: part.variants.length
+    }, { actor: request.user, at: part.updatedAt });
     await database.write();
     return part;
   });
@@ -7880,7 +7940,16 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (exists) return reply.code(409).send({ error: "SKU already exists" });
     const sku = { id: randomUUID(), workspaceId: request.user.workspaceId, ...parsed.data, updatedAt: new Date().toISOString() };
     database.data.skus.push(sku);
-    await dispatchEvent(database, "sku.created", sku.sku, { skuId: sku.id, sku: sku.sku, parts: sku.parts }, { actor: request.user, at: sku.updatedAt });
+    await dispatchEvent(database, "sku.created", sku.sku, {
+      workspaceId: request.user.workspaceId,
+      skuId: sku.id,
+      sku: sku.sku,
+      partCount: sku.parts.length,
+      variantCount: sku.variants.length,
+      channel: sku.channel,
+      stock: sku.stock,
+      price: sku.price
+    }, { actor: request.user, at: sku.updatedAt });
     await database.write();
     return reply.code(201).send(sku);
   });
@@ -7896,7 +7965,16 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const sku = database.data.skus.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!sku) return reply.code(404).send({ error: "SKU not found" });
     Object.assign(sku, parsed.data, { updatedAt: new Date().toISOString() });
-    await dispatchEvent(database, "sku.updated", sku.sku, { skuId: sku.id, sku: sku.sku, parts: sku.parts }, { actor: request.user, at: sku.updatedAt });
+    await dispatchEvent(database, "sku.updated", sku.sku, {
+      workspaceId: request.user.workspaceId,
+      skuId: sku.id,
+      sku: sku.sku,
+      partCount: sku.parts.length,
+      variantCount: sku.variants.length,
+      channel: sku.channel,
+      stock: sku.stock,
+      price: sku.price
+    }, { actor: request.user, at: sku.updatedAt });
     await database.write();
     return sku;
   });
@@ -7908,7 +7986,14 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const result = generateJobsForOrder(database.data, request.params.id, parsed.data);
     if (result.error) return reply.code(result.statusCode || 400).send({ error: result.error });
     if (!result.dryRun && !result.duplicateBlocked) {
-      await dispatchEvent(database, "order.jobs_generated", `${result.jobs.length} jobs generated for ${result.order.id}`, { orderId: result.order.id, jobs: result.jobs.map((job) => job.id), missing: result.missing, stockChanges: result.stockChanges }, { actor: request.user });
+      await dispatchEvent(database, "order.jobs_generated", `${result.jobs.length} jobs generated for ${result.order.id}`, {
+        workspaceId: request.user.workspaceId,
+        orderId: result.order.id,
+        jobs: result.jobs.map((job) => job.id),
+        jobCount: result.jobs.length,
+        missing: result.missing,
+        stockChanges: result.stockChanges
+      }, { actor: request.user });
       await database.write();
     }
     return result;

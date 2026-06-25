@@ -138,6 +138,8 @@ Generated sample files, Hot Drop handling, parametric nameplate generation, file
 
 Authenticated catalog CSV exports are scoped to the requesting workspace and write `catalog.exported` audit events with row and catalog object counts, without storing the exported CSV body. Audit CSV exports write `admin.audit_exported` events with export filters, matched counts, and exported event counts, also without storing exported evidence rows.
 
+Operator quote reviews, customer portal-link generation/rotation, quote conversion, manual order creation, order status changes, SKU-linked job generation, and part/SKU setup writes create workspace/operator audit events. These records include compact quote, order, job, part, SKU, status, value, stock, and generated-job counts without storing quote customer notes, internal notes, portal bearer tokens, or full generated job response bodies.
+
 Inventory and maintenance audit events for spool creation, label export, scan/usage/update, purchase request creation/reorder/update/receive, maintenance job creation/update, templates, and problem reports include workspace and authenticated operator context so physical material and service-log changes can be reviewed after production incidents.
 
 Webhook, notification channel, and commerce connector create/update audit events plus webhook and notification test-send events include workspace and authenticated operator context. These events record compact endpoint identity, enabled status, subscribed event names, channel type, recipient count, and whether a token exists without storing endpoint URLs, URL paths/query strings, or bearer tokens.
