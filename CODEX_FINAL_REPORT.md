@@ -128,6 +128,7 @@
   - `9d45c2b` `docs: record codex round 61 status`
   - `5f20670` `feat: audit storage integrity checks`
   - `b7ba010` `docs: record codex round 62 status`
+  - `4d806eb` `feat: add idempotent model uploads`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -334,6 +335,11 @@
   - Round 62 targeted `npm run test -- api/server.test.mjs -t "storage payload coverage"`: failed before implementation, then passed, 1 test passed.
   - Round 62 targeted `npm run test -- api/server.test.mjs`: passed, 121 tests passed.
   - Round 62 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 139 tests passed.
+  - Round 63 targeted `npm run test -- api/server.test.mjs -t "idempotent model uploads"`: failed before implementation, then passed, 1 test passed.
+  - Round 63 targeted `npm run test -- api/server.test.mjs -t "model files|stored files in an S3|idempotent model uploads|file artifact writes"`: passed, 4 tests passed.
+  - Round 63 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
+  - Round 63 targeted `npm run test -- api/server.test.mjs`: passed, 122 tests passed.
+  - Round 63 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 140 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs -t "spool metadata updates|maintenance job updates"`: failed before implementation, then passed, 2 tests passed.
   - Round 50 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs`: passed, 114 tests passed.
@@ -529,6 +535,9 @@
 - Added deployment/script regression coverage and documentation so timer-backed ops checks enforce the same storage integrity gate operators use before backup and restore drills.
 - Added storage-aware integrity audit evidence to `admin.integrity_checked` events, including whether storage was checked, completeness, byte/count totals, and missing-file count without storing model/G-code contents.
 - Added regression coverage and documentation so operators can verify storage integrity gate outcomes later through `/api/audit`.
+- Added route-specific idempotent replay/conflict protection for multipart `/api/files/upload` after parsing the upload stream, using filename, material, folder, and file-byte digest before storage writes.
+- Moved upload audit events through the actor/workspace-aware audit dispatcher so successful uploads have traceable `file.uploaded` evidence.
+- Wired the built-in Files upload action to generate stable per-attempt browser `Idempotency-Key` headers for the same selected file/material/folder until success.
 
 ## Remaining Blockers
 
@@ -571,14 +580,14 @@
 - Queue matching idempotency now protects committed production assignment retries from duplicate audit events; clients still need stable per-attempt keys when operators retry queue matching commits.
 - History reprint idempotency now protects operator reprint retries from duplicate queue jobs, generated todos, and audit events; clients still need stable per-attempt keys when retrying history reprint actions.
 - History annotation idempotency now protects operator issue/waste updates from duplicate audit events and double inventory deduction; clients still need stable per-attempt keys when retrying history annotations.
-- File/model artifact idempotency now protects JSON file creation, sample generation, Hot Drop, parametric nameplate, file version, and file deletion retries; multipart file upload remains intentionally outside the generic replay allowlist until stream-body digesting is route-specific.
+- File/model artifact idempotency now protects JSON file creation, multipart model upload, sample generation, Hot Drop, parametric nameplate, file version, and file deletion retries; multipart upload uses route-specific stream-body digesting before storage writes.
 - Catalog/profile/printer configuration idempotency now protects setup retries from duplicate setup records and duplicate setup audit events; clients still need stable per-attempt keys when retrying configuration writes.
 - Cost catalog and material-map idempotency now protects catalog governance retries from duplicate pricing/material-normalization audit or run records; clients still need stable per-attempt keys when retrying those governance writes.
 - Integration configuration idempotency now protects webhook, notification channel, commerce connector, add-on, and bridge setup retries from duplicate records and audit events; clients still need stable per-attempt keys when retrying integration setup writes.
 - Governance setup idempotency now protects workspace settings, onboarding checklist updates, and support snapshot generation from duplicate audit events; clients still need stable per-attempt keys when retrying go-live setup actions.
 - Admin account management idempotency now protects API-key create/update, user invite/update, and password-reset retries from duplicate generated secrets and duplicate governance audit events; clients still need stable per-attempt keys when retrying owner/admin actions.
 - The built-in Team, API-key, Settings governance, support snapshot, billing, and confirmed restore commit UI now generates stable per-attempt idempotency headers for supported retry-prone writes.
-- The built-in daily operator UI now generates stable per-attempt idempotency headers for supported queue, scheduler, order, quote, file, slicer, printer, todo, spool, maintenance job, and purchasing writes; multipart uploads and lower-risk integration/history components still need route-specific browser retry handling before claiming complete UI coverage.
+- The built-in daily operator UI now generates stable per-attempt idempotency headers for supported queue, scheduler, order, quote, file upload/artifact, slicer, printer, todo, spool, maintenance job, and purchasing writes; lower-risk integration/history components still need route-specific browser retry handling before claiming complete UI coverage.
 - Idempotency replay records are intentionally omitted from shared state and admin exports; retry clients should use fresh keys after workspace export/restore rather than expecting replay cache continuity.
 - Audit context now covers the highest-impact production scheduling/queue/bridge/file-version operator actions; remaining lower-risk direct event writes should be migrated only with route-specific delivery and notification review.
 - Ops-check authenticated verification requires valid Owner/Admin credentials or a dedicated smoke account configured in `.env`; otherwise it warns and continues with unauthenticated host checks.
