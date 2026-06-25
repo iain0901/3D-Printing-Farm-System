@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 94 committed; push pending
+- Phase: round 94 committed and pushed
 - Started: 2026-06-24 UTC
-- Current state: Round 94 file deletion audit hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`; push is pending.
+- Current state: Round 94 file deletion audit hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
 - Baseline QC: Round 86 passed `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed)
 - Current plan:
   - Add regression coverage requiring file deletion audit evidence to include workspace/operator/file context without storage paths, object keys, file bodies, or raw reference records.
@@ -24,6 +24,8 @@
   - Full API suite passed: `npm run test -- api/server.test.mjs` (135 tests).
   - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 154 tests passed).
   - Committed round 94 implementation/status/docs as `163957a` (`feat: add file deletion audit context`).
+  - Committed round 94 final report/status as `91e48b5` (`docs: record codex round 94 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
   - Round 93 repo inspection started at 2026-06-25T20:20:44Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, auth/session helpers, realtime WebSocket/SSE routes, and existing auth/realtime tests before editing.
   - Selected production-readiness slice: realtime session-token URL hardening so production browser connections do not put long-lived user bearer tokens in proxy/access-log URLs.
