@@ -1611,6 +1611,50 @@ describe("3DSTU FarmFlow API", () => {
     });
   });
 
+  it("replays idempotent audit retention runs without duplicate audit events", async () => {
+    await withApp(async ({ app, db }) => {
+      const token = await login(app);
+      db.data.workspaceSettings.auditLogRetention = true;
+      db.data.workspaceSettings.auditLogRetentionDays = 7;
+      db.data.events.push(
+        { id: "stale-queue-event", workspaceId: "default", type: "queue.created", message: "Old queued job", at: "2020-01-01T00:00:00.000Z", data: {} },
+        { id: "protected-restore-event", workspaceId: "default", type: "admin.restore", message: "Old restore", at: "2020-01-01T00:00:00.000Z", data: {} }
+      );
+      await db.write();
+      const headers = { ...auth(token), "idempotency-key": "audit-retention-retry-001" };
+
+      const first = await app.inject({ method: "POST", url: "/api/admin/audit-retention/run", headers, payload: {} });
+      expect(first.statusCode).toBe(200);
+      const firstBody = first.json();
+      expect(firstBody.retention.pruned).toBeGreaterThanOrEqual(1);
+
+      const replay = await app.inject({ method: "POST", url: "/api/admin/audit-retention/run", headers, payload: {} });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(firstBody);
+
+      const runEvents = db.data.events.filter((event) => event.type === "admin.audit_retention_run");
+      expect(runEvents).toHaveLength(1);
+      expect(db.data.events.some((event) => event.id === "stale-queue-event")).toBe(false);
+      expect(db.data.events.some((event) => event.id === "protected-restore-event")).toBe(true);
+      expect(db.data.dataMeta.idempotencyKeys.find((record) => record.key === "audit-retention-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/admin/audit-retention/run",
+        statusCode: 200,
+        replayCount: 1
+      });
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/admin/audit-retention/run",
+        headers,
+        payload: { reason: "different retry body" }
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+    });
+  });
+
   it("creates files with validation and persists them", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);

@@ -1,16 +1,25 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 22 pushed
+- Phase: round 23 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 22 maintenance workflow idempotency hardening is implemented, verified, committed, and ready on `origin/codex/production-saas-completion-20260624`.
+- Current state: Round 23 audit-retention idempotency hardening is in progress on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 96 tests passed)
 - Current plan:
-  - Add persisted idempotency replay/conflict protection for retry-prone maintenance job, template, and problem-report writes.
-  - Cover retries so they do not duplicate maintenance jobs, reports, linked jobs, templates, or audit events.
-  - Document supported maintenance idempotency routes, run targeted tests and full QC, then commit and push.
+  - Add persisted idempotency replay/conflict protection for the audit-retention run endpoint.
+  - Cover retries so they do not duplicate retention-run audit events or shift the reported run timestamp.
+  - Document supported audit-retention idempotency, run targeted tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 23 repo inspection started at 2026-06-25T05:13:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent admin audit-retention runs for retry-safe governance operations.
+  - Added failing regression coverage proving audit-retention retries need replay semantics to avoid duplicate retention-run audit events.
+  - Added admin audit-retention run to the persisted `Idempotency-Key` allowlist.
+  - Documented audit-retention idempotency in README, operations, and production-readiness docs.
+  - Targeted audit-retention idempotency test passed: `npm run test -- api/server.test.mjs -t "audit retention runs"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (86 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 103 tests passed).
   - Round 22 repo inspection started at 2026-06-25T05:00:32Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: idempotent maintenance workflow retries for job creation, template save, and problem-report intake.

@@ -33,7 +33,7 @@ In `NODE_ENV=production`, `/api/readiness` is a deployment gate, not just a live
 ## Order And Queue Handling
 
 - Use dry-run job generation before committing SKU-linked orders.
-- API clients and public quote forms that submit customer quote requests, accept/reject/request quote changes, create orders, convert quotes, queue work, create spools, log spool usage, create maintenance jobs/templates/reports, receive filament purchases, generate reorder plans, or import commerce batches should send a unique `Idempotency-Key` on retry-prone requests. Supported routes replay the original 2xx response for the same actor, key, route, and body, and return `409` if the same key is reused with different input. The built-in public quote form and customer quote portal controls already generate and reuse keys for the same attempted payload until the request succeeds.
+- API clients and public quote forms that submit customer quote requests, accept/reject/request quote changes, create orders, convert quotes, queue work, create spools, log spool usage, create maintenance jobs/templates/reports, receive filament purchases, generate reorder plans, import commerce batches, or trigger audit-retention runs should send a unique `Idempotency-Key` on retry-prone requests. Supported routes replay the original 2xx response for the same actor, key, route, and body, and return `409` if the same key is reused with different input. The built-in public quote form and customer quote portal controls already generate and reuse keys for the same attempted payload until the request succeeds.
 - Idempotency replay records are retained only as internal server metadata. `/api/state` and `/api/admin/export` omit the ledger so replay response bodies from token-returning routes are not included in support or backup handoff files.
 - Review `/api/audit` after core production changes; order, catalog, scheduling, queue, bridge, file-version, history/reprint, admin export, integrity, restore, and job-generation events include the workspace and authenticated operator context for traceability.
 - Use Hold when an order should stop progressing but remain recoverable.
@@ -56,6 +56,7 @@ Idempotency is supported for:
 - `POST /api/maintenance/reports`
 - `POST /api/productionTemplates/:id/run`
 - `POST /api/purchaseRequests/reorderPlan`
+- `POST /api/admin/audit-retention/run`
 - `POST /api/purchaseRequests/:id/receive`
 - `POST /api/commerceConnectors/:id/import`
 - `POST /api/commerce/import-csv`
