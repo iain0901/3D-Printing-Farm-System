@@ -58,7 +58,7 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 - [ ] `scripts/ubuntu-backup.sh backup` creates a verified archive.
 - [ ] `scripts/ubuntu-backup.sh restore-drill <archive>` succeeds without touching production data.
 - [ ] Full API JSON file-byte exports are below `LAYERPILOT_FULL_BACKUP_MAX_BYTES`, return no missing stored-file payloads, or are intentionally replaced by verified volume/object-storage backups for large file libraries.
-- [ ] Model/G-code download access is reviewed through `file.downloaded` audit events; events include file ID/name/type, storage-backed versus fallback-manifest status, and byte counts without storing file contents, local storage paths, or object-storage keys.
+- [ ] Model/G-code download and preview access is reviewed through `file.downloaded` and `file.previewed` audit events; events include file ID/name/type, storage-backed context, and byte counts without storing file contents, local storage paths, or object-storage keys.
 - [ ] Any `/api/admin/export?includeFiles=true&allowMissingFiles=true` use is documented as a partial JSON export with a separate file-byte recovery plan.
 - [ ] `/api/admin/restore` preview `filePayloadCoverage.complete` is true for JSON backups that are expected to restore stored model/G-code bytes, or missing payloads are covered by a separate verified volume/object-storage restore plan.
 - [ ] `/api/admin/restore` dry-run automation is scoped with `admin:restore`, and destructive restore commits are performed only from a logged-in Owner/Admin session.

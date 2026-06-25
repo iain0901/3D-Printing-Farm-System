@@ -1,17 +1,30 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 75 committed and pushed
+- Phase: round 76 verified; commit pending
 - Started: 2026-06-24 UTC
-- Current state: Round 75 file-download audit evidence is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 76 file-preview audit evidence is implemented and verified on `codex/production-saas-completion-20260624`; commit and push are pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage proving authenticated stored file/model downloads create compact audit evidence without file contents or storage locations.
-  - Implement `file.downloaded` audit events for stored-byte and fallback-manifest downloads.
-  - Document file-download audit review in production readiness and operations docs.
-  - Run targeted file/storage tests, full API tests, and full QC, then commit and push.
+  - Add regression coverage proving authenticated stored file/G-code previews create compact audit evidence without file contents or storage locations.
+  - Implement `file.previewed` audit events for stored-byte and metadata-only preview paths.
+  - Document file-preview audit review in production readiness and operations docs.
+  - Run targeted file/preview tests, full API tests, and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 76 repo inspection started at 2026-06-25T16:22:42Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, API route list, file download/preview implementation, and existing file tests before editing.
+  - Selected production-readiness slice: audit trail evidence for authenticated model/G-code previews so production file-byte access is reviewable even when operators inspect a preview instead of downloading the file.
+  - Added regression coverage requiring authenticated stored G-code previews to write one `file.previewed` audit event with file ID/name/type, storage-backed status, preview kind, byte count, and no file contents or storage path.
+  - Targeted preview-audit regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "builds safe file previews"` (no `file.previewed` event was persisted).
+  - Implemented compact `file.previewed` audit events for stored-byte and metadata-only preview paths.
+  - Documented file-preview audit review in README, operations, and production-readiness docs.
+  - Targeted preview coverage passed: `npm run test -- api/server.test.mjs -t "builds safe file previews"` (1 test).
+  - Broader file/storage coverage passed: `npm run test -- api/server.test.mjs -t "model files|stored files|file artifact writes|storage payload coverage|downloads stored files|builds safe file previews"` (7 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (132 tests).
+  - Tightened preview audit coverage to assert `previewKind`, fixed preview audit metadata to await async preview generation before deriving the preview kind, and reran targeted preview coverage successfully.
+  - Broader file/storage coverage passed after the async fix: `npm run test -- api/server.test.mjs -t "model files|stored files|file artifact writes|storage payload coverage|downloads stored files|builds safe file previews"` (7 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 151 tests passed).
   - Round 75 repo inspection started at 2026-06-25T16:12:57Z.
   - Reviewed current branch, recent commits, run status, final report, README, production-readiness, operations, package metadata, API route/idempotency/auth/readiness code, and file download tests before editing.
   - Selected production-readiness slice: audit trail evidence for stored file/model downloads so production model/G-code exports are reviewable without storing file contents in audit metadata.

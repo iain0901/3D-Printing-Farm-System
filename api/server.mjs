@@ -7207,7 +7207,20 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
         buffer = null;
       }
     }
-    return buildFilePreview(file, buffer, workspaceScopeForUser(database.data, request.user));
+    const preview = await buildFilePreview(file, buffer, workspaceScopeForUser(database.data, request.user));
+    await dispatchEvent(database, "file.previewed", `${request.user.email} previewed ${file.name || file.id}`, {
+      workspaceId: request.user.workspaceId,
+      fileId: file.id,
+      fileName: file.name || file.id,
+      fileType: file.type || "",
+      material: file.material || "",
+      folder: file.folder || "",
+      storageBacked: Boolean(file.storagePath || file.storageKey),
+      bytes: buffer ? buffer.length : 0,
+      previewKind: preview?.visualization?.kind || preview?.type || ""
+    }, { actor: request.user });
+    await database.write();
+    return preview;
   });
 
   app.delete("/api/files/:id", async (request, reply) => {

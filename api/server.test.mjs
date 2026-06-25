@@ -3160,7 +3160,7 @@ endsolid delete_me`;
   });
 
   it("builds safe file previews with G-code toolpath summaries", async () => {
-    await withApp(async ({ app }) => {
+    await withApp(async ({ app, dbPath }) => {
       const token = await login(app);
       const boundary = "layerpilot-preview-boundary";
       const gcode = [
@@ -3181,6 +3181,7 @@ endsolid delete_me`;
         payload: multipartPayload({ boundary, filename: "preview-job.gcode", content: gcode, fields: { material: "PLA", folder: "Production" } })
       });
       expect(uploaded.statusCode).toBe(201);
+      const storagePath = uploaded.json().storagePath;
 
       const preview = await app.inject({ method: "GET", url: `/api/files/${uploaded.json().id}/preview`, headers: auth(token) });
       expect(preview.statusCode).toBe(200);
@@ -3196,6 +3197,21 @@ endsolid delete_me`;
       });
       expect(preview.json().visualization.layers.length).toBeGreaterThan(0);
       expect(JSON.stringify(preview.json())).not.toContain("customer secret note");
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      const previewEvents = persisted.events.filter((event) => event.type === "file.previewed" && event.data?.fileId === uploaded.json().id);
+      expect(previewEvents).toHaveLength(1);
+      expect(previewEvents[0].data).toMatchObject({
+        workspaceId: "ws-default",
+        fileId: uploaded.json().id,
+        fileName: "preview-job.gcode",
+        fileType: "GCODE",
+        storageBacked: true,
+        bytes: Buffer.byteLength(gcode),
+        previewKind: "toolpath"
+      });
+      expect(JSON.stringify(previewEvents[0])).not.toContain("customer secret note");
+      expect(JSON.stringify(previewEvents[0])).not.toContain(storagePath);
     });
   });
 
