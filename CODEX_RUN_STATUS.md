@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 61 verified, ready to commit
+- Phase: round 61 committed and pushed
 - Started: 2026-06-24 UTC
-- Current state: Round 61 ops-check storage integrity slice is implemented and verified on `codex/production-saas-completion-20260624`.
+- Current state: Round 61 ops-check storage integrity slice is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
   - Add regression coverage that production smoke and authenticated ops checks call `/api/admin/integrity?checkStorage=true`.
@@ -28,6 +28,8 @@
   - Local authenticated ops checker passed against the same static-serving API on `127.0.0.1:19100`, reporting `storage.complete: true`.
   - Committed round 61 implementation as `27f41f0` (`feat: enforce storage integrity ops checks`).
   - Updated final report with round 61 commit, verification, completed feature, and residual blocker notes.
+  - Committed round 61 status/final report as `9d45c2b` (`docs: record codex round 61 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
   - Round 60 repo inspection started at 2026-06-25T12:09:01Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, mutating API routes, idempotency allowlist, admin export/restore/integrity code, and existing integrity/backup tests before editing.
   - Selected production-readiness slice: admin integrity storage coverage for safer backup/restore/export operations.
