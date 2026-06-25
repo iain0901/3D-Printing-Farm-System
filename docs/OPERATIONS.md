@@ -12,6 +12,8 @@ This runbook covers routine production operation for a 3DSTU FarmFlow VPS.
 
 In `NODE_ENV=production`, `/api/readiness` is a deployment gate, not just a liveness check. It fails if required owner credentials or worker/metrics tokens are missing, if documented default secrets are still in use, if production token/password minimum lengths are not met, or if default/demo access is still enabled. It also validates live optional dependency configuration: S3 object storage must include bucket, region, access key, and secret key when enabled; Stripe billing must include the secret, webhook secret, and all plan price IDs when Stripe is configured; MQTT must use an `mqtt://` or `mqtts://` URL with QoS `0`, `1`, or `2` and a boolean retain flag.
 
+Stripe billing webhooks on `/api/billing/webhook/stripe` verify the official `Stripe-Signature` header against `LAYERPILOT_STRIPE_WEBHOOK_SECRET` when Stripe calls the app directly. Deployments that terminate or transform webhook bodies at a trusted edge proxy can instead inject `x-layerpilot-billing-webhook-secret` with the same configured secret; do not expose that fallback header to arbitrary clients.
+
 `scripts/ubuntu-deploy.sh ops-check` also runs an authenticated API check when credentials are available from `.env`. It verifies login, `/api/state`, `/api/audit`, and `/api/metrics` when `LAYERPILOT_METRICS_TOKEN` is configured. Set `LAYERPILOT_OPS_EMAIL` and `LAYERPILOT_OPS_PASSWORD` to use a dedicated Owner/Admin smoke account; otherwise it falls back to the bootstrap admin credentials.
 
 ## Session Policy
@@ -143,6 +145,7 @@ Idempotency is supported for:
 ## Integration Endpoints
 
 - Treat webhook, notification, commerce feed, and printer bridge URLs as credentials when they contain provider tokens in the path or query string.
+- For Stripe billing, configure Stripe to send signed webhooks to the app or keep the route behind a trusted proxy that injects `x-layerpilot-billing-webhook-secret`; unsigned public webhook traffic is rejected when `LAYERPILOT_STRIPE_WEBHOOK_SECRET` is set.
 - API list/state/export responses show only redacted endpoint host metadata plus `hasUrl` or `hasBaseUrl` flags.
 - Stored endpoint URLs remain available server-side for deliveries, connector imports, and bridge commands, but operators should paste the full URL again when replacing or rotating an endpoint.
 - Delivery logs redact endpoint paths and query strings; use provider-side logs for exact destination troubleshooting when needed.

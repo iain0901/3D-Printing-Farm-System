@@ -1,18 +1,25 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 55 committed and pushed
+- Phase: round 56 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 55 audit trail pagination and filtered-count usability slice is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 56 Stripe billing webhook signature verification hardening slice is in progress on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage for `/api/audit` filtered totals, returned counts, offset pagination, and CSV export offsets.
-  - Implement matched audit counts and offset/has-more pagination in the API without changing permission boundaries.
-  - Wire the Add-ons audit timeline to show filtered totals and load more real audit events.
-  - Document audit pagination/export behavior in README, operations, and production-readiness docs.
-  - Run targeted audit tests and full QC, then commit and push.
+  - Add regression coverage for Stripe webhook signature verification and the existing trusted-proxy shared-secret fallback.
+  - Implement signature verification for `Stripe-Signature` requests using the configured webhook secret without exposing secrets.
+  - Document the production webhook verification behavior in README, operations, and production-readiness docs.
+  - Run targeted billing tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 56 repo inspection started at 2026-06-25T11:21:57Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, Stripe billing route/tests, and residual README notes before editing.
+  - Selected production-readiness slice: Stripe billing webhook signature verification with documented fallback for trusted edge proxies.
+  - Added regression coverage proving an invalid `Stripe-Signature` is rejected and a valid signed Stripe webhook succeeds without the legacy proxy secret header.
+  - Implemented raw JSON body preservation and Stripe `constructEvent` signature verification for `/api/billing/webhook/stripe`, while retaining the existing `x-layerpilot-billing-webhook-secret` fallback when no Stripe signature is present.
+  - Documented signed Stripe webhook verification and the trusted-proxy fallback in README, operations, and production-readiness docs.
+  - Targeted Stripe billing regression passed: `npm run test -- api/server.test.mjs -t "Stripe billing"` (1 test).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (117 tests).
   - Round 55 repo inspection started at 2026-06-25T11:22:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, audit API/UI, audit retention tests, and existing audit query/export coverage before editing.
   - Selected production-readiness slice: audit trail/operator event log usability with filtered counts and pagination.

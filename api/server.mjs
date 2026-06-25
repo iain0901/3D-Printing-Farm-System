@@ -3455,6 +3455,29 @@ function productionDependencyConfigIssues(env = process.env) {
   return issues;
 }
 
+function rawRequestBody(request) {
+  const raw = request.rawBody;
+  if (typeof raw === "string" || Buffer.isBuffer(raw)) return raw;
+  return JSON.stringify(request.body || {});
+}
+
+function stripeWebhookPayloadFromRequest(request, secret) {
+  const signature = request.headers["stripe-signature"];
+  if (!signature) return { ok: true, payload: request.body || {}, verified: false };
+  if (!secret) {
+    return { ok: false, statusCode: 503, error: "Stripe webhook secret is required for signature verification" };
+  }
+  try {
+    return {
+      ok: true,
+      payload: Stripe.webhooks.constructEvent(rawRequestBody(request), signature, secret),
+      verified: true
+    };
+  } catch {
+    return { ok: false, statusCode: 401, error: "Invalid Stripe webhook signature" };
+  }
+}
+
 function productionReadinessConfigChecks(data, env = process.env) {
   if (env.NODE_ENV !== "production") return [];
   const checks = [];
@@ -5447,6 +5470,17 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   database.mqttPublisher = mqttPublisher;
   const startedAt = new Date();
   const app = Fastify({ logger: false });
+  app.removeContentTypeParser("application/json");
+  app.addContentTypeParser("application/json", { parseAs: "string" }, (request, body, done) => {
+    request.rawBody = body;
+    if (!body) return done(null, {});
+    try {
+      done(null, JSON.parse(body));
+    } catch (error) {
+      error.statusCode = 400;
+      done(error, undefined);
+    }
+  });
   await app.register(cors, { origin: true });
   await app.register(helmet, {
     contentSecurityPolicy: {
@@ -6407,8 +6441,10 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   app.post("/api/billing/webhook/stripe", { config: { rateLimit: { ...sensitiveRateLimit, groupId: "billing-webhook" } } }, async (request, reply) => {
     const expectedSecret = process.env.LAYERPILOT_STRIPE_WEBHOOK_SECRET || "";
     if (!expectedSecret && process.env.NODE_ENV === "production") return reply.code(503).send({ error: "Stripe webhook secret is required in production" });
-    if (expectedSecret && request.headers["x-layerpilot-billing-webhook-secret"] !== expectedSecret) return reply.code(401).send({ error: "Invalid billing webhook secret" });
-    const parsed = stripeWebhookSchema.safeParse(request.body || {});
+    const verified = stripeWebhookPayloadFromRequest(request, expectedSecret);
+    if (!verified.ok) return reply.code(verified.statusCode).send({ error: verified.error });
+    if (!verified.verified && expectedSecret && request.headers["x-layerpilot-billing-webhook-secret"] !== expectedSecret) return reply.code(401).send({ error: "Invalid billing webhook secret" });
+    const parsed = stripeWebhookSchema.safeParse(verified.payload || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid Stripe webhook payload", issues: parsed.error.issues });
     const result = applyStripeBillingEvent(database.data, parsed.data);
     await dispatchEvent(database, "billing.stripe_webhook", `Stripe ${parsed.data.type}`, { eventId: parsed.data.id, eventType: parsed.data.type, planId: result.plan?.id, invoiceId: result.invoice?.id });

@@ -1,6 +1,7 @@
 import { access, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import Stripe from "stripe";
 import { describe, expect, it } from "vitest";
 import { buildServer, generateTotpCode, openDatabase } from "./server.mjs";
 
@@ -1950,26 +1951,49 @@ describe("3DSTU FarmFlow API", () => {
         });
         expect(denied.statusCode).toBe(401);
 
+        const stripeEvent = {
+          id: "evt_paid",
+          type: "checkout.session.completed",
+          data: {
+            object: {
+              id: "cs_test_layerpilot",
+              customer: "cus_layerpilot",
+              subscription: "sub_layerpilot",
+              amount_total: 14900,
+              currency: "usd",
+              status: "paid",
+              created: 1781430000,
+              lines: { data: [{ price: { id: "price_farm_test" } }] }
+            }
+          }
+        };
+        const rawStripeEvent = JSON.stringify(stripeEvent);
+        const badSignature = await app.inject({
+          method: "POST",
+          url: "/api/billing/webhook/stripe",
+          headers: {
+            "content-type": "application/json",
+            "stripe-signature": Stripe.webhooks.generateTestHeaderString({
+              payload: rawStripeEvent,
+              secret: "wrong_webhook_secret"
+            })
+          },
+          payload: rawStripeEvent
+        });
+        expect(badSignature.statusCode).toBe(401);
+        expect(badSignature.json()).toMatchObject({ error: "Invalid Stripe webhook signature" });
+
         const webhook = await app.inject({
           method: "POST",
           url: "/api/billing/webhook/stripe",
-          headers: { "x-layerpilot-billing-webhook-secret": "whsec_test" },
-          payload: {
-            id: "evt_paid",
-            type: "checkout.session.completed",
-            data: {
-              object: {
-                id: "cs_test_layerpilot",
-                customer: "cus_layerpilot",
-                subscription: "sub_layerpilot",
-                amount_total: 14900,
-                currency: "usd",
-                status: "paid",
-                created: 1781430000,
-                lines: { data: [{ price: { id: "price_farm_test" } }] }
-              }
-            }
-          }
+          headers: {
+            "content-type": "application/json",
+            "stripe-signature": Stripe.webhooks.generateTestHeaderString({
+              payload: rawStripeEvent,
+              secret: "whsec_test"
+            })
+          },
+          payload: rawStripeEvent
         });
         expect(webhook.statusCode).toBe(200);
         expect(webhook.json().plan).toMatchObject({ id: "farm", name: "Print Farm" });
