@@ -152,6 +152,7 @@ Retry-prone order, queue, queue matching, scheduler automation, telemetry tick, 
 
 Confirmed workspace restore commits on `/api/admin/restore` also accept an `Idempotency-Key`. Because a successful restore intentionally revokes existing sessions, an exact retry of the same committed restore payload can replay the original success response even after the old session token is no longer valid. Restore previews remain authenticated dry-runs and are not exposed through this post-commit replay path.
 Restore preview and commit summaries include `filePayloadCoverage` metadata for stored model/G-code files: expected payloads, included payloads, missing payloads, extra payloads, and whether the backup is complete for stored bytes. The Settings restore panel surfaces the same coverage so operators can stop before committing a JSON restore that would leave files marked for re-upload.
+Committed restores add `admin.restore_prepared` evidence to the restored audit timeline with workspace/operator context, collection counts, warning count, stripped-storage-path count, restored file-payload count, and compact file-payload coverage counts. This evidence does not store restored record names, customer/user emails from the backup, storage paths, file payload bytes, or backup contents.
 
 - `GET /api/health`
 - `GET /api/readiness`

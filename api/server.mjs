@@ -2239,6 +2239,34 @@ function summarizeRestoreData(data, warnings = [], storagePathsStripped = 0, fil
   };
 }
 
+function restorePreparedAuditData(summary, actor = null) {
+  const workspaceId = actor?.workspaceId || DEFAULT_WORKSPACE_ID;
+  const coverage = summary.filePayloadCoverage || {};
+  return {
+    workspaceId,
+    actorId: actor?.id || "",
+    actorEmail: actor?.email || "",
+    actorRole: actor?.role || "",
+    actorType: actor ? "user" : "system",
+    collectionCounts: summary.collectionCounts || {},
+    users: summary.users || 0,
+    printers: summary.printers || 0,
+    queue: summary.queue || 0,
+    files: summary.files || 0,
+    storagePathsStripped: summary.storagePathsStripped || 0,
+    filePayloadsRestored: summary.filePayloadsRestored || 0,
+    warningCount: Array.isArray(summary.warnings) ? summary.warnings.length : 0,
+    filePayloadCoverage: {
+      complete: coverage.complete !== false,
+      expected: Number(coverage.expected || 0),
+      included: Number(coverage.included || 0),
+      missing: Array.isArray(coverage.missing) ? coverage.missing.length : 0,
+      extra: Array.isArray(coverage.extra) ? coverage.extra.length : 0,
+      storageIncluded: coverage.storageIncluded === true
+    }
+  };
+}
+
 async function prepareRestoreData(currentData, backup, options = {}, actor = null) {
   const incoming = extractBackupData(backup);
   if (!incoming) return { error: "Backup payload must include an object or { data } object" };
@@ -2254,18 +2282,22 @@ async function prepareRestoreData(currentData, backup, options = {}, actor = nul
   const secretWarnings = normalizeRestoredSecrets(restored);
   const storagePathsStripped = normalizeRestoredStoragePaths(restored, options.preserveStoragePaths === true);
   restored.events = Array.isArray(restored.events) ? restored.events : [];
-  restored.events.unshift({
-    id: randomUUID(),
-    type: "admin.restore_prepared",
-    message: `${actor?.email || "system"} prepared workspace restore`,
-    at: new Date().toISOString()
-  });
   const restoredPayloads = await restoreBackupFilePayloads(restored, backup, { enabled: options.restoreFilePayloads === true });
   const coverageWarnings = [];
   if (filePayloadCoverage.missing.length) coverageWarnings.push(`Backup is missing file payloads for ${filePayloadCoverage.missing.length} stored file${filePayloadCoverage.missing.length === 1 ? "" : "s"}; restore will mark them for re-upload unless storage is restored separately`);
   if (filePayloadCoverage.extra.length) coverageWarnings.push(`Backup includes ${filePayloadCoverage.extra.length} file payload${filePayloadCoverage.extra.length === 1 ? "" : "s"} without matching file records; those payloads will be skipped`);
   const warnings = [...userResult.warnings, ...secretWarnings, ...coverageWarnings, ...restoredPayloads.warnings];
-  return { data: restored, summary: summarizeRestoreData(restored, warnings, storagePathsStripped, restoredPayloads.restored, filePayloadCoverage) };
+  const summary = summarizeRestoreData(restored, warnings, storagePathsStripped, restoredPayloads.restored, filePayloadCoverage);
+  const workspaceId = actor?.workspaceId || DEFAULT_WORKSPACE_ID;
+  restored.events.unshift({
+    id: randomUUID(),
+    workspaceId,
+    type: "admin.restore_prepared",
+    message: `${actor?.email || "system"} prepared workspace restore`,
+    data: restorePreparedAuditData(summary, actor),
+    at: new Date().toISOString()
+  });
+  return { data: restored, summary };
 }
 
 function sendSse(raw, event, data) {

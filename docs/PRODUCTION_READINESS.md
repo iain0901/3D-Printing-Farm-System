@@ -76,6 +76,7 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 - [ ] `/api/admin/restore` preview `filePayloadCoverage.complete` is true for JSON backups that are expected to restore stored model/G-code bytes, or missing payloads are covered by a separate verified volume/object-storage restore plan.
 - [ ] `/api/admin/restore` dry-run automation is scoped with `admin:restore`, and destructive restore commits are performed only from a logged-in Owner/Admin session.
 - [ ] Destructive `/api/admin/restore` commits are submitted with an `Idempotency-Key`, and an exact retry has been smoke-tested to replay the restored summary after the successful commit revokes the original session.
+- [ ] Committed restore drills leave `admin.restore_prepared` evidence with workspace/operator context, collection counts, warning count, stripped-storage-path count, restored file-payload count, and compact file-payload coverage counts without restored record names, backup user/customer emails, storage paths, file bytes, or backup contents.
 - [ ] Customer quote portal links are regenerated or rotated after restore when needed; workspace exports redact portal bearer tokens and record only whether one exists.
 - [ ] Retry clients use fresh `Idempotency-Key` values after restore because exported backups do not include internal replay records.
 - [ ] Integration endpoint URLs are re-entered or verified after restore/rotation when provider tokens changed; exports show only redacted host metadata and `hasUrl`/`hasBaseUrl` flags.

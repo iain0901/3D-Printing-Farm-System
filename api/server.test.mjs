@@ -7343,6 +7343,29 @@ endsolid s3_store`;
       expect(persisted.users.find((user) => user.email === "restored@example.com")).toMatchObject({ passwordResetRequired: true });
       expect(persisted.apiKeys.find((key) => key.id === "restored-key")).toMatchObject({ enabled: false });
       expect(persisted.events.filter((event) => event.type === "admin.restore")).toHaveLength(1);
+      const preparedEvent = persisted.events.find((event) => event.type === "admin.restore_prepared");
+      expect(preparedEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: expect.objectContaining({
+          workspaceId: "ws-default",
+          actorId: "u0",
+          actorEmail: "demo@layerpilot.test",
+          collectionCounts: expect.objectContaining({ printers: backup.data.printers.length }),
+          users: expect.any(Number),
+          files: expect.any(Number),
+          storagePathsStripped: 1,
+          filePayloadCoverage: expect.objectContaining({
+            complete: false,
+            expected: expect.any(Number),
+            missing: expect.any(Number),
+            extra: expect.any(Number),
+            storageIncluded: false
+          })
+        })
+      });
+      expect(JSON.stringify(preparedEvent)).not.toContain("Restored Forge");
+      expect(JSON.stringify(preparedEvent)).not.toContain("C:\\old-layerpilot");
+      expect(JSON.stringify(preparedEvent)).not.toContain("restored@example.com");
       expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "restore-commit-retry-001")).toMatchObject({
         method: "POST",
         path: "/api/admin/restore",

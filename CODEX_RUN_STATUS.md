@@ -1,17 +1,28 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 90 committed and pushed
+- Phase: round 91 verified, commit pending
 - Started: 2026-06-24 UTC
-- Current state: Round 90 printer action audit actor-context hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 91 restore-prepared audit evidence hardening is implemented and verified on `codex/production-saas-completion-20260624`.
 - Baseline QC: Round 86 passed `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed)
 - Current plan:
-  - Add regression coverage requiring real printer action audit events to include authenticated workspace/operator context.
-  - Wire `/api/actions` `printer.action` audit events through the actor-aware audit path without exposing bridge credentials.
-  - Update production docs/runbooks for printer-action audit evidence.
-  - Run targeted printer-action coverage, full API tests, and full QC, then commit and push.
+  - Add regression coverage requiring committed restore-prepared audit evidence to include workspace/operator context and compact restore coverage counts without restored backup contents.
+  - Harden restore preparation audit metadata for destructive restore commits.
+  - Update production docs/runbooks for restore-prepared audit evidence.
+  - Run targeted restore coverage, full API tests, and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 91 repo inspection started at 2026-06-25T19:20:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, API route list, restore implementation, and restore tests before editing.
+  - Selected production-readiness slice: restore-prepared audit evidence hardening so destructive restore commits leave compact operator/workspace evidence without restored backup contents.
+  - Added regression coverage requiring the committed `admin.restore_prepared` event to include workspace/operator context, restore counts, storage-path strip count, and file-payload coverage counts while excluding restored printer names, restored backup user emails, and stripped storage paths.
+  - Targeted restore regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "previews and commits sanitized workspace restores"` (the `admin.restore_prepared` event lacked actor/context metadata).
+  - Implemented compact `admin.restore_prepared` metadata inside prepared restore data, including actor context, collection counts, warning count, storage-path strip count, restored file-payload count, and summarized file-payload coverage.
+  - Targeted restore coverage passed after implementation: `npm run test -- api/server.test.mjs -t "previews and commits sanitized workspace restores"` (1 test).
+  - Documented restore-prepared audit evidence review in README, operations, and production-readiness docs.
+  - Targeted restore coverage passed after docs/status updates: `npm run test -- api/server.test.mjs -t "previews and commits sanitized workspace restores"` (1 test).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (134 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed).
   - Round 90 repo inspection started at 2026-06-25T19:10:45Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, API route/idempotency surface, `/api/actions` implementation, and existing printer-action tests before editing.
   - Selected production-readiness slice: actor-aware audit context for real printer action commands so pause/resume/cancel evidence is traceable to the authenticated workspace/operator without exposing bridge credentials.
