@@ -1,17 +1,25 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 37 committed and pushed
+- Phase: round 38 verified; commit pending
 - Started: 2026-06-24 UTC
-- Current state: Round 37 catalog governance retry hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 38 slicer retry hardening is implemented and verified on `codex/production-saas-completion-20260624`; commit/push pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 96 tests passed)
 - Current plan:
-  - Add regression coverage for retry-safe cost catalog updates and material-map runs.
-  - Add cost catalog and material-map routes to the persisted `Idempotency-Key` allowlist.
-  - Ensure material-map audit events include workspace and authenticated actor context.
-  - Document catalog governance idempotency, run targeted tests and full QC, then commit and push.
+  - Add regression coverage for retry-safe slicer job runs and quick file-slice actions.
+  - Add slicer job and file-slice routes to the persisted `Idempotency-Key` allowlist.
+  - Document slicer retry idempotency, run targeted tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 38 repo inspection started at 2026-06-25T07:58:56Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent slicer retries to prevent duplicate slicer job records, file-version increments, G-code artifacts, and slicer audit events after dropped operator/browser responses.
+  - Added failing regression coverage proving slicer job and quick file-slice retries need replay semantics.
+  - Added `POST /api/slicer/jobs` and `PATCH /api/files/:id/slice` to the persisted `Idempotency-Key` allowlist.
+  - Documented slicer retry idempotency in README, operations, and production-readiness docs.
+  - Targeted slicer idempotency tests initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "slicer"` (4 tests).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (104 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 121 tests passed).
   - Round 37 repo inspection started at 2026-06-25T07:48:55Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: retry-safe catalog governance writes for cost catalog pricing and material normalization runs.

@@ -1512,6 +1512,7 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "POST" && routePath === "/api/admin/audit-retention/run") return true;
   if (method === "POST" && routePath === "/api/billing/portal") return true;
   if (method === "POST" && routePath === "/api/bridges/sync") return true;
+  if (method === "POST" && routePath === "/api/slicer/jobs") return true;
   if (method === "POST" && /^\/api\/schedule\/(auto|optimize|constraint)$/.test(routePath)) return true;
   if (method === "PATCH" && routePath === "/api/billing/plan") return true;
   if (method === "PATCH" && routePath === "/api/costCatalog") return true;
@@ -1538,6 +1539,7 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "PATCH" && /^\/api\/profiles\/[^/]+\/default$/.test(routePath)) return true;
   if (method === "DELETE" && /^\/api\/profiles\/[^/]+$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/orders\/[^/]+\/status$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/files\/[^/]+\/slice$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/spools\/[^/]+\/usage$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/queue\/[^/]+\/(schedule|status|priority)$/.test(routePath)) return true;
   return false;

@@ -2174,6 +2174,68 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent slicer job retries without duplicate artifacts or version increments", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const payload = { fileId: "f2", printerId: "p1", material: "PETG", layerHeight: "0.16", infill: 22, supports: true };
+      const headers = { ...auth(token), "idempotency-key": "slicer-job-retry-001" };
+
+      const first = await app.inject({ method: "POST", url: "/api/slicer/jobs", headers, payload });
+      expect(first.statusCode).toBe(201);
+      const replay = await app.inject({ method: "POST", url: "/api/slicer/jobs", headers, payload });
+      expect(replay.statusCode).toBe(201);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json().job.id).toBe(first.json().job.id);
+      expect(replay.json().job.outputPath).toBe(first.json().job.outputPath);
+      expect(replay.json().file.version).toBe(first.json().file.version);
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/slicer/jobs",
+        headers,
+        payload: { ...payload, infill: 35 }
+      });
+      expect(conflict.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.slicerJobs.filter((job) => job.fileId === "f2")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "slicer.completed" && event.data?.fileId === "f2")).toHaveLength(1);
+      expect(persisted.files.find((file) => file.id === "f2")).toMatchObject({ version: 3, storagePath: first.json().file.storagePath });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "slicer-job-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/slicer/jobs",
+        replayCount: 1,
+        statusCode: 201
+      });
+    });
+  });
+
+  it("replays idempotent quick file-slice retries without duplicate slicer events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const headers = { ...auth(token), "idempotency-key": "file-slice-retry-001" };
+
+      const first = await app.inject({ method: "PATCH", url: "/api/files/f3/slice", headers });
+      expect(first.statusCode).toBe(200);
+      const replay = await app.inject({ method: "PATCH", url: "/api/files/f3/slice", headers });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json().version).toBe(first.json().version);
+      expect(replay.json().storagePath).toBe(first.json().storagePath);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.slicerJobs.filter((job) => job.fileId === "f3")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "file.sliced" && event.data?.fileId === "f3")).toHaveLength(1);
+      expect(persisted.files.find((file) => file.id === "f3")).toMatchObject({ version: 2, storagePath: first.json().storagePath });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "file-slice-retry-001")).toMatchObject({
+        method: "PATCH",
+        path: "/api/files/f3/slice",
+        replayCount: 1,
+        statusCode: 200
+      });
+    });
+  });
+
   it("schedules queue jobs and updates derived todos", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);
