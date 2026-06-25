@@ -1107,6 +1107,22 @@ describe("3DSTU FarmFlow API", () => {
       });
       expect(JSON.stringify(enableFailedEvent)).not.toContain("wrong-password");
 
+      const invalidCodeEvent = db.data.events.find((event) => event.type === "auth.2fa_enable_failed" && event.data?.reason === "invalid_code");
+      expect(invalidCodeEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          userId: "u0",
+          actorId: "u0",
+          actorEmail: "demo@layerpilot.test",
+          actorRole: "Admin",
+          actorType: "user",
+          reason: "invalid_code"
+        }
+      });
+      expect(JSON.stringify(invalidCodeEvent)).not.toContain("000000");
+      expect(JSON.stringify(invalidCodeEvent)).not.toContain(setup.json().secret);
+
       const enable = await app.inject({
         method: "POST",
         url: "/api/auth/2fa/enable",

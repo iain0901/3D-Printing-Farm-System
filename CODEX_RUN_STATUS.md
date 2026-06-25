@@ -1,17 +1,28 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 91 committed and pushed
+- Phase: round 92 verified, commit pending
 - Started: 2026-06-24 UTC
-- Current state: Round 91 restore-prepared audit evidence hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 92 2FA enablement failure audit hardening is implemented and verified on `codex/production-saas-completion-20260624`; commit/push is pending.
 - Baseline QC: Round 86 passed `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed)
 - Current plan:
-  - Add regression coverage requiring committed restore-prepared audit evidence to include workspace/operator context and compact restore coverage counts without restored backup contents.
-  - Harden restore preparation audit metadata for destructive restore commits.
-  - Update production docs/runbooks for restore-prepared audit evidence.
-  - Run targeted restore coverage, full API tests, and full QC, then commit and push.
+  - Add regression coverage requiring invalid-code TOTP enablement attempts to create sanitized `auth.2fa_enable_failed` audit evidence.
+  - Harden `/api/auth/2fa/enable` so bad authenticator-code attempts are traceable without storing submitted codes, TOTP secrets, recovery codes, or passwords.
+  - Update production docs/runbooks for 2FA enablement failure evidence.
+  - Run targeted auth coverage, full API tests, and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 92 repo inspection started at 2026-06-25T20:06:39Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, auth/session routes, and existing auth tests before editing.
+  - Selected production-readiness slice: 2FA enablement failure audit hardening so invalid authenticator-code attempts during TOTP enrollment leave sanitized operator/workspace evidence.
+  - Added regression coverage requiring invalid-code TOTP enablement attempts to emit `auth.2fa_enable_failed` with workspace/operator context and without submitted codes or TOTP secrets.
+  - Targeted 2FA regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "two-factor|2FA"` (invalid-code TOTP enablement left no audit event).
+  - Implemented sanitized `auth.2fa_enable_failed` evidence for invalid authenticator-code attempts during TOTP enrollment.
+  - Targeted 2FA coverage passed after implementation: `npm run test -- api/server.test.mjs -t "two-factor|2FA"` (4 tests).
+  - Documented invalid-code TOTP enablement failure evidence in README, operations, and production-readiness docs.
+  - Targeted 2FA coverage passed after docs/status updates: `npm run test -- api/server.test.mjs -t "two-factor|2FA"` (4 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (134 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed).
   - Round 91 repo inspection started at 2026-06-25T19:20:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, API route list, restore implementation, and restore tests before editing.
   - Selected production-readiness slice: restore-prepared audit evidence hardening so destructive restore commits leave compact operator/workspace evidence without restored backup contents.

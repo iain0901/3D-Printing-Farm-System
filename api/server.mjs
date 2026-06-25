@@ -6204,7 +6204,14 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       await database.write();
       return reply.code(401).send({ error: "Current password is incorrect" });
     }
-    if (!verifyTotpCode(parsed.data.secret, parsed.data.code)) return reply.code(401).send({ error: "Invalid two-factor code" });
+    if (!verifyTotpCode(parsed.data.secret, parsed.data.code)) {
+      await dispatchEvent(database, "auth.2fa_enable_failed", `${user.email} failed 2FA enable code check`, {
+        userId: user.id,
+        reason: "invalid_code"
+      }, { actor: user });
+      await database.write();
+      return reply.code(401).send({ error: "Invalid two-factor code" });
+    }
     const recoveryCodes = generateRecoveryCodes();
     user.twoFactorSecret = parsed.data.secret.toUpperCase().replace(/[^A-Z2-7]/g, "");
     user.twoFactorEnabled = true;
