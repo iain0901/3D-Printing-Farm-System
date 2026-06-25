@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 81 verified, ready to commit
+- Phase: round 81 committed, push pending
 - Started: 2026-06-24 UTC
-- Current state: Round 81 printer/file generation audit context hardening is implemented and verified on `codex/production-saas-completion-20260624`; commit/push pending.
+- Current state: Round 81 printer/file generation audit context hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`; push pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
   - Add regression coverage proving printer create/update and file-generation audit events include workspace/operator context without storing generated model bodies or storage paths.
@@ -22,6 +22,7 @@
   - Targeted printer/file-generation audit coverage passed: `npm run test -- api/server.test.mjs -t "creates file folders|handles Hot Drop|parametric nameplate|printer capability"` (6 tests).
   - Full API suite passed: `npm run test -- api/server.test.mjs` (132 tests).
   - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 151 tests passed).
+  - Committed round 81 implementation/status/final report as `81603d4` (`feat: add printer file generation audit context`).
   - Round 80 repo inspection started at 2026-06-25T17:05:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route list, audit dispatcher, integration endpoint routes, and existing integration tests before editing.
   - Selected production-readiness slice: actor-aware audit context for integration endpoint configuration and test sends so webhook, notification, and commerce endpoint changes are traceable without exposing endpoint URLs or tokens.
