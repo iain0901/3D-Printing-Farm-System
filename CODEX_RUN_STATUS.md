@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 46 ready to commit
+- Phase: round 46 final reporting ready to commit
 - Started: 2026-06-24 UTC
-- Current state: Round 46 browser operator idempotency is implemented and verified on `codex/production-saas-completion-20260624`.
+- Current state: Round 46 browser operator idempotency is implemented, verified, and committed on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
   - Add browser idempotency headers for daily authenticated operator production writes.
@@ -20,6 +20,8 @@
   - Targeted browser helper test passed: `npm run test -- src/idempotency.test.ts` (2 tests).
   - Production build passed: `npm run build`.
   - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 128 tests passed).
+  - Committed round 46 implementation as `9c538d7` (`feat: add operator browser idempotency`).
+  - Updated final report with round 46 commit, verification, completed feature, and residual UI coverage notes.
   - Round 45 repo inspection started at 2026-06-25T09:09:57Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, and roadmap docs before editing.
   - Selected production-readiness slice: browser-side idempotency keys for authenticated admin/governance UI writes so operator retries replay backend-safe actions instead of creating duplicate support, billing, settings, onboarding, or API-key effects.
