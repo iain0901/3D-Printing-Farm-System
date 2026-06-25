@@ -60,7 +60,7 @@
   - `6f4a844` `feat: add idempotent bridge syncs`
   - Current `HEAD` `docs: record codex round 33 status`
   - `5ed0f18` `feat: add idempotent spool label exports`
-  - Current `HEAD` `feat: add governance audit context`
+  - `3787b48` `feat: add governance audit context`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.

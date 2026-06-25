@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 35 verified
+- Phase: round 35 committed
 - Started: 2026-06-24 UTC
-- Current state: Round 35 governance audit-context hardening is implemented and verified on `codex/production-saas-completion-20260624`; commit and push are next.
+- Current state: Round 35 governance audit-context hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 96 tests passed)
 - Current plan:
   - Add regression coverage for actor/workspace metadata on admin/go-live governance audit events.
@@ -20,6 +20,7 @@
   - Targeted governance audit-context test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "governance and go-live audit events"` (1 test).
   - Targeted API suite passed: `npm run test -- api/server.test.mjs` (98 tests).
   - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 115 tests passed).
+  - Committed and pushed round 35 implementation as `3787b48` (`feat: add governance audit context`).
   - Round 34 repo inspection started at 2026-06-25T07:17:54Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: idempotent spool label export retries to prevent duplicate inventory label audit events after operator/browser retries.
