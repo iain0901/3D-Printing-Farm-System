@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 68 in progress
+- Phase: round 68 committed and pushed
 - Started: 2026-06-24 UTC
-- Current state: Round 68 workspace API allowlist validation/readiness hardening is in progress on `codex/production-saas-completion-20260624`.
+- Current state: Round 68 workspace API allowlist validation/readiness hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
   - Add regression coverage proving workspace API-key IP allowlists reject invalid rules and production readiness fails when persisted allowlist configuration is empty or invalid.
@@ -25,6 +25,8 @@
   - Full API suite passed: `npm run test -- api/server.test.mjs` (126 tests).
   - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 144 tests passed).
   - Tightened allowlist validation to IPv4-only for both direct addresses and CIDR ranges, added IPv6 rejection coverage, reran targeted allowlist coverage, and reran final QC successfully.
+  - Committed round 68 implementation/status/final report as `e986278` (`feat: validate api key ip allowlists`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
   - Round 67 repo inspection started at 2026-06-25T13:29:26Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, readiness implementation, worker heartbeat code, deployment docs, and existing readiness/worker tests before editing.
   - Selected production-readiness slice: worker freshness readiness gate so production deployments with enabled telemetry or bridge polling fail readiness when the background worker has never reported or is stale.
