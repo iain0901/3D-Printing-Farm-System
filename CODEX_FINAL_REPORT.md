@@ -123,7 +123,7 @@
   - `ddefc9b` `feat: block incomplete full backup exports`
   - `7eacd3d` `docs: record codex round 59 final report`
   - Current `HEAD` `docs: record codex round 59 push`
-  - Current `HEAD` `feat: report integrity storage coverage`
+  - `a1015d8` `feat: report integrity storage coverage`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.

@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 60 verified, ready to commit
+- Phase: round 60 committed and pushed
 - Started: 2026-06-24 UTC
-- Current state: Round 60 health/readiness/ops-check slice is implemented and verified on `codex/production-saas-completion-20260624`; commit/push pending.
+- Current state: Round 60 health/readiness/ops-check slice is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
   - Add regression coverage for `/api/admin/integrity?checkStorage=true` storage payload coverage.
@@ -22,6 +22,8 @@
   - Targeted integrity/backup coverage passed: `npm run test -- api/server.test.mjs -t "admin integrity|storage payload coverage|full backup|file payload coverage|stored file payloads|configured byte limit"` (6 tests).
   - Full API suite passed: `npm run test -- api/server.test.mjs` (121 tests).
   - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 139 tests passed).
+  - Committed round 60 implementation as `a1015d8` (`feat: report integrity storage coverage`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
   - Round 59 repo inspection started at 2026-06-25T11:57:49Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API readiness/backup/restore code, backup UI, and existing backup/restore tests before editing.
   - Selected production-readiness slice: full backup export missing-file guard for safer backup/export operations.
