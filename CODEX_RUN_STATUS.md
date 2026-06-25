@@ -1,17 +1,28 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 95 committed and pushed
+- Phase: round 96 verified, preparing commit
 - Started: 2026-06-24 UTC
-- Current state: Round 95 bridge audit hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 96 idempotency replay secret-storage hardening is implemented and verified on `codex/production-saas-completion-20260624`; commit/push is pending.
 - Baseline QC: Round 86 passed `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed)
 - Current plan:
-  - Add regression coverage requiring bridge setup/diagnostic/sync audit evidence to include workspace/operator and redacted bridge metadata without endpoint paths, query tokens, or API keys.
-  - Harden bridge save, diagnostic, and operator-triggered sync audit writes to use shared compact metadata.
-  - Update production docs/runbooks for bridge audit review.
-  - Run targeted bridge coverage, full API tests, and full QC, then commit and push.
+  - Add regression coverage requiring persisted idempotency replay bodies for generated API keys, temporary passwords, and quote portal tokens to redact those secrets.
+  - Redact secret-like fields before idempotency response bodies are persisted or replayed.
+  - Update production docs/runbooks for idempotency replay redaction behavior.
+  - Run targeted idempotency/account/quote coverage, full API tests, and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 96 repo inspection started at 2026-06-25T20:53:33Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, API route list, idempotency middleware, admin account routes, public quote intake/portal routes, and existing retry-safety tests before editing.
+  - Selected production-readiness slice: idempotency replay secret-storage hardening so retry ledgers do not persist generated API keys, temporary passwords, or quote portal tokens in raw response bodies.
+  - Added regression coverage requiring public quote intake, admin account, quote update/conversion, and quote portal-link retry ledgers to redact generated secret fields in persisted replay bodies and replay responses while preserving duplicate-write protection.
+  - Targeted secret-storage regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "public quote intake retries|admin account writes|quote portal link rotations"` (raw quote tokens, API keys, and temporary passwords were replayed from persisted response bodies).
+  - Implemented centralized idempotency response-body redaction for secret-like JSON fields and token-bearing URLs before ledger persistence/replay.
+  - Targeted secret-storage coverage passed: `npm run test -- api/server.test.mjs -t "public quote intake retries|admin account writes|quote portal link rotations"` (3 tests).
+  - Broader idempotency/auth/billing/quote coverage passed: `npm run test -- api/server.test.mjs -t "public quote intake retries|admin account writes|quote portal link rotations|queries audit events|billing|replays idempotent"` (51 tests).
+  - Documented idempotency replay secret redaction and recovery expectations in README, operations, and production-readiness docs.
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (135 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 154 tests passed).
   - Round 95 repo inspection started at 2026-06-25T20:39:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route list, bridge routes, and existing bridge tests before editing.
   - Selected production-readiness slice: printer bridge audit hardening so bridge setup, diagnostics, and manual syncs leave compact operator/workspace evidence without exposing endpoint paths, query tokens, or API keys.

@@ -656,7 +656,13 @@ describe("3DSTU FarmFlow API", () => {
       const replay = await app.inject({ method: "POST", url: "/api/public/quoteRequests", headers, payload });
       expect(replay.statusCode).toBe(201);
       expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
-      expect(replay.json()).toEqual(first.json());
+      expect(replay.json()).toMatchObject({
+        ok: true,
+        quoteRequest: {
+          ...first.json().quoteRequest,
+          accessToken: "REDACTED"
+        }
+      });
 
       const conflict = await app.inject({
         method: "POST",
@@ -678,7 +684,9 @@ describe("3DSTU FarmFlow API", () => {
         replayCount: 1,
         statusCode: 201
       });
-      expect(ledgerRecord.responseBody).toContain(first.json().quoteRequest.accessToken);
+      expect(ledgerRecord).toMatchObject({ responseBodyRedacted: true });
+      expect(ledgerRecord.responseBody).toContain("REDACTED");
+      expect(ledgerRecord.responseBody).not.toContain(first.json().quoteRequest.accessToken);
 
       const token = await login(app);
       for (const url of ["/api/state", "/api/admin/export"]) {
@@ -1826,7 +1834,7 @@ describe("3DSTU FarmFlow API", () => {
       const apiKeyReplay = await app.inject({ method: "POST", url: "/api/apiKeys", headers: apiKeyHeaders, payload: apiKeyPayload });
       expect(apiKeyReplay.statusCode).toBe(201);
       expect(apiKeyReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
-      expect(apiKeyReplay.json()).toEqual(apiKey.json());
+      expect(apiKeyReplay.json()).toEqual({ ...apiKey.json(), secret: "REDACTED" });
 
       const apiKeyUpdateHeaders = { ...auth(token), "idempotency-key": "admin-api-key-update-retry-001" };
       const apiKeyUpdatePayload = { enabled: false, scopes: ["orders:write"] };
@@ -1845,7 +1853,7 @@ describe("3DSTU FarmFlow API", () => {
       const invitedReplay = await app.inject({ method: "POST", url: "/api/users", headers: inviteHeaders, payload: invitePayload });
       expect(invitedReplay.statusCode).toBe(201);
       expect(invitedReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
-      expect(invitedReplay.json()).toEqual(invited.json());
+      expect(invitedReplay.json()).toEqual({ ...invited.json(), temporaryPassword: "REDACTED" });
 
       const userUpdateHeaders = { ...auth(token), "idempotency-key": "admin-user-update-retry-001" };
       const userUpdatePayload = { role: "Admin", location: "Studio South" };
@@ -1864,7 +1872,7 @@ describe("3DSTU FarmFlow API", () => {
       const resetReplay = await app.inject({ method: "POST", url: `/api/users/${invited.json().user.id}/reset-password`, headers: resetHeaders, payload: resetPayload });
       expect(resetReplay.statusCode).toBe(200);
       expect(resetReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
-      expect(resetReplay.json()).toEqual(reset.json());
+      expect(resetReplay.json()).toEqual({ ...reset.json(), temporaryPassword: "REDACTED" });
 
       const conflict = await app.inject({
         method: "POST",
@@ -1887,8 +1895,14 @@ describe("3DSTU FarmFlow API", () => {
         method: "POST",
         path: `/api/users/${invited.json().user.id}/reset-password`,
         replayCount: 1,
-        statusCode: 200
+        statusCode: 200,
+        responseBodyRedacted: true
       });
+      const persistedReplayBodies = JSON.stringify(persisted.dataMeta.idempotencyKeys);
+      expect(persistedReplayBodies).not.toContain(apiKey.json().secret);
+      expect(persistedReplayBodies).not.toContain(invited.json().temporaryPassword);
+      expect(persistedReplayBodies).not.toContain(reset.json().temporaryPassword);
+      expect(persistedReplayBodies).toContain("REDACTED");
     });
   });
 
@@ -5518,7 +5532,15 @@ endsolid s3_store`;
       });
       expect(replay.statusCode).toBe(201);
       expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
-      expect(replay.json()).toEqual(converted.json());
+      expect(replay.json()).toMatchObject({
+        quoteRequest: {
+          ...converted.json().quoteRequest,
+          customerAccessToken: "REDACTED"
+        },
+        order: converted.json().order,
+        job: converted.json().job
+      });
+      expect(JSON.stringify(replay.json())).not.toContain(quote.json().quoteRequest.accessToken);
 
       const conflict = await app.inject({
         method: "POST",
@@ -5537,8 +5559,10 @@ endsolid s3_store`;
         method: "POST",
         path: `/api/quoteRequests/${id}/convert-order`,
         replayCount: 1,
-        statusCode: 201
+        statusCode: 201,
+        responseBodyRedacted: true
       });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "quote-convert-retry-001").responseBody).not.toContain(quote.json().quoteRequest.accessToken);
     });
   });
 
@@ -5581,7 +5605,7 @@ endsolid s3_store`;
       });
       expect(replay.statusCode).toBe(200);
       expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
-      expect(replay.json()).toEqual(updated.json());
+      expect(replay.json()).toEqual({ ...updated.json(), customerAccessToken: "REDACTED" });
 
       const conflict = await app.inject({
         method: "PATCH",
@@ -5603,8 +5627,10 @@ endsolid s3_store`;
         method: "PATCH",
         path: `/api/quoteRequests/${id}`,
         replayCount: 1,
-        statusCode: 200
+        statusCode: 200,
+        responseBodyRedacted: true
       });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "quote-update-retry-001").responseBody).not.toContain(quote.json().quoteRequest.accessToken);
     });
   });
 
@@ -5648,7 +5674,14 @@ endsolid s3_store`;
       });
       expect(replay.statusCode).toBe(200);
       expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
-      expect(replay.json()).toEqual(rotated.json());
+      expect(replay.json()).toMatchObject({
+        quoteRequest: {
+          ...rotated.json().quoteRequest,
+          customerAccessToken: "REDACTED"
+        },
+        url: expect.stringContaining("(redacted)"),
+        accessToken: "REDACTED"
+      });
 
       const conflict = await app.inject({
         method: "POST",
@@ -5674,8 +5707,10 @@ endsolid s3_store`;
         method: "POST",
         path: `/api/quoteRequests/${id}/customer-link`,
         replayCount: 1,
-        statusCode: 200
+        statusCode: 200,
+        responseBodyRedacted: true
       });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "quote-link-rotate-retry-001").responseBody).not.toContain(rotated.json().accessToken);
     });
   });
 

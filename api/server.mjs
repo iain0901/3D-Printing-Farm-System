@@ -1856,6 +1856,43 @@ function sendIdempotentReplay(reply, record) {
   reply.code(record.statusCode || 200).send(record.responseBody || "");
 }
 
+function isSensitiveResponseKey(key = "") {
+  return /password|secret|token|authorization/i.test(String(key || "")) || /^apiKey$/i.test(String(key || ""));
+}
+
+function isSensitiveResponseUrl(value = "") {
+  if (!/^https?:\/\//i.test(String(value || "").trim())) return false;
+  try {
+    const parsed = new URL(value);
+    return [...parsed.searchParams.keys()].some((key) => /token|secret|api[_-]?key|apikey|session/i.test(key));
+  } catch {
+    return /[?&][^=]*(token|secret|api[_-]?key|apikey|session)[^=]*=/i.test(String(value || ""));
+  }
+}
+
+function redactIdempotencyResponseValue(value, key = "") {
+  if (Array.isArray(value)) return value.map((item) => redactIdempotencyResponseValue(item, key));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([entryKey, entryValue]) => [entryKey, redactIdempotencyResponseValue(entryValue, entryKey)]));
+  }
+  if (typeof value === "boolean") return value;
+  if (isSensitiveResponseKey(key)) return "REDACTED";
+  if (typeof value === "string" && /(^|[._-])(url|uri|endpoint|baseUrl|publicUrl|callbackUrl|feedUrl)$/i.test(key) && isSensitiveResponseUrl(value)) return redactEndpointUrl(value);
+  return value;
+}
+
+function sanitizeIdempotencyResponseBody(responseBody = "") {
+  if (!String(responseBody || "").trim()) return { responseBody, redacted: false };
+  try {
+    const parsed = JSON.parse(responseBody);
+    const redacted = redactIdempotencyResponseValue(parsed);
+    const safeBody = JSON.stringify(redacted);
+    return { responseBody: safeBody, redacted: safeBody !== responseBody };
+  } catch {
+    return { responseBody, redacted: false };
+  }
+}
+
 function isRestoreCommitRequest(method, routePath, body) {
   return method === "POST" && routePath === "/api/admin/restore" && body?.dryRun === false && body?.confirm === "RESTORE";
 }
@@ -6105,7 +6142,8 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const context = request.idempotency;
     if (!context || reply.statusCode < 200 || reply.statusCode >= 400) return payload;
     const responseBody = Buffer.isBuffer(payload) ? payload.toString("utf8") : String(payload || "");
-    if (Buffer.byteLength(responseBody) > IDEMPOTENCY_MAX_RESPONSE_BYTES) return payload;
+    const safeReplay = sanitizeIdempotencyResponseBody(responseBody);
+    if (Buffer.byteLength(safeReplay.responseBody) > IDEMPOTENCY_MAX_RESPONSE_BYTES) return payload;
     const ledger = pruneIdempotencyLedger(database.data);
     if (ledger.some((record) => record.workspaceId === context.workspaceId && record.actorId === context.actorId && record.key === context.key)) return payload;
     const now = new Date().toISOString();
@@ -6120,8 +6158,9 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       fingerprint: context.fingerprint,
       statusCode: reply.statusCode,
       contentType: String(reply.getHeader("content-type") || "application/json; charset=utf-8"),
-      responseBody,
-      responseBytes: Buffer.byteLength(responseBody),
+      responseBody: safeReplay.responseBody,
+      responseBytes: Buffer.byteLength(safeReplay.responseBody),
+      responseBodyRedacted: safeReplay.redacted,
       replayCount: 0,
       createdAt: context.createdAt || now,
       updatedAt: now
