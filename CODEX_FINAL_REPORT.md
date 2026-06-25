@@ -6,7 +6,7 @@
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
 - Latest round: Round 85 queue lifecycle retry-safety evidence implemented, verified, committed, and pushed.
 - Commits:
-  - Pending final push-status commit
+  - `9e4f9eb` `docs: record codex round 85 push`
   - `1e5b5ab` `docs: record codex round 85 status`
   - `cb73ea0` `test: cover queue lifecycle retries`
   - `60033a3` `docs: record codex round 84 status`
