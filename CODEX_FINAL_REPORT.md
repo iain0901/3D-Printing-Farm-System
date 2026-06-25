@@ -4,8 +4,9 @@
 - Pushed remote: `origin/codex/production-saas-completion-20260624`
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
-- Latest round: Round 84 quote/order/catalog audit context hardening implemented, verified, committed, and pushed.
+- Latest round: Round 85 queue lifecycle retry-safety evidence implemented and verified; commit/push pending.
 - Commits:
+  - Pending round 85 commit: queue lifecycle retry-safety regression/docs
   - `60033a3` `docs: record codex round 84 status`
   - `be6ef57` `feat: add quote order audit context`
   - `3b09db4` `docs: record codex round 83 status`
@@ -178,6 +179,10 @@
   - `7e42cc7` `feat: scope audit retention by workspace`
   - Current `HEAD` `docs: record codex round 69 push`
 - QC result:
+  - Round 85 targeted `npm run test -- api/server.test.mjs -t "queue lifecycle updates"`: passed, 1 test passed.
+  - Round 85 broader queue/scheduler `npm run test -- api/server.test.mjs -t "queue lifecycle updates|schedules queue jobs|creates queue jobs|queue matching|scheduler writes|auto schedules|constraint schedules"`: passed, 8 tests passed.
+  - Round 85 full API `npm run test -- api/server.test.mjs`: passed, 134 tests passed.
+  - Round 85 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 153 tests passed.
   - Round 84 targeted `npm run test -- api/server.test.mjs -t "operator context for quote, order, and catalog audit events"`: failed before implementation as expected, `quote_request.updated` lacked authenticated actor metadata.
   - Round 84 targeted `npm run test -- api/server.test.mjs -t "operator context for quote, order, and catalog audit events"`: passed, 1 test passed.
   - Round 84 broader quote/order/catalog `npm run test -- api/server.test.mjs -t "quote request|catalog configuration|order work|operator context for quote"`: passed, 6 tests passed.

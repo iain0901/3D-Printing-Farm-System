@@ -3511,6 +3511,72 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent queue lifecycle updates without duplicate reservations or audit events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+
+      const scheduleHeaders = { ...auth(token), "idempotency-key": "queue-schedule-retry-001" };
+      const scheduled = await app.inject({ method: "PATCH", url: "/api/queue/q2/schedule", headers: scheduleHeaders, payload: { printerId: "p2", scheduledStart: "13:00" } });
+      const scheduleReplay = await app.inject({ method: "PATCH", url: "/api/queue/q2/schedule", headers: scheduleHeaders, payload: { printerId: "p2", scheduledStart: "13:00" } });
+      expect(scheduled.statusCode).toBe(200);
+      expect(scheduleReplay.statusCode).toBe(200);
+      expect(scheduleReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(scheduleReplay.json().job).toMatchObject({ id: "q2", reservedSpoolId: "s2", reservedGrams: 42 });
+
+      let persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.spools.find((spool) => spool.id === "s2")).toMatchObject({ remaining: 318, reserved: 42 });
+      expect(persisted.events.filter((event) => event.type === "queue.scheduled" && event.data?.jobId === "q2")).toHaveLength(1);
+
+      const priorityHeaders = { ...auth(token), "idempotency-key": "queue-priority-retry-001" };
+      const priority = await app.inject({ method: "PATCH", url: "/api/queue/q2/priority", headers: priorityHeaders, payload: { priority: "Rush" } });
+      const priorityReplay = await app.inject({ method: "PATCH", url: "/api/queue/q2/priority", headers: priorityHeaders, payload: { priority: "Rush" } });
+      expect(priority.statusCode).toBe(200);
+      expect(priorityReplay.statusCode).toBe(200);
+      expect(priorityReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(priorityReplay.json().job).toMatchObject({ id: "q2", priority: "Rush" });
+
+      const completeHeaders = { ...auth(token), "idempotency-key": "queue-status-complete-retry-001" };
+      const completed = await app.inject({ method: "PATCH", url: "/api/queue/q2/status", headers: completeHeaders, payload: { status: "complete" } });
+      const completedReplay = await app.inject({ method: "PATCH", url: "/api/queue/q2/status", headers: completeHeaders, payload: { status: "complete" } });
+      expect(completed.statusCode).toBe(200);
+      expect(completedReplay.statusCode).toBe(200);
+      expect(completedReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(completedReplay.json().materialChange).toMatchObject({ spoolId: "s2", grams: 42, remaining: 276 });
+
+      persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.spools.find((spool) => spool.id === "s2")).toMatchObject({ remaining: 276, reserved: 0 });
+      expect(persisted.events.filter((event) => event.type === "queue.priority" && event.data?.jobId === "q2")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "queue.status" && event.data?.jobId === "q2" && event.data?.status === "complete")).toHaveLength(1);
+
+      const cancelJob = await app.inject({
+        method: "POST",
+        url: "/api/queue",
+        headers: auth(token),
+        payload: { fileId: "f3", file: "Retry cancel fixture.stl", material: "PLA", dimensions: [60, 40, 20], time: "1h 10m", cost: 24 }
+      });
+      expect(cancelJob.statusCode).toBe(201);
+      const cancelJobId = cancelJob.json().job.id;
+      const cancelSchedule = await app.inject({ method: "PATCH", url: `/api/queue/${cancelJobId}/schedule`, headers: auth(token), payload: { printerId: "p1", scheduledStart: "15:30" } });
+      expect(cancelSchedule.statusCode).toBe(200);
+      expect(cancelSchedule.json().materialReservation).toMatchObject({ spoolId: "s1", status: "reserved" });
+
+      const cancelHeaders = { ...auth(token), "idempotency-key": "queue-status-cancel-retry-001" };
+      const cancelled = await app.inject({ method: "PATCH", url: `/api/queue/${cancelJobId}/status`, headers: cancelHeaders, payload: { status: "cancelled" } });
+      const cancelledReplay = await app.inject({ method: "PATCH", url: `/api/queue/${cancelJobId}/status`, headers: cancelHeaders, payload: { status: "cancelled" } });
+      expect(cancelled.statusCode).toBe(200);
+      expect(cancelledReplay.statusCode).toBe(200);
+      expect(cancelledReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(cancelledReplay.json().materialChange).toMatchObject({ spoolId: "s1", grams: 50 });
+
+      persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.spools.find((spool) => spool.id === "s1")).toMatchObject({ reserved: 0 });
+      expect(persisted.events.filter((event) => event.type === "queue.status" && event.data?.jobId === cancelJobId && event.data?.status === "cancelled")).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "queue-schedule-retry-001")).toMatchObject({ method: "PATCH", path: "/api/queue/q2/schedule", replayCount: 1, statusCode: 200 });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "queue-status-complete-retry-001")).toMatchObject({ method: "PATCH", path: "/api/queue/q2/status", replayCount: 1, statusCode: 200 });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "queue-status-cancel-retry-001")).toMatchObject({ method: "PATCH", path: `/api/queue/${cancelJobId}/status`, replayCount: 1, statusCode: 200 });
+    });
+  });
+
   it("auto schedules queued work by material, volume, due risk, and load", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);

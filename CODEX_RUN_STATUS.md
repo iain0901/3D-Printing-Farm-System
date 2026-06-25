@@ -1,17 +1,24 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 84 committed and pushed
+- Phase: round 85 verified; commit/push pending
 - Started: 2026-06-24 UTC
-- Current state: Round 84 quote/order/catalog audit context hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 85 queue lifecycle retry-safety evidence is implemented and verified on `codex/production-saas-completion-20260624`; commit/push pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage proving operator-driven quote updates, quote portal-link generation/rotation, order lifecycle/job generation, and part/SKU setup audit events include workspace/operator context without storing customer notes, portal tokens, or bulky generated job payloads.
-  - Replace remaining bare quote/order/catalog audit writes with actor-aware compact audit records.
-  - Document quote/order/catalog audit evidence review in README, operations, and production-readiness docs.
-  - Run targeted quote/order/catalog audit tests, full API tests, and full QC, then commit and push.
+  - Add regression coverage proving queue schedule, priority, complete, and cancel retries replay without duplicate material reservations, material consumption/release, or audit events.
+  - Document queue lifecycle retry-safety evidence in README, operations, and production-readiness docs.
+  - Run targeted queue lifecycle coverage, broader queue/scheduler coverage, full API tests, and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 85 repo inspection started at 2026-06-25T18:00:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, route list, idempotency allowlist, queue lifecycle routes, UI idempotency headers, and existing queue/material reservation tests before editing.
+  - Selected production-readiness slice: queue lifecycle retry-safety regression coverage for schedule, priority, complete, and cancel operations that mutate material reservations and operator audit evidence.
+  - Added targeted regression coverage requiring queue schedule, priority, complete, and cancel retries to return idempotent replays, preserve spool reservation/remaining values, and create only one audit event per operator action.
+  - Targeted queue lifecycle retry-safety coverage passed: `npm run test -- api/server.test.mjs -t "queue lifecycle updates"` (1 test).
+  - Broader queue/scheduler coverage passed: `npm run test -- api/server.test.mjs -t "queue lifecycle updates|schedules queue jobs|creates queue jobs|queue matching|scheduler writes|auto schedules|constraint schedules"` (8 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (134 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed).
   - Round 84 repo inspection started at 2026-06-25T17:54:24Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route list, idempotency allowlist, audit dispatcher usage, quote/order/catalog routes, and existing quote/catalog tests before editing.
   - Selected production-readiness slice: actor-aware audit context for remaining quote, order, part, and SKU configuration/lifecycle events so customer quote decisions, operator reviews, production order status changes, generated jobs, and catalog setup are traceable to the authenticated workspace/operator without exposing portal bearer tokens or customer/internal notes.
