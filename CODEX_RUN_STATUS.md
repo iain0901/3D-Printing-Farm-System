@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 5 QC passed; commit pending
+- Phase: round 5 pushed
 - Started: 2026-06-24 UTC
-- Current state: Round 5 restore-commit hardening implemented and QC passed; commit/push pending.
+- Current state: Round 5 restore-commit hardening implemented, QC passed, and branch pushed to `origin/codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 9 files / 79 tests passed)
 - Current plan:
   - Add regression coverage proving `admin:restore` API keys can dry-run restore validation but cannot commit destructive restores.
@@ -18,6 +18,8 @@
   - Documented the restore commit gate in operations and production-readiness docs.
   - Targeted API suite passed: `npm run test -- api/server.test.mjs` (66 tests).
   - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 82 tests passed).
+  - Committed round 5 as `6a7f6b4` (`feat: require user session for restore commits`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
   - Round 4 repo inspection started at 2026-06-25T01:52:41Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Added tenant audit regression coverage for order creation events with workspace and operator context.
