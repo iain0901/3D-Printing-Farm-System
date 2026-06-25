@@ -1585,6 +1585,7 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "POST" && /^\/api\/users\/[^/]+\/reset-password$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/purchaseRequests\/[^/]+$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/printers\/[^/]+$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/printers\/[^/]+\/status$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/parts\/[^/]+$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/skus\/[^/]+$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/productionTemplates\/[^/]+$/.test(routePath)) return true;

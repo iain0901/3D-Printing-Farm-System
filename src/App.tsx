@@ -1653,12 +1653,16 @@ function App() {
   const updatePrinterStatus = async (id: string, status: PrinterStatus, localPatch: Partial<Printer> = {}) => {
     setPrinters((items) => items.map((printer) => printer.id === id ? { ...printer, status, ...localPatch } : printer));
     setSelectedPrinter((current) => current?.id === id ? { ...current, status, ...localPatch } : current);
+    const payload = { status, ...localPatch };
+    const attemptKey = `printer-status:${id}`;
     try {
       const printer = await apiRequest<Printer>(`/api/printers/${id}/status`, {
         method: "PATCH",
-        body: JSON.stringify({ status, ...localPatch })
+        headers: operatorIdempotencyHeaders(attemptKey, { printerId: id, ...payload }),
+        body: JSON.stringify(payload)
       });
       setPrinterState({ ...printer, ...localPatch });
+      clearOperatorIdempotency(attemptKey);
       setBackendStatus("connected");
     } catch {
       setBackendStatus("local");

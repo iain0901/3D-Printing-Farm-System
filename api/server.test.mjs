@@ -5413,6 +5413,41 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent direct printer status updates without duplicate audit events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const headers = { ...auth(token), "idempotency-key": "printer-status-retry-001" };
+      const payload = { status: "maintenance", progress: 0, job: null };
+
+      const updated = await app.inject({ method: "PATCH", url: "/api/printers/p2/status", headers, payload });
+      expect(updated.statusCode).toBe(200);
+      expect(updated.json()).toMatchObject({ id: "p2", status: "maintenance", progress: 0 });
+
+      const replay = await app.inject({ method: "PATCH", url: "/api/printers/p2/status", headers, payload });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(updated.json());
+
+      const conflict = await app.inject({
+        method: "PATCH",
+        url: "/api/printers/p2/status",
+        headers,
+        payload: { status: "offline", progress: 0, job: null }
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.events.filter((event) => event.type === "printer.status" && event.data?.printerId === "p2" && event.data?.status === "maintenance")).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "printer-status-retry-001")).toMatchObject({
+        method: "PATCH",
+        path: "/api/printers/p2/status",
+        replayCount: 1,
+        statusCode: 200
+      });
+    });
+  });
+
   it("persists actions on generated todos", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);
