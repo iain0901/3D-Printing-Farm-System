@@ -12,6 +12,7 @@
   - `705032a` `docs: finalize codex round 2 status`
   - Current `HEAD` `docs: record final round 2 push`
   - `0f03c57` `feat: harden persisted user sessions`
+  - `438b340` `feat: add tenant-safe audit context`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
