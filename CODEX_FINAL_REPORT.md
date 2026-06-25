@@ -91,7 +91,9 @@
   - `51048dc` `docs: record codex round 47 push prep`
   - `166e6bc` `feat: add idempotent restore commits`
   - `b78a615` `docs: record codex round 48 status`
-  - Current `HEAD` `docs: record codex round 48 push prep`
+  - `abbdff8` `docs: record codex round 48 push prep`
+  - `6ffee13` `docs: record codex round 48 push`
+  - Current `HEAD` `docs: record codex round 48 final report`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
