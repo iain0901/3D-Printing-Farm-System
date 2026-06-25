@@ -5078,6 +5078,62 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent history annotations without double-deducting waste inventory", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      await app.inject({ method: "POST", url: "/api/telemetry/tick", headers: auth(token), payload: { increment: 100 } });
+
+      const headers = { ...auth(token), "idempotency-key": "history-annotation-retry-001" };
+      const payload = {
+        note: "Retry-safe waste deduction",
+        issueTag: "Retry validation",
+        issueSeverity: "High",
+        failureReason: "Support scar",
+        failureCategory: "Surface finish",
+        wasteGrams: 24,
+        wasteSpoolId: "s1",
+        deductWasteFromInventory: true
+      };
+      const first = await app.inject({
+        method: "PATCH",
+        url: "/api/history/q1",
+        headers,
+        payload
+      });
+      expect(first.statusCode).toBe(200);
+      expect(first.json().wasteInventory).toMatchObject({ spoolId: "s1", before: 742, after: 718, grams: 24 });
+
+      const replay = await app.inject({
+        method: "PATCH",
+        url: "/api/history/q1",
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(first.json());
+
+      const conflict = await app.inject({
+        method: "PATCH",
+        url: "/api/history/q1",
+        headers,
+        payload: { ...payload, wasteGrams: 30 }
+      });
+      expect(conflict.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.spools.find((spool) => spool.id === "s1")).toMatchObject({ remaining: 718 });
+      expect(persisted.queue.find((job) => job.id === "q1")).toMatchObject({ wasteInventoryDeductedGrams: 24, wasteSpoolId: "s1" });
+      expect(persisted.events.filter((event) => event.type === "history.annotated" && event.data?.jobId === "q1")).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "history-annotation-retry-001")).toMatchObject({
+        method: "PATCH",
+        path: "/api/history/q1",
+        statusCode: 200,
+        replayCount: 1
+      });
+    });
+  });
+
   it("previews and commits sanitized workspace restores", async () => {
     await withApp(async ({ app, db, dbPath }) => {
       const token = await login(app);

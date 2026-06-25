@@ -1523,6 +1523,7 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "POST" && /^\/api\/quoteRequests\/[^/]+\/convert-order$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/quoteRequests\/[^/]+$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/todos\/[^/]+\/action$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/history\/[^/]+$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/history\/[^/]+\/reprint$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/webhooks\/[^/]+\/test$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/notificationChannels\/[^/]+\/test$/.test(routePath)) return true;
