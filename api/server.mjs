@@ -1491,6 +1491,7 @@ function isMutatingApiRequest(request) {
 function idempotencyEligibleRoute(method, routePath) {
   if (method === "POST" && routePath === "/api/orders") return true;
   if (method === "POST" && routePath === "/api/queue") return true;
+  if (method === "POST" && routePath === "/api/actions") return true;
   if (method === "POST" && routePath === "/api/spools") return true;
   if (method === "POST" && routePath === "/api/spools/scan") return true;
   if (method === "POST" && routePath === "/api/maintenance") return true;

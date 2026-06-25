@@ -2292,6 +2292,91 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent printer actions without sending duplicate bridge commands", async () => {
+    await withApp(async ({ app, db, dbPath }) => {
+      const printer = db.data.printers.find((item) => item.id === "p2");
+      printer.status = "printing";
+      printer.job = "Bridge retry fixture.gcode";
+      printer.progress = 44;
+      db.data.queue.push({
+        id: "action-retry-job",
+        workspaceId: "ws-default",
+        fileId: "f2",
+        file: "Bridge retry fixture.gcode",
+        printerId: printer.id,
+        printer: printer.name,
+        material: "Resin",
+        color: "Any",
+        due: "Today 17:00",
+        dimensions: [80, 60, 30],
+        status: "printing",
+        stage: "printing",
+        priority: "Normal",
+        time: "1h 05m",
+        cost: 24
+      });
+      db.data.bridges.push({
+        id: "bridge-action-retry",
+        workspaceId: "ws-default",
+        printerId: printer.id,
+        kind: "octoprint",
+        name: "Action Retry Octo",
+        baseUrl: "http://octopi.action.test",
+        apiKey: "secret",
+        enabled: true,
+        lastStatus: "connected"
+      });
+      await db.write();
+
+      const originalFetch = global.fetch;
+      const commandCalls = [];
+      global.fetch = async (url, init = {}) => {
+        commandCalls.push({ url: String(url), body: init.body ? JSON.parse(init.body) : null });
+        return { ok: true, status: 204, text: async () => "" };
+      };
+      try {
+        const token = await login(app);
+        const headers = { ...auth(token), "idempotency-key": "printer-action-retry-001" };
+        const payload = { printerId: printer.id, action: "pause" };
+
+        const first = await app.inject({ method: "POST", url: "/api/actions", headers, payload });
+        expect(first.statusCode).toBe(200);
+        expect(first.json().printer).toMatchObject({ id: printer.id, status: "paused" });
+        expect(first.json().job).toMatchObject({ id: "action-retry-job", status: "paused", stage: "printing" });
+
+        const replay = await app.inject({ method: "POST", url: "/api/actions", headers, payload });
+        expect(replay.statusCode).toBe(200);
+        expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+        expect(replay.json()).toEqual(first.json());
+        expect(commandCalls).toHaveLength(1);
+        expect(commandCalls[0]).toMatchObject({
+          url: "http://octopi.action.test/api/job",
+          body: { command: "pause", action: "pause" }
+        });
+
+        const conflict = await app.inject({
+          method: "POST",
+          url: "/api/actions",
+          headers,
+          payload: { printerId: printer.id, action: "resume" }
+        });
+        expect(conflict.statusCode).toBe(409);
+        expect(commandCalls).toHaveLength(1);
+
+        const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+        expect(persisted.events.filter((event) => event.type === "printer.action" && event.data?.action === "pause" && event.data?.bridgeId === "bridge-action-retry")).toHaveLength(1);
+        expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "printer-action-retry-001")).toMatchObject({
+          method: "POST",
+          path: "/api/actions",
+          replayCount: 1,
+          statusCode: 200
+        });
+      } finally {
+        global.fetch = originalFetch;
+      }
+    });
+  });
+
   it("persists inventory, maintenance, and order operations", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);
