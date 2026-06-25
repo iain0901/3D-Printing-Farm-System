@@ -117,6 +117,7 @@
   - `11432e6` `docs: record codex round 56 push prep`
   - `8fc02b1` `feat: report restore file payload coverage`
   - `ce8e8e8` `docs: record codex round 57 status`
+  - Current `HEAD` `feat: add idempotent commerce connector tests`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -303,6 +304,11 @@
   - Round 57 targeted `npm run test -- api/server.test.mjs -t "exports and restores stored model bytes|missing file payload coverage|sanitized workspace restores|configured byte limit"`: passed, 4 tests passed.
   - Round 57 targeted `npm run test -- api/server.test.mjs`: passed, 118 tests passed.
   - Round 57 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 136 tests passed.
+  - Round 58 targeted `npm run test -- api/server.test.mjs -t "commerce connector tests"`: failed before implementation, then passed, 1 test passed.
+  - Round 58 targeted `npm run test -- api/server.test.mjs -t "commerce connector tests|commerce connector imports|commerce CSV imports|integration configuration"`: passed, 4 tests passed.
+  - Round 58 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
+  - Round 58 targeted `npm run test -- api/server.test.mjs`: passed, 119 tests passed.
+  - Round 58 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 137 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs -t "spool metadata updates|maintenance job updates"`: failed before implementation, then passed, 2 tests passed.
   - Round 50 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs`: passed, 114 tests passed.
@@ -351,6 +357,9 @@
 - Added idempotent replay/conflict protection for commerce connector import and CSV import routes.
 - Added regression coverage proving connector import retries do not refetch external commerce feeds and CSV import retries do not create duplicate import runs.
 - Documented commerce import `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for commerce connector test routes so dropped operator/browser responses do not refetch external commerce feeds or expose stored connector tokens in replay bodies.
+- Wired the built-in Orders commerce connector Test, Import, and CSV intake controls to generate stable per-attempt browser `Idempotency-Key` headers until success.
+- Added regression coverage proving commerce connector test retries replay the original sanitized response, and documented commerce connector test retry behavior in README, operations, and production-readiness docs.
 - Added actor-aware audit context for production scheduling, queue creation/matching/status/priority, bridge save/test, printer status, history annotation/reprint, and file-version operator actions.
 - Added regression coverage proving production scheduling, queue, bridge, and file-version audit events include workspace and authenticated operator metadata.
 - Documented expanded operator audit traceability in README, operations, and production-readiness docs.
@@ -509,7 +518,7 @@
 - Runtime production readiness now fails hard on unsafe default/demo access or weak/missing deployment secrets; operators must fix `.env` before live smoke checks can pass.
 - Workspace exports intentionally omit customer quote portal bearer tokens; operators should regenerate or rotate portal links after restore when customers need access.
 - API responses intentionally show only host-level metadata for webhook, notification, commerce, and bridge endpoints; operators should re-enter full provider URLs when rotating those integration credentials.
-- Commerce import idempotency now protects connector and CSV batch retries; broader write API coverage should still be added only after route-specific response and secret review.
+- Commerce connector idempotency now protects feed tests, connector imports, and CSV batch retries; broader write API coverage should still be added only after route-specific response and secret review.
 - Quote conversion idempotency now protects authenticated operator retries; public customer quote decisions remain intentionally token-gated and should be reviewed separately before adding public idempotency semantics.
 - Public quote intake and token-verified customer quote decision idempotency now protect customer form submissions and portal approval retries; any broader public portal write coverage should still be added only with route-specific replay and token review.
 - The built-in public quote UI now sends idempotency headers for quote intake and customer accept/reject/revision decisions; embedded third-party forms still need their own per-attempt key generation.

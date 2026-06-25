@@ -1578,6 +1578,7 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "POST" && /^\/api\/history\/[^/]+\/reprint$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/webhooks\/[^/]+\/test$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/notificationChannels\/[^/]+\/test$/.test(routePath)) return true;
+  if (method === "POST" && /^\/api\/commerceConnectors\/[^/]+\/test$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/bridges\/[^/]+\/test$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/printers\/[^/]+\/sync$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/productionTemplates\/[^/]+\/run$/.test(routePath)) return true;

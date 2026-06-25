@@ -4047,6 +4047,12 @@ function OrdersPage({ orders, setOrders, quoteRequests, files, skus, commerceCon
   const [csvText, setCsvText] = useState("externalId,customer,items,due,value\nSP-1001,Demo Customer,DUCT-KIT-BLK x1,Tomorrow 17:00,680");
   const [busy, setBusy] = useState("");
   const [jobPlan, setJobPlan] = useState<OrderJobGenerationResult | null>(null);
+  const commerceIdempotencyAttempts = useRef<Record<string, IdempotencyAttempt>>({});
+  const idempotencyHeaders = (action: string, payload: unknown) => {
+    const result = idempotencyHeadersForAttempt(commerceIdempotencyAttempts.current[action] || null, action, payload);
+    commerceIdempotencyAttempts.current[action] = result.attempt;
+    return result.headers;
+  };
   const newQuotes = quoteRequests.filter((quote) => quote.status === "new" || quote.status === "reviewing");
   const saveConnector = async () => {
     setBusy("save");
@@ -4067,11 +4073,14 @@ function OrdersPage({ orders, setOrders, quoteRequests, files, skus, commerceCon
   };
   const testConnector = async (connector: CommerceConnector) => {
     setBusy(`test-${connector.id}`);
+    const attemptKey = `commerce:test:${connector.id}`;
+    const payload = { connectorId: connector.id };
     try {
-      const result = await apiRequest<{ connector: CommerceConnector; ok: boolean }>(`/api/commerceConnectors/${connector.id}/test`, { method: "POST" });
+      const result = await apiRequest<{ connector: CommerceConnector; ok: boolean }>(`/api/commerceConnectors/${connector.id}/test`, { method: "POST", headers: idempotencyHeaders(attemptKey, payload) });
       setCommerceConnectors((items) => items.map((item) => item.id === connector.id ? result.connector : item));
       setBackendStatus("connected");
       addToast(result.ok ? `${connector.name} feed reachable` : `${connector.name} feed returned an error`, result.ok ? "success" : "warning");
+      delete commerceIdempotencyAttempts.current[attemptKey];
     } catch {
       setBackendStatus("local");
       addToast(`${connector.name} test failed`, "warning");
@@ -4081,13 +4090,16 @@ function OrdersPage({ orders, setOrders, quoteRequests, files, skus, commerceCon
   };
   const importConnector = async (connector: CommerceConnector) => {
     setBusy(`import-${connector.id}`);
+    const attemptKey = `commerce:import:${connector.id}`;
+    const payload = { connectorId: connector.id };
     try {
-      const result = await apiRequest<{ created: Order[]; skipped: unknown[]; importRun: CommerceImport; orders: Order[]; connector: CommerceConnector }>(`/api/commerceConnectors/${connector.id}/import`, { method: "POST" });
+      const result = await apiRequest<{ created: Order[]; skipped: unknown[]; importRun: CommerceImport; orders: Order[]; connector: CommerceConnector }>(`/api/commerceConnectors/${connector.id}/import`, { method: "POST", headers: idempotencyHeaders(attemptKey, payload) });
       setOrders(result.orders);
       setCommerceConnectors((items) => items.map((item) => item.id === connector.id ? result.connector : item));
       setCommerceImports((items) => [result.importRun, ...items.filter((item) => item.id !== result.importRun.id)]);
       setBackendStatus("connected");
       addToast(`${result.created.length} orders imported, ${result.skipped.length} skipped`, result.created.length ? "success" : "warning");
+      delete commerceIdempotencyAttempts.current[attemptKey];
     } catch {
       setBackendStatus("local");
       addToast(`${connector.name} import failed`, "warning");
@@ -4097,15 +4109,18 @@ function OrdersPage({ orders, setOrders, quoteRequests, files, skus, commerceCon
   };
   const importCsv = async () => {
     setBusy("csv");
+    const payload = { source: connectorDraft.source, csv: csvText };
     try {
       const result = await apiRequest<{ created: Order[]; skipped: unknown[]; importRun: CommerceImport; orders: Order[] }>("/api/commerce/import-csv", {
         method: "POST",
-        body: JSON.stringify({ source: connectorDraft.source, csv: csvText })
+        headers: idempotencyHeaders("commerce:csv", payload),
+        body: JSON.stringify(payload)
       });
       setOrders(result.orders);
       setCommerceImports((items) => [result.importRun, ...items.filter((item) => item.id !== result.importRun.id)]);
       setBackendStatus("connected");
       addToast(`${result.created.length} CSV orders imported, ${result.skipped.length} skipped`, result.created.length ? "success" : "warning");
+      delete commerceIdempotencyAttempts.current["commerce:csv"];
     } catch {
       setBackendStatus("local");
       addToast("CSV import failed. Check headers or API status.", "warning");

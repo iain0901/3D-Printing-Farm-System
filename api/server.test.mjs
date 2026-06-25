@@ -5202,6 +5202,55 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent commerce connector tests without refetching the feed", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const originalFetch = global.fetch;
+      let fetchCount = 0;
+      global.fetch = async () => {
+        fetchCount += 1;
+        return {
+          ok: true,
+          status: 204,
+          text: async () => ""
+        };
+      };
+      try {
+        const token = await login(app);
+        const connector = await app.inject({
+          method: "POST",
+          url: "/api/commerceConnectors",
+          headers: auth(token),
+          payload: { name: "Retry test feed", source: "Generic", url: "https://commerce.test/test-feed.json", token: "test-token-secret", enabled: true }
+        });
+        expect(connector.statusCode).toBe(201);
+        const headers = { ...auth(token), "idempotency-key": "commerce-test-retry-001" };
+
+        const tested = await app.inject({ method: "POST", url: `/api/commerceConnectors/${connector.json().id}/test`, headers });
+        expect(tested.statusCode).toBe(200);
+        expect(tested.json()).toMatchObject({ ok: true, statusCode: 204 });
+        expect(tested.json().connector).toMatchObject({ id: connector.json().id, lastStatus: "connected", hasToken: true });
+        expect(JSON.stringify(tested.json())).not.toContain("test-token-secret");
+
+        const replay = await app.inject({ method: "POST", url: `/api/commerceConnectors/${connector.json().id}/test`, headers });
+        expect(replay.statusCode).toBe(200);
+        expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+        expect(replay.json()).toEqual(tested.json());
+        expect(fetchCount).toBe(1);
+
+        const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+        expect(persisted.commerceConnectors.find((item) => item.id === connector.json().id)).toMatchObject({ lastStatus: "connected", lastStatusCode: 204, token: "test-token-secret" });
+        expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "commerce-test-retry-001")).toMatchObject({
+          method: "POST",
+          path: `/api/commerceConnectors/${connector.json().id}/test`,
+          replayCount: 1,
+          statusCode: 200
+        });
+      } finally {
+        global.fetch = originalFetch;
+      }
+    });
+  });
+
   it("imports commerce CSV rows into orders", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);
