@@ -112,6 +112,7 @@
   - Current `HEAD` `docs: record codex round 54 pushed`
   - `3489f3d` `feat: paginate audit trail queries`
   - `edf6c38` `docs: record codex round 55 status`
+  - `03bd3db` `feat: verify stripe webhook signatures`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -291,6 +292,9 @@
   - Round 55 targeted `npm run test -- api/i18n.test.mjs`: passed, 2 tests passed.
   - Round 55 targeted `npm run test -- api/server.test.mjs`: passed, 117 tests passed.
   - Round 55 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 135 tests passed.
+  - Round 56 targeted `npm run test -- api/server.test.mjs -t "Stripe billing"`: passed, 1 test passed.
+  - Round 56 targeted `npm run test -- api/server.test.mjs`: passed, 117 tests passed.
+  - Round 56 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 135 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs -t "spool metadata updates|maintenance job updates"`: failed before implementation, then passed, 2 tests passed.
   - Round 50 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs`: passed, 114 tests passed.
@@ -469,6 +473,9 @@
 - Made `/api/audit/export` honor matching `type`, `search`, `limit`, and `offset` filters for scoped CSV evidence exports.
 - Updated the Add-ons audit timeline to show live matched counts, load additional audit pages, and display an empty live-result state instead of substituting demo audit rows.
 - Added regression and i18n coverage for audit pagination/export behavior and the new audit empty-state copy, and documented the audit query contract in README, operations, and production-readiness docs.
+- Added raw JSON body preservation and direct `Stripe-Signature` verification for `/api/billing/webhook/stripe` using `LAYERPILOT_STRIPE_WEBHOOK_SECRET`.
+- Preserved the existing `x-layerpilot-billing-webhook-secret` fallback for trusted edge proxies that transform webhook bodies before forwarding to the app.
+- Added regression coverage for invalid and valid signed Stripe webhook delivery, and documented the signed-webhook production checklist in README, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -498,7 +505,7 @@
 - Inventory idempotency now protects spool creation, metadata updates, label export, usage logging, and scan-based usage/location retries; broader inventory write coverage should still be added only after route-specific replay and response review.
 - Maintenance idempotency now protects job creation, job updates, template saves, and problem-report intake retries; broader maintenance write coverage should still be added only after route-specific replay and response review.
 - Audit-retention run idempotency now protects retry-prone governance cleanup runs; broader admin write coverage should still be added only after route-specific replay and response review.
-- Billing idempotency now protects plan-change and portal-session retries; Stripe webhooks still depend on provider event IDs and webhook-secret validation rather than client `Idempotency-Key` headers.
+- Billing idempotency now protects plan-change and portal-session retries; Stripe webhooks now verify direct `Stripe-Signature` deliveries or the trusted-proxy shared-secret fallback rather than client `Idempotency-Key` headers.
 - Printer action idempotency now protects `/api/actions` retries before bridge dispatch; real hardware validation is still required against the customer's printer fleet before go-live.
 - Direct printer status idempotency now protects manual status update retries from duplicate `printer.status` audit events; real hardware status correctness still depends on bridge validation against the customer's printer fleet.
 - Quote portal-link idempotency now protects generation and rotation retries; operators should still avoid sharing superseded customer links after intentional manual rotation.
