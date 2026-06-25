@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 17 verified
+- Phase: round 17 committed
 - Started: 2026-06-24 UTC
-- Current state: Round 17 public quote-decision idempotency hardening is implemented and verified locally; commit/push pending.
+- Current state: Round 17 public quote-decision idempotency hardening is implemented, verified, and committed as `2d85a39`; push pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 9 files / 92 tests passed)
 - Current plan:
   - Add retry-safe idempotency coverage for public customer quote decisions.
@@ -20,6 +20,7 @@
   - Targeted public quote decision idempotency test passed: `npm run test -- api/server.test.mjs -t "idempotent public quote approvals"` (1 test).
   - Targeted API suite passed: `npm run test -- api/server.test.mjs` (76 tests).
   - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 92 tests passed).
+  - Committed round 17 implementation as `2d85a39` (`feat: add idempotent public quote decisions`).
   - Round 16 repo inspection started at 2026-06-25T04:00:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: idempotent public quote intake retries to prevent duplicate customer quote requests from browser/form gateway retries.

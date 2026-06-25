@@ -32,7 +32,8 @@
   - `dc29e63` `feat: add idempotent quote conversion`
   - `0529d85` `feat: add idempotent public quote intake`
   - Current `HEAD` `docs: record codex round 16 push`
-  - Current pending round 17 changes: public quote decision idempotency hardening
+  - `2d85a39` `feat: add idempotent public quote decisions`
+  - Current pending docs: record codex round 17 push
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
