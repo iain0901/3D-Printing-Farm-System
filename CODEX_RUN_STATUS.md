@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 67 committed; push pending
+- Phase: round 67 committed and pushed
 - Started: 2026-06-24 UTC
-- Current state: Round 67 worker freshness readiness gate is implemented, verified, and committed on `codex/production-saas-completion-20260624`; push is pending.
+- Current state: Round 67 worker freshness readiness gate is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
   - Add regression coverage proving production `/api/readiness` fails when enabled worker jobs have no fresh heartbeat and passes when the heartbeat is current.
@@ -25,6 +25,8 @@
   - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 143 tests passed).
   - Updated final report with round 67 scope, verification, completed feature, and residual worker freshness note.
   - Committed round 67 implementation as `07c77ea` (`feat: gate readiness on worker freshness`).
+  - Committed round 67 status/final report as `0a3226e` (`docs: record codex round 67 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
   - Round 66 repo inspection started at 2026-06-25T13:19:39Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, install docs, package metadata, health/readiness/metrics code, worker broadcast auth, worker notifier, and existing metrics/worker tests before editing.
   - Selected production-readiness slice: header-only production transport for worker and metrics ops tokens so secrets are not accepted in URL query strings that can leak through access logs.
