@@ -6,7 +6,7 @@
 - Current state: Round 13 authenticated ops-check smoke coverage is implemented, verified, committed, and pushed to `origin/codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 9 files / 79 tests passed)
 - Current plan:
-  - Add non-mutating authenticated smoke checks to the Ubuntu ops-check path when production credentials are available.
+  - Add authenticated smoke checks to the Ubuntu ops-check path when production credentials are available.
   - Cover the deployment helper behavior with targeted tests.
   - Update operations/readiness docs, run targeted tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
