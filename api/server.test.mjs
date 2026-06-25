@@ -4049,10 +4049,59 @@ endsolid s3_store`;
       expect(persisted.events.some((event) => event.type === "spool.labels_generated")).toBe(true);
       expect(persisted.events.some((event) => event.type === "spool.scanned_usage")).toBe(true);
       expect(persisted.events.some((event) => event.type === "purchase_request.received")).toBe(true);
+      const spoolCreatedEvent = persisted.events.find((event) => event.type === "spool.created" && event.data?.spoolId === spool.json().id);
+      expect(spoolCreatedEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          actorEmail: "demo@layerpilot.test",
+          actorRole: "Admin",
+          spoolId: spool.json().id,
+          material: "PLA",
+          location: "Rack QC"
+        }
+      });
+      const spoolUpdatedEvent = persisted.events.find((event) => event.type === "spool.updated" && event.data?.spoolId === spool.json().id);
+      expect(spoolUpdatedEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          actorEmail: "demo@layerpilot.test",
+          actorRole: "Admin",
+          spoolId: spool.json().id,
+          remaining: 425,
+          dry: false
+        }
+      });
       expect(persisted.maintenance.find((item) => item.id === maintenance.json().id)).toMatchObject({ status: "done" });
       expect(persisted.maintenanceTemplates.find((item) => item.id === template.json().template.id)).toMatchObject({ title: "QC motion service" });
       expect(persisted.maintenanceReports.find((item) => item.id === report.json().report.id)).toMatchObject({ linkedJobId: report.json().job.id });
       expect(persisted.events.some((event) => event.type === "maintenance_report.created")).toBe(true);
+      const maintenanceCreatedEvent = persisted.events.find((event) => event.type === "maintenance.created" && event.data?.maintenanceId === maintenance.json().id);
+      expect(maintenanceCreatedEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          actorEmail: "demo@layerpilot.test",
+          actorRole: "Admin",
+          maintenanceId: maintenance.json().id,
+          printer: "Forge A1",
+          status: "scheduled",
+          severity: "High"
+        }
+      });
+      const maintenanceUpdatedEvent = persisted.events.find((event) => event.type === "maintenance.updated" && event.data?.maintenanceId === maintenance.json().id);
+      expect(maintenanceUpdatedEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          actorEmail: "demo@layerpilot.test",
+          actorRole: "Admin",
+          maintenanceId: maintenance.json().id,
+          status: "done",
+          progress: "Complete"
+        }
+      });
       expect(persisted.orders.find((item) => item.id === order.json().id)).toMatchObject({ status: "shipped" });
     });
   });

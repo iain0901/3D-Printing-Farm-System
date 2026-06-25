@@ -7271,7 +7271,15 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsed.success) return reply.code(400).send({ error: "Invalid spool payload", issues: parsed.error.issues });
     const spool = { id: randomUUID(), workspaceId: request.user.workspaceId, ...parsed.data, updatedAt: new Date().toISOString() };
     database.data.spools.push(spool);
-    database.data.events.unshift({ id: randomUUID(), type: "spool.created", message: `${spool.material} ${spool.brand} added`, at: spool.updatedAt });
+    await dispatchEvent(database, "spool.created", `${spool.material} ${spool.brand} added`, {
+      workspaceId: request.user.workspaceId,
+      spoolId: spool.id,
+      material: spool.material,
+      brand: spool.brand,
+      location: spool.location,
+      remaining: spool.remaining,
+      weight: spool.weight
+    }, { actor: request.user, at: spool.updatedAt });
     await database.write();
     return reply.code(201).send(spool);
   });
@@ -7284,7 +7292,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const selected = (database.data.spools || [])
       .filter((spool) => itemInWorkspace(spool, request.user.workspaceId) && (!selectedIds.size || selectedIds.has(spool.id)) && (parsed.data.includeEmpty || Number(spool.remaining ?? 0) > 0));
     const exportPayload = buildSpoolLabelExport(selected);
-    await dispatchEvent(database, "spool.labels_generated", `${exportPayload.count} spool labels generated`, { count: exportPayload.count, spoolIds: selected.map((spool) => spool.id) });
+    await dispatchEvent(database, "spool.labels_generated", `${exportPayload.count} spool labels generated`, { workspaceId: request.user.workspaceId, count: exportPayload.count, spoolIds: selected.map((spool) => spool.id) }, { actor: request.user });
     await database.write();
     return exportPayload;
   });
@@ -7311,6 +7319,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (spool.remaining <= 0) warnings.push("Spool empty");
     else if (spool.remaining < 150) warnings.push("Low stock");
     await dispatchEvent(database, parsed.data.grams ? "spool.scanned_usage" : "spool.scanned", parsed.data.grams ? `${parsed.data.grams}g scanned for ${spool.material}` : `${spool.material} spool scanned`, {
+      workspaceId: request.user.workspaceId,
       spoolId: spool.id,
       code: parsed.data.code,
       location: spool.location,
@@ -7318,7 +7327,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       remaining: spool.remaining,
       grams: parsed.data.grams || 0,
       warnings
-    });
+    }, { actor: request.user });
     await database.write();
     return { spool, matchedBy: spool.nfc === parsed.data.code ? "nfc" : spool.id === parsed.data.code ? "id" : "label", usageLogged: parsed.data.grams || 0, warnings, spools: database.data.spools };
   });
@@ -7330,7 +7339,16 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const spool = database.data.spools.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!spool) return reply.code(404).send({ error: "Spool not found" });
     Object.assign(spool, parsed.data, { remaining: Math.min(parsed.data.remaining ?? spool.remaining, parsed.data.weight ?? spool.weight), updatedAt: new Date().toISOString() });
-    database.data.events.unshift({ id: randomUUID(), type: "spool.updated", message: `${spool.material} ${spool.brand} updated`, at: spool.updatedAt });
+    await dispatchEvent(database, "spool.updated", `${spool.material} ${spool.brand} updated`, {
+      workspaceId: request.user.workspaceId,
+      spoolId: spool.id,
+      material: spool.material,
+      brand: spool.brand,
+      location: spool.location,
+      remaining: spool.remaining,
+      weight: spool.weight,
+      dry: spool.dry
+    }, { actor: request.user, at: spool.updatedAt });
     await database.write();
     return spool;
   });
@@ -7343,7 +7361,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!spool) return reply.code(404).send({ error: "Spool not found" });
     spool.remaining = Math.max(0, Number(spool.remaining || 0) - parsed.data.grams);
     spool.updatedAt = new Date().toISOString();
-    await dispatchEvent(database, "spool.usage", `${parsed.data.grams}g logged for ${spool.material}`, { spoolId: spool.id, material: spool.material, remaining: spool.remaining, grams: parsed.data.grams });
+    await dispatchEvent(database, "spool.usage", `${parsed.data.grams}g logged for ${spool.material}`, { workspaceId: request.user.workspaceId, spoolId: spool.id, material: spool.material, remaining: spool.remaining, grams: parsed.data.grams }, { actor: request.user });
     await database.write();
     return spool;
   });
@@ -7356,7 +7374,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const now = new Date().toISOString();
     const purchaseRequest = { id: randomUUID(), workspaceId: request.user.workspaceId, ...parsed.data, createdAt: now, updatedAt: now };
     database.data.purchaseRequests.unshift(purchaseRequest);
-    await dispatchEvent(database, "purchase_request.created", `${purchaseRequest.material} reorder request created`, { purchaseRequestId: purchaseRequest.id, material: purchaseRequest.material, quantity: purchaseRequest.quantity });
+    await dispatchEvent(database, "purchase_request.created", `${purchaseRequest.material} reorder request created`, { workspaceId: request.user.workspaceId, purchaseRequestId: purchaseRequest.id, material: purchaseRequest.material, quantity: purchaseRequest.quantity }, { actor: request.user });
     await database.write();
     return reply.code(201).send(purchaseRequest);
   });
@@ -7366,7 +7384,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const parsed = purchaseReorderPlanSchema.safeParse(request.body || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid reorder plan payload", issues: parsed.error.issues });
     const result = createReorderPlan(database.data, request.user.workspaceId, parsed.data);
-    await dispatchEvent(database, "purchase_request.reorder_plan", `${result.created.length} reorder requests created`, { created: result.created.map((item) => item.id), skipped: result.skipped.length, thresholdGrams: result.thresholdGrams });
+    await dispatchEvent(database, "purchase_request.reorder_plan", `${result.created.length} reorder requests created`, { workspaceId: request.user.workspaceId, created: result.created.map((item) => item.id), skipped: result.skipped.length, thresholdGrams: result.thresholdGrams }, { actor: request.user });
     await database.write();
     return result;
   });
@@ -7381,7 +7399,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const rawPatch = request.body && typeof request.body === "object" ? request.body : {};
     const patch = Object.fromEntries(Object.entries(parsed.data).filter(([key]) => Object.prototype.hasOwnProperty.call(rawPatch, key)));
     Object.assign(purchaseRequest, patch, { updatedAt: new Date().toISOString() });
-    await dispatchEvent(database, "purchase_request.updated", `${purchaseRequest.material} reorder request ${purchaseRequest.status}`, { purchaseRequestId: purchaseRequest.id, status: purchaseRequest.status });
+    await dispatchEvent(database, "purchase_request.updated", `${purchaseRequest.material} reorder request ${purchaseRequest.status}`, { workspaceId: request.user.workspaceId, purchaseRequestId: purchaseRequest.id, status: purchaseRequest.status }, { actor: request.user });
     await database.write();
     return purchaseRequest;
   });
@@ -7392,7 +7410,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsed.success) return reply.code(400).send({ error: "Invalid receive payload", issues: parsed.error.issues });
     const result = receivePurchaseRequest(database.data, request.params.id, request.user.workspaceId, parsed.data);
     if (result.error) return reply.code(result.statusCode || 400).send({ error: result.error });
-    await dispatchEvent(database, "purchase_request.received", `${result.spools.length} ${result.request.material} spools received`, { purchaseRequestId: result.request.id, spoolIds: result.spools.map((spool) => spool.id) });
+    await dispatchEvent(database, "purchase_request.received", `${result.spools.length} ${result.request.material} spools received`, { workspaceId: request.user.workspaceId, purchaseRequestId: result.request.id, spoolIds: result.spools.map((spool) => spool.id) }, { actor: request.user });
     await database.write();
     return result;
   });
@@ -7403,7 +7421,15 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsed.success) return reply.code(400).send({ error: "Invalid maintenance payload", issues: parsed.error.issues });
     const job = { id: randomUUID(), workspaceId: request.user.workspaceId, ...parsed.data, updatedAt: new Date().toISOString() };
     database.data.maintenance.push(job);
-    database.data.events.unshift({ id: randomUUID(), type: "maintenance.created", message: `${job.title} for ${job.printer}`, at: job.updatedAt });
+    await dispatchEvent(database, "maintenance.created", `${job.title} for ${job.printer}`, {
+      workspaceId: request.user.workspaceId,
+      maintenanceId: job.id,
+      title: job.title,
+      printer: job.printer,
+      status: job.status,
+      severity: job.severity,
+      due: job.due
+    }, { actor: request.user, at: job.updatedAt });
     await database.write();
     return reply.code(201).send(job);
   });
@@ -7415,7 +7441,15 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const job = database.data.maintenance.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!job) return reply.code(404).send({ error: "Maintenance job not found" });
     Object.assign(job, parsed.data, { updatedAt: new Date().toISOString() });
-    database.data.events.unshift({ id: randomUUID(), type: "maintenance.updated", message: `${job.title} -> ${job.status}`, at: job.updatedAt });
+    await dispatchEvent(database, "maintenance.updated", `${job.title} -> ${job.status}`, {
+      workspaceId: request.user.workspaceId,
+      maintenanceId: job.id,
+      title: job.title,
+      printer: job.printer,
+      status: job.status,
+      severity: job.severity,
+      progress: job.progress
+    }, { actor: request.user, at: job.updatedAt });
     await database.write();
     return job;
   });
@@ -7427,13 +7461,13 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const existing = (database.data.maintenanceTemplates || []).find((template) => itemInWorkspace(template, request.user.workspaceId) && template.title.toLowerCase() === parsed.data.title.toLowerCase() && template.printerModel.toLowerCase() === parsed.data.printerModel.toLowerCase());
     if (existing) {
       Object.assign(existing, parsed.data, { updatedAt: new Date().toISOString() });
-      await dispatchEvent(database, "maintenance_template.updated", `${existing.title} template updated`, { templateId: existing.id });
+      await dispatchEvent(database, "maintenance_template.updated", `${existing.title} template updated`, { workspaceId: request.user.workspaceId, templateId: existing.id }, { actor: request.user });
       await database.write();
       return { template: existing, templates: database.data.maintenanceTemplates, created: false };
     }
     const template = { id: randomUUID(), workspaceId: request.user.workspaceId, ...parsed.data, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     database.data.maintenanceTemplates.unshift(template);
-    await dispatchEvent(database, "maintenance_template.created", `${template.title} template saved`, { templateId: template.id, intervalDays: template.intervalDays });
+    await dispatchEvent(database, "maintenance_template.created", `${template.title} template saved`, { workspaceId: request.user.workspaceId, templateId: template.id, intervalDays: template.intervalDays }, { actor: request.user });
     await database.write();
     return reply.code(201).send({ template, templates: database.data.maintenanceTemplates, created: true });
   });
@@ -7462,7 +7496,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       database.data.maintenance.push(job);
       report.linkedJobId = job.id;
     }
-    await dispatchEvent(database, "maintenance_report.created", `${report.title} reported for ${report.printer}`, { reportId: report.id, jobId: job?.id || "", severity: report.severity });
+    await dispatchEvent(database, "maintenance_report.created", `${report.title} reported for ${report.printer}`, { workspaceId: request.user.workspaceId, reportId: report.id, jobId: job?.id || "", severity: report.severity }, { actor: request.user });
     await database.write();
     return reply.code(201).send({ report, job, reports: database.data.maintenanceReports, maintenance: database.data.maintenance });
   });

@@ -1,17 +1,27 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 77 committed and pushed
+- Phase: round 78 verified; commit pending
 - Started: 2026-06-24 UTC
-- Current state: Round 77 CSV export audit evidence is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 78 inventory and maintenance audit context hardening is implemented and verified on `codex/production-saas-completion-20260624`; commit/push is pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage proving authenticated catalog CSV exports and audit CSV exports create compact audit evidence without storing exported CSV bodies.
-  - Implement `catalog.exported` and `admin.audit_exported` events with workspace/operator context and export filter/count metadata.
-  - Document CSV export audit review in README, operations, and production-readiness docs.
-  - Run targeted export/audit tests, full API tests, and full QC, then commit and push.
+  - Add regression coverage proving direct spool create/update and maintenance create/update audit events include workspace/operator context.
+  - Replace remaining bare inventory/maintenance event writes with the standard actor-aware audit dispatcher.
+  - Document inventory and maintenance audit evidence review in README, operations, and production-readiness docs.
+  - Run targeted inventory/maintenance tests, full API tests, and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 78 repo inspection started at 2026-06-25T16:48:24Z.
+  - Reviewed current branch, recent commits, run status, final report, README, install docs, operations, production-readiness, roadmap, package metadata, API route list, audit dispatcher, inventory/maintenance routes, and existing inventory/maintenance tests before editing.
+  - Selected production-readiness slice: operator audit context for direct inventory and maintenance create/update events so physical spool and service-log changes are traceable to the authenticated workspace/operator.
+  - Added regression coverage requiring authenticated spool create/update and maintenance create/update events to include workspace/operator context.
+  - Targeted inventory/maintenance audit regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "persists inventory, maintenance, and order operations"` (direct spool events lacked structured workspace/operator metadata).
+  - Replaced remaining bare inventory/maintenance event writes with actor-aware audit dispatch for spool create/labels/scan/update/usage, purchase request create/reorder/update/receive, maintenance job create/update, maintenance templates, and maintenance reports.
+  - Documented inventory and maintenance audit review in README, operations, and production-readiness docs.
+  - Targeted inventory/maintenance coverage passed: `npm run test -- api/server.test.mjs -t "persists inventory, maintenance, and order operations|spool metadata|maintenance job updates|maintenance job creation|maintenance template saves|maintenance reports|spool label exports|spool creation|spool usage|spool scan|purchase request"` (11 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (132 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 151 tests passed).
   - Round 77 repo inspection started at 2026-06-25T16:37:53Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route list, export/audit implementation, and existing export tests before editing.
   - Selected production-readiness slice: audit trail evidence for authenticated CSV exports so catalog exports and audit evidence exports are themselves reviewable without storing exported CSV bodies.

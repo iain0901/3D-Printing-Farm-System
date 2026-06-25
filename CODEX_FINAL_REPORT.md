@@ -4,6 +4,7 @@
 - Pushed remote: `origin/codex/production-saas-completion-20260624`
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
+- Latest round: Round 78 inventory and maintenance audit context hardening implemented and verified; commit/push pending.
 - Commits:
   - `0348328` `feat: audit csv exports`
   - `137d724` `docs: record codex round 77 status`
@@ -164,6 +165,10 @@
   - `7e42cc7` `feat: scope audit retention by workspace`
   - Current `HEAD` `docs: record codex round 69 push`
 - QC result:
+  - Round 78 targeted `npm run test -- api/server.test.mjs -t "persists inventory, maintenance, and order operations"`: failed before implementation as expected, direct spool events lacked structured workspace/operator metadata.
+  - Round 78 targeted `npm run test -- api/server.test.mjs -t "persists inventory, maintenance, and order operations|spool metadata|maintenance job updates|maintenance job creation|maintenance template saves|maintenance reports|spool label exports|spool creation|spool usage|spool scan|purchase request"`: passed, 11 tests passed.
+  - Round 78 full API `npm run test -- api/server.test.mjs`: passed, 132 tests passed.
+  - Round 78 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 151 tests passed.
   - Round 77 targeted `npm run test -- api/server.test.mjs -t "audit events with filters|catalog records"`: failed before implementation as expected, catalog export included another workspace SKU and audit export had no `admin.audit_exported` evidence.
   - Round 77 targeted `npm run test -- api/server.test.mjs -t "audit events with filters|catalog records"`: passed, 2 tests passed.
   - Round 77 full API `npm run test -- api/server.test.mjs`: passed, 132 tests passed.
@@ -441,6 +446,9 @@
 
 ## Completed Features
 
+- Inventory and maintenance audit events now use actor-aware dispatch for spool creation, label export, scan/usage/update, purchase request creation/reorder/update/receive, maintenance job creation/update, templates, and problem reports.
+- Added regression coverage proving direct spool and maintenance create/update events include workspace and authenticated operator context.
+- Documented inventory and maintenance audit review in README, operations, and production-readiness docs.
 - Scoped authenticated `/api/catalog/export` CSV output to the requesting workspace so another tenant's SKUs/parts are not included in a catalog export.
 - Added `catalog.exported` audit evidence for authenticated catalog CSV exports, including workspace/operator context and row/object counts without storing exported CSV bodies.
 - Added `admin.audit_exported` audit evidence for audit CSV exports, including filter, matched-count, and exported-count metadata without storing exported evidence rows.
