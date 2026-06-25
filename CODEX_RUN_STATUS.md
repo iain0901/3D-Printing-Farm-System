@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 43 verified; final docs pending push
+- Phase: round 43 committed and pushed
 - Started: 2026-06-24 UTC
-- Current state: Round 43 governance setup retry hardening is implemented, verified, and committed locally on `codex/production-saas-completion-20260624`.
+- Current state: Round 43 governance setup retry hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 125 tests passed)
 - Current plan:
   - Add regression coverage for retry-safe governance setup writes.
@@ -22,6 +22,8 @@
   - Targeted API suite passed: `npm run test -- api/server.test.mjs` (109 tests).
   - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 126 tests passed).
   - Committed round 43 implementation as `1b194c6` (`feat: add idempotent governance setup writes`).
+  - Committed round 43 status docs as `f8d7c26` (`docs: record codex round 43 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
   - Round 42 repo inspection started at 2026-06-25T08:45:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, and production-readiness docs before editing.
   - Selected production-readiness slice: idempotent direct purchase-request create/update writes to prevent duplicate reorder records and duplicate purchasing audit events after dropped operator/browser responses.
