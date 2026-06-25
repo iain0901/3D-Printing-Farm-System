@@ -1,15 +1,11 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 10 QC passed
+- Phase: round 10 pushed
 - Started: 2026-06-24 UTC
-- Current state: Round 10 integration endpoint redaction hardening is implemented, targeted tests and full QC passed, and commit/push is pending.
+- Current state: Round 10 integration endpoint redaction hardening is implemented, targeted tests and full QC passed, and branch pushed to `origin/codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 9 files / 79 tests passed)
 - Current plan:
-  - Add regression coverage proving credential-bearing integration URLs and delivery endpoints are redacted from state, list, test, and admin export responses.
-  - Sanitize webhook, notification, commerce, and bridge endpoint responses while preserving stored credentials for actual delivery/test/import operations.
-  - Document integration endpoint backup/export handling in operations and production-readiness docs.
-  - Commit and push round 10.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
   - Round 10 repo inspection started at 2026-06-25T02:53:49Z.
@@ -20,6 +16,8 @@
   - Documented integration endpoint redaction and restore/rotation expectations in README and production operations docs.
   - Targeted API suite passed: `npm run test -- api/server.test.mjs` (70 tests).
   - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 86 tests passed).
+  - Committed round 10 implementation as `903f22d` (`feat: redact integration endpoints`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
   - Round 9 repo inspection started at 2026-06-25T02:43:55Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: backup/export safety for customer quote portal access tokens.
