@@ -26,6 +26,7 @@
   - `2b714f3` `feat: add idempotent commerce imports`
   - Current `HEAD` `docs: record codex round 11 push`
   - Current `HEAD` `feat: add actor-aware production audit events`
+  - `625f290` `feat: add authenticated ops checks`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
