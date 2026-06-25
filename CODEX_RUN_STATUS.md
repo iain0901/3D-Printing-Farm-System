@@ -1,17 +1,27 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 88 committed and pushed
+- Phase: round 89 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 88 production 2FA enrollment password-proof hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 89 Stripe webhook duplicate-delivery hardening is in progress on `codex/production-saas-completion-20260624`.
 - Baseline QC: Round 86 passed `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed)
 - Current plan:
-  - Add regression coverage requiring TOTP enablement to prove the current account password before storing the TOTP secret or issuing recovery codes.
-  - Require the current password in `/api/auth/2fa/enable`, audit failed password-proof attempts without storing submitted passwords, and preserve production admin enrollment flow.
-  - Update the Settings UI and production docs/runbooks for the password-proof enrollment workflow.
-  - Run targeted auth coverage, full API tests, and full QC, then commit and push.
+  - Add regression coverage for duplicate signed Stripe webhook delivery.
+  - Deduplicate Stripe billing webhook events by provider `event.id` before mutating billing state or writing audit evidence.
+  - Update production docs/runbooks for the webhook replay behavior.
+  - Run targeted billing coverage, full API tests, and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 89 repo inspection started at 2026-06-25T19:00:45Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, API mutating route/idempotency allowlist, billing webhook code, and existing billing tests before editing.
+  - Selected production-readiness slice: Stripe webhook duplicate-delivery hardening so provider retries do not duplicate billing audit evidence.
+  - Added regression coverage requiring duplicate signed Stripe webhook delivery to return a replay marker, avoid duplicate `billing.stripe_webhook` audit events, and record compact replay metadata.
+  - Targeted Stripe webhook regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "Stripe billing"` (duplicate delivery lacked replay header).
+  - Implemented a compact internal Stripe webhook event ledger keyed by provider `event.id`, replay responses with `x-layerpilot-stripe-webhook-replay: true`, and state/export sanitization for the internal ledger.
+  - Documented duplicate Stripe webhook delivery behavior in README, operations, and production-readiness docs.
+  - Targeted Stripe billing coverage passed: `npm run test -- api/server.test.mjs -t "Stripe billing"` (1 test).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (134 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed).
   - Round 88 repo inspection started at 2026-06-25T18:45:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, API write-route/idempotency surface, auth/2FA routes, auth tests, and Settings 2FA UI before editing.
   - Selected production-readiness slice: TOTP enrollment password-proof hardening so a stolen signed-in browser session cannot enable 2FA without knowing the account password.

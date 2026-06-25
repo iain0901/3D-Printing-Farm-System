@@ -89,7 +89,7 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 - [ ] If background telemetry or bridge polling is enabled, `/api/readiness` includes a passing `worker` check and the `layerpilot-worker` container or service has reported within the readiness freshness window.
 - [ ] `/api/metrics` is scraped with a metrics token or scoped API key.
 - [ ] If Stripe billing or MQTT event streaming is enabled, live `/api/readiness` passes with complete Stripe secret/webhook/price IDs and valid MQTT URL/QoS/retain settings.
-- [ ] Stripe billing webhooks have been smoke-tested with a valid `Stripe-Signature` header, or the route is reachable only through a trusted edge proxy that injects `x-layerpilot-billing-webhook-secret`.
+- [ ] Stripe billing webhooks have been smoke-tested with a valid `Stripe-Signature` header, or the route is reachable only through a trusted edge proxy that injects `x-layerpilot-billing-webhook-secret`; replay the same provider event once and confirm the response includes `x-layerpilot-stripe-webhook-replay: true` without creating a duplicate `billing.stripe_webhook` audit event.
 - [ ] Disk free space is monitored for the data volume and backup destination.
 - [ ] Support bundle and API support snapshot generation are tested and reviewed for redaction; snapshots preserve endpoint hosts but remove secret-like fields and URL paths/query strings.
 

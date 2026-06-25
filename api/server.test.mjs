@@ -2575,9 +2575,34 @@ describe("3DSTU FarmFlow API", () => {
         expect(webhook.json().plan).toMatchObject({ id: "farm", name: "Print Farm" });
         expect(webhook.json().invoice).toMatchObject({ id: "cs_test_layerpilot", provider: "stripe", planId: "farm", amount: 149, status: "paid" });
 
+        const replayWebhook = await app.inject({
+          method: "POST",
+          url: "/api/billing/webhook/stripe",
+          headers: {
+            "content-type": "application/json",
+            "stripe-signature": Stripe.webhooks.generateTestHeaderString({
+              payload: rawStripeEvent,
+              secret: "whsec_test"
+            })
+          },
+          payload: rawStripeEvent
+        });
+        expect(replayWebhook.statusCode).toBe(200);
+        expect(replayWebhook.headers["x-layerpilot-stripe-webhook-replay"]).toBe("true");
+        expect(replayWebhook.json()).toMatchObject({ received: true, replayed: true, eventType: "checkout.session.completed" });
+        expect(replayWebhook.json().invoice).toMatchObject({ id: "cs_test_layerpilot", provider: "stripe", planId: "farm" });
+
         const persisted = JSON.parse(await readFile(dbPath, "utf8"));
         expect(persisted.workspaceSettings).toMatchObject({ plan: "Print Farm", stripeCustomerId: "cus_layerpilot", stripeSubscriptionId: "sub_layerpilot" });
-        expect(persisted.events.some((event) => event.type === "billing.stripe_webhook" && event.data.planId === "farm")).toBe(true);
+        const stripeEvents = persisted.events.filter((event) => event.type === "billing.stripe_webhook" && event.data.eventId === "evt_paid");
+        expect(stripeEvents).toHaveLength(1);
+        expect(stripeEvents[0].data).toMatchObject({ eventType: "checkout.session.completed", planId: "farm", invoiceId: "cs_test_layerpilot" });
+        expect(persisted.dataMeta.stripeWebhookEvents.find((event) => event.eventId === "evt_paid")).toMatchObject({
+          eventId: "evt_paid",
+          eventType: "checkout.session.completed",
+          invoiceId: "cs_test_layerpilot",
+          replayCount: 1
+        });
       }, { stripeClient: fakeStripe });
     });
   });

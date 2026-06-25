@@ -60,6 +60,8 @@ const DEFAULT_WORKSPACE_ID = "ws-default";
 const IDEMPOTENCY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const IDEMPOTENCY_MAX_RECORDS = 500;
 const IDEMPOTENCY_MAX_RESPONSE_BYTES = 256 * 1024;
+const STRIPE_WEBHOOK_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+const STRIPE_WEBHOOK_MAX_RECORDS = 500;
 const DEFAULT_FULL_BACKUP_MAX_BYTES = 512 * 1024 * 1024;
 const DEFAULT_SESSION_TTL_HOURS = 7 * 24;
 const DEFAULT_SESSION_IDLE_TIMEOUT_HOURS = 24;
@@ -1360,7 +1362,7 @@ function sanitizeUser(user) {
 }
 
 function sanitizeDataMeta(meta = {}) {
-  const { idempotencyKeys, ...safeMeta } = meta || {};
+  const { idempotencyKeys, stripeWebhookEvents, ...safeMeta } = meta || {};
   return safeMeta;
 }
 
@@ -4118,6 +4120,67 @@ function applyStripeBillingEvent(data, event) {
     return { plan, invoice };
   }
   return { plan, invoice: null };
+}
+
+function ensureStripeWebhookLedger(data) {
+  data.dataMeta ||= {};
+  if (!Array.isArray(data.dataMeta.stripeWebhookEvents)) data.dataMeta.stripeWebhookEvents = [];
+  return data.dataMeta.stripeWebhookEvents;
+}
+
+function pruneStripeWebhookLedger(data, now = new Date()) {
+  const cutoff = now.getTime() - STRIPE_WEBHOOK_RETENTION_MS;
+  const retained = ensureStripeWebhookLedger(data)
+    .filter((record) => {
+      const receivedAt = Date.parse(record.receivedAt || record.updatedAt || "");
+      return Number.isFinite(receivedAt) && receivedAt >= cutoff;
+    })
+    .sort((a, b) => String(b.updatedAt || b.receivedAt || "").localeCompare(String(a.updatedAt || a.receivedAt || "")))
+    .slice(0, STRIPE_WEBHOOK_MAX_RECORDS);
+  data.dataMeta.stripeWebhookEvents = retained;
+  return retained;
+}
+
+function stripeWebhookReplayResponse(record = {}) {
+  return {
+    received: true,
+    replayed: true,
+    eventType: record.eventType || "",
+    plan: record.plan || null,
+    invoice: record.invoice || null
+  };
+}
+
+function recordStripeWebhookEvent(data, event, result) {
+  const eventId = String(event?.id || "").trim();
+  if (!eventId) return null;
+  const now = new Date().toISOString();
+  const ledger = pruneStripeWebhookLedger(data);
+  const record = {
+    eventId,
+    eventType: String(event.type || ""),
+    invoiceId: result.invoice?.id || "",
+    planId: result.plan?.id || "",
+    plan: result.plan || null,
+    invoice: result.invoice || null,
+    replayCount: 0,
+    receivedAt: now,
+    updatedAt: now
+  };
+  ledger.unshift(record);
+  pruneStripeWebhookLedger(data);
+  return record;
+}
+
+function replayStripeWebhookEvent(data, event) {
+  const eventId = String(event?.id || "").trim();
+  if (!eventId) return null;
+  const ledger = pruneStripeWebhookLedger(data);
+  const existing = ledger.find((record) => record.eventId === eventId);
+  if (!existing) return null;
+  existing.replayCount = Number(existing.replayCount || 0) + 1;
+  existing.updatedAt = new Date().toISOString();
+  return existing;
 }
 
 function fileReferences(data, fileId) {
@@ -6905,7 +6968,14 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!verified.verified && expectedSecret && request.headers["x-layerpilot-billing-webhook-secret"] !== expectedSecret) return reply.code(401).send({ error: "Invalid billing webhook secret" });
     const parsed = stripeWebhookSchema.safeParse(verified.payload || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid Stripe webhook payload", issues: parsed.error.issues });
+    const replayRecord = replayStripeWebhookEvent(database.data, parsed.data);
+    if (replayRecord) {
+      await database.write();
+      reply.header("x-layerpilot-stripe-webhook-replay", "true");
+      return stripeWebhookReplayResponse(replayRecord);
+    }
     const result = applyStripeBillingEvent(database.data, parsed.data);
+    recordStripeWebhookEvent(database.data, parsed.data, result);
     await dispatchEvent(database, "billing.stripe_webhook", `Stripe ${parsed.data.type}`, { eventId: parsed.data.id, eventType: parsed.data.type, planId: result.plan?.id, invoiceId: result.invoice?.id });
     await database.write();
     return { received: true, eventType: parsed.data.type, plan: result.plan || null, invoice: result.invoice || null, billing: await buildBillingSummary(database.data, { stripeClient }) };
