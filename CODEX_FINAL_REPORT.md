@@ -4,9 +4,10 @@
 - Pushed remote: `origin/codex/production-saas-completion-20260624`
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
-- Latest round: Round 87 workspace-scoped cost catalog isolation implemented, verified, and committed locally; push pending.
+- Latest round: Round 87 workspace-scoped cost catalog isolation implemented, verified, committed, and pushed.
 - Commits:
   - `c224949` `feat: scope cost catalogs by workspace`
+  - `8805eef` `docs: record codex round 87 status`
   - `c9d4b41` `docs: record codex round 86 push`
   - `5d60b0c` `docs: record codex round 86 status`
   - `cdacddd` `test: cover order lifecycle retries`
