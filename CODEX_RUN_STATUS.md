@@ -1,17 +1,30 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 56 committed and pushed
+- Phase: round 57 verified; docs commit pending
 - Started: 2026-06-24 UTC
-- Current state: Round 56 Stripe billing webhook signature verification hardening slice is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 57 restore preview file-payload coverage slice is implemented, verified, and committed as `8fc02b1`; status/final report update is pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage for Stripe webhook signature verification and the existing trusted-proxy shared-secret fallback.
-  - Implement signature verification for `Stripe-Signature` requests using the configured webhook secret without exposing secrets.
-  - Document the production webhook verification behavior in README, operations, and production-readiness docs.
-  - Run targeted billing tests and full QC, then commit and push.
+  - Add regression coverage for restore previews that detect missing stored file payloads before commit.
+  - Implement restore summary file-payload coverage metadata without exposing stored bytes or secrets.
+  - Surface file-payload coverage in the Settings restore panel.
+  - Document restore preview coverage in README, operations, and production-readiness docs.
+  - Run targeted restore/export tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 57 repo inspection started at 2026-06-25T11:34:07Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, API auth/IP allowlist coverage, backup/export/restore code, restore UI, and existing restore/export tests before editing.
+  - Selected production-readiness slice: restore preview file-payload coverage for safer backup/restore/export operations.
+  - Added regression coverage proving restore previews report missing stored file payload coverage before implementation.
+  - Targeted restore coverage failed before implementation as expected: `npm run test -- api/server.test.mjs -t "missing file payload coverage"` (missing `filePayloadCoverage` summary).
+  - Implemented restore summary file-payload coverage metadata for expected, included, missing, extra, completeness, and storage-included state.
+  - Wired the Settings restore panel to show stored file payload coverage during preview/commit.
+  - Targeted restore coverage passed: `npm run test -- api/server.test.mjs -t "missing file payload coverage"` (1 test).
+  - Targeted restore/export regression passed: `npm run test -- api/server.test.mjs -t "exports and restores stored model bytes|missing file payload coverage|sanitized workspace restores|configured byte limit"` (4 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (118 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 136 tests passed).
+  - Committed round 57 implementation as `8fc02b1` (`feat: report restore file payload coverage`).
   - Round 56 repo inspection started at 2026-06-25T11:21:57Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, Stripe billing route/tests, and residual README notes before editing.
   - Selected production-readiness slice: Stripe billing webhook signature verification with documented fallback for trusted edge proxies.

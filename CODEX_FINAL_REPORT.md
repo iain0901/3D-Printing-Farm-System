@@ -115,6 +115,7 @@
   - `03bd3db` `feat: verify stripe webhook signatures`
   - `7e4decd` `docs: record codex round 56 status`
   - `11432e6` `docs: record codex round 56 push prep`
+  - `8fc02b1` `feat: report restore file payload coverage`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -297,6 +298,10 @@
   - Round 56 targeted `npm run test -- api/server.test.mjs -t "Stripe billing"`: passed, 1 test passed.
   - Round 56 targeted `npm run test -- api/server.test.mjs`: passed, 117 tests passed.
   - Round 56 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 135 tests passed.
+  - Round 57 targeted `npm run test -- api/server.test.mjs -t "missing file payload coverage"`: failed before implementation, then passed, 1 test passed.
+  - Round 57 targeted `npm run test -- api/server.test.mjs -t "exports and restores stored model bytes|missing file payload coverage|sanitized workspace restores|configured byte limit"`: passed, 4 tests passed.
+  - Round 57 targeted `npm run test -- api/server.test.mjs`: passed, 118 tests passed.
+  - Round 57 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 136 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs -t "spool metadata updates|maintenance job updates"`: failed before implementation, then passed, 2 tests passed.
   - Round 50 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs`: passed, 114 tests passed.
@@ -478,6 +483,9 @@
 - Added raw JSON body preservation and direct `Stripe-Signature` verification for `/api/billing/webhook/stripe` using `LAYERPILOT_STRIPE_WEBHOOK_SECRET`.
 - Preserved the existing `x-layerpilot-billing-webhook-secret` fallback for trusted edge proxies that transform webhook bodies before forwarding to the app.
 - Added regression coverage for invalid and valid signed Stripe webhook delivery, and documented the signed-webhook production checklist in README, operations, and production-readiness docs.
+- Added restore preview/commit `filePayloadCoverage` summaries for stored model/G-code files so operators can see expected, included, missing, and extra payloads before committing a JSON restore.
+- Updated the Settings restore panel to show stored file payload coverage directly in the restore preview.
+- Added regression coverage for missing restore file payload detection, and documented the restore coverage check in README, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -488,6 +496,7 @@
 - Live production readiness now fails when configured S3, Stripe, or MQTT integrations are incomplete or malformed; operators must either complete those settings or leave the optional integration disabled before go-live.
 - Frontend bundle size warning remains from the existing single-bundle app; it does not fail QC.
 - Full API JSON file-byte exports are intentionally capped by `LAYERPILOT_FULL_BACKUP_MAX_BYTES`; large production farms should rely on verified volume/object-storage backups unless an operator deliberately raises the API export ceiling.
+- Restore previews now report incomplete JSON file-payload coverage, but operators must still verify any separate volume/object-storage restore path before committing a restore that intentionally omits file bytes.
 - Idempotency coverage is route-specific; token- or secret-returning replay records are intentionally retained only in internal server metadata and omitted from shared state/admin exports.
 - Session expiry policy should be reviewed against the customer's shared-device operating model before go-live.
 - Production Owner/Admin users must enroll TOTP before protected API access when workspace `requireAdmin2fa` remains enabled; this is now enforced in `NODE_ENV=production`.
