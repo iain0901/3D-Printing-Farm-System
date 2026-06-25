@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 25 in progress
+- Phase: round 25 verified
 - Started: 2026-06-24 UTC
-- Current state: Round 25 printer action idempotency hardening is implemented and verified on `codex/production-saas-completion-20260624`; commit and push are pending.
+- Current state: Round 25 printer action idempotency hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`; final report update and push are pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 96 tests passed)
 - Current plan:
   - Add persisted idempotency replay/conflict protection for real printer action commands.
@@ -20,6 +20,7 @@
   - Targeted printer action idempotency test passed: `npm run test -- api/server.test.mjs -t "idempotent printer actions"` (1 test).
   - Targeted API suite passed: `npm run test -- api/server.test.mjs` (88 tests).
   - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 105 tests passed).
+  - Committed round 25 implementation as `3ca1c29` (`feat: add idempotent printer actions`).
   - Round 24 repo inspection started at 2026-06-25T05:21:42Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: idempotent billing plan and portal writes for retry-safe SaaS billing operations.
