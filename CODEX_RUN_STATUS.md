@@ -1,16 +1,25 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 33 committed
+- Phase: round 34 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 33 bridge diagnostic and sync idempotency hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 34 spool label export idempotency hardening is implemented and verified on `codex/production-saas-completion-20260624`; commit and push are pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 96 tests passed)
 - Current plan:
-  - Add persisted idempotency replay/conflict protection for bridge diagnostic and sync retries.
-  - Cover retries so dropped operator responses do not repeat hardware status polling or duplicate bridge audit events.
-  - Document supported bridge diagnostic/sync idempotency, run targeted tests and full QC, then commit and push.
+  - Add persisted idempotency replay/conflict protection for spool label export retries.
+  - Cover retries so dropped operator responses do not duplicate `spool.labels_generated` audit events or return a newly generated label artifact.
+  - Document supported spool-label idempotency, run targeted tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 34 repo inspection started at 2026-06-25T07:17:54Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent spool label export retries to prevent duplicate inventory label audit events after operator/browser retries.
+  - Added failing regression coverage proving spool label export retries need replay semantics to avoid duplicate `spool.labels_generated` audit events and changing generated artifacts.
+  - Added `/api/spools/labels` to the persisted `Idempotency-Key` allowlist.
+  - Documented spool label export idempotency in README, operations, and production-readiness docs.
+  - Targeted spool label export idempotency test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "spool label exports"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (97 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 114 tests passed).
   - Round 33 repo inspection started at 2026-06-25T07:09:55Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: idempotent bridge diagnostic and sync retries to prevent repeated hardware polling and duplicate bridge audit events after operator/browser retries.

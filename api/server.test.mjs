@@ -2711,6 +2711,48 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent spool label exports without duplicating inventory audit events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const spool = await app.inject({
+        method: "POST",
+        url: "/api/spools",
+        headers: auth(token),
+        payload: { material: "PLA", color: "#22c55e", brand: "Label Retry", remaining: 640, weight: 1000, location: "Rack Label", dry: true, nfc: "LP-LABEL-RETRY" }
+      });
+      expect(spool.statusCode).toBe(201);
+
+      const headers = { ...auth(token), "idempotency-key": "spool-labels-retry-001" };
+      const payload = { ids: [spool.json().id] };
+      const first = await app.inject({ method: "POST", url: "/api/spools/labels", headers, payload });
+      expect(first.statusCode).toBe(200);
+      expect(first.json()).toMatchObject({ count: 1 });
+      expect(first.json().csv).toContain("LP-LABEL-RETRY");
+
+      const replay = await app.inject({ method: "POST", url: "/api/spools/labels", headers, payload });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(first.json());
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/spools/labels",
+        headers,
+        payload: { ids: [spool.json().id], includeEmpty: true }
+      });
+      expect(conflict.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.events.filter((event) => event.type === "spool.labels_generated" && event.data?.spoolIds?.includes(spool.json().id))).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "spool-labels-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/spools/labels",
+        replayCount: 1,
+        statusCode: 200
+      });
+    });
+  });
+
   it("replays idempotent purchase reorder plans without creating duplicate requests", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);

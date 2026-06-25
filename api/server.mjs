@@ -1494,6 +1494,7 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "POST" && routePath === "/api/queue/match") return true;
   if (method === "POST" && routePath === "/api/actions") return true;
   if (method === "POST" && routePath === "/api/spools") return true;
+  if (method === "POST" && routePath === "/api/spools/labels") return true;
   if (method === "POST" && routePath === "/api/spools/scan") return true;
   if (method === "POST" && routePath === "/api/maintenance") return true;
   if (method === "POST" && routePath === "/api/maintenance/templates") return true;
