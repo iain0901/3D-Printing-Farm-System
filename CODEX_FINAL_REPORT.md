@@ -104,6 +104,7 @@
   - `4ddeb7d` `docs: record codex round 51 status`
   - `6822902` `feat: add idempotent file folders`
   - `0282a0a` `docs: record codex round 52 status`
+  - `4b15a23` `feat: add idempotent printer status updates`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -270,6 +271,10 @@
   - Round 52 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
   - Round 52 targeted `npm run test -- api/server.test.mjs`: passed, 115 tests passed.
   - Round 52 final `npm run qc`: passed, build passed, Vitest 10 files / 133 tests passed.
+  - Round 53 targeted `npm run test -- api/server.test.mjs -t "direct printer status"`: failed before implementation, then passed, 1 test passed.
+  - Round 53 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
+  - Round 53 targeted `npm run test -- api/server.test.mjs`: passed, 116 tests passed.
+  - Round 53 final `npm run qc`: passed, build passed, Vitest 10 files / 134 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs -t "spool metadata updates|maintenance job updates"`: failed before implementation, then passed, 2 tests passed.
   - Round 50 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs`: passed, 114 tests passed.
@@ -439,6 +444,9 @@
 - Added idempotent replay/conflict protection for file folder creation so dropped operator/browser responses replay the original create/reuse response without duplicate folder audit events.
 - Wired the built-in Files page folder action to generate stable per-attempt browser `Idempotency-Key` headers until success.
 - Added regression coverage proving file folder retries replay the original response, and documented the retry contract in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for direct printer status updates so dropped operator/browser responses replay the original status response without duplicate `printer.status` audit events.
+- Wired the built-in printer status controls to generate stable per-attempt browser `Idempotency-Key` headers until success.
+- Added regression coverage proving direct printer status retries replay the original response, and documented the retry contract in README, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -469,6 +477,7 @@
 - Audit-retention run idempotency now protects retry-prone governance cleanup runs; broader admin write coverage should still be added only after route-specific replay and response review.
 - Billing idempotency now protects plan-change and portal-session retries; Stripe webhooks still depend on provider event IDs and webhook-secret validation rather than client `Idempotency-Key` headers.
 - Printer action idempotency now protects `/api/actions` retries before bridge dispatch; real hardware validation is still required against the customer's printer fleet before go-live.
+- Direct printer status idempotency now protects manual status update retries from duplicate `printer.status` audit events; real hardware status correctness still depends on bridge validation against the customer's printer fleet.
 - Quote portal-link idempotency now protects generation and rotation retries; operators should still avoid sharing superseded customer links after intentional manual rotation.
 - Generated todo action idempotency now protects claim/snooze/complete/reopen retries; clients still need to provide stable per-attempt keys for retry-prone operator actions.
 - Scheduler idempotency now protects auto/optimize/constraint retries from duplicate audit events; clients still need stable per-attempt keys when operators retry scheduler automation.

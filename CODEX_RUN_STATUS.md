@@ -1,18 +1,32 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 52 committed and pushed
+- Phase: round 53 committed, pending push
 - Started: 2026-06-24 UTC
-- Current state: Round 52 retry-safe file folder creation is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 53 retry-safe direct printer status updates are implemented, verified, and committed on `codex/production-saas-completion-20260624`; push is pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage proving `POST /api/file-folders` retries replay the original folder response without duplicating folder audit events.
-  - Add `POST /api/file-folders` to the persisted idempotency allowlist.
-  - Wire the built-in Files page folder action to generate and reuse browser `Idempotency-Key` headers for the same attempted payload until success.
-  - Document file folder retry safety in README, operations, and production-readiness docs.
-  - Run targeted file/idempotency tests and full QC, then commit and push.
+  - Add regression coverage proving `PATCH /api/printers/:id/status` retries replay the original status response without duplicating `printer.status` audit events.
+  - Add direct printer status updates to the persisted `Idempotency-Key` allowlist.
+  - Wire the built-in printer controls to generate and reuse browser `Idempotency-Key` headers for the same attempted payload until success.
+  - Document direct printer status retry safety in README, operations, and production-readiness docs.
+  - Run targeted printer/idempotency tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 53 repo inspection started at 2026-06-25T10:48:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, mutating API routes, idempotency allowlist, direct printer status route/UI, and existing printer tests before editing.
+  - Selected production-readiness slice: idempotent direct printer status updates for retry-safe operator controls.
+  - Added regression coverage proving `PATCH /api/printers/:id/status` retries replay the original status response without duplicate `printer.status` audit events.
+  - Targeted direct-printer-status regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "direct printer status"` (retry returned a fresh response without replay metadata).
+  - Added `PATCH /api/printers/:id/status` to the persisted `Idempotency-Key` allowlist.
+  - Wired the built-in printer status controls to generate and reuse browser `Idempotency-Key` headers for the same attempted payload until success.
+  - Targeted direct-printer-status regression passed: `npm run test -- api/server.test.mjs -t "direct printer status"` (1 test).
+  - Documented direct printer status retry safety in README, operations, and production-readiness docs.
+  - Targeted browser idempotency helper test passed: `npm run test -- src/idempotency.test.ts` (2 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (116 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 134 tests passed).
+  - Committed round 53 implementation as `4b15a23` (`feat: add idempotent printer status updates`).
+  - Updated final report with round 53 commit, verification, completed feature, and residual blocker notes.
   - Round 52 repo inspection started at 2026-06-25T10:36:26Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, mutating API routes, idempotency allowlist, file folder route/UI, and existing file tests before editing.
   - Selected production-readiness slice: idempotent file folder creation for retry-safe operator file organization.
