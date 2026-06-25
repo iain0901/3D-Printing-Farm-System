@@ -4246,7 +4246,7 @@ endsolid s3_store`;
           method: "POST",
           url: "/api/bridges",
           headers: auth(token),
-          payload: { printerId: "p2", kind: "octoprint", name: "Retry Safe Octo", baseUrl: "http://octopi.retry.test", apiKey: "secret", enabled: true }
+          payload: { printerId: "p2", kind: "octoprint", name: "Retry Safe Octo", baseUrl: "http://octopi.retry.test/api?apikey=bridge-audit-secret", apiKey: "bridge-api-secret", enabled: true }
         });
         expect(saved.statusCode).toBe(201);
         const bridgeId = saved.json().id;
@@ -4289,8 +4289,59 @@ endsolid s3_store`;
         expect(hardwareCalls).toHaveLength(6);
 
         const persisted = JSON.parse(await readFile(dbPath, "utf8"));
-        expect(persisted.events.filter((event) => event.type === "bridge.connected" && event.data?.bridgeId === bridgeId)).toHaveLength(1);
-        expect(persisted.events.filter((event) => event.type === "bridge.poll" && event.data?.synced?.some((item) => item.bridgeId === bridgeId))).toHaveLength(1);
+        const bridgeAuditText = JSON.stringify(persisted.events.filter((event) => String(event.type || "").startsWith("bridge.")));
+        expect(bridgeAuditText).not.toContain("bridge-audit-secret");
+        expect(bridgeAuditText).not.toContain("bridge-api-secret");
+        expect(bridgeAuditText).not.toContain("/api?apikey=");
+        const savedEvents = persisted.events.filter((event) => event.type === "bridge.saved" && event.data?.bridgeId === bridgeId);
+        expect(savedEvents).toHaveLength(1);
+        expect(savedEvents[0]).toMatchObject({
+          workspaceId: "ws-default",
+          data: {
+            workspaceId: "ws-default",
+            actorEmail: "demo@layerpilot.test",
+            actorType: "user",
+            bridgeId,
+            printerId: "p2",
+            kind: "octoprint",
+            enabled: true,
+            hasBaseUrl: true,
+            baseUrlHost: "http://octopi.retry.test",
+            hasApiKey: true
+          }
+        });
+        const connectedEvents = persisted.events.filter((event) => event.type === "bridge.connected" && event.data?.bridgeId === bridgeId);
+        expect(connectedEvents).toHaveLength(1);
+        expect(connectedEvents[0]).toMatchObject({
+          data: {
+            actorEmail: "demo@layerpilot.test",
+            bridgeId,
+            printerId: "p2",
+            kind: "octoprint",
+            hasBaseUrl: true,
+            baseUrlHost: "http://octopi.retry.test",
+            hasApiKey: true,
+            diagnostic: { ok: true, latencyMs: expect.any(Number) }
+          }
+        });
+        const pollEvents = persisted.events.filter((event) => event.type === "bridge.poll" && event.data?.synced?.some((item) => item.bridgeId === bridgeId));
+        expect(pollEvents).toHaveLength(1);
+        expect(pollEvents[0]).toMatchObject({
+          data: {
+            actorEmail: "demo@layerpilot.test",
+            bridgeCount: 1,
+            syncedCount: 1,
+            failedCount: 0,
+            synced: [expect.objectContaining({
+              bridgeId,
+              printerId: "p2",
+              kind: "octoprint",
+              hasBaseUrl: true,
+              baseUrlHost: "http://octopi.retry.test",
+              hasApiKey: true
+            })]
+          }
+        });
         expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "bridge-test-retry-001")).toMatchObject({
           method: "POST",
           path: `/api/bridges/${bridgeId}/test`,

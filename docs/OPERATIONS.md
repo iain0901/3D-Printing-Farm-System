@@ -161,6 +161,7 @@ Idempotency is supported for:
 - Test each bridge after credential or network changes.
 - A failed diagnostic should move the printer to a safe offline state.
 - API responses, shared state, admin exports, and delivery logs redact bridge base URL paths/query strings and API keys; operators should re-enter or verify bridge endpoints from the integration settings when rotating credentials.
+- Review `bridge.saved`, `bridge.connected`, `bridge.diagnostic_failed`, and `bridge.poll` audit events after setup or sync smoke tests. They should include workspace/operator context, bridge/printer IDs, bridge kind, enabled state, endpoint host, credential-presence flags, and sync counts without bridge API keys, full endpoint URLs, endpoint paths, or query-string tokens.
 - Do not expose printer bridge credentials or full endpoint URLs in support bundles or screenshots.
 - Keep manual bridge mode for machines that cannot be controlled safely.
 

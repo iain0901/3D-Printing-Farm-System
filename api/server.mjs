@@ -2657,6 +2657,20 @@ function sanitizeBridgeDiagnostic(diagnostic) {
   };
 }
 
+function bridgeAuditMetadata(bridge, printer = null) {
+  return {
+    workspaceId: bridge?.workspaceId || printer?.workspaceId || DEFAULT_WORKSPACE_ID,
+    bridgeId: bridge?.id || "",
+    printerId: printer?.id || bridge?.printerId || "",
+    kind: bridge?.kind || "",
+    enabled: Boolean(bridge?.enabled),
+    hasBaseUrl: Boolean(bridge?.baseUrl),
+    baseUrlHost: endpointHost(bridge?.baseUrl),
+    hasApiKey: Boolean(bridge?.apiKey),
+    lastStatus: bridge?.lastStatus || ""
+  };
+}
+
 function sanitizeWebhook(webhook) {
   if (!webhook) return null;
   return {
@@ -3234,24 +3248,31 @@ export async function runBridgePollingTick(database, options = {}) {
       bridge.lastStatus = "connected";
       bridge.lastError = "";
       bridge.lastSyncAt = new Date().toISOString();
-      synced.push({ bridgeId: bridge.id, bridge: bridge.name, printerId: printer.id, printer: printer.name, status: printer.status, previousStatus });
+      synced.push({ ...bridgeAuditMetadata(bridge, printer), status: printer.status, previousStatus });
       if (previousStatus !== printer.status) {
-        await dispatchEvent(database, "printer.status", `${printer.name} -> ${printer.status}`, { workspaceId, printerId: printer.id, status: printer.status, source: "bridge.poll" });
+        await dispatchEvent(database, "printer.status", `${printer.name} -> ${printer.status}`, { workspaceId, printerId: printer.id, status: printer.status, source: "bridge.poll" }, { actor: options.actor });
       }
     } catch (error) {
       bridge.lastStatus = "error";
       bridge.lastError = error instanceof Error ? error.message : "Bridge sync failed";
       bridge.lastSyncAt = new Date().toISOString();
       printer.status = "offline";
-      failed.push({ bridgeId: bridge.id, bridge: bridge.name, printerId: printer.id, printer: printer.name, error: bridge.lastError });
+      failed.push({ ...bridgeAuditMetadata(bridge, printer), error: bridge.lastError });
       if (previousStatus !== "offline") {
-        await dispatchEvent(database, "printer.status", `${printer.name} -> offline`, { workspaceId, printerId: printer.id, status: "offline", source: "bridge.poll", error: bridge.lastError });
+        await dispatchEvent(database, "printer.status", `${printer.name} -> offline`, { workspaceId, printerId: printer.id, status: "offline", source: "bridge.poll", error: bridge.lastError }, { actor: options.actor });
       }
     }
   }
   const stateData = scopeWorkspaceId ? scopedWorkspaceData(database.data, scopeWorkspaceId) : database.data;
   if (!synced.length && !failed.length) return { changed: false, synced, failed, state: realtimeState(stateData) };
-  await dispatchEvent(database, "bridge.poll", `${synced.length} bridges synced, ${failed.length} failed`, { workspaceId: scopeWorkspaceId || DEFAULT_WORKSPACE_ID, synced, failed });
+  await dispatchEvent(database, "bridge.poll", `${synced.length} bridges synced, ${failed.length} failed`, {
+    workspaceId: scopeWorkspaceId || options.actor?.workspaceId || DEFAULT_WORKSPACE_ID,
+    bridgeCount: synced.length + failed.length,
+    syncedCount: synced.length,
+    failedCount: failed.length,
+    synced,
+    failed
+  }, { actor: options.actor });
   await database.write();
   const payload = { reason: "bridge.poll", state: realtimeState(stateData), synced, failed };
   broadcastRealtime(database, "state", payload);
@@ -8292,14 +8313,14 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     Object.assign(bridge, parsed.data, { updatedAt: new Date().toISOString() });
     if (!existing) database.data.bridges.push(bridge);
     printer.connection = parsed.data.kind === "octoprint" ? "OctoPrint" : parsed.data.kind === "moonraker" ? "Klipper / Moonraker" : parsed.data.kind === "prusalink" ? "PrusaLink" : "Manual bridge";
-    await dispatchEvent(database, "bridge.saved", `${bridge.name} saved for ${printer.name}`, { workspaceId: request.user.workspaceId, bridgeId: bridge.id, printerId: printer.id, kind: bridge.kind }, { actor: request.user });
+    await dispatchEvent(database, "bridge.saved", `${bridge.name} saved for ${printer.name}`, bridgeAuditMetadata(bridge, printer), { actor: request.user });
     await database.write();
     return reply.code(existing ? 200 : 201).send(sanitizeBridge(bridge));
   });
 
   app.post("/api/bridges/sync", async (request, reply) => {
     if (!hasPermission(request.user, "printers:control")) return reply.code(403).send({ error: "Missing permission: printers:control" });
-    const result = await runBridgePollingTick(database, { workspaceId: request.user.workspaceId });
+    const result = await runBridgePollingTick(database, { workspaceId: request.user.workspaceId, actor: request.user });
     const scoped = workspaceScopeForUser(database.data, request.user);
     return { ...result, bridges: (scoped.bridges || []).map(sanitizeBridge), printers: scoped.printers };
   });
@@ -8317,12 +8338,12 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       if (diagnostic.status) applyBridgeStatus(printer, diagnostic.status);
       bridge.lastStatus = "connected";
       bridge.lastError = "";
-      await dispatchEvent(database, "bridge.connected", `${bridge.name} connected`, { workspaceId: request.user.workspaceId, bridgeId: bridge.id, printerId: printer.id, diagnostic: { ok: true, latencyMs: diagnostic.latencyMs } }, { actor: request.user, at: bridge.lastSyncAt });
+      await dispatchEvent(database, "bridge.connected", `${bridge.name} connected`, { ...bridgeAuditMetadata(bridge, printer), diagnostic: { ok: true, latencyMs: diagnostic.latencyMs } }, { actor: request.user, at: bridge.lastSyncAt });
     } else {
       bridge.lastStatus = "error";
       bridge.lastError = diagnostic.summary || "Bridge test failed";
       printer.status = "offline";
-      await dispatchEvent(database, "bridge.diagnostic_failed", `${bridge.name} diagnostic failed`, { workspaceId: request.user.workspaceId, bridgeId: bridge.id, printerId: printer.id, diagnostic: { ok: false, latencyMs: diagnostic.latencyMs, recommendation: diagnostic.recommendation } }, { actor: request.user, at: bridge.lastSyncAt });
+      await dispatchEvent(database, "bridge.diagnostic_failed", `${bridge.name} diagnostic failed`, { ...bridgeAuditMetadata(bridge, printer), diagnostic: { ok: false, latencyMs: diagnostic.latencyMs, recommendation: diagnostic.recommendation } }, { actor: request.user, at: bridge.lastSyncAt });
     }
     await database.write();
     return { ok: diagnostic.ok, bridge: sanitizeBridge(bridge), printer, status: diagnostic.status, diagnostic: sanitizeBridgeDiagnostic(diagnostic) };

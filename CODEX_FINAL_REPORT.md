@@ -4,7 +4,7 @@
 - Pushed remote: `origin/codex/production-saas-completion-20260624`
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
-- Latest round: Round 94 file deletion audit hardening implemented, verified, committed, and pushed.
+- Latest round: Round 95 bridge audit hardening implemented and verified; commit/push pending.
 - Commits:
   - `91e48b5` `docs: record codex round 94 status`
   - `163957a` `feat: add file deletion audit context`
@@ -203,6 +203,11 @@
   - `7e42cc7` `feat: scope audit retention by workspace`
   - Current `HEAD` `docs: record codex round 69 push`
 - QC result:
+  - Round 95 targeted `npm run test -- api/server.test.mjs -t "replays idempotent bridge diagnostics"`: failed before implementation as expected, `bridge.saved` audit evidence lacked redacted bridge metadata.
+  - Round 95 targeted `npm run test -- api/server.test.mjs -t "replays idempotent bridge diagnostics"`: passed, 1 test passed.
+  - Round 95 broader bridge/printer-action coverage `npm run test -- api/server.test.mjs -t "bridge|printer actions|production scheduling"`: passed, 5 tests passed.
+  - Round 95 full API `npm run test -- api/server.test.mjs`: passed, 135 tests passed.
+  - Round 95 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 154 tests passed.
   - Round 94 targeted `npm run test -- api/server.test.mjs -t "downloads stored files and deletes unreferenced files"`: failed before implementation as expected, `file.deleted` audit evidence lacked authenticated actor and compact file metadata.
   - Round 94 targeted `npm run test -- api/server.test.mjs -t "downloads stored files and deletes unreferenced files"`: passed, 1 test passed.
   - Round 94 broader file coverage `npm run test -- api/server.test.mjs -t "creates files with validation|file artifact writes|downloads stored files|builds safe file previews|stores uploaded files|model uploads"`: passed, 6 tests passed.

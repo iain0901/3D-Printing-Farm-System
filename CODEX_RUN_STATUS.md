@@ -1,17 +1,28 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 94 committed and pushed
+- Phase: round 95 implementation verified; final docs/commit pending
 - Started: 2026-06-24 UTC
-- Current state: Round 94 file deletion audit hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 95 bridge audit hardening is implemented and verified on `codex/production-saas-completion-20260624`; commit and push pending.
 - Baseline QC: Round 86 passed `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed)
 - Current plan:
-  - Add regression coverage requiring file deletion audit evidence to include workspace/operator/file context without storage paths, object keys, file bodies, or raw reference records.
-  - Harden `DELETE /api/files/:id` audit writes to use actor-aware compact metadata.
-  - Update production docs/runbooks for file deletion audit review.
-  - Run targeted file coverage, full API tests, and full QC, then commit and push.
+  - Add regression coverage requiring bridge setup/diagnostic/sync audit evidence to include workspace/operator and redacted bridge metadata without endpoint paths, query tokens, or API keys.
+  - Harden bridge save, diagnostic, and operator-triggered sync audit writes to use shared compact metadata.
+  - Update production docs/runbooks for bridge audit review.
+  - Run targeted bridge coverage, full API tests, and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 95 repo inspection started at 2026-06-25T20:39:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route list, bridge routes, and existing bridge tests before editing.
+  - Selected production-readiness slice: printer bridge audit hardening so bridge setup, diagnostics, and manual syncs leave compact operator/workspace evidence without exposing endpoint paths, query tokens, or API keys.
+  - Added regression coverage requiring bridge save, diagnostic, and sync audit evidence to include workspace/operator context, bridge/printer IDs, kind, enabled status, endpoint host, base URL/API-key presence, and sync counts while excluding endpoint paths, query tokens, and API keys.
+  - Targeted bridge regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "replays idempotent bridge diagnostics"` (`bridge.saved` lacked redacted bridge metadata).
+  - Implemented shared compact bridge audit metadata and passed the authenticated actor through operator-triggered bridge polling.
+  - Targeted bridge retry/audit coverage passed: `npm run test -- api/server.test.mjs -t "replays idempotent bridge diagnostics"` (1 test).
+  - Documented bridge setup/diagnostic/sync audit evidence review in README, operations, and production-readiness docs.
+  - Broader bridge/printer-action coverage passed: `npm run test -- api/server.test.mjs -t "bridge|printer actions|production scheduling"` (5 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (135 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 154 tests passed).
   - Round 94 repo inspection started at 2026-06-25T20:33:52Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route/idempotency surface, file routes, and existing file tests before editing.
   - Selected production-readiness slice: file deletion audit hardening so destructive file-library cleanup leaves compact workspace/operator evidence without exposing file bodies, storage paths, object keys, or raw reference records.
