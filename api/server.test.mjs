@@ -2706,7 +2706,7 @@ describe("3DSTU FarmFlow API", () => {
   });
 
   it("queries audit events with filters and exports CSV with admin permissions", async () => {
-    await withApp(async ({ app }) => {
+    await withApp(async ({ app, db }) => {
       const token = await login(app);
       await app.inject({
         method: "PATCH",
@@ -2745,6 +2745,19 @@ describe("3DSTU FarmFlow API", () => {
       expect(csv.body).toContain("cost_catalog.updated");
       expect(csv.body).toContain("machineHourlyRate");
       expect(csv.body).not.toContain("\"\"laborPerOrder\"\":18");
+      const auditExportEvent = db.data.events.find((event) => event.type === "admin.audit_exported");
+      expect(auditExportEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: expect.objectContaining({
+          workspaceId: "ws-default",
+          type: "cost_catalog.updated",
+          limit: 1,
+          offset: 1,
+          exportedEvents: 1
+        })
+      });
+      expect(auditExportEvent.data).toMatchObject({ actorEmail: "demo@layerpilot.test", actorType: "user" });
+      expect(JSON.stringify(auditExportEvent.data)).not.toContain("machineHourlyRate");
 
       const apiKey = await app.inject({
         method: "POST",
@@ -4633,7 +4646,7 @@ endsolid s3_store`;
   });
 
   it("persists catalog records and generates order jobs from SKU-linked parts", async () => {
-    await withApp(async ({ app, dbPath }) => {
+    await withApp(async ({ app, db, dbPath }) => {
       const token = await login(app);
       const part = await app.inject({
         method: "POST",
@@ -4659,6 +4672,8 @@ endsolid s3_store`;
         payload: { sku: "QC-BRACKET", title: "QC Bracket", parts: ["QC linked bracket"], variants: ["Orange"], price: 180, stock: 3, channel: "Manual" }
       });
       expect(sku.statusCode).toBe(201);
+      db.data.parts.push({ id: "other-workspace-part", workspaceId: "ws-other", name: "Other workspace part", fileId: "f2", material: "PLA", process: "0.2mm", plates: 1, variants: [], status: "ready" });
+      db.data.skus.push({ id: "other-workspace-sku", workspaceId: "ws-other", sku: "OTHER-TENANT", title: "Other Tenant SKU", parts: ["Other workspace part"], variants: [], price: 99, stock: 1, channel: "Manual" });
 
       const materialMap = await app.inject({ method: "POST", url: "/api/catalog/material-map", headers: auth(token), payload: { apply: true } });
       expect(materialMap.statusCode).toBe(200);
@@ -4682,6 +4697,21 @@ endsolid s3_store`;
       ]));
       expect(catalogExport.json().csv).toContain('"QC-BRACKET"');
       expect(catalogExport.json().csv).toContain('"QC linked bracket"');
+      expect(catalogExport.json().csv).not.toContain("OTHER-TENANT");
+      expect(catalogExport.json().rows.some((row) => row.sku === "OTHER-TENANT")).toBe(false);
+      const catalogExportEvent = db.data.events.find((event) => event.type === "catalog.exported");
+      expect(catalogExportEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: expect.objectContaining({
+          workspaceId: "ws-default",
+          rows: catalogExport.json().rows.length,
+          skus: expect.any(Number),
+          parts: expect.any(Number),
+          files: expect.any(Number)
+        })
+      });
+      expect(catalogExportEvent.data).toMatchObject({ actorEmail: "demo@layerpilot.test", actorType: "user" });
+      expect(JSON.stringify(catalogExportEvent.data)).not.toContain("QC-BRACKET");
 
       const order = await app.inject({
         method: "POST",

@@ -6382,7 +6382,18 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
 
   app.get("/api/catalog/export", async (request, reply) => {
     if (!hasPermission(request.user, "catalog:write")) return reply.code(403).send({ error: "Missing permission: catalog:write" });
-    return buildCatalogExport(database.data);
+    const scoped = workspaceScopeForUser(database.data, request.user);
+    const exported = buildCatalogExport(scoped);
+    await dispatchEvent(database, "catalog.exported", `${request.user.email} exported catalog CSV`, {
+      workspaceId: request.user.workspaceId,
+      exportedAt: exported.exportedAt,
+      rows: exported.rows.length,
+      skus: scoped.skus?.length || 0,
+      parts: scoped.parts?.length || 0,
+      files: scoped.files?.length || 0
+    }, { actor: request.user });
+    await database.write();
+    return exported;
   });
 
   app.post("/api/catalog/material-map", async (request, reply) => {
@@ -6425,7 +6436,21 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   app.get("/api/audit/export", async (request, reply) => {
     if (!hasPermission(request.user, "admin:export")) return reply.code(403).send({ error: "Missing permission: admin:export" });
     const options = parseAuditQuery(request.query || {});
-    const events = buildAuditEvents(workspaceScopeForUser(database.data, request.user), { ...options, limit: request.query?.limit ? options.limit : 1000 });
+    const effectiveOptions = { ...options, limit: request.query?.limit ? options.limit : 1000 };
+    const page = buildAuditEventPage(workspaceScopeForUser(database.data, request.user), effectiveOptions);
+    const events = page.events;
+    const exportedAt = new Date().toISOString();
+    await dispatchEvent(database, "admin.audit_exported", `${request.user.email} exported audit CSV`, {
+      workspaceId: request.user.workspaceId,
+      exportedAt,
+      type: options.type || "",
+      searchApplied: Boolean(options.search),
+      limit: effectiveOptions.limit,
+      offset: effectiveOptions.offset,
+      matchedEvents: page.matched,
+      exportedEvents: events.length
+    }, { actor: request.user });
+    await database.write();
     const date = new Date().toISOString().slice(0, 10);
     reply.header("content-disposition", `attachment; filename="layerpilot-audit-${date}.csv"`);
     reply.type("text/csv; charset=utf-8");

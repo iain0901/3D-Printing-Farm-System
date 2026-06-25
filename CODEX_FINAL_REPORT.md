@@ -5,6 +5,7 @@
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
 - Commits:
+  - Pending round 77 commit: CSV export audit evidence
   - Current `HEAD` `docs: record codex round 76 status`
   - `c1705fc` `docs: record codex round 76 status`
   - `a90fb7f` `feat: audit file previews`
@@ -162,6 +163,10 @@
   - `7e42cc7` `feat: scope audit retention by workspace`
   - Current `HEAD` `docs: record codex round 69 push`
 - QC result:
+  - Round 77 targeted `npm run test -- api/server.test.mjs -t "audit events with filters|catalog records"`: failed before implementation as expected, catalog export included another workspace SKU and audit export had no `admin.audit_exported` evidence.
+  - Round 77 targeted `npm run test -- api/server.test.mjs -t "audit events with filters|catalog records"`: passed, 2 tests passed.
+  - Round 77 full API `npm run test -- api/server.test.mjs`: passed, 132 tests passed.
+  - Round 77 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 151 tests passed.
   - Round 76 targeted `npm run test -- api/server.test.mjs -t "builds safe file previews"`: failed before implementation as expected, previews did not persist `file.previewed` audit evidence.
   - Round 76 targeted `npm run test -- api/server.test.mjs -t "builds safe file previews"`: passed, 1 test passed.
   - Round 76 broader file/storage `npm run test -- api/server.test.mjs -t "model files|stored files|file artifact writes|storage payload coverage|downloads stored files|builds safe file previews"`: passed, 7 tests passed.
@@ -435,6 +440,10 @@
 
 ## Completed Features
 
+- Scoped authenticated `/api/catalog/export` CSV output to the requesting workspace so another tenant's SKUs/parts are not included in a catalog export.
+- Added `catalog.exported` audit evidence for authenticated catalog CSV exports, including workspace/operator context and row/object counts without storing exported CSV bodies.
+- Added `admin.audit_exported` audit evidence for audit CSV exports, including filter, matched-count, and exported-count metadata without storing exported evidence rows.
+- Added regression coverage for workspace-scoped catalog exports and compact CSV export audit events, and documented the review path in README, operations, and production-readiness docs.
 - Added `file.previewed` audit evidence for authenticated model/G-code previews, including workspace/operator context, file ID/name/type, storage-backed status, preview kind, and byte counts.
 - Added `file.downloaded` audit evidence for authenticated model/G-code downloads, including workspace/operator context, file ID/name/type, storage-backed versus fallback-manifest status, and byte counts.
 - File access audit metadata intentionally excludes file contents, local storage paths, and object-storage keys.
@@ -718,3 +727,4 @@
 - Production readiness now fails when worker telemetry or bridge polling is enabled and the worker heartbeat is missing or stale; operators must verify the `layerpilot-worker` service and shared database/volume on the live host.
 - Production readiness now fails when API-key IP restrictions are enabled with an empty or invalid IPv4/CIDR allowlist; operators must correct workspace settings before relying on scoped automation keys.
 - File-download and file-preview audit evidence is now captured, but operators still need to include `/api/audit?type=file.downloaded` and `/api/audit?type=file.previewed` review in live access-review and incident-response drills.
+- Catalog CSV and audit CSV export evidence is now captured, but operators still need to include `/api/audit?type=catalog.exported` and `/api/audit?type=admin.audit_exported` review in live access-review and evidence-export drills.
