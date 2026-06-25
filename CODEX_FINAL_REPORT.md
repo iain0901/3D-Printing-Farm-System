@@ -20,6 +20,8 @@
   - Round 2 final `npm run qc`: passed, build passed, Vitest 9 files / 81 tests passed.
   - Round 3 targeted `npm run test -- api/server.test.mjs`: passed, 66 tests passed.
   - Round 3 final `npm run qc`: passed, build passed, Vitest 9 files / 82 tests passed.
+  - Round 4 targeted `npm run test -- api/server.test.mjs`: passed, 66 tests passed.
+  - Round 4 final `npm run qc`: passed, build passed, Vitest 9 files / 82 tests passed.
 
 ## Completed Features
 
@@ -38,6 +40,9 @@
 - Added absolute and idle session expiry controls with defaults of 168 hours and 24 hours.
 - Legacy plaintext session rows are migrated to hashed storage on successful use, avoiding surprise deploy-time logout.
 - Documented session policy in `.env.example`, README, install, operations, and production-readiness docs.
+- Added tenant-safe operator audit context for core order, catalog, job-generation, and admin export/integrity/restore events.
+- Added regression coverage confirming signup-tenant order events appear in that tenant's audit feed with workspace and operator metadata.
+- Documented audit traceability checks in the operations runbook and production-readiness checklist.
 
 ## Remaining Blockers
 

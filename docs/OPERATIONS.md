@@ -21,6 +21,7 @@ This runbook covers routine production operation for a 3DSTU FarmFlow VPS.
 
 - Use dry-run job generation before committing SKU-linked orders.
 - API clients that create orders or queue work should send a unique `Idempotency-Key` on retry-prone requests. Supported routes replay the original 2xx response for the same actor, key, route, and body, and return `409` if the same key is reused with different input.
+- Review `/api/audit` after core production changes; order, catalog, admin export, integrity, restore, and job-generation events include the workspace and authenticated operator context for traceability.
 - Use Hold when an order should stop progressing but remain recoverable.
 - Use Cancel when the customer or operator stops the order. Cancelled orders cascade to linked non-terminal generated jobs and release reserved filament.
 - Use Complete only after all fulfillment work is done.

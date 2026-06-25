@@ -1914,8 +1914,10 @@ async function deliverWebhook(database, webhook, event, fetchImpl = globalThis.f
 }
 
 async function dispatchEvent(database, type, message, data = {}, options = {}) {
-  const workspaceId = data.workspaceId || options.workspaceId || DEFAULT_WORKSPACE_ID;
-  const event = { id: randomUUID(), workspaceId, type, message, data: { ...data, workspaceId }, at: options.at || new Date().toISOString() };
+  const actor = options.actor || null;
+  const workspaceId = data.workspaceId || options.workspaceId || actor?.workspaceId || DEFAULT_WORKSPACE_ID;
+  const actorData = actor ? { actorId: actor.id, actorEmail: actor.email, actorRole: actor.role, actorType: "user" } : {};
+  const event = { id: randomUUID(), workspaceId, type, message, data: { ...data, ...actorData, workspaceId }, at: options.at || new Date().toISOString() };
   database.data.events.unshift(event);
   applyAuditRetention(database.data, { now: event.at });
   const matching = (database.data.webhooks || []).filter((webhook) => itemInWorkspace(webhook, workspaceId) && webhookMatches(webhook, type));
@@ -2002,6 +2004,7 @@ function auditTypeMatches(eventType = "", filter = "") {
 function normalizeAuditEvent(event) {
   return {
     id: event.id || randomUUID(),
+    workspaceId: event.workspaceId || event.data?.workspaceId || DEFAULT_WORKSPACE_ID,
     type: String(event.type || "unknown"),
     message: String(event.message || ""),
     at: event.at || new Date(0).toISOString(),
@@ -5501,7 +5504,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const retention = applyAuditRetention(database.data);
     database.data.dataMeta ||= {};
     database.data.dataMeta.auditRetentionLastRunAt = new Date().toISOString();
-    await dispatchEvent(database, "admin.audit_retention_run", `${request.user.email} ran audit retention`, { retention });
+    await dispatchEvent(database, "admin.audit_retention_run", `${request.user.email} ran audit retention`, { retention }, { actor: request.user });
     await database.write();
     return { retention, events: database.data.events.length, ranAt: database.data.dataMeta.auditRetentionLastRunAt };
   });
@@ -5574,7 +5577,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!hasPermission(request.user, "admin:export")) return reply.code(403).send({ error: "Missing permission: admin:export" });
     const exportedAt = new Date().toISOString();
     const includeFiles = request.query?.includeFiles === "true";
-    await dispatchEvent(database, "admin.export", `${request.user.email} exported workspace data`, { exportedAt, userId: request.user.id, includeFiles });
+    await dispatchEvent(database, "admin.export", `${request.user.email} exported workspace data`, { exportedAt, userId: request.user.id, includeFiles }, { actor: request.user });
     await database.write();
     reply.header("content-disposition", `attachment; filename="layerpilot-export-${exportedAt.slice(0, 10)}.json"`);
     const scoped = workspaceScopeForUser(database.data, request.user);
@@ -5597,7 +5600,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const report = await buildDataIntegrityReport(workspaceScopeForUser(database.data, request.user), { checkStorage: request.query?.checkStorage === "true" });
     database.data.dataMeta ||= {};
     database.data.dataMeta.integrityLastCheckedAt = report.checkedAt;
-    await dispatchEvent(database, "admin.integrity_checked", `${request.user.email} checked data integrity`, { ok: report.ok, errors: report.errors.length, warnings: report.warnings.length });
+    await dispatchEvent(database, "admin.integrity_checked", `${request.user.email} checked data integrity`, { ok: report.ok, errors: report.errors.length, warnings: report.warnings.length }, { actor: request.user });
     await database.write();
     return report;
   });
@@ -5613,13 +5616,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (parsed.data.dryRun !== false) return { dryRun: true, ...prepared.summary };
     if (parsed.data.confirm !== "RESTORE") return reply.code(409).send({ error: "Restore commit requires confirm: RESTORE", dryRun: true, ...prepared.summary });
     database.data = prepared.data;
-    database.data.events.unshift({
-      id: randomUUID(),
-      type: "admin.restore",
-      message: `${request.user.email} restored workspace data`,
-      data: { summary: prepared.summary },
-      at: new Date().toISOString()
-    });
+    await dispatchEvent(database, "admin.restore", `${request.user.email} restored workspace data`, { summary: prepared.summary }, { actor: request.user });
     await ensureAuthData(database, { skipDemoUser: true });
     await database.write();
     broadcastRealtime(database, "state", { reason: "admin.restore", state: realtimeState(database.data), summary: prepared.summary });
@@ -6440,7 +6437,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsed.success) return reply.code(400).send({ error: "Invalid order payload", issues: parsed.error.issues });
     const order = { id: `ord-${1000 + database.data.orders.length + 1}`, workspaceId: request.user.workspaceId, ...parsed.data, updatedAt: new Date().toISOString() };
     database.data.orders.push(order);
-    database.data.events.unshift({ id: randomUUID(), type: "order.created", message: `${order.id} from ${order.source}`, at: order.updatedAt });
+    await dispatchEvent(database, "order.created", `${order.id} from ${order.source}`, { orderId: order.id, source: order.source, customer: order.customer }, { actor: request.user, at: order.updatedAt });
     await database.write();
     return reply.code(201).send(order);
   });
@@ -6507,7 +6504,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!database.data.files.some((file) => file.id === parsed.data.fileId && itemInWorkspace(file, request.user.workspaceId))) return reply.code(404).send({ error: "Linked file not found" });
     const part = { id: randomUUID(), workspaceId: request.user.workspaceId, ...parsed.data, updatedAt: new Date().toISOString() };
     database.data.parts.push(part);
-    database.data.events.unshift({ id: randomUUID(), type: "part.created", message: part.name, at: part.updatedAt });
+    await dispatchEvent(database, "part.created", part.name, { partId: part.id, fileId: part.fileId, material: part.material }, { actor: request.user, at: part.updatedAt });
     await database.write();
     return reply.code(201).send(part);
   });
@@ -6520,7 +6517,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const part = database.data.parts.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!part) return reply.code(404).send({ error: "Part not found" });
     Object.assign(part, parsed.data, { updatedAt: new Date().toISOString() });
-    database.data.events.unshift({ id: randomUUID(), type: "part.updated", message: part.name, at: part.updatedAt });
+    await dispatchEvent(database, "part.updated", part.name, { partId: part.id, fileId: part.fileId, material: part.material }, { actor: request.user, at: part.updatedAt });
     await database.write();
     return part;
   });
@@ -6661,7 +6658,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (exists) return reply.code(409).send({ error: "SKU already exists" });
     const sku = { id: randomUUID(), workspaceId: request.user.workspaceId, ...parsed.data, updatedAt: new Date().toISOString() };
     database.data.skus.push(sku);
-    database.data.events.unshift({ id: randomUUID(), type: "sku.created", message: sku.sku, at: sku.updatedAt });
+    await dispatchEvent(database, "sku.created", sku.sku, { skuId: sku.id, sku: sku.sku, parts: sku.parts }, { actor: request.user, at: sku.updatedAt });
     await database.write();
     return reply.code(201).send(sku);
   });
@@ -6677,7 +6674,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const sku = database.data.skus.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!sku) return reply.code(404).send({ error: "SKU not found" });
     Object.assign(sku, parsed.data, { updatedAt: new Date().toISOString() });
-    database.data.events.unshift({ id: randomUUID(), type: "sku.updated", message: sku.sku, at: sku.updatedAt });
+    await dispatchEvent(database, "sku.updated", sku.sku, { skuId: sku.id, sku: sku.sku, parts: sku.parts }, { actor: request.user, at: sku.updatedAt });
     await database.write();
     return sku;
   });
@@ -6689,7 +6686,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const result = generateJobsForOrder(database.data, request.params.id, parsed.data);
     if (result.error) return reply.code(result.statusCode || 400).send({ error: result.error });
     if (!result.dryRun && !result.duplicateBlocked) {
-      await dispatchEvent(database, "order.jobs_generated", `${result.jobs.length} jobs generated for ${result.order.id}`, { orderId: result.order.id, jobs: result.jobs.map((job) => job.id), missing: result.missing, stockChanges: result.stockChanges });
+      await dispatchEvent(database, "order.jobs_generated", `${result.jobs.length} jobs generated for ${result.order.id}`, { orderId: result.order.id, jobs: result.jobs.map((job) => job.id), missing: result.missing, stockChanges: result.stockChanges }, { actor: request.user });
       await database.write();
     }
     return result;

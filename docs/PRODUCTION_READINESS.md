@@ -21,6 +21,7 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 - [ ] Operator accounts have only the permissions needed for daily production.
 - [ ] API keys have the minimum required scopes.
 - [ ] API key IP/CIDR allowlists are enabled when automation runs from fixed networks.
+- [ ] `/api/audit` shows recent production/admin events with the expected workspace and operator context.
 
 ## Production Workflows
 

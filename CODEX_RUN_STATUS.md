@@ -1,14 +1,22 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 3 pushed
+- Phase: round 4 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 3 auth/session hardening implemented, QC passed, and branch pushed to `origin/codex/production-saas-completion-20260624`.
+- Current state: Round 4 tenant-safe operator audit events implemented, targeted tests and full QC passed, preparing commit/push.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 9 files / 79 tests passed)
 - Current plan:
-  - Continue with next production-readiness slice only if requested in a follow-up run.
+  - Add regression coverage showing tenant production events appear in the tenant audit log with actor context.
+  - Route affected direct event writes through the audit dispatcher with workspace and actor metadata.
+  - Run targeted API tests, full `npm run qc`, commit, and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 4 repo inspection started at 2026-06-25T01:52:41Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Added tenant audit regression coverage for order creation events with workspace and operator context.
+  - Routed core order/catalog/admin audit writes through the event dispatcher with actor metadata.
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (66 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 82 tests passed).
   - Round 3 repo inspection started at 2026-06-25 UTC.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Added regression coverage for hashed session storage, stale session expiry, and legacy plaintext session migration.

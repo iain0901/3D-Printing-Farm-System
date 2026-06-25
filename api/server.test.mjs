@@ -681,6 +681,29 @@ describe("3DSTU FarmFlow API", () => {
       expect(tenantPrinter.statusCode).toBe(201);
       expect(tenantPrinter.json()).toMatchObject({ name: "Tenant CoreXY", workspaceId: tenantWorkspaceId });
 
+      const tenantOrder = await app.inject({
+        method: "POST",
+        url: "/api/orders",
+        headers: auth(tenantToken),
+        payload: { source: "Manual", customer: "Tenant Customer", items: ["TENANT-PART x1"], status: "received", due: "Tomorrow 12:00", value: 120 }
+      });
+      expect(tenantOrder.statusCode).toBe(201);
+      expect(tenantOrder.json()).toMatchObject({ customer: "Tenant Customer", workspaceId: tenantWorkspaceId });
+
+      const tenantAudit = await app.inject({ method: "GET", url: "/api/audit?type=order.created&limit=5", headers: auth(tenantToken) });
+      expect(tenantAudit.statusCode).toBe(200);
+      expect(tenantAudit.json()).toMatchObject({ returned: 1 });
+      expect(tenantAudit.json().events[0]).toMatchObject({
+        workspaceId: tenantWorkspaceId,
+        type: "order.created",
+        data: {
+          workspaceId: tenantWorkspaceId,
+          actorEmail: "tenant.owner@layerpilot.test",
+          actorRole: "Owner",
+          orderId: tenantOrder.json().id
+        }
+      });
+
       const defaultToken = await login(app, "owner@layerpilot.test", "layerpilot");
       const defaultState = await app.inject({ method: "GET", url: "/api/state", headers: auth(defaultToken) });
       expect(defaultState.statusCode).toBe(200);
@@ -701,6 +724,7 @@ describe("3DSTU FarmFlow API", () => {
       expect(persisted.workspaces.some((workspace) => workspace.id === tenantWorkspaceId && workspace.name === "Tenant Print Farm")).toBe(true);
       expect(persisted.users.find((user) => user.email === "tenant.scheduler@layerpilot.test")).toMatchObject({ workspaceId: tenantWorkspaceId });
       expect(persisted.apiKeys.find((key) => key.name === "Tenant automation")).toMatchObject({ workspaceId: tenantWorkspaceId });
+      expect(persisted.events.find((event) => event.type === "order.created" && event.data?.orderId === tenantOrder.json().id)).toMatchObject({ workspaceId: tenantWorkspaceId, data: { actorEmail: "tenant.owner@layerpilot.test" } });
     });
   });
 
