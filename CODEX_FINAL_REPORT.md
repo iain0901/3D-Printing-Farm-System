@@ -110,6 +110,7 @@
   - `df73728` `docs: record codex round 54 status`
   - `d1f0507` `docs: record codex round 54 push`
   - Current `HEAD` `docs: record codex round 54 pushed`
+  - `3489f3d` `feat: paginate audit trail queries`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -285,6 +286,10 @@
   - Round 54 targeted `npm run test -- api/server.test.mjs -t "S3-compatible object store|configured byte limit|exports and restores stored model bytes"`: passed, 3 tests passed.
   - Round 54 targeted `npm run test -- api/server.test.mjs`: passed, 117 tests passed.
   - Round 54 final `npm run qc`: passed, build passed, Vitest 10 files / 135 tests passed.
+  - Round 55 targeted `npm run test -- api/server.test.mjs -t "queries audit events"`: failed before implementation, then passed, 1 test passed.
+  - Round 55 targeted `npm run test -- api/i18n.test.mjs`: passed, 2 tests passed.
+  - Round 55 targeted `npm run test -- api/server.test.mjs`: passed, 117 tests passed.
+  - Round 55 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 135 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs -t "spool metadata updates|maintenance job updates"`: failed before implementation, then passed, 2 tests passed.
   - Round 50 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs`: passed, 114 tests passed.
@@ -459,6 +464,10 @@
 - Added regression coverage proving direct printer status retries replay the original response, and documented the retry contract in README, operations, and production-readiness docs.
 - Added a configurable `LAYERPILOT_FULL_BACKUP_MAX_BYTES` guard for `/api/admin/export?includeFiles=true` so oversized full file-byte exports return `413` with a storage manifest before stored model/G-code bytes are embedded in JSON.
 - Added regression coverage for local and S3 full-backup export paths, including the oversized-export guard, and documented the recommended verified volume/object-storage backup path for larger production file libraries.
+- Added `/api/audit` filtered matched counts, returned counts, offset pagination, and `hasMore` metadata so operators can verify filtered audit evidence without confusing raw workspace totals for matched totals.
+- Made `/api/audit/export` honor matching `type`, `search`, `limit`, and `offset` filters for scoped CSV evidence exports.
+- Updated the Add-ons audit timeline to show live matched counts, load additional audit pages, and display an empty live-result state instead of substituting demo audit rows.
+- Added regression and i18n coverage for audit pagination/export behavior and the new audit empty-state copy, and documented the audit query contract in README, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
