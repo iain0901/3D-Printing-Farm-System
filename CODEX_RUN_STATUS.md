@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 41 in progress
+- Phase: round 41 committed; final report update in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 41 integration configuration retry hardening is in progress on `codex/production-saas-completion-20260624`.
+- Current state: Round 41 integration configuration retry hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`; final report update is in progress before push.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 96 tests passed)
 - Current plan:
   - Add regression coverage for retry-safe webhook, notification channel, commerce connector, add-on, and bridge configuration writes.
@@ -20,6 +20,7 @@
   - Targeted integration configuration idempotency test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "integration configuration"` (1 test).
   - Targeted API suite passed: `npm run test -- api/server.test.mjs` (107 tests).
   - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 124 tests passed).
+  - Committed round 41 implementation as `8a128a9` (`feat: add idempotent integration configuration`).
   - Round 40 repo inspection started at 2026-06-25T08:18:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, and production-readiness docs before editing.
   - Selected production-readiness slice: idempotent file/model artifact writes to prevent duplicate generated model files, Hot Drop queue jobs, and file-version audit events after dropped operator/browser responses.

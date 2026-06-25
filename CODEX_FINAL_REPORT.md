@@ -70,6 +70,7 @@
   - `823e1e7` `docs: record codex round 39 status`
   - `9e163b2` `feat: add idempotent file artifact writes`
   - `39286ce` `docs: record codex round 40 status`
+  - `8a128a9` `feat: add idempotent integration configuration`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -188,6 +189,9 @@
   - Round 40 targeted `npm run test -- api/server.test.mjs -t "file artifact writes"`: failed before implementation, then passed, 1 test passed.
   - Round 40 targeted `npm run test -- api/server.test.mjs`: passed, 106 tests passed.
   - Round 40 final `npm run qc`: passed, build passed, Vitest 10 files / 123 tests passed.
+  - Round 41 targeted `npm run test -- api/server.test.mjs -t "integration configuration"`: failed before implementation, then passed, 1 test passed.
+  - Round 41 targeted `npm run test -- api/server.test.mjs`: passed, 107 tests passed.
+  - Round 41 final `npm run qc`: passed, build passed, Vitest 10 files / 124 tests passed.
 
 ## Completed Features
 
@@ -318,6 +322,9 @@
 - Added idempotent replay/conflict protection for cost catalog updates and catalog material-map runs.
 - Scoped material mapping to the authenticated workspace and added workspace/authenticated actor context to `catalog.material_mapped` audit events.
 - Added regression coverage proving catalog governance retries replay without duplicate pricing/material-normalization audit or run records, and documented the new retry contract.
+- Added idempotent replay/conflict protection for integration configuration writes covering webhook create/update, notification channel create/update, commerce connector create/update, add-on updates, and bridge saves.
+- Added regression coverage proving integration configuration retries replay without duplicate connector records, duplicate add-on/bridge writes, or duplicate setup audit events.
+- Documented integration configuration `Idempotency-Key` usage in README, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -354,6 +361,7 @@
 - File/model artifact idempotency now protects JSON file creation, sample generation, Hot Drop, parametric nameplate, file version, and file deletion retries; multipart file upload remains intentionally outside the generic replay allowlist until stream-body digesting is route-specific.
 - Catalog/profile/printer configuration idempotency now protects setup retries from duplicate setup records and duplicate setup audit events; clients still need stable per-attempt keys when retrying configuration writes.
 - Cost catalog and material-map idempotency now protects catalog governance retries from duplicate pricing/material-normalization audit or run records; clients still need stable per-attempt keys when retrying those governance writes.
+- Integration configuration idempotency now protects webhook, notification channel, commerce connector, add-on, and bridge setup retries from duplicate records and audit events; clients still need stable per-attempt keys when retrying integration setup writes.
 - Idempotency replay records are intentionally omitted from shared state and admin exports; retry clients should use fresh keys after workspace export/restore rather than expecting replay cache continuity.
 - Audit context now covers the highest-impact production scheduling/queue/bridge/file-version operator actions; remaining lower-risk direct event writes should be migrated only with route-specific delivery and notification review.
 - Ops-check authenticated verification requires valid Owner/Admin credentials or a dedicated smoke account configured in `.env`; otherwise it warns and continues with unauthenticated host checks.
