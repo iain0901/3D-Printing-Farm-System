@@ -13,6 +13,7 @@
   - Current `HEAD` `docs: record final round 2 push`
   - `0f03c57` `feat: harden persisted user sessions`
   - `438b340` `feat: add tenant-safe audit context`
+  - Current `HEAD` `feat: require user session for restore commits`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -23,6 +24,8 @@
   - Round 3 final `npm run qc`: passed, build passed, Vitest 9 files / 82 tests passed.
   - Round 4 targeted `npm run test -- api/server.test.mjs`: passed, 66 tests passed.
   - Round 4 final `npm run qc`: passed, build passed, Vitest 9 files / 82 tests passed.
+  - Round 5 targeted `npm run test -- api/server.test.mjs`: passed, 66 tests passed.
+  - Round 5 final `npm run qc`: passed, build passed, Vitest 9 files / 82 tests passed.
 
 ## Completed Features
 
@@ -44,6 +47,9 @@
 - Added tenant-safe operator audit context for core order, catalog, job-generation, and admin export/integrity/restore events.
 - Added regression coverage confirming signup-tenant order events appear in that tenant's audit feed with workspace and operator metadata.
 - Documented audit traceability checks in the operations runbook and production-readiness checklist.
+- Hardened destructive workspace restore commits so scoped `admin:restore` API keys can run dry-run restore previews but cannot replace workspace data.
+- Added regression coverage for restore preview automation versus user-session-only restore commits.
+- Documented the restore commit gate in the operations runbook and production-readiness checklist.
 
 ## Remaining Blockers
 
@@ -54,3 +60,4 @@
 - Frontend bundle size warning remains from the existing single-bundle app; it does not fail QC.
 - Idempotency is intentionally scoped to non-secret-bearing production workflow routes; broader write API coverage should be added only with route-specific response redaction.
 - Session expiry policy should be reviewed against the customer's shared-device operating model before go-live.
+- Destructive restore commits now require a logged-in Owner/Admin user session; automation should use dry-run restore validation and hand off final commit to an operator.

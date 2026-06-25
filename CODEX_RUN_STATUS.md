@@ -1,16 +1,23 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 4 pushed
+- Phase: round 5 QC passed; commit pending
 - Started: 2026-06-24 UTC
-- Current state: Round 4 tenant-safe operator audit events implemented, QC passed, and branch pushed to `origin/codex/production-saas-completion-20260624`.
+- Current state: Round 5 restore-commit hardening implemented and QC passed; commit/push pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 9 files / 79 tests passed)
 - Current plan:
-  - Add regression coverage showing tenant production events appear in the tenant audit log with actor context.
-  - Route affected direct event writes through the audit dispatcher with workspace and actor metadata.
+  - Add regression coverage proving `admin:restore` API keys can dry-run restore validation but cannot commit destructive restores.
+  - Require a persisted user session for `dryRun: false` restore commits before replacing workspace data.
   - Run targeted API tests, full `npm run qc`, commit, and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 5 repo inspection started at 2026-06-25T02:02:53Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Added regression coverage proving an `admin:restore` API key can preview restore data but cannot commit a destructive restore.
+  - Added a session-only guard for `/api/admin/restore` commits while preserving API-key dry-run restore checks.
+  - Documented the restore commit gate in operations and production-readiness docs.
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (66 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 82 tests passed).
   - Round 4 repo inspection started at 2026-06-25T01:52:41Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Added tenant audit regression coverage for order creation events with workspace and operator context.

@@ -67,6 +67,7 @@ scripts/ubuntu-backup.sh restore /path/to/layerpilot-data-YYYYmmdd-HHMMSS.tgz
 ```
 
 The restore command creates a pre-restore safeguard archive unless `LAYERPILOT_PRE_RESTORE_BACKUP=false` is explicitly set.
+Workspace restore previews may be run with a scoped `admin:restore` API key for automation drills, but committing a restore through `/api/admin/restore` requires a logged-in user session and `confirm: "RESTORE"`.
 
 ## Updates And Rollback
 

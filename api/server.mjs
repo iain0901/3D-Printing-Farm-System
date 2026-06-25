@@ -5610,6 +5610,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const parsed = adminRestoreSchema.safeParse(request.body || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid restore payload", issues: parsed.error.issues });
     const commitRequested = parsed.data.dryRun === false;
+    if (commitRequested && Array.isArray(request.user?.apiScopes)) return reply.code(403).send({ error: "Restore commit requires a user session" });
     const restoreFilePayloads = commitRequested && parsed.data.confirm === "RESTORE";
     const prepared = await prepareRestoreData(database.data, parsed.data.backup, { preserveStoragePaths: parsed.data.preserveStoragePaths, restoreFilePayloads }, request.user);
     if (prepared.error) return reply.code(400).send({ error: prepared.error });

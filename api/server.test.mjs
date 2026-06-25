@@ -2935,6 +2935,31 @@ endsolid s3_store`;
       ]));
       expect(db.data.printers[0].name).not.toBe("Restored Forge");
 
+      const restoreKey = await app.inject({
+        method: "POST",
+        url: "/api/apiKeys",
+        headers: auth(token),
+        payload: { name: "Restore drill automation", scopes: ["admin:restore"], enabled: true }
+      });
+      expect(restoreKey.statusCode).toBe(201);
+      const apiKeyPreview = await app.inject({
+        method: "POST",
+        url: "/api/admin/restore",
+        headers: auth(restoreKey.json().secret),
+        payload: { backup, dryRun: true }
+      });
+      expect(apiKeyPreview.statusCode).toBe(200);
+      expect(apiKeyPreview.json()).toMatchObject({ dryRun: true, printers: backup.data.printers.length, storagePathsStripped: 1 });
+      const apiKeyCommitDenied = await app.inject({
+        method: "POST",
+        url: "/api/admin/restore",
+        headers: auth(restoreKey.json().secret),
+        payload: { backup, dryRun: false, confirm: "RESTORE" }
+      });
+      expect(apiKeyCommitDenied.statusCode).toBe(403);
+      expect(apiKeyCommitDenied.json()).toMatchObject({ error: "Restore commit requires a user session" });
+      expect(db.data.printers[0].name).not.toBe("Restored Forge");
+
       const exportOnlyKey = await app.inject({
         method: "POST",
         url: "/api/apiKeys",
