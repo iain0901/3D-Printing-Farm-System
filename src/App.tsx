@@ -2027,14 +2027,17 @@ function App() {
   };
 
   const updateSpool = async (spoolId: string, patch: Partial<Spool>) => {
+    const attemptKey = `spool-update:${spoolId}`;
     setSpools((items) => items.map((spool) => spool.id === spoolId ? { ...spool, ...patch } : spool));
     try {
       const updated = await apiRequest<Spool>(`/api/spools/${spoolId}`, {
         method: "PATCH",
+        headers: operatorIdempotencyHeaders(attemptKey, { spoolId, patch }),
         body: JSON.stringify(patch)
       });
       setSpools((items) => items.map((spool) => spool.id === spoolId ? updated : spool));
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return updated;
     } catch {
       setBackendStatus("local");
@@ -2243,14 +2246,17 @@ function App() {
   };
 
   const updateMaintenanceJob = async (jobId: string, patch: Partial<MaintenanceJob>) => {
+    const attemptKey = `maintenance-update:${jobId}`;
     setMaintenance((items) => items.map((job) => job.id === jobId ? { ...job, ...patch } : job));
     try {
       const updated = await apiRequest<MaintenanceJob>(`/api/maintenance/${jobId}`, {
         method: "PATCH",
+        headers: operatorIdempotencyHeaders(attemptKey, { jobId, patch }),
         body: JSON.stringify(patch)
       });
       setMaintenance((items) => items.map((job) => job.id === jobId ? updated : job));
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return updated;
     } catch {
       setBackendStatus("local");

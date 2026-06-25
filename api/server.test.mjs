@@ -3397,6 +3397,88 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent spool metadata updates without duplicate inventory audit events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const spool = await app.inject({
+        method: "POST",
+        url: "/api/spools",
+        headers: auth(token),
+        payload: { material: "PETG", color: "#14b8a6", brand: "Metadata Retry", remaining: 700, weight: 1000, location: "Rack Old", dry: true, nfc: "LP-SPOOL-PATCH-RETRY" }
+      });
+      expect(spool.statusCode).toBe(201);
+
+      const headers = { ...auth(token), "idempotency-key": "spool-patch-retry-001" };
+      const payload = { location: "Rack Retry", dry: false, remaining: 680 };
+      const first = await app.inject({ method: "PATCH", url: `/api/spools/${spool.json().id}`, headers, payload });
+      expect(first.statusCode).toBe(200);
+      expect(first.json()).toMatchObject({ id: spool.json().id, location: "Rack Retry", dry: false, remaining: 680 });
+
+      const replay = await app.inject({ method: "PATCH", url: `/api/spools/${spool.json().id}`, headers, payload });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(first.json());
+
+      const conflict = await app.inject({
+        method: "PATCH",
+        url: `/api/spools/${spool.json().id}`,
+        headers,
+        payload: { ...payload, remaining: 650 }
+      });
+      expect(conflict.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.events.filter((event) => event.type === "spool.updated" && event.message.includes("Metadata Retry"))).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "spool-patch-retry-001")).toMatchObject({
+        method: "PATCH",
+        path: `/api/spools/${spool.json().id}`,
+        replayCount: 1,
+        statusCode: 200
+      });
+    });
+  });
+
+  it("replays idempotent maintenance job updates without duplicate maintenance audit events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const maintenance = await app.inject({
+        method: "POST",
+        url: "/api/maintenance",
+        headers: auth(token),
+        payload: { title: "Retry nozzle service", printer: "Forge Retry", status: "scheduled", due: "Monday", progress: "0/2", severity: "Medium" }
+      });
+      expect(maintenance.statusCode).toBe(201);
+
+      const headers = { ...auth(token), "idempotency-key": "maintenance-patch-retry-001" };
+      const payload = { status: "in progress", progress: "1/2" };
+      const first = await app.inject({ method: "PATCH", url: `/api/maintenance/${maintenance.json().id}`, headers, payload });
+      expect(first.statusCode).toBe(200);
+      expect(first.json()).toMatchObject({ id: maintenance.json().id, status: "in progress", progress: "1/2" });
+
+      const replay = await app.inject({ method: "PATCH", url: `/api/maintenance/${maintenance.json().id}`, headers, payload });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(first.json());
+
+      const conflict = await app.inject({
+        method: "PATCH",
+        url: `/api/maintenance/${maintenance.json().id}`,
+        headers,
+        payload: { ...payload, progress: "2/2" }
+      });
+      expect(conflict.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.events.filter((event) => event.type === "maintenance.updated" && event.message.includes("Retry nozzle service"))).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "maintenance-patch-retry-001")).toMatchObject({
+        method: "PATCH",
+        path: `/api/maintenance/${maintenance.json().id}`,
+        replayCount: 1,
+        statusCode: 200
+      });
+    });
+  });
+
   it("replays idempotent purchase reorder plans without creating duplicate requests", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);

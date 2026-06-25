@@ -1594,7 +1594,9 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "PATCH" && /^\/api\/files\/[^/]+\/version$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/files\/[^/]+\/slice$/.test(routePath)) return true;
   if (method === "DELETE" && /^\/api\/files\/[^/]+$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/spools\/[^/]+$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/spools\/[^/]+\/usage$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/maintenance\/[^/]+$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/queue\/[^/]+\/(schedule|status|priority)$/.test(routePath)) return true;
   return false;
 }

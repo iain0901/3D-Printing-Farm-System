@@ -1,17 +1,29 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 49 committed and pushed
+- Phase: round 50 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 49 production admin 2FA disable hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 50 retry-safe inventory and maintenance update hardening is in progress on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage proving production Owner/Admin users cannot disable 2FA while workspace `requireAdmin2fa` remains enabled.
-  - Enforce the production-required admin 2FA policy in `/api/auth/2fa/disable` without affecting non-production or non-required workspaces.
-  - Document the disable guard in README, operations, and production-readiness docs.
-  - Run targeted auth tests and full QC, then commit and push.
+  - Add regression coverage proving spool metadata and maintenance job update retries replay without duplicate audit events.
+  - Add `PATCH /api/spools/:id` and `PATCH /api/maintenance/:id` to the persisted idempotency allowlist.
+  - Document retry-safe spool metadata and maintenance job updates in README, operations, and production-readiness docs.
+  - Run targeted inventory/maintenance tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 50 repo inspection started at 2026-06-25T10:10:49Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, API route allowlist, inventory/maintenance routes, and existing tests before editing.
+  - Selected production-readiness slice: idempotent spool metadata and maintenance job updates for retry-safe operator workflows.
+  - Added regression coverage for retry-safe spool metadata and maintenance job updates.
+  - Targeted regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "spool metadata updates|maintenance job updates"` (2 failing tests; retries did not replay).
+  - Added `PATCH /api/spools/:id` and `PATCH /api/maintenance/:id` to the persisted `Idempotency-Key` allowlist.
+  - Targeted retry-safe inventory/maintenance tests passed: `npm run test -- api/server.test.mjs -t "spool metadata updates|maintenance job updates"` (2 tests).
+  - Wired the built-in spool metadata and maintenance job update controls to generate and reuse browser `Idempotency-Key` headers for the same attempted payload until success.
+  - Targeted browser idempotency helper test passed: `npm run test -- src/idempotency.test.ts` (2 tests).
+  - Documented spool metadata and maintenance job update retry safety in README, operations, and production-readiness docs.
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (114 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 132 tests passed).
   - Round 49 repo inspection started at 2026-06-25T10:06:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, auth/session/TOTP code, idempotency code, and auth/readiness tests before editing.
   - Selected production-readiness slice: prevent production Owner/Admin users from disabling TOTP while workspace `requireAdmin2fa` is enabled.
