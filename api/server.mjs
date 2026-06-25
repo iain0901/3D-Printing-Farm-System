@@ -1493,6 +1493,10 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "POST" && routePath === "/api/queue") return true;
   if (method === "POST" && routePath === "/api/queue/match") return true;
   if (method === "POST" && routePath === "/api/actions") return true;
+  if (method === "POST" && routePath === "/api/files") return true;
+  if (method === "POST" && routePath === "/api/files/sample") return true;
+  if (method === "POST" && routePath === "/api/hot-drop") return true;
+  if (method === "POST" && routePath === "/api/parametric/nameplate") return true;
   if (method === "POST" && routePath === "/api/printers") return true;
   if (method === "POST" && routePath === "/api/parts") return true;
   if (method === "POST" && routePath === "/api/skus") return true;
@@ -1540,7 +1544,9 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "PATCH" && /^\/api\/profiles\/[^/]+\/default$/.test(routePath)) return true;
   if (method === "DELETE" && /^\/api\/profiles\/[^/]+$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/orders\/[^/]+\/status$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/files\/[^/]+\/version$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/files\/[^/]+\/slice$/.test(routePath)) return true;
+  if (method === "DELETE" && /^\/api\/files\/[^/]+$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/spools\/[^/]+\/usage$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/queue\/[^/]+\/(schedule|status|priority)$/.test(routePath)) return true;
   return false;

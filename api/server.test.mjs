@@ -2014,6 +2014,74 @@ endsolid bracket`;
     });
   });
 
+  it("replays idempotent file artifact writes without duplicate files, queue jobs, or version events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+
+      const samplePayload = { name: "Retry sample bracket", folder: "Inbox / Retry", material: "PETG" };
+      const sampleHeaders = { ...auth(token), "idempotency-key": "file-sample-retry-001" };
+      const sample = await app.inject({ method: "POST", url: "/api/files/sample", headers: sampleHeaders, payload: samplePayload });
+      expect(sample.statusCode).toBe(201);
+      const sampleReplay = await app.inject({ method: "POST", url: "/api/files/sample", headers: sampleHeaders, payload: samplePayload });
+      expect(sampleReplay.statusCode).toBe(201);
+      expect(sampleReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(sampleReplay.json()).toEqual(sample.json());
+
+      const hotDropPayload = { mode: "Auto-Queue", name: "Retry hot queue", folder: "Hot Drops / Retry", material: "PETG" };
+      const hotDropHeaders = { ...auth(token), "idempotency-key": "hot-drop-retry-001" };
+      const hotDrop = await app.inject({ method: "POST", url: "/api/hot-drop", headers: hotDropHeaders, payload: hotDropPayload });
+      expect(hotDrop.statusCode).toBe(201);
+      const hotDropReplay = await app.inject({ method: "POST", url: "/api/hot-drop", headers: hotDropHeaders, payload: hotDropPayload });
+      expect(hotDropReplay.statusCode).toBe(201);
+      expect(hotDropReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(hotDropReplay.json()).toEqual(hotDrop.json());
+
+      const versionHeaders = { ...auth(token), "idempotency-key": "file-version-retry-001" };
+      const versioned = await app.inject({ method: "PATCH", url: "/api/files/f2/version", headers: versionHeaders });
+      expect(versioned.statusCode).toBe(200);
+      const versionReplay = await app.inject({ method: "PATCH", url: "/api/files/f2/version", headers: versionHeaders });
+      expect(versionReplay.statusCode).toBe(200);
+      expect(versionReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(versionReplay.json()).toEqual(versioned.json());
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/files/sample",
+        headers: sampleHeaders,
+        payload: { ...samplePayload, material: "PLA" }
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.files.filter((file) => file.name === "retry-sample-bracket.stl")).toHaveLength(1);
+      expect(persisted.files.filter((file) => file.name === "retry-hot-queue.stl")).toHaveLength(1);
+      expect(persisted.queue.filter((job) => job.file === "retry-hot-queue.stl" && job.added === "Hot Drop")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "file.sample_generated" && event.data?.fileId === sample.json().file.id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "hot_drop.handled" && event.data?.fileId === hotDrop.json().file.id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "file.versioned" && event.data?.fileId === "f2")).toHaveLength(1);
+      expect(persisted.files.find((file) => file.id === "f2")).toMatchObject({ version: versioned.json().version });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "file-sample-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/files/sample",
+        replayCount: 1,
+        statusCode: 201
+      });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "hot-drop-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/hot-drop",
+        replayCount: 1,
+        statusCode: 201
+      });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "file-version-retry-001")).toMatchObject({
+        method: "PATCH",
+        path: "/api/files/f2/version",
+        replayCount: 1,
+        statusCode: 200
+      });
+    });
+  });
+
   it("downloads stored files and deletes unreferenced files with storage cleanup", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);
