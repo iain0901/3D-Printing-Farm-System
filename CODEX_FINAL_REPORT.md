@@ -21,6 +21,7 @@
   - `9132a52` `feat: gate production readiness config`
   - `4e982a7` `feat: redact quote portal tokens`
   - Current `HEAD` `docs: record codex round 9 push`
+  - Current `HEAD` `feat: redact integration endpoints`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -41,6 +42,8 @@
   - Round 8 final `npm run qc`: passed, build passed, Vitest 9 files / 85 tests passed.
   - Round 9 targeted `npm run test -- api/server.test.mjs`: passed, 69 tests passed.
   - Round 9 final `npm run qc`: passed, build passed, Vitest 9 files / 85 tests passed.
+  - Round 10 targeted `npm run test -- api/server.test.mjs`: passed, 70 tests passed.
+  - Round 10 final `npm run qc`: passed, build passed, Vitest 9 files / 86 tests passed.
 
 ## Completed Features
 
@@ -79,6 +82,9 @@
 - Redacted customer quote portal bearer tokens from authenticated state, quote list, realtime state, and workspace export surfaces while preserving explicit customer-link generation and rotation.
 - Added regression coverage proving quote portal access tokens stay out of quote list, state, and admin export responses.
 - Documented quote portal link regeneration and rotation expectations after restore.
+- Redacted credential-bearing integration endpoint URL paths and query strings from authenticated state, list endpoints, webhook/notification delivery logs, bridge diagnostics, and workspace exports while preserving server-side stored URLs for deliveries, imports, and bridge commands.
+- Added regression coverage proving webhook, notification, commerce connector, and printer bridge endpoint secrets stay out of API state, lists, delivery logs, and admin exports.
+- Documented integration endpoint redaction and restore/rotation expectations.
 
 ## Remaining Blockers
 
@@ -94,3 +100,4 @@
 - API-key read access is intentionally allowlisted by route and scope; integrations that need broader reads should be reviewed and granted a purpose-specific automation scope instead of falling back to user sessions.
 - Runtime production readiness now fails hard on unsafe default/demo access or weak/missing deployment secrets; operators must fix `.env` before live smoke checks can pass.
 - Workspace exports intentionally omit customer quote portal bearer tokens; operators should regenerate or rotate portal links after restore when customers need access.
+- API responses intentionally show only host-level metadata for webhook, notification, commerce, and bridge endpoints; operators should re-enter full provider URLs when rotating those integration credentials.

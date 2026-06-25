@@ -1,17 +1,25 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 9 pushed
+- Phase: round 10 QC passed
 - Started: 2026-06-24 UTC
-- Current state: Round 9 quote portal token redaction implemented, targeted tests and full QC passed, and branch pushed to `origin/codex/production-saas-completion-20260624`.
+- Current state: Round 10 integration endpoint redaction hardening is implemented, targeted tests and full QC passed, and commit/push is pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 9 files / 79 tests passed)
 - Current plan:
-  - Add regression coverage proving quote portal bearer tokens are not exposed through authenticated state/list/export backup surfaces.
-  - Sanitize quote request responses from shared state, collection list, realtime state, and admin export while keeping explicit customer-link generation usable.
-  - Document quote portal token backup/export handling in operations and production-readiness docs.
-  - Run targeted API tests, full `npm run qc`, commit, and push.
+  - Add regression coverage proving credential-bearing integration URLs and delivery endpoints are redacted from state, list, test, and admin export responses.
+  - Sanitize webhook, notification, commerce, and bridge endpoint responses while preserving stored credentials for actual delivery/test/import operations.
+  - Document integration endpoint backup/export handling in operations and production-readiness docs.
+  - Commit and push round 10.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 10 repo inspection started at 2026-06-25T02:53:49Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: backup/export safety for credential-bearing integration endpoint URLs.
+  - Added regression coverage proving webhook, notification, commerce, and bridge endpoint paths/query strings stay out of API state, lists, delivery logs, and admin exports.
+  - Added endpoint redaction serializers for webhook, notification, commerce, and bridge records plus webhook/notification delivery logs and bridge diagnostics.
+  - Documented integration endpoint redaction and restore/rotation expectations in README and production operations docs.
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (70 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 86 tests passed).
   - Round 9 repo inspection started at 2026-06-25T02:43:55Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: backup/export safety for customer quote portal access tokens.

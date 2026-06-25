@@ -1049,6 +1049,80 @@ describe("3DSTU FarmFlow API", () => {
     });
   });
 
+  it("redacts credential-bearing integration endpoints from state, lists, delivery logs, and exports", async () => {
+    await withApp(async ({ app, db, dbPath }) => {
+      const token = await login(app);
+      const webhookUrl = "https://hooks.slack.com/services/T000/B000/WEBHOOK_SECRET?token=webhook-query-secret";
+      const notificationUrl = "https://discord.com/api/webhooks/NOTIFICATION_SECRET?wait=true";
+      const commerceUrl = "https://commerce.example.test/orders.json?access_token=commerce-query-secret";
+      const bridgeBaseUrl = "http://octoprint.local/api?apikey=bridge-query-secret";
+
+      const webhook = await app.inject({
+        method: "POST",
+        url: "/api/webhooks",
+        headers: auth(token),
+        payload: { name: "Secret webhook", url: webhookUrl, events: ["queue.created"], enabled: true }
+      });
+      expect(webhook.statusCode).toBe(201);
+      expect(JSON.stringify(webhook.json())).not.toContain("WEBHOOK_SECRET");
+      expect(webhook.json()).toMatchObject({ hasUrl: true, urlHost: "https://hooks.slack.com" });
+
+      const notification = await app.inject({
+        method: "POST",
+        url: "/api/notificationChannels",
+        headers: auth(token),
+        payload: { name: "Secret notification", type: "discord", url: notificationUrl, token: "notification-token-secret", events: ["queue.created"], enabled: true }
+      });
+      expect(notification.statusCode).toBe(201);
+      expect(JSON.stringify(notification.json())).not.toContain("NOTIFICATION_SECRET");
+      expect(notification.json()).toMatchObject({ hasUrl: true, urlHost: "https://discord.com", hasToken: true });
+
+      const commerce = await app.inject({
+        method: "POST",
+        url: "/api/commerceConnectors",
+        headers: auth(token),
+        payload: { name: "Secret commerce", source: "Generic", url: commerceUrl, token: "commerce-token-secret", enabled: true, mapping: {} }
+      });
+      expect(commerce.statusCode).toBe(201);
+      expect(JSON.stringify(commerce.json())).not.toContain("commerce-query-secret");
+      expect(commerce.json()).toMatchObject({ hasUrl: true, urlHost: "https://commerce.example.test", hasToken: true });
+
+      const bridge = await app.inject({
+        method: "POST",
+        url: "/api/bridges",
+        headers: auth(token),
+        payload: { printerId: "p1", kind: "octoprint", name: "Secret bridge", baseUrl: bridgeBaseUrl, apiKey: "octo-api-secret", enabled: true }
+      });
+      expect([200, 201]).toContain(bridge.statusCode);
+      expect(JSON.stringify(bridge.json())).not.toContain("bridge-query-secret");
+      expect(bridge.json()).toMatchObject({ hasBaseUrl: true, baseUrlHost: "http://octoprint.local", hasApiKey: true });
+
+      db.data.webhookDeliveries.unshift({ id: "wd-secret", webhookId: webhook.json().id, webhookName: "Secret webhook", eventId: "event-secret", eventType: "queue.created", url: webhookUrl, status: "failed", statusCode: 500, at: new Date().toISOString() });
+      db.data.notificationDeliveries.unshift({ id: "nd-secret", channelId: notification.json().id, channelName: "Secret notification", channelType: "discord", eventId: "event-secret", eventType: "queue.created", url: notificationUrl, status: "failed", statusCode: 500, at: new Date().toISOString() });
+      await db.write();
+
+      const rawDb = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(rawDb.webhooks.find((item) => item.id === webhook.json().id).url).toBe(webhookUrl);
+      expect(rawDb.notificationChannels.find((item) => item.id === notification.json().id).url).toBe(notificationUrl);
+      expect(rawDb.commerceConnectors.find((item) => item.id === commerce.json().id).url).toBe(commerceUrl);
+      expect(rawDb.bridges.find((item) => item.id === bridge.json().id).baseUrl).toBe(bridgeBaseUrl);
+
+      for (const url of ["/api/state", "/api/webhooks", "/api/webhookDeliveries", "/api/notificationChannels", "/api/notificationDeliveries", "/api/commerceConnectors", "/api/bridges", "/api/admin/export"]) {
+        const response = await app.inject({ method: "GET", url, headers: auth(token) });
+        expect(response.statusCode).toBe(200);
+        const text = response.body;
+        expect(text).not.toContain("WEBHOOK_SECRET");
+        expect(text).not.toContain("webhook-query-secret");
+        expect(text).not.toContain("NOTIFICATION_SECRET");
+        expect(text).not.toContain("notification-token-secret");
+        expect(text).not.toContain("commerce-query-secret");
+        expect(text).not.toContain("commerce-token-secret");
+        expect(text).not.toContain("bridge-query-secret");
+        expect(text).not.toContain("octo-api-secret");
+      }
+    });
+  });
+
   it("enforces audit retention policy and preserves protected admin events", async () => {
     await withApp(async ({ app, db, dbPath }) => {
       const token = await login(app);

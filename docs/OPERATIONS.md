@@ -53,8 +53,16 @@ Idempotency is supported for:
 
 - Test each bridge after credential or network changes.
 - A failed diagnostic should move the printer to a safe offline state.
-- Do not expose printer bridge credentials in support bundles or screenshots.
+- API responses, shared state, admin exports, and delivery logs redact bridge base URL paths/query strings and API keys; operators should re-enter or verify bridge endpoints from the integration settings when rotating credentials.
+- Do not expose printer bridge credentials or full endpoint URLs in support bundles or screenshots.
 - Keep manual bridge mode for machines that cannot be controlled safely.
+
+## Integration Endpoints
+
+- Treat webhook, notification, commerce feed, and printer bridge URLs as credentials when they contain provider tokens in the path or query string.
+- API list/state/export responses show only redacted endpoint host metadata plus `hasUrl` or `hasBaseUrl` flags.
+- Stored endpoint URLs remain available server-side for deliveries, connector imports, and bridge commands, but operators should paste the full URL again when replacing or rotating an endpoint.
+- Delivery logs redact endpoint paths and query strings; use provider-side logs for exact destination troubleshooting when needed.
 
 ## Backup And Restore
 
@@ -80,6 +88,7 @@ scripts/ubuntu-backup.sh restore /path/to/layerpilot-data-YYYYmmdd-HHMMSS.tgz
 The restore command creates a pre-restore safeguard archive unless `LAYERPILOT_PRE_RESTORE_BACKUP=false` is explicitly set.
 Workspace restore previews may be run with a scoped `admin:restore` API key for automation drills, but committing a restore through `/api/admin/restore` requires a logged-in user session and `confirm: "RESTORE"`.
 Workspace exports and shared state redact customer quote portal bearer tokens. Restored or migrated quote records receive fresh portal tokens automatically; operators should use the quote customer-link action to generate or rotate customer-facing URLs after a restore.
+Workspace exports and shared state also redact credential-bearing integration endpoint paths/query strings for webhooks, notifications, commerce connectors, delivery logs, and printer bridges while preserving host hints and stored-server-side operation.
 
 ## Updates And Rollback
 

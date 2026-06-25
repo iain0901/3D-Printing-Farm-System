@@ -1175,6 +1175,23 @@ function sanitizeUser(user) {
   return { ...safeUser, twoFactor: twoFactorStatus(user), twoFactorEnabled: twoFactorStatus(user).enabled };
 }
 
+function endpointHost(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const parsed = new URL(raw);
+    return `${parsed.protocol}//${parsed.host}`;
+  } catch {
+    return "";
+  }
+}
+
+function redactEndpointUrl(value) {
+  if (!String(value || "").trim()) return "";
+  const host = endpointHost(value);
+  return host ? `${host} (redacted)` : "redacted endpoint";
+}
+
 function normalizeAddonStatus(status) {
   const normalized = String(status || "").toLowerCase();
   if (addonStatusSchema.safeParse(normalized).success) return normalized;
@@ -1558,7 +1575,10 @@ function publicState(data) {
     ...safeState,
     users: data.users.map(sanitizeUser),
     bridges: (data.bridges || []).map(sanitizeBridge),
+    webhooks: (data.webhooks || []).map(sanitizeWebhook),
+    webhookDeliveries: (data.webhookDeliveries || []).map(sanitizeWebhookDelivery),
     notificationChannels: (data.notificationChannels || []).map(sanitizeNotificationChannel),
+    notificationDeliveries: (data.notificationDeliveries || []).map(sanitizeNotificationDelivery),
     commerceConnectors: (data.commerceConnectors || []).map(sanitizeCommerceConnector),
     apiKeys: (data.apiKeys || []).map(sanitizeApiKey),
     quoteRequests: (data.quoteRequests || []).map(sanitizeQuoteRequest),
@@ -1992,12 +2012,12 @@ async function dispatchEvent(database, type, message, data = {}, options = {}) {
   const matching = (database.data.webhooks || []).filter((webhook) => itemInWorkspace(webhook, workspaceId) && webhookMatches(webhook, type));
   const deliveries = [];
   for (const webhook of matching) {
-    deliveries.push(await deliverWebhook(database, webhook, event, options.fetchImpl || globalThis.fetch));
+    deliveries.push(sanitizeWebhookDelivery(await deliverWebhook(database, webhook, event, options.fetchImpl || globalThis.fetch)));
   }
   const matchingNotifications = (database.data.notificationChannels || []).filter((channel) => itemInWorkspace(channel, workspaceId) && notificationMatches(channel, type));
   const notificationDeliveries = [];
   for (const channel of matchingNotifications) {
-    notificationDeliveries.push(await deliverNotification(database, channel, event, options.fetchImpl || globalThis.fetch));
+    notificationDeliveries.push(sanitizeNotificationDelivery(await deliverNotification(database, channel, event, options.fetchImpl || globalThis.fetch)));
   }
   const mqttDelivery = await deliverMqtt(database, event, options.mqttPublisher || database.mqttPublisher || null);
   const mqttDeliveries = mqttDelivery ? [mqttDelivery] : [];
@@ -2010,7 +2030,41 @@ function sanitizeBridge(bridge) {
   const { apiKey, ...safeBridge } = bridge;
   return {
     ...safeBridge,
+    baseUrl: redactEndpointUrl(bridge.baseUrl),
+    baseUrlHost: endpointHost(bridge.baseUrl),
+    hasBaseUrl: Boolean(bridge.baseUrl),
+    lastDiagnostics: bridge.lastDiagnostics ? sanitizeBridgeDiagnostic(bridge.lastDiagnostics) : bridge.lastDiagnostics,
     hasApiKey: Boolean(apiKey)
+  };
+}
+
+function sanitizeBridgeDiagnostic(diagnostic) {
+  if (!diagnostic) return null;
+  return {
+    ...diagnostic,
+    baseUrl: redactEndpointUrl(diagnostic.baseUrl),
+    baseUrlHost: endpointHost(diagnostic.baseUrl),
+    hasBaseUrl: Boolean(diagnostic.baseUrl)
+  };
+}
+
+function sanitizeWebhook(webhook) {
+  if (!webhook) return null;
+  return {
+    ...webhook,
+    url: redactEndpointUrl(webhook.url),
+    urlHost: endpointHost(webhook.url),
+    hasUrl: Boolean(webhook.url)
+  };
+}
+
+function sanitizeWebhookDelivery(delivery) {
+  if (!delivery) return null;
+  return {
+    ...delivery,
+    url: redactEndpointUrl(delivery.url),
+    urlHost: endpointHost(delivery.url),
+    hasUrl: Boolean(delivery.url)
   };
 }
 
@@ -2019,7 +2073,20 @@ function sanitizeNotificationChannel(channel) {
   const { token, ...safeChannel } = channel;
   return {
     ...safeChannel,
+    url: redactEndpointUrl(channel.url),
+    urlHost: endpointHost(channel.url),
+    hasUrl: Boolean(channel.url),
     hasToken: Boolean(token)
+  };
+}
+
+function sanitizeNotificationDelivery(delivery) {
+  if (!delivery) return null;
+  return {
+    ...delivery,
+    url: redactEndpointUrl(delivery.url),
+    urlHost: endpointHost(delivery.url),
+    hasUrl: Boolean(delivery.url)
   };
 }
 
@@ -2028,6 +2095,9 @@ function sanitizeCommerceConnector(connector) {
   const { token, ...safeConnector } = connector;
   return {
     ...safeConnector,
+    url: redactEndpointUrl(connector.url),
+    urlHost: endpointHost(connector.url),
+    hasUrl: Boolean(connector.url),
     hasToken: Boolean(token)
   };
 }
@@ -5384,7 +5454,10 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   });
   app.get("/api/users", async (request) => scopedWorkspaceData(database.data, request.user.workspaceId).users.map(sanitizeUser));
   app.get("/api/bridges", async (request) => (scopedWorkspaceData(database.data, request.user.workspaceId).bridges || []).map(sanitizeBridge));
+  app.get("/api/webhooks", async (request) => (scopedWorkspaceData(database.data, request.user.workspaceId).webhooks || []).map(sanitizeWebhook));
+  app.get("/api/webhookDeliveries", async (request) => (scopedWorkspaceData(database.data, request.user.workspaceId).webhookDeliveries || []).map(sanitizeWebhookDelivery));
   app.get("/api/notificationChannels", async (request) => (scopedWorkspaceData(database.data, request.user.workspaceId).notificationChannels || []).map(sanitizeNotificationChannel));
+  app.get("/api/notificationDeliveries", async (request) => (scopedWorkspaceData(database.data, request.user.workspaceId).notificationDeliveries || []).map(sanitizeNotificationDelivery));
   app.get("/api/commerceConnectors", async (request) => (scopedWorkspaceData(database.data, request.user.workspaceId).commerceConnectors || []).map(sanitizeCommerceConnector));
   app.get("/api/apiKeys", async (request) => (scopedWorkspaceData(database.data, request.user.workspaceId).apiKeys || []).map(sanitizeApiKey));
   app.get("/api/addons", async (request) => (scopedWorkspaceData(database.data, request.user.workspaceId).addons || []).map(sanitizeAddon));
@@ -5413,7 +5486,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   app.get("/api/costCatalog", async () => database.data.costCatalog);
 
   for (const collection of COLLECTIONS) {
-    if (collection === "bridges" || collection === "notificationChannels" || collection === "commerceConnectors" || collection === "apiKeys" || collection === "addons" || collection === "quoteRequests") continue;
+    if (collection === "bridges" || collection === "webhooks" || collection === "webhookDeliveries" || collection === "notificationChannels" || collection === "notificationDeliveries" || collection === "commerceConnectors" || collection === "apiKeys" || collection === "addons" || collection === "quoteRequests") continue;
     app.get(`/api/${collection}`, async (request) => scopedWorkspaceData(database.data, request.user.workspaceId)[collection] || []);
   }
 
@@ -5767,7 +5840,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     database.data.webhooks.push(webhook);
     await dispatchEvent(database, "webhook.created", `${webhook.name} configured`, { webhookId: webhook.id });
     await database.write();
-    return reply.code(201).send(webhook);
+    return reply.code(201).send(sanitizeWebhook(webhook));
   });
 
   app.patch("/api/webhooks/:id", async (request, reply) => {
@@ -5779,7 +5852,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     Object.assign(webhook, parsed.data, { updatedAt: new Date().toISOString() });
     await dispatchEvent(database, "webhook.updated", `${webhook.name} updated`, { webhookId: webhook.id });
     await database.write();
-    return webhook;
+    return sanitizeWebhook(webhook);
   });
 
   app.post("/api/webhooks/:id/test", async (request, reply) => {
@@ -5790,7 +5863,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     database.data.events.unshift(event);
     const delivery = await deliverWebhook(database, webhook, event);
     await database.write();
-    return { event, delivery, webhook };
+    return { event, delivery: sanitizeWebhookDelivery(delivery), webhook: sanitizeWebhook(webhook) };
   });
 
   app.post("/api/notificationChannels", async (request, reply) => {
@@ -5824,8 +5897,9 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     database.data.events.unshift(event);
     const delivery = await deliverNotification(database, channel, event);
     await database.write();
-    broadcastRealtime(database, "event", { event, notificationDeliveries: [delivery] });
-    return { event, delivery, channel: sanitizeNotificationChannel(channel) };
+    const safeDelivery = sanitizeNotificationDelivery(delivery);
+    broadcastRealtime(database, "event", { event, notificationDeliveries: [safeDelivery] });
+    return { event, delivery: safeDelivery, channel: sanitizeNotificationChannel(channel) };
   });
 
   app.post("/api/apiKeys", { config: { rateLimit: { ...sensitiveRateLimit, groupId: "api-keys-create" } } }, async (request, reply) => {
@@ -6909,7 +6983,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       database.data.events.unshift({ id: randomUUID(), workspaceId: request.user.workspaceId, type: "bridge.diagnostic_failed", message: `${bridge.name} diagnostic failed`, data: { workspaceId: request.user.workspaceId, diagnostic: { ok: false, latencyMs: diagnostic.latencyMs, recommendation: diagnostic.recommendation } }, at: bridge.lastSyncAt });
     }
     await database.write();
-    return { ok: diagnostic.ok, bridge: sanitizeBridge(bridge), printer, status: diagnostic.status, diagnostic };
+    return { ok: diagnostic.ok, bridge: sanitizeBridge(bridge), printer, status: diagnostic.status, diagnostic: sanitizeBridgeDiagnostic(diagnostic) };
   });
 
   app.post("/api/printers/:id/sync", async (request, reply) => {

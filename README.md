@@ -284,7 +284,7 @@ Use the seeded demo account on the auth screen:
 - Email: `demo@layerpilot.test`
 - Password: `layerpilot`
 
-The API uses local bearer-token sessions, password hashes, optional TOTP two-factor auth with one-time recovery codes, and role-based write permissions for core production actions. User responses, state exports, and backup exports strip password hashes, 2FA secrets, and recovery-code hashes.
+The API uses local bearer-token sessions, password hashes, optional TOTP two-factor auth with one-time recovery codes, and role-based write permissions for core production actions. User responses, state exports, and backup exports strip password hashes, 2FA secrets, recovery-code hashes, quote portal bearer tokens, API-key secrets, and credential-bearing integration endpoint URL paths/query strings.
 
 ## Implemented MVP Areas
 
@@ -298,7 +298,7 @@ The API uses local bearer-token sessions, password hashes, optional TOTP two-fac
 - Printer list, detail drawer, API-backed add-printer wizard with capability/build-volume capture, and API-backed printer actions that synchronize printer state, active queue jobs, temperatures, progress, audit events, and optional hardware bridges
 - Printer states aligned to production usage: `idle`, `printing`, `paused`, `offline`, `error`, and `maintenance`
 - Products workspace with API-backed parts, SKUs, variants, file links, SKU/part/material CSV export, API-backed material alias mapping/normalization across parts, files, and queue jobs, and a parametric nameplate builder that generates stored STL files, quote estimates, and optional linked production parts
-- Orders workspace with API-backed Shopify/Etsy/eBay/manual intake, token-safe commerce connectors, JSON feed import, CSV import, duplicate external-order skipping, import history, SKU mapping, fulfillment status updates, SKU-linked queue job generation, preflight job plans, stock-change previews, catalog-gap warnings, and duplicate job-generation blocking
+- Orders workspace with API-backed Shopify/Etsy/eBay/manual intake, token-safe and endpoint-redacted commerce connectors, JSON feed import, CSV import, duplicate external-order skipping, import history, SKU mapping, fulfillment status updates, SKU-linked queue job generation, preflight job plans, stock-change previews, catalog-gap warnings, and duplicate job-generation blocking
 - Cloud files with real multipart model upload, local or S3-compatible stored file bytes, generated sample STL files, API-backed folder records, STL/G-code/3MF metadata parsing, API-backed download/delete with reference protection and storage cleanup, full backup export/restore of stored model and G-code bytes, API-backed version/slice actions, filters, folders, queue actions, file status, versions, model dimensions, thumbnails, and quote estimates
 - Print queue with API-backed status, priority, printer assignment, matching dry-runs, committed queue-to-printer production starts, sortable queue, low-priority queue, automatic matching controls, production slots, bulk actions, and matching inspector
 - Scheduler workspace with API-backed drag-to-schedule flow, an automatic scheduling engine, material/color batch optimization, load-balance optimization, `javascript-lp-solver` constraint scheduling for balanced cost, due-risk, and changeover-minimizing objectives, an unscheduled task pool, printer capability list, production timeline, inline selected-task risk summary, stored schedule warnings, material conflict warnings, size mismatch warnings, printer availability warnings, slot-overlap checks, and due-date risk flags
@@ -311,14 +311,14 @@ The API uses local bearer-token sessions, password hashes, optional TOTP two-fac
 - Maintenance dashboard with API-backed jobs, completion updates, reusable templates, issue reports that can generate maintenance jobs, schedules, inventory, and problem tracking
 - Team users with API-backed invites, temporary passwords, admin password reset, password-reset-required indicators, role/location updates, owner-protection guardrails, permissions, and organization/location fields
 - Signup-created workspace tenancy with schema-versioned workspace records, scoped state/list APIs, scoped users/API keys/settings/billing/export/audit reads, and workspace-tagged production objects for small-team SaaS isolation.
-- Integrations, API-backed scoped API key creation/disable flow, API-backed webhook configuration, test delivery, production-event webhook delivery, and delivery log
-- API-backed OctoPrint, Moonraker, and PrusaLink bridge configuration, key-safe bridge listing, connection tests, manual sync, background polling sync, status broadcasting, and bridge-aware printer actions with persisted local state transitions
+- Integrations, API-backed scoped API key creation/disable flow, endpoint-redacted API-backed webhook configuration, test delivery, production-event webhook delivery, and delivery log
+- API-backed OctoPrint, Moonraker, and PrusaLink bridge configuration, key-safe and endpoint-redacted bridge listing, connection tests, manual sync, background polling sync, status broadcasting, and bridge-aware printer actions with persisted local state transitions
 - Production background worker process for telemetry ticks and OctoPrint/Moonraker/PrusaLink polling, with durable worker heartbeat metadata and internal token-protected API rebroadcasts for WebSocket/SSE clients
 - Authenticated WebSocket realtime channel for production state snapshots, events, heartbeats, telemetry ticks, bridge sync updates, and notification delivery updates, with the browser console using WebSocket first and SSE as a fallback
 - Add-ons marketplace with commerce connectors, API-backed cost catalog, API-backed audit timeline, CSV export, manual audit-retention enforcement, configurable MQTT event publishing, and mobile console toggles
 - PWA mobile console assets with installable manifest, maskable SVG icon, production service worker registration, static app-shell caching, offline fallback page, and API network-only handling to avoid stale production data
 - API-backed Sidebar Hot Drop workflow with persisted upload-only, direct-print, and auto-queue modes that can generate stored sample files, create queue jobs, route unsliced files to slicing, and trigger queue matching for printable files
-- Notification center with API-backed Slack, Discord, custom webhook, and email-provider webhook channel configuration, test delivery, production-event delivery, and delivery log
+- Notification center with endpoint-redacted API-backed Slack, Discord, custom webhook, and email-provider webhook channel configuration, test delivery, production-event delivery, and delivery log
 - API-backed settings for organization, billing plan, real storage usage, units, currency, timezone, theme, user password change, two-factor auth setup, security policy with audit retention days and API key IP/CIDR allowlists, internal/external/Stripe billing sessions, Stripe webhook-synced subscriptions and invoices, admin JSON backup export, full file backup export, and safe restore preview/commit
 
 ## Current Integration Boundaries

@@ -36,6 +36,7 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 - [ ] Spool inventory shows remaining, reserved, and available material.
 - [ ] Maintenance templates and problem reports are configured for the fleet.
 - [ ] Hardware bridges are tested for every connected printer before live work.
+- [ ] Webhook, notification, commerce connector, and bridge endpoints are stored only in the intended production instance; exported/shared API responses redact credential-bearing URL paths and query strings.
 
 ## Data And Recovery
 
@@ -45,6 +46,7 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 - [ ] `scripts/ubuntu-backup.sh restore-drill <archive>` succeeds without touching production data.
 - [ ] `/api/admin/restore` dry-run automation is scoped with `admin:restore`, and destructive restore commits are performed only from a logged-in Owner/Admin session.
 - [ ] Customer quote portal links are regenerated or rotated after restore when needed; workspace exports redact portal bearer tokens and record only whether one exists.
+- [ ] Integration endpoint URLs are re-entered or verified after restore/rotation when provider tokens changed; exports show only redacted host metadata and `hasUrl`/`hasBaseUrl` flags.
 - [ ] `layerpilot-backup.timer` is enabled on Ubuntu production hosts.
 - [ ] Restore and rollback responsibility is assigned to a named operator.
 
