@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 69 committed; push pending
+- Phase: round 69 committed and pushed
 - Started: 2026-06-24 UTC
-- Current state: Round 69 workspace-scoped audit retention hardening is implemented, verified, and committed as `7e42cc7`; push pending.
+- Current state: Round 69 workspace-scoped audit retention hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
   - Add regression coverage proving audit-retention runs only prune the caller workspace's non-protected events.
@@ -23,6 +23,8 @@
   - Full API suite passed: `npm run test -- api/server.test.mjs` (126 tests).
   - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 144 tests passed).
   - Committed round 69 implementation/status/final report as `7e42cc7` (`feat: scope audit retention by workspace`).
+  - Committed round 69 status/final report as `87bdb04` (`docs: record codex round 69 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
   - Round 68 repo inspection started at 2026-06-25T13:39:37Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, readiness/auth/IP allowlist code, route list, and existing readiness/settings tests before editing.
   - Selected production-readiness slice: workspace API-key IP allowlist validation and readiness gate so production cannot silently deploy invalid or empty automation network restrictions.
