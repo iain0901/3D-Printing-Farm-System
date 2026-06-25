@@ -55,7 +55,8 @@
   - Current `HEAD` `feat: add idempotent queue matching`
   - `754a7ff` `feat: add idempotent history reprints`
   - Current `HEAD` `docs: record codex round 31 push`
-  - Current `HEAD` `feat: add idempotent integration test deliveries`
+  - `62f7a92` `feat: add idempotent integration test deliveries`
+  - Current `HEAD` `docs: record codex round 32 status`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
