@@ -2743,13 +2743,16 @@ function App() {
 
   const createFileFolder = async (draft: Omit<FileFolder, "id" | "fileCount" | "createdAt" | "updatedAt">) => {
     const fallback: FileFolder = { ...draft, id: crypto.randomUUID(), fileCount: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    const attemptKey = `file-folder:${draft.parent || ""}:${draft.name}:${draft.purpose}`;
     try {
       const result = await apiRequest<{ folder: FileFolder; folders: FileFolder[]; created: boolean }>("/api/file-folders", {
         method: "POST",
+        headers: operatorIdempotencyHeaders(attemptKey, draft),
         body: JSON.stringify(draft)
       });
       setFileFolders(result.folders);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return result.folder;
     } catch {
       setFileFolders((items) => [...items, fallback]);

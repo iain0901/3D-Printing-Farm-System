@@ -1522,6 +1522,7 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "POST" && routePath === "/api/queue") return true;
   if (method === "POST" && routePath === "/api/queue/match") return true;
   if (method === "POST" && routePath === "/api/actions") return true;
+  if (method === "POST" && routePath === "/api/file-folders") return true;
   if (method === "POST" && routePath === "/api/files") return true;
   if (method === "POST" && routePath === "/api/files/sample") return true;
   if (method === "POST" && routePath === "/api/hot-drop") return true;

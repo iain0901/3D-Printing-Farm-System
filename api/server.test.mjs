@@ -2356,6 +2356,30 @@ endsolid bracket`;
       expect(reused.statusCode).toBe(200);
       expect(reused.json()).toMatchObject({ created: false });
 
+      const retryHeaders = { ...auth(token), "idempotency-key": "file-folder-retry-001" };
+      const firstRetrySafe = await app.inject({
+        method: "POST",
+        url: "/api/file-folders",
+        headers: retryHeaders,
+        payload: { name: "QC Intake", parent: "Inbox", purpose: "review" }
+      });
+      expect(firstRetrySafe.statusCode).toBe(201);
+      expect(firstRetrySafe.json()).toMatchObject({ created: true, folder: expect.objectContaining({ name: "Inbox / QC Intake" }) });
+
+      const replayRetrySafe = await app.inject({
+        method: "POST",
+        url: "/api/file-folders",
+        headers: retryHeaders,
+        payload: { name: "QC Intake", parent: "Inbox", purpose: "review" }
+      });
+      expect(replayRetrySafe.statusCode).toBe(201);
+      expect(replayRetrySafe.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replayRetrySafe.json().folder.id).toBe(firstRetrySafe.json().folder.id);
+
+      const persistedAfterRetry = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persistedAfterRetry.events.filter((event) => event.type === "file_folder.created" && event.data?.name === "Inbox / QC Intake")).toHaveLength(1);
+      expect(persistedAfterRetry.events.filter((event) => event.type === "file_folder.reused" && event.data?.name === "Inbox / QC Intake")).toHaveLength(0);
+
       const sample = await app.inject({
         method: "POST",
         url: "/api/files/sample",
