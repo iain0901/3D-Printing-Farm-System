@@ -1364,10 +1364,10 @@ class ApiError extends Error {
   }
 }
 
-function realtimeUrl(path: string, token: string) {
+function realtimeUrl(path: string, ticket: string) {
   const base = API_BASE || window.location.origin;
   const url = new URL(path, base);
-  url.searchParams.set("token", token);
+  url.searchParams.set("ticket", ticket);
   if (url.protocol === "http:") url.protocol = "ws:";
   if (url.protocol === "https:") url.protocol = "wss:";
   return url.toString();
@@ -1396,6 +1396,10 @@ async function apiRequest<T>(path: string, init: RequestInit = {}) {
     throw new ApiError(response.status, body);
   }
   return response.json() as Promise<T>;
+}
+
+async function realtimeTicket() {
+  return apiRequest<{ token: string; expiresAt: string }>("/api/events/token", { method: "POST" });
 }
 
 function downloadJsonFile(filename: string, payload: unknown) {
@@ -3272,6 +3276,9 @@ function App() {
 
   useEffect(() => {
     if (!authed || !authToken || authToken === "local-demo" || twoFactorEnrollmentRequired) return;
+    let closed = false;
+    let socket: WebSocket | null = null;
+    let source: EventSource | null = null;
     const handleRealtimePayload = (kind: string, payload: Record<string, unknown>) => {
       if (kind === "state" && payload.state) applyIncomingState(payload.state as Record<string, unknown>);
       if (kind === "event") {
@@ -3282,21 +3289,31 @@ function App() {
       }
       if (kind !== "heartbeat") setBackendStatus("connected");
     };
-    if ("WebSocket" in window) {
-      const socket = new WebSocket(realtimeUrl("/api/events/ws", authToken));
-      socket.onmessage = (event) => {
-        const payload = JSON.parse(event.data || "{}");
-        handleRealtimePayload(payload.event || "", payload.data || {});
-      };
-      socket.onerror = () => setBackendStatus("local");
-      socket.onclose = () => setBackendStatus("local");
-      return () => socket.close();
-    }
-    const source = new EventSource(`${API_BASE}/api/events/stream?token=${encodeURIComponent(authToken)}`);
-    source.addEventListener("state", (event) => handleRealtimePayload("state", JSON.parse((event as MessageEvent).data || "{}")));
-    source.addEventListener("event", (event) => handleRealtimePayload("event", JSON.parse((event as MessageEvent).data || "{}")));
-    source.onerror = () => setBackendStatus("local");
-    return () => source.close();
+    realtimeTicket()
+      .then(({ token }) => {
+        if (closed) return;
+        if ("WebSocket" in window) {
+          socket = new WebSocket(realtimeUrl("/api/events/ws", token));
+          socket.onmessage = (event) => {
+            const payload = JSON.parse(event.data || "{}");
+            handleRealtimePayload(payload.event || "", payload.data || {});
+          };
+          socket.onerror = () => setBackendStatus("local");
+          socket.onclose = () => setBackendStatus("local");
+          return;
+        }
+        const query = new URLSearchParams({ ticket: token });
+        source = new EventSource(`${API_BASE}/api/events/stream?${query.toString()}`);
+        source.addEventListener("state", (event) => handleRealtimePayload("state", JSON.parse((event as MessageEvent).data || "{}")));
+        source.addEventListener("event", (event) => handleRealtimePayload("event", JSON.parse((event as MessageEvent).data || "{}")));
+        source.onerror = () => setBackendStatus("local");
+      })
+      .catch(() => setBackendStatus("local"));
+    return () => {
+      closed = true;
+      socket?.close();
+      source?.close();
+    };
   }, [authed, authToken, twoFactorEnrollmentRequired]);
 
   if (!authed && showMarketing) return <MarketingSite onOpenApp={() => { window.location.hash = "app"; setShowMarketing(false); }} />;

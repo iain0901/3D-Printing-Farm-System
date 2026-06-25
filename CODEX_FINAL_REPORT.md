@@ -4,8 +4,9 @@
 - Pushed remote: `origin/codex/production-saas-completion-20260624`
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
-- Latest round: Round 92 2FA enablement failure audit hardening implemented, verified, committed, and pushed.
+- Latest round: Round 93 realtime session-token URL hardening implemented and verified; commit/push pending.
 - Commits:
+  - Pending `feat: add realtime auth tickets`
   - `e7d4c7d` `docs: record codex round 92 push`
   - `c10349c` `docs: record codex round 92 status`
   - `a6c28eb` `feat: audit 2fa enable code failures`
@@ -198,6 +199,11 @@
   - `7e42cc7` `feat: scope audit retention by workspace`
   - Current `HEAD` `docs: record codex round 69 push`
 - QC result:
+  - Round 93 targeted `npm run test -- api/server.test.mjs -t "realtime tickets"`: failed before implementation as expected, production `/api/state?token=<session>` accepted a full session token from the URL query and returned `200`.
+  - Round 93 targeted `npm run test -- api/server.test.mjs -t "realtime tickets"`: passed, 1 test passed.
+  - Round 93 adjacent auth/realtime `npm run test -- api/server.test.mjs -t "realtime|authenticates users and supports logout|production Owner and Admin sessions"`: passed, 4 tests passed.
+  - Round 93 full API `npm run test -- api/server.test.mjs`: passed, 135 tests passed.
+  - Round 93 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 154 tests passed.
   - Round 92 targeted `npm run test -- api/server.test.mjs -t "two-factor|2FA"`: failed before implementation as expected, invalid-code TOTP enablement returned `401` without `auth.2fa_enable_failed` evidence.
   - Round 92 targeted `npm run test -- api/server.test.mjs -t "two-factor|2FA"`: passed, 4 tests passed.
   - Round 92 full API `npm run test -- api/server.test.mjs`: passed, 134 tests passed.

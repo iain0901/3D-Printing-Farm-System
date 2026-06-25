@@ -187,6 +187,65 @@ describe("3DSTU FarmFlow API", () => {
     });
   });
 
+  it("issues one-time realtime tickets without accepting production bearer query auth", async () => {
+    await withEnv({
+      NODE_ENV: "production",
+      LAYERPILOT_ADMIN_EMAIL: "owner@example.com",
+      LAYERPILOT_ADMIN_PASSWORD: "production-owner-password",
+      LAYERPILOT_WORKER_TOKEN: "worker-token-32-characters-minimum",
+      LAYERPILOT_METRICS_TOKEN: "metrics-token-32-characters-minimum",
+      LAYERPILOT_DISABLE_DEFAULT_USERS: "true",
+      LAYERPILOT_DISABLE_DEMO_LOGIN: "true"
+    }, async () => {
+      await withApp(async ({ app, db }) => {
+        const loginResponse = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "owner@example.com", password: "production-owner-password" } });
+        expect(loginResponse.statusCode).toBe(200);
+        const token = loginResponse.json().token;
+
+        const setup = await app.inject({ method: "POST", url: "/api/auth/2fa/setup", headers: auth(token) });
+        expect(setup.statusCode).toBe(200);
+        const enable = await app.inject({
+          method: "POST",
+          url: "/api/auth/2fa/enable",
+          headers: auth(token),
+          payload: { secret: setup.json().secret, code: generateTotpCode(setup.json().secret), password: "production-owner-password" }
+        });
+        expect(enable.statusCode).toBe(200);
+
+        const stateByQueryToken = await app.inject({ method: "GET", url: `/api/state?token=${encodeURIComponent(token)}` });
+        expect(stateByQueryToken.statusCode).toBe(401);
+
+        const ticket = await app.inject({ method: "POST", url: "/api/events/token", headers: auth(token) });
+        expect(ticket.statusCode).toBe(200);
+        expect(ticket.json()).toMatchObject({ token: expect.any(String), expiresAt: expect.any(String) });
+        expect(ticket.json().token).not.toBe(token);
+        expect(JSON.stringify(db.data)).not.toContain(ticket.json().token);
+
+        await app.ready();
+        const collector = createWebSocketCollector();
+        const socket = await app.injectWS(`/api/events/ws?ticket=${encodeURIComponent(ticket.json().token)}`, {}, { onInit: (ws) => collector.attach(ws) });
+        try {
+          const initial = await collector.waitFor((message) => message.event === "state");
+          expect(initial.data).toMatchObject({ reason: "ws.open" });
+        } finally {
+          socket.close();
+        }
+
+        const replayCollector = createWebSocketCollector();
+        const replayedSocket = await app.injectWS(`/api/events/ws?ticket=${encodeURIComponent(ticket.json().token)}`, {}, { onInit: (ws) => replayCollector.attach(ws) });
+        try {
+          const replayError = await replayCollector.waitFor((message) => message.event === "error");
+          expect(replayError.data).toMatchObject({ error: "Authentication required" });
+        } finally {
+          replayedSocket.close();
+        }
+
+        const streamByQueryToken = await app.inject({ method: "GET", url: `/api/events/stream?token=${encodeURIComponent(token)}` });
+        expect(streamByQueryToken.statusCode).toBe(401);
+      });
+    });
+  });
+
   it("reports readiness and protects operational metrics", async () => {
     await withEnv({ LAYERPILOT_METRICS_TOKEN: "metrics-secret" }, async () => {
       await withApp(async ({ app }) => {

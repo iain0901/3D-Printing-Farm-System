@@ -1,17 +1,30 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 92 committed and pushed
+- Phase: round 93 verified; commit/push pending
 - Started: 2026-06-24 UTC
-- Current state: Round 92 2FA enablement failure audit hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 93 realtime session-token URL hardening is implemented and verified; commit/push are still pending.
 - Baseline QC: Round 86 passed `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed)
 - Current plan:
-  - Add regression coverage requiring invalid-code TOTP enablement attempts to create sanitized `auth.2fa_enable_failed` audit evidence.
-  - Harden `/api/auth/2fa/enable` so bad authenticator-code attempts are traceable without storing submitted codes, TOTP secrets, recovery codes, or passwords.
-  - Update production docs/runbooks for 2FA enablement failure evidence.
-  - Run targeted auth coverage, full API tests, and full QC, then commit and push.
+  - Add regression coverage requiring production protected APIs to reject session/API-key query credentials and realtime clients to use one-time tickets.
+  - Harden backend user auth so production ignores `?token=` for session/API-key credentials while issuing short-lived `/api/events/token` realtime tickets.
+  - Update the browser realtime WebSocket/SSE connection flow to use tickets instead of long-lived bearer tokens in URLs.
+  - Update production docs/runbooks for realtime ticket auth.
+  - Run targeted auth/realtime coverage, full API tests, and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 93 repo inspection started at 2026-06-25T20:20:44Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, auth/session helpers, realtime WebSocket/SSE routes, and existing auth/realtime tests before editing.
+  - Selected production-readiness slice: realtime session-token URL hardening so production browser connections do not put long-lived user bearer tokens in proxy/access-log URLs.
+  - Added regression coverage requiring production protected APIs to reject `?token=` session credentials, `/api/events/token` to issue a short-lived one-time realtime ticket without persisting the raw ticket, ticket replay to fail, and old realtime `?token=` auth to be rejected.
+  - Targeted realtime-token regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "realtime tickets"` (protected `/api/state?token=<session>` returned `200` in production).
+  - Implemented in-memory hashed realtime tickets with 60-second expiry and one-time consumption, added protected `POST /api/events/token`, and moved WebSocket/SSE route auth into realtime handlers so ticket URLs work without reopening query credential auth for protected APIs.
+  - Updated the React realtime client to request a ticket over normal `Authorization` auth, then use `?ticket=` for WebSocket/SSE URLs instead of `?token=<bearer>`.
+  - Documented production realtime-ticket behavior in README, operations, and production-readiness docs.
+  - Targeted realtime-token coverage passed: `npm run test -- api/server.test.mjs -t "realtime tickets"` (1 test).
+  - Adjacent auth/realtime coverage passed: `npm run test -- api/server.test.mjs -t "realtime|authenticates users and supports logout|production Owner and Admin sessions"` (4 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (135 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 154 tests passed).
   - Round 92 repo inspection started at 2026-06-25T20:06:39Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, auth/session routes, and existing auth tests before editing.
   - Selected production-readiness slice: 2FA enablement failure audit hardening so invalid authenticator-code attempts during TOTP enrollment leave sanitized operator/workspace evidence.

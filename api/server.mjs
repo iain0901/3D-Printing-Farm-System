@@ -67,6 +67,8 @@ const DEFAULT_SESSION_TTL_HOURS = 7 * 24;
 const DEFAULT_SESSION_IDLE_TIMEOUT_HOURS = 24;
 const DEFAULT_AUTH_LOCK_THRESHOLD = 5;
 const DEFAULT_AUTH_LOCK_MINUTES = 15;
+const REALTIME_TICKET_TTL_MS = 60 * 1000;
+const REALTIME_TICKET_MAX_RECORDS = 1000;
 const API_KEY_GRANTABLE_SCOPES = [
   "actions:write",
   "admin:export",
@@ -1952,9 +1954,13 @@ async function prepareRestoreCommitIdempotentRequest(database, request, reply, {
   return false;
 }
 
+function allowQueryCredentialAuth(request) {
+  return process.env.NODE_ENV !== "production";
+}
+
 function userFromRequest(database, request) {
   const queryToken = typeof request.query?.token === "string" ? request.query.token : "";
-  const token = request.headers.authorization?.replace(/^Bearer\s+/i, "") || queryToken;
+  const token = request.headers.authorization?.replace(/^Bearer\s+/i, "") || (allowQueryCredentialAuth(request) ? queryToken : "");
   const session = token ? pruneExpiredSessions(database.data).find((item) => sessionMatchesToken(item, token)) : null;
   const user = session ? database.data.users.find((item) => item.id === session.userId) : null;
   if (user) {
@@ -1981,6 +1987,57 @@ function userFromRequest(database, request) {
       apiScopes: key.scopes
     }
   };
+}
+
+function realtimeTicketHash(token) {
+  return createHash("sha256").update(String(token || "")).digest("hex");
+}
+
+function pruneRealtimeTickets(database, nowMs = Date.now()) {
+  database.realtimeTickets ||= new Map();
+  for (const [hash, ticket] of database.realtimeTickets) {
+    if (Date.parse(ticket.expiresAt || "") <= nowMs) database.realtimeTickets.delete(hash);
+  }
+  while (database.realtimeTickets.size > REALTIME_TICKET_MAX_RECORDS) {
+    const oldest = database.realtimeTickets.keys().next().value;
+    if (!oldest) break;
+    database.realtimeTickets.delete(oldest);
+  }
+  return database.realtimeTickets;
+}
+
+function createRealtimeTicket(database, user) {
+  const token = randomBytes(32).toString("base64url");
+  const nowMs = Date.now();
+  const expiresAt = new Date(nowMs + REALTIME_TICKET_TTL_MS).toISOString();
+  pruneRealtimeTickets(database, nowMs).set(realtimeTicketHash(token), {
+    userId: user.id,
+    workspaceId: user.workspaceId || DEFAULT_WORKSPACE_ID,
+    createdAt: new Date(nowMs).toISOString(),
+    expiresAt
+  });
+  return { token, expiresAt };
+}
+
+function consumeRealtimeTicket(database, token) {
+  const normalized = String(token || "").trim();
+  if (!normalized) return null;
+  const tickets = pruneRealtimeTickets(database);
+  const hash = realtimeTicketHash(normalized);
+  const ticket = tickets.get(hash);
+  if (!ticket) return null;
+  tickets.delete(hash);
+  const user = database.data.users.find((item) => item.id === ticket.userId && itemInWorkspace(item, ticket.workspaceId));
+  if (!user) return null;
+  user.workspaceId ||= ticket.workspaceId || DEFAULT_WORKSPACE_ID;
+  return { user, ticket };
+}
+
+function realtimeUserFromRequest(database, request) {
+  const ticketToken = typeof request.query?.ticket === "string" ? request.query.ticket : "";
+  if (ticketToken) return consumeRealtimeTicket(database, ticketToken) || { user: null, ticket: null };
+  const credentials = userFromRequest(database, request);
+  return { user: credentials.user, ticket: null, session: credentials.session, apiKey: credentials.apiKey };
 }
 
 function publicState(data) {
@@ -5908,6 +5965,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   const database = db || await openDatabase();
   activeObjectStorage = objectStorageAdapter;
   database.realtimeClients ||= new Set();
+  database.realtimeTickets ||= new Map();
   database.mqttPublisher = mqttPublisher;
   const startedAt = new Date();
   const app = Fastify({ logger: false });
@@ -5979,7 +6037,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
 
   app.addHook("preHandler", async (request, reply) => {
     const routePath = request.url.split("?")[0];
-    const publicRoute = routePath === "/api/health" || routePath === "/api/readiness" || routePath === "/api/metrics" && hasValidMetricsToken(request) || routePath === "/api/internal/worker-broadcast" && hasValidWorkerToken(request) || routePath === "/api/billing/webhook/stripe" || routePath === "/api/public/quoteRequests" || routePath.startsWith("/api/public/quoteRequests/") || routePath.startsWith("/api/auth/") || serveStatic && !routePath.startsWith("/api/");
+    const publicRoute = routePath === "/api/health" || routePath === "/api/readiness" || routePath === "/api/metrics" && hasValidMetricsToken(request) || routePath === "/api/internal/worker-broadcast" && hasValidWorkerToken(request) || routePath === "/api/billing/webhook/stripe" || routePath === "/api/public/quoteRequests" || routePath.startsWith("/api/public/quoteRequests/") || routePath.startsWith("/api/auth/") || routePath === "/api/events/stream" || routePath === "/api/events/ws" || serveStatic && !routePath.startsWith("/api/");
     if (publicRoute) return;
     if (await replayCommittedRestoreRequest(database, request, reply)) return;
     const { session, user, apiKey } = userFromRequest(database, request);
@@ -6063,6 +6121,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     reply.type("text/plain; version=0.0.4; charset=utf-8");
     return buildOperationalMetrics(database, startedAt);
   });
+  app.post("/api/events/token", async (request) => createRealtimeTicket(database, request.user));
   app.post("/api/auth/login", { config: { rateLimit: authRateLimit } }, async (request, reply) => {
     const parsed = authSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Invalid login payload", issues: parsed.error.issues });
@@ -6284,8 +6343,15 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
 
   app.get("/api/state", async (request) => realtimeStateForUser(database.data, request.user));
   app.get("/api/events/stream", async (request, reply) => {
-    const { user } = userFromRequest(database, request);
+    const { user } = realtimeUserFromRequest(database, request);
     if (!user) return reply.code(401).send({ error: "Authentication required" });
+    if (requiresProductionAdminTwoFactor(database.data, user, "GET", "/api/events/stream")) {
+      return reply.code(403).send({
+        error: "Two-factor enrollment required",
+        requiresTwoFactorEnrollment: true,
+        remediation: "Enroll TOTP two-factor authentication before accessing production admin APIs."
+      });
+    }
     reply.hijack();
     reply.raw.writeHead(200, {
       "content-type": "text/event-stream; charset=utf-8",
@@ -6309,10 +6375,15 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     client.send("state", { reason: "stream.open", state: realtimeStateForUser(database.data, user) });
   });
   app.get("/api/events/ws", { websocket: true }, (socket, request) => {
-    const { user } = userFromRequest(database, request);
+    const { user } = realtimeUserFromRequest(database, request);
     if (!user) {
       socket.send(JSON.stringify({ event: "error", data: { error: "Authentication required" } }));
       socket.close(1008, "Authentication required");
+      return;
+    }
+    if (requiresProductionAdminTwoFactor(database.data, user, "GET", "/api/events/ws")) {
+      socket.send(JSON.stringify({ event: "error", data: { error: "Two-factor enrollment required", requiresTwoFactorEnrollment: true } }));
+      socket.close(1008, "Two-factor enrollment required");
       return;
     }
     const client = {
