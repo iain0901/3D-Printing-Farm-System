@@ -102,6 +102,7 @@
   - Current `HEAD` `docs: record codex round 50 push`
   - `4a82481` `feat: add production dependency readiness gate`
   - `4ddeb7d` `docs: record codex round 51 status`
+  - `6822902` `feat: add idempotent file folders`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -264,6 +265,10 @@
   - Round 51 targeted `npm run test -- api/server.test.mjs -t "readiness|health|integrity"`: passed, 7 tests passed.
   - Round 51 targeted `npm run test -- api/server.test.mjs`: passed, 115 tests passed.
   - Round 51 final `npm run qc`: passed, build passed, Vitest 10 files / 133 tests passed.
+  - Round 52 targeted `npm run test -- api/server.test.mjs -t "file folders"`: failed before implementation, then passed, 1 test passed.
+  - Round 52 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
+  - Round 52 targeted `npm run test -- api/server.test.mjs`: passed, 115 tests passed.
+  - Round 52 final `npm run qc`: passed, build passed, Vitest 10 files / 133 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs -t "spool metadata updates|maintenance job updates"`: failed before implementation, then passed, 2 tests passed.
   - Round 50 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs`: passed, 114 tests passed.
@@ -430,6 +435,9 @@
 - Added regression coverage proving spool metadata and maintenance job update retries replay the original response and conflicting retry bodies return `409`, and documented the retry contract in README, operations, and production-readiness docs.
 - Added a live `NODE_ENV=production` `/api/readiness` dependency gate that validates DB adapter, S3 object storage, Stripe billing, and MQTT event-stream configuration consistency without exposing secret values.
 - Added regression coverage proving incomplete optional production dependency configuration fails readiness, and documented the live gate in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for file folder creation so dropped operator/browser responses replay the original create/reuse response without duplicate folder audit events.
+- Wired the built-in Files page folder action to generate stable per-attempt browser `Idempotency-Key` headers until success.
+- Added regression coverage proving file folder retries replay the original response, and documented the retry contract in README, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
