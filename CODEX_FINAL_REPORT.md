@@ -120,6 +120,8 @@
   - `cecb222` `feat: add idempotent commerce connector tests`
   - `178dc30` `docs: record codex round 58 push`
   - Current `HEAD` `docs: record codex round 58 final report`
+  - `ddefc9b` `feat: block incomplete full backup exports`
+  - Current `HEAD` `docs: record codex round 59 final report`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -311,6 +313,10 @@
   - Round 58 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
   - Round 58 targeted `npm run test -- api/server.test.mjs`: passed, 119 tests passed.
   - Round 58 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 137 tests passed.
+  - Round 59 targeted `npm run test -- api/server.test.mjs -t "stored file payloads are missing"`: failed before implementation, then passed, 1 test passed.
+  - Round 59 targeted `npm run test -- api/server.test.mjs -t "stored file payloads are missing|stored model bytes|missing file payload coverage|configured byte limit"`: passed, 4 tests passed.
+  - Round 59 targeted `npm run test -- api/server.test.mjs`: passed, 120 tests passed.
+  - Round 59 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 138 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs -t "spool metadata updates|maintenance job updates"`: failed before implementation, then passed, 2 tests passed.
   - Round 50 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs`: passed, 114 tests passed.
@@ -498,6 +504,8 @@
 - Added restore preview/commit `filePayloadCoverage` summaries for stored model/G-code files so operators can see expected, included, missing, and extra payloads before committing a JSON restore.
 - Updated the Settings restore panel to show stored file payload coverage directly in the restore preview.
 - Added regression coverage for missing restore file payload detection, and documented the restore coverage check in README, operations, and production-readiness docs.
+- Added a fail-closed missing-file guard for `/api/admin/export?includeFiles=true` so full JSON exports return `409` with a storage manifest when referenced stored model/G-code bytes cannot be read, unless an operator explicitly requests `allowMissingFiles=true`.
+- Added regression coverage for blocked and intentional partial full-backup exports, and documented the partial-export recovery requirement in README, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -508,6 +516,7 @@
 - Live production readiness now fails when configured S3, Stripe, or MQTT integrations are incomplete or malformed; operators must either complete those settings or leave the optional integration disabled before go-live.
 - Frontend bundle size warning remains from the existing single-bundle app; it does not fail QC.
 - Full API JSON file-byte exports are intentionally capped by `LAYERPILOT_FULL_BACKUP_MAX_BYTES`; large production farms should rely on verified volume/object-storage backups unless an operator deliberately raises the API export ceiling.
+- Full API JSON file-byte exports now fail closed when stored file payloads are missing; `allowMissingFiles=true` should be used only with a documented separate volume/object-storage recovery plan.
 - Restore previews now report incomplete JSON file-payload coverage, but operators must still verify any separate volume/object-storage restore path before committing a restore that intentionally omits file bytes.
 - Idempotency coverage is route-specific; token- or secret-returning replay records are intentionally retained only in internal server metadata and omitted from shared state/admin exports.
 - Session expiry policy should be reviewed against the customer's shared-device operating model before go-live.
