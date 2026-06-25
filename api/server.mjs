@@ -1516,6 +1516,7 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "POST" && routePath === "/api/public/quoteRequests") return true;
   if (method === "POST" && routePath === "/api/catalog/material-map") return true;
   if (method === "POST" && routePath === "/api/commerce/import-csv") return true;
+  if (method === "POST" && routePath === "/api/purchaseRequests") return true;
   if (method === "POST" && routePath === "/api/purchaseRequests/reorderPlan") return true;
   if (method === "POST" && routePath === "/api/admin/audit-retention/run") return true;
   if (method === "POST" && routePath === "/api/billing/portal") return true;
@@ -1544,6 +1545,7 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "POST" && /^\/api\/productionTemplates\/[^/]+\/run$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/commerceConnectors\/[^/]+\/import$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/purchaseRequests\/[^/]+\/receive$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/purchaseRequests\/[^/]+$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/printers\/[^/]+$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/parts\/[^/]+$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/skus\/[^/]+$/.test(routePath)) return true;

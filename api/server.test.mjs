@@ -3217,6 +3217,86 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent purchase request writes without duplicate records or update events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const createHeaders = { ...auth(token), "idempotency-key": "purchase-request-create-retry-001" };
+      const createPayload = { material: "ASA", color: "Black", brand: "Retry", quantity: 2, targetGrams: 1000, supplier: "Retry Supplier", status: "open", due: "Friday" };
+
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/purchaseRequests",
+        headers: createHeaders,
+        payload: createPayload
+      });
+      expect(created.statusCode).toBe(201);
+
+      const createReplay = await app.inject({
+        method: "POST",
+        url: "/api/purchaseRequests",
+        headers: createHeaders,
+        payload: createPayload
+      });
+      expect(createReplay.statusCode).toBe(201);
+      expect(createReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(createReplay.json()).toEqual(created.json());
+
+      const createConflict = await app.inject({
+        method: "POST",
+        url: "/api/purchaseRequests",
+        headers: createHeaders,
+        payload: { ...createPayload, quantity: 3 }
+      });
+      expect(createConflict.statusCode).toBe(409);
+
+      const updateHeaders = { ...auth(token), "idempotency-key": "purchase-request-update-retry-001" };
+      const updatePayload = { status: "ordered", due: "Next week" };
+      const updated = await app.inject({
+        method: "PATCH",
+        url: `/api/purchaseRequests/${created.json().id}`,
+        headers: updateHeaders,
+        payload: updatePayload
+      });
+      expect(updated.statusCode).toBe(200);
+      expect(updated.json()).toMatchObject(updatePayload);
+
+      const updateReplay = await app.inject({
+        method: "PATCH",
+        url: `/api/purchaseRequests/${created.json().id}`,
+        headers: updateHeaders,
+        payload: updatePayload
+      });
+      expect(updateReplay.statusCode).toBe(200);
+      expect(updateReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(updateReplay.json()).toEqual(updated.json());
+
+      const updateConflict = await app.inject({
+        method: "PATCH",
+        url: `/api/purchaseRequests/${created.json().id}`,
+        headers: updateHeaders,
+        payload: { status: "cancelled" }
+      });
+      expect(updateConflict.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.purchaseRequests.filter((request) => request.supplier === "Retry Supplier")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "purchase_request.created" && event.data?.purchaseRequestId === created.json().id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "purchase_request.updated" && event.data?.purchaseRequestId === created.json().id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "purchase-request-create-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/purchaseRequests",
+        replayCount: 1,
+        statusCode: 201
+      });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "purchase-request-update-retry-001")).toMatchObject({
+        method: "PATCH",
+        path: `/api/purchaseRequests/${created.json().id}`,
+        replayCount: 1,
+        statusCode: 200
+      });
+    });
+  });
+
   it("replays idempotent spool creation without adding duplicate inventory", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);
