@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 77 ready to commit
+- Phase: round 77 committed; push pending
 - Started: 2026-06-24 UTC
-- Current state: Round 77 CSV export audit evidence is implemented and verified on `codex/production-saas-completion-20260624`; commit/push pending.
+- Current state: Round 77 CSV export audit evidence is implemented, verified, and committed on `codex/production-saas-completion-20260624`; push pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
   - Add regression coverage proving authenticated catalog CSV exports and audit CSV exports create compact audit evidence without storing exported CSV bodies.
@@ -22,6 +22,7 @@
   - Targeted CSV export coverage passed: `npm run test -- api/server.test.mjs -t "audit events with filters|catalog records"` (2 tests).
   - Full API suite passed: `npm run test -- api/server.test.mjs` (132 tests).
   - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 151 tests passed).
+  - Committed round 77 implementation/status/final report as `0348328` (`feat: audit csv exports`).
   - Round 76 repo inspection started at 2026-06-25T16:22:42Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, API route list, file download/preview implementation, and existing file tests before editing.
   - Selected production-readiness slice: audit trail evidence for authenticated model/G-code previews so production file-byte access is reviewable even when operators inspect a preview instead of downloading the file.
