@@ -2076,6 +2076,78 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent scheduler writes without duplicating scheduling events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const headers = { ...auth(token), "idempotency-key": "schedule-auto-retry-001" };
+      const payload = { includeBusyPrinters: true, respectMaterial: true, respectBuildVolume: true, startMinute: 480 };
+      const first = await app.inject({ method: "POST", url: "/api/schedule/auto", headers, payload });
+      const replay = await app.inject({ method: "POST", url: "/api/schedule/auto", headers, payload });
+      const conflict = await app.inject({ method: "POST", url: "/api/schedule/auto", headers, payload: { ...payload, startMinute: 540 } });
+      expect(first.statusCode).toBe(200);
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(first.json());
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.events.filter((event) => event.type === "queue.auto_scheduled")).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "schedule-auto-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/schedule/auto",
+        statusCode: 200,
+        replayCount: 1
+      });
+    });
+
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/queue",
+        headers: auth(token),
+        payload: { fileId: "f2", file: "Batch PETG retry.3mf", material: "PETG", color: "Orange", due: "Today 17:00", dimensions: [80, 60, 30], time: "1h 20m", cost: 28 }
+      });
+      expect(created.statusCode).toBe(201);
+      const headers = { ...auth(token), "idempotency-key": "schedule-optimize-retry-001" };
+      const payload = { strategy: "material-color", includeBusyPrinters: true, respectMaterial: true, respectBuildVolume: true, startMinute: 8 * 60 };
+      const first = await app.inject({ method: "POST", url: "/api/schedule/optimize", headers, payload });
+      const replay = await app.inject({ method: "POST", url: "/api/schedule/optimize", headers, payload });
+      expect(first.statusCode).toBe(200);
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(first.json());
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.events.filter((event) => event.type === "queue.optimized" && event.data?.strategy === "material-color")).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "schedule-optimize-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/schedule/optimize",
+        statusCode: 200,
+        replayCount: 1
+      });
+    });
+
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const headers = { ...auth(token), "idempotency-key": "schedule-constraint-retry-001" };
+      const payload = { objective: "changeover-min", includeBusyPrinters: true, respectMaterial: true, respectBuildVolume: true, startMinute: 8 * 60 };
+      const first = await app.inject({ method: "POST", url: "/api/schedule/constraint", headers, payload });
+      const replay = await app.inject({ method: "POST", url: "/api/schedule/constraint", headers, payload });
+      expect(first.statusCode).toBe(200);
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(first.json());
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.events.filter((event) => event.type === "queue.constraint_scheduled" && event.data?.objective === "changeover-min")).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "schedule-constraint-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/schedule/constraint",
+        statusCode: 200,
+        replayCount: 1
+      });
+    });
+  });
+
   it("optimizes schedules by material/color batches and load balance", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);

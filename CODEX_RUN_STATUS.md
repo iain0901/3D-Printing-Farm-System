@@ -1,16 +1,26 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 27 pushed
+- Phase: round 28 committed
 - Started: 2026-06-24 UTC
-- Current state: Round 27 todo action idempotency hardening is implemented, verified, committed, and ready on `origin/codex/production-saas-completion-20260624`.
+- Current state: Round 28 scheduler idempotency hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 96 tests passed)
 - Current plan:
-  - Add persisted idempotency replay/conflict protection for generated todo action writes.
-  - Cover retries so claim/complete/snooze/reopen requests do not duplicate todo action records or audit events.
-  - Document supported todo action idempotency, run targeted tests and full QC, then commit and push.
+  - Add persisted idempotency replay/conflict protection for scheduler auto/optimize/constraint write APIs.
+  - Cover retries so dropped operator responses do not duplicate scheduler audit events or re-run queue optimization.
+  - Document supported scheduler idempotency, run targeted tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 28 repo inspection started at 2026-06-25T06:25:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent scheduler write retries for auto, optimized, and constraint scheduling operations.
+  - Added failing regression coverage proving scheduler retries need replay semantics to avoid duplicate auto/optimized/constraint scheduling events.
+  - Added scheduler auto/optimize/constraint routes to the persisted `Idempotency-Key` allowlist.
+  - Documented scheduler idempotency in README, operations, and production-readiness docs.
+  - Targeted scheduler idempotency test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "idempotent scheduler"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (91 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 108 tests passed).
+  - Committed round 28 implementation (`feat: add idempotent scheduler writes`).
   - Round 27 repo inspection started at 2026-06-25T06:07:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: idempotent generated todo action retries to prevent duplicate operator action records and audit events after dropped responses.
