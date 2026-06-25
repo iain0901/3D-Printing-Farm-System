@@ -1346,9 +1346,29 @@ describe("3DSTU FarmFlow API", () => {
       const tenantState = await app.inject({ method: "GET", url: "/api/state", headers: auth(tenantToken) });
       expect(tenantState.statusCode).toBe(200);
       expect(tenantState.json().workspaceSettings).toMatchObject({ organizationName: "Tenant Print Farm", workspaceId: tenantWorkspaceId });
+      expect(tenantState.json().costCatalog).toMatchObject({ currency: "USD", materialRates: { PETG: 1.05 }, machineHourlyRate: 18 });
+      expect(tenantState.json().costCatalogs).toBeUndefined();
       expect(tenantState.json().printers).toHaveLength(0);
       expect(tenantState.json().files).toHaveLength(0);
       expect(tenantState.json().users.map((user) => user.email)).toEqual(["tenant.owner@layerpilot.test"]);
+
+      const tenantPricing = await app.inject({
+        method: "PATCH",
+        url: "/api/costCatalog",
+        headers: auth(tenantToken),
+        payload: { materialRates: { PETG: 3 }, machineHourlyRate: 60, failureReservePercent: 0, overheadPercent: 0, minimumQuote: 5 }
+      });
+      expect(tenantPricing.statusCode).toBe(200);
+      expect(tenantPricing.json()).toMatchObject({ materialRates: { PETG: 3 }, machineHourlyRate: 60 });
+
+      const tenantQuote = await app.inject({
+        method: "POST",
+        url: "/api/quotes",
+        headers: auth(tenantToken),
+        payload: { material: "PETG", grams: 100, minutes: 60, includeLabor: false, quantity: 1 }
+      });
+      expect(tenantQuote.statusCode).toBe(200);
+      expect(tenantQuote.json()).toMatchObject({ currency: "USD", materialCost: 3, machineCost: 60, total: 63 });
 
       const invited = await app.inject({
         method: "POST",
@@ -1397,6 +1417,15 @@ describe("3DSTU FarmFlow API", () => {
       expect(tenantPrinter.statusCode).toBe(201);
       expect(tenantPrinter.json()).toMatchObject({ name: "Tenant CoreXY", workspaceId: tenantWorkspaceId });
 
+      const tenantFile = await app.inject({
+        method: "POST",
+        url: "/api/files",
+        headers: auth(tenantToken),
+        payload: { name: "Tenant priced fixture.stl", type: "STL", material: "PETG", dimensions: [80, 80, 20], estimateGrams: 100, estimateMinutes: 60 }
+      });
+      expect(tenantFile.statusCode).toBe(201);
+      expect(tenantFile.json()).toMatchObject({ workspaceId: tenantWorkspaceId, quote: 63, quoteBreakdown: { materialCost: 3, machineCost: 60, total: 63 } });
+
       const tenantOrder = await app.inject({
         method: "POST",
         url: "/api/orders",
@@ -1423,6 +1452,16 @@ describe("3DSTU FarmFlow API", () => {
       const defaultToken = await login(app, "owner@layerpilot.test", "layerpilot");
       const defaultState = await app.inject({ method: "GET", url: "/api/state", headers: auth(defaultToken) });
       expect(defaultState.statusCode).toBe(200);
+      expect(defaultState.json().costCatalog).toMatchObject({ materialRates: { PETG: 1.05 }, machineHourlyRate: 18 });
+      expect(defaultState.json().costCatalogs).toBeUndefined();
+      const defaultQuote = await app.inject({
+        method: "POST",
+        url: "/api/quotes",
+        headers: auth(defaultToken),
+        payload: { material: "PETG", grams: 100, minutes: 60, includeLabor: false, quantity: 1 }
+      });
+      expect(defaultQuote.statusCode).toBe(200);
+      expect(defaultQuote.json()).toMatchObject({ materialCost: 1.05, machineCost: 18, total: 21.72 });
       expect(defaultState.json().workspaceSettings.workspaceId).not.toBe(tenantWorkspaceId);
       expect(defaultState.json().printers.length).toBeGreaterThan(0);
       expect(defaultState.json().printers.map((printer) => printer.id)).not.toContain(tenantPrinter.json().id);

@@ -1,16 +1,27 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 86 committed and pushed
+- Phase: round 87 verified locally; commit and push pending
 - Started: 2026-06-24 UTC
-- Current state: Round 86 order lifecycle retry-safety evidence is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
-- Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
+- Current state: Round 87 workspace-scoped cost catalog isolation is implemented and verified locally; commit and push are pending.
+- Baseline QC: Round 86 passed `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed)
 - Current plan:
-  - Add regression coverage proving order status retries replay without duplicate order lifecycle audit events or double material release for generated cancelled order work.
-  - Document order lifecycle retry-safety evidence in README, operations, and production-readiness docs.
-  - Run targeted order lifecycle coverage, broader order/queue coverage, full API tests, and full QC, then commit and push.
+  - Add regression coverage proving signup-created tenant cost catalog changes do not leak into the default workspace, scoped state does not expose the raw `costCatalogs` map, and quote/file estimates use the authenticated workspace catalog.
+  - Implement workspace-scoped cost catalog reads, updates, quote calculation, generated-file estimates, and slicer estimates while preserving the legacy default workspace `costCatalog` shape.
+  - Document tenant pricing isolation in README, operations, and production-readiness docs.
+  - Run targeted cost/tenant coverage, full API tests, and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 87 repo inspection started at 2026-06-25T18:33:08Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, install docs, roadmap, package metadata, API route list, workspace scoping helpers, cost catalog routes, quote/file estimate call sites, and existing tenant/cost catalog tests before editing.
+  - Selected production-readiness slice: workspace-scoped cost catalog isolation for tenant pricing, quote calculation, and file/slicer estimates.
+  - Added regression coverage requiring signup-created tenant pricing changes to stay out of default workspace state and quote calculations, with scoped `/api/state` omitting the raw multi-tenant `costCatalogs` map.
+  - Implemented per-workspace cost catalog helpers and wired authenticated cost catalog reads/updates plus quote, direct file, generated file, upload, parametric, and slicer estimate paths through the authenticated workspace catalog.
+  - Documented tenant pricing isolation in README, operations, and production-readiness docs.
+  - Targeted tenant isolation coverage passed: `npm run test -- api/server.test.mjs -t "creates isolated workspaces"` (1 test).
+  - Adjacent cost catalog coverage passed: `npm run test -- api/server.test.mjs -t "cost catalog|catalog governance|creates isolated workspaces|quotes and file estimates"` (3 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (134 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed).
   - Round 86 repo inspection started at 2026-06-25T18:19:59Z.
   - Reviewed current branch, recent commits, run status, final report, README, install, operations, release, production-readiness, roadmap, package metadata, API route list, idempotency allowlist, order lifecycle routes, UI idempotency headers, and existing order/queue/material tests before editing.
   - Selected production-readiness slice: order lifecycle retry-safety regression coverage for status changes that mutate generated queue jobs, material reservations, and operator audit evidence.

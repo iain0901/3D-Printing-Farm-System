@@ -26,7 +26,7 @@ import { seedData } from "./seed.mjs";
 const execFileAsync = promisify(execFile);
 
 const COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "orders", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns"];
-const RESTORABLE_EXTRA_KEYS = ["users", "workspaces", "workspaceSettings", "costCatalog", "profileDefaults", "profileMatchingPolicy", "billingSessions", "invoices", "dataMeta"];
+const RESTORABLE_EXTRA_KEYS = ["users", "workspaces", "workspaceSettings", "costCatalog", "costCatalogs", "profileDefaults", "profileMatchingPolicy", "billingSessions", "invoices", "dataMeta"];
 const RESTORABLE_KEYS = [...COLLECTIONS, ...RESTORABLE_EXTRA_KEYS];
 const defaultCostCatalog = {
   currency: "USD",
@@ -1036,6 +1036,44 @@ function workspaceForId(data, workspaceId = DEFAULT_WORKSPACE_ID) {
   return data.workspaces.find((workspace) => workspace.id === workspaceId) || data.workspaces[0];
 }
 
+function normalizeCostCatalog(catalog = {}) {
+  return costCatalogSchema.parse({
+    ...defaultCostCatalog,
+    ...(catalog || {}),
+    materialRates: {
+      ...defaultCostCatalog.materialRates,
+      ...((catalog || {}).materialRates || {})
+    }
+  });
+}
+
+function costCatalogForWorkspace(data, workspaceId = DEFAULT_WORKSPACE_ID) {
+  const normalizedWorkspaceId = workspaceForId(data, workspaceId)?.id || DEFAULT_WORKSPACE_ID;
+  const catalogs = ensureRecord(data, "costCatalogs");
+  const catalog = normalizedWorkspaceId === DEFAULT_WORKSPACE_ID ? data.costCatalog : catalogs[normalizedWorkspaceId];
+  return normalizeCostCatalog(catalog || defaultCostCatalog);
+}
+
+function updateCostCatalogForWorkspace(data, workspaceId = DEFAULT_WORKSPACE_ID, patch = {}) {
+  const normalizedWorkspaceId = workspaceForId(data, workspaceId)?.id || DEFAULT_WORKSPACE_ID;
+  const current = costCatalogForWorkspace(data, normalizedWorkspaceId);
+  const next = normalizeCostCatalog({
+    ...current,
+    ...patch,
+    materialRates: {
+      ...current.materialRates,
+      ...(patch.materialRates || {})
+    }
+  });
+  if (normalizedWorkspaceId === DEFAULT_WORKSPACE_ID) {
+    data.costCatalog = next;
+  } else {
+    const catalogs = ensureRecord(data, "costCatalogs");
+    catalogs[normalizedWorkspaceId] = next;
+  }
+  return next;
+}
+
 function markWorkspaceDefaults(data, workspaceId = DEFAULT_WORKSPACE_ID) {
   for (const user of ensureArray(data, "users")) user.workspaceId ||= workspaceId;
   for (const session of ensureArray(data, "sessions")) {
@@ -1063,6 +1101,8 @@ function scopedWorkspaceData(data, workspaceId) {
   scoped.sessions = [];
   scoped.workspaces = [workspace];
   scoped.workspaceSettings = workspace.settings || data.workspaceSettings;
+  scoped.costCatalog = costCatalogForWorkspace(data, workspace.id);
+  delete scoped.costCatalogs;
   return scoped;
 }
 
@@ -1096,6 +1136,7 @@ function applyDataMigrations(data) {
     }
     ensureRecord(data, "workspaceSettings");
     ensureRecord(data, "costCatalog");
+    ensureRecord(data, "costCatalogs");
     ensureRecord(data, "profileDefaults");
     ensureRecord(data, "profileMatchingPolicy");
     applied.push({ version: 1, name: "core collection defaults", appliedAt: now });
@@ -1397,7 +1438,8 @@ async function ensureAuthData(database, options = {}) {
   database.data.dataMeta.idempotencyKeys ||= [];
   database.data.addons = ensureAddonCatalog(database.data.addons || []);
   database.data.workspaceSettings = workspaceSettingsSchema.parse(database.data.workspaceSettings || {});
-  database.data.costCatalog = costCatalogSchema.parse({ ...defaultCostCatalog, ...(database.data.costCatalog || {}) });
+  database.data.costCatalog = normalizeCostCatalog(database.data.costCatalog || defaultCostCatalog);
+  ensureRecord(database.data, "costCatalogs");
   database.data.profileDefaults = profileDefaultsSchema.parse(database.data.profileDefaults || {});
   database.data.profileMatchingPolicy = profileMatchingPolicySchema.parse(database.data.profileMatchingPolicy || {});
   const now = new Date().toISOString();
@@ -3468,7 +3510,7 @@ async function createSampleFile(database, payload, options = {}) {
   const dimensions = [120, 36, 28];
   const grams = 64;
   const minutes = 128;
-  const quote = calculateQuote(database.data.costCatalog, { material: parsed.material, grams, minutes });
+  const quote = calculateQuote(costCatalogForWorkspace(database.data, workspaceId), { material: parsed.material, grams, minutes });
   const file = {
     id,
     workspaceId,
@@ -3514,7 +3556,7 @@ async function createParametricNameplate(database, payload, options = {}) {
   const volumeMm3 = parsed.width * parsed.height * parsed.thickness;
   const grams = Math.max(1, Math.round(volumeMm3 * 0.00124 * 100) / 100);
   const minutes = Math.max(12, Math.round(volumeMm3 / 720));
-  const quote = calculateQuote(database.data.costCatalog, { material: parsed.material, grams, minutes });
+  const quote = calculateQuote(costCatalogForWorkspace(database.data, workspaceId), { material: parsed.material, grams, minutes });
   const file = {
     id,
     workspaceId,
@@ -3575,7 +3617,7 @@ async function createStoredModelFile(database, payload, options = {}) {
   const id = payload.id || randomUUID();
   const folderResult = ensureFileFolder(database.data, { name: folder, purpose: payload.folderPurpose || "inbox", workspaceId });
   const stored = await storeObject(`uploads/${id}/${filename}`, buffer, { filename, type: metadata.type });
-  const quote = calculateQuote(database.data.costCatalog, { material, grams: metadata.estimateGrams, minutes: metadata.estimateMinutes });
+  const quote = calculateQuote(costCatalogForWorkspace(database.data, workspaceId), { material, grams: metadata.estimateGrams, minutes: metadata.estimateMinutes });
   const file = {
     id,
     workspaceId,
@@ -4237,7 +4279,7 @@ async function runSlicerJob(database, payload) {
   const outputPath = path.join(outputDir, outputName);
   const configPath = path.join(outputDir, "layerpilot-slicer-settings.json");
   const estimates = estimateSliceOutput(file, payload);
-  const quote = calculateQuote(database.data.costCatalog, { material: payload.material, grams: estimates.estimateGrams, minutes: estimates.estimateMinutes });
+  const quote = calculateQuote(costCatalogForWorkspace(database.data, payload.workspaceId || DEFAULT_WORKSPACE_ID), { material: payload.material, grams: estimates.estimateGrams, minutes: estimates.estimateMinutes });
   estimates.quote = quote.total;
   estimates.quoteBreakdown = quote;
   await writeFile(configPath, JSON.stringify({ file, printer, profile, settings: payload, estimates }, null, 2));
@@ -5360,7 +5402,7 @@ function dayLabel(value = "") {
 }
 
 function materialWasteCost(data, material, grams) {
-  const catalog = costCatalogSchema.parse({ ...defaultCostCatalog, ...(data.costCatalog || {}) });
+  const catalog = normalizeCostCatalog(data.costCatalog || defaultCostCatalog);
   const materialRate = catalog.materialRates[material] ?? catalog.materialRates[Object.keys(catalog.materialRates).find((key) => String(material || "").toLowerCase().includes(key.toLowerCase())) || "PLA"] ?? 1;
   return Math.round(Number(grams || 0) / 100 * materialRate * 100) / 100;
 }
@@ -6206,7 +6248,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     return snapshot;
   });
   app.get("/api/billing", async (request) => buildBillingSummary(workspaceScopeForUser(database.data, request.user), { stripeClient }));
-  app.get("/api/costCatalog", async () => database.data.costCatalog);
+  app.get("/api/costCatalog", async (request) => costCatalogForWorkspace(database.data, request.user.workspaceId));
 
   for (const collection of COLLECTIONS) {
     if (collection === "bridges" || collection === "webhooks" || collection === "webhookDeliveries" || collection === "notificationChannels" || collection === "notificationDeliveries" || collection === "commerceConnectors" || collection === "apiKeys" || collection === "addons" || collection === "quoteRequests") continue;
@@ -6864,14 +6906,10 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!hasPermission(request.user, "catalog:write")) return reply.code(403).send({ error: "Missing permission: catalog:write" });
     const parsed = costCatalogPatchSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Invalid cost catalog", issues: parsed.error.issues });
-    database.data.costCatalog = costCatalogSchema.parse({
-      ...database.data.costCatalog,
-      ...parsed.data,
-      materialRates: { ...database.data.costCatalog.materialRates, ...(parsed.data.materialRates || {}) }
-    });
-    await dispatchEvent(database, "cost_catalog.updated", "Cost catalog updated", { workspaceId: request.user.workspaceId, costCatalog: database.data.costCatalog }, { actor: request.user });
+    const costCatalog = updateCostCatalogForWorkspace(database.data, request.user.workspaceId, parsed.data);
+    await dispatchEvent(database, "cost_catalog.updated", "Cost catalog updated", { workspaceId: request.user.workspaceId, costCatalog }, { actor: request.user });
     await database.write();
-    return database.data.costCatalog;
+    return costCatalog;
   });
 
   app.patch("/api/addons/:id", async (request, reply) => {
@@ -6903,7 +6941,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   app.post("/api/quotes", async (request, reply) => {
     const parsed = quoteRequestSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Invalid quote request", issues: parsed.error.issues });
-    return calculateQuote(database.data.costCatalog, parsed.data);
+    return calculateQuote(costCatalogForWorkspace(database.data, request.user.workspaceId), parsed.data);
   });
 
   app.post("/api/printers", async (request, reply) => {
@@ -7086,7 +7124,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const minutes = parsed.data.estimateMinutes || 60;
     const hours = Math.floor(minutes / 60);
     const remainder = String(minutes % 60).padStart(2, "0");
-    const quote = calculateQuote(database.data.costCatalog, { material: parsed.data.material, grams: parsed.data.estimateGrams, minutes });
+    const quote = calculateQuote(costCatalogForWorkspace(database.data, request.user.workspaceId), { material: parsed.data.material, grams: parsed.data.estimateGrams, minutes });
     const file = {
       id: randomUUID(),
       workspaceId: request.user.workspaceId,

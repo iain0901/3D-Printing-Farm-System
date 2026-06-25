@@ -4,8 +4,9 @@
 - Pushed remote: `origin/codex/production-saas-completion-20260624`
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
-- Latest round: Round 86 order lifecycle retry-safety evidence implemented, verified, committed, and pushed.
+- Latest round: Round 87 workspace-scoped cost catalog isolation implemented and verified locally; commit and push pending.
 - Commits:
+  - Pending: `feat: scope cost catalogs by workspace`
   - `c9d4b41` `docs: record codex round 86 push`
   - `5d60b0c` `docs: record codex round 86 status`
   - `cdacddd` `test: cover order lifecycle retries`
@@ -184,6 +185,10 @@
   - `7e42cc7` `feat: scope audit retention by workspace`
   - Current `HEAD` `docs: record codex round 69 push`
 - QC result:
+  - Round 87 targeted `npm run test -- api/server.test.mjs -t "creates isolated workspaces"`: passed, 1 test passed.
+  - Round 87 adjacent cost catalog `npm run test -- api/server.test.mjs -t "cost catalog|catalog governance|creates isolated workspaces|quotes and file estimates"`: passed, 3 tests passed.
+  - Round 87 full API `npm run test -- api/server.test.mjs`: passed, 134 tests passed.
+  - Round 87 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 153 tests passed.
   - Round 86 targeted `npm run test -- api/server.test.mjs -t "order lifecycle cancellation"`: passed, 1 test passed.
   - Round 86 broader order/queue `npm run test -- api/server.test.mjs -t "order lifecycle cancellation|order jobs|queue lifecycle updates|catalog records and generates order jobs|quote conversions"`: passed, 4 tests passed.
   - Round 86 full API `npm run test -- api/server.test.mjs`: passed, 134 tests passed.
