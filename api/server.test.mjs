@@ -3198,6 +3198,77 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent quote portal link rotations without invalidating the original response", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const quote = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        payload: {
+          customer: "Retry Link Buyer",
+          email: "retry-link@example.com",
+          company: "Portal Link Studio",
+          project: "Customer portal link retry",
+          material: "ASA",
+          quantity: 5,
+          due: "2026-08-12",
+          budget: 450,
+          notes: "Portal link rotation retry"
+        }
+      });
+      expect(quote.statusCode).toBe(201);
+      const { id, accessToken: originalToken } = quote.json().quoteRequest;
+      const token = await login(app);
+      const headers = { ...auth(token), "idempotency-key": "quote-link-rotate-retry-001" };
+      const payload = { rotate: true };
+
+      const rotated = await app.inject({
+        method: "POST",
+        url: `/api/quoteRequests/${id}/customer-link`,
+        headers,
+        payload
+      });
+      expect(rotated.statusCode).toBe(200);
+      expect(rotated.json().accessToken).not.toBe(originalToken);
+
+      const replay = await app.inject({
+        method: "POST",
+        url: `/api/quoteRequests/${id}/customer-link`,
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(rotated.json());
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: `/api/quoteRequests/${id}/customer-link`,
+        headers,
+        payload: { rotate: false }
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+
+      const oldTokenStatus = await app.inject({ method: "GET", url: `/api/public/quoteRequests/${id}?token=${originalToken}` });
+      expect(oldTokenStatus.statusCode).toBe(404);
+      const rotatedStatus = await app.inject({ method: "GET", url: `/api/public/quoteRequests/${id}?token=${rotated.json().accessToken}` });
+      expect(rotatedStatus.statusCode).toBe(200);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.quoteRequests.find((item) => item.id === id)).toMatchObject({
+        customerAccessToken: rotated.json().accessToken,
+        portalLinkGeneratedBy: "demo@layerpilot.test"
+      });
+      expect(persisted.events.filter((event) => event.type === "quote_request.portal_link_rotated" && event.data?.quoteRequestId === id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "quote-link-rotate-retry-001")).toMatchObject({
+        method: "POST",
+        path: `/api/quoteRequests/${id}/customer-link`,
+        replayCount: 1,
+        statusCode: 200
+      });
+    });
+  });
+
   it("lets customers accept quoted requests through the public quote portal", async () => {
     await withApp(async ({ app, dbPath }) => {
       const quote = await app.inject({

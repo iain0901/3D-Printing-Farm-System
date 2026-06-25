@@ -31,7 +31,7 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 
 - [ ] Orders can be created from manual entry, CSV, connector import, or quote conversion.
 - [ ] SKU-linked orders can dry-run job generation before committing queue jobs.
-- [ ] External clients and public quote forms use `Idempotency-Key` for retry-prone quote intake, customer quote decisions, order, quote conversion, queue, printer action, inventory, maintenance, filament purchasing, commerce import, billing, and audit-retention write APIs; printer action retries have been smoke-tested against bridge-connected hardware so client retries do not duplicate pause/resume/cancel commands; the built-in public quote form and quote portal controls have been smoke-tested for generated idempotency headers.
+- [ ] External clients and public quote forms use `Idempotency-Key` for retry-prone quote intake, customer quote decisions, quote portal-link generation/rotation, order, quote conversion, queue, printer action, inventory, maintenance, filament purchasing, commerce import, billing, and audit-retention write APIs; quote portal-link rotation retries have been smoke-tested so they do not invalidate the first operator-visible customer link; printer action retries have been smoke-tested against bridge-connected hardware so client retries do not duplicate pause/resume/cancel commands; the built-in public quote form and quote portal controls have been smoke-tested for generated idempotency headers.
 - [ ] State/export handoff files have been checked to confirm internal idempotency replay records are omitted.
 - [ ] Cancelled orders stop linked active generated jobs and release material reservations.
 - [ ] Queue jobs can be scheduled, started, paused, completed, failed, or cancelled.
