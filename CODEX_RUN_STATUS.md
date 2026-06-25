@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 76 committed; push pending
+- Phase: round 76 committed and pushed
 - Started: 2026-06-24 UTC
-- Current state: Round 76 file-preview audit evidence is implemented, verified, and committed on `codex/production-saas-completion-20260624`; push is pending.
+- Current state: Round 76 file-preview audit evidence is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
   - Add regression coverage proving authenticated stored file/G-code previews create compact audit evidence without file contents or storage locations.
@@ -26,6 +26,8 @@
   - Broader file/storage coverage passed after the async fix: `npm run test -- api/server.test.mjs -t "model files|stored files|file artifact writes|storage payload coverage|downloads stored files|builds safe file previews"` (7 tests).
   - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 151 tests passed).
   - Committed round 76 implementation/status/final report as `a90fb7f` (`feat: audit file previews`).
+  - Committed round 76 status/final report as `c1705fc` (`docs: record codex round 76 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
   - Round 75 repo inspection started at 2026-06-25T16:12:57Z.
   - Reviewed current branch, recent commits, run status, final report, README, production-readiness, operations, package metadata, API route/idempotency/auth/readiness code, and file download tests before editing.
   - Selected production-readiness slice: audit trail evidence for stored file/model downloads so production model/G-code exports are reviewable without storing file contents in audit metadata.

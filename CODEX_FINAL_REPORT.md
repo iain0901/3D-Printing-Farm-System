@@ -5,7 +5,8 @@
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
 - Commits:
-  - Current `HEAD` `feat: audit file previews`
+  - Current `HEAD` `docs: record codex round 76 status`
+  - `c1705fc` `docs: record codex round 76 status`
   - `a90fb7f` `feat: audit file previews`
   - Current `HEAD` `docs: record codex round 75 status`
   - `9be0f6c` `feat: audit file downloads`
