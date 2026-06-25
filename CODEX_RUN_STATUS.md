@@ -1,16 +1,26 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 29 committed
+- Phase: round 30 committed
 - Started: 2026-06-24 UTC
-- Current state: Round 29 authenticated quote update idempotency hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`.
+- Current state: Round 30 queue matching idempotency hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 96 tests passed)
 - Current plan:
-  - Add persisted idempotency replay/conflict protection for authenticated quote request update retries.
-  - Cover retries so dropped operator responses do not duplicate quote update audit events.
-  - Document supported quote update idempotency, run targeted tests and full QC, then commit and push.
+  - Add persisted idempotency replay/conflict protection for committed production queue matching retries.
+  - Cover retries so dropped operator responses do not duplicate queue-match assignment audit events.
+  - Document supported queue matching idempotency, run targeted tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 30 repo inspection started at 2026-06-25T06:37:16Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent committed queue matching to prevent duplicate production assignment audit events after operator/browser retries.
+  - Added failing regression coverage proving committed queue-match retries need replay semantics to avoid duplicate `queue.matched` audit events.
+  - Added `/api/queue/match` to the persisted `Idempotency-Key` allowlist.
+  - Documented queue matching idempotency in README, operations, and production-readiness docs.
+  - Targeted queue-match idempotency test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "queue matching commits"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (93 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 110 tests passed).
+  - Committed round 30 implementation (`feat: add idempotent queue matching`).
   - Round 29 repo inspection started at 2026-06-25T06:27:04Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: idempotent authenticated quote request updates to prevent duplicate quote update events after operator/browser retries.

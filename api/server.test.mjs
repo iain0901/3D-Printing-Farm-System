@@ -2311,6 +2311,60 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent queue matching commits without duplicating assignment events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const queued = await app.inject({
+        method: "POST",
+        url: "/api/queue",
+        headers: auth(token),
+        payload: {
+          fileId: "f2",
+          file: "Queue match retry fixture.3mf",
+          material: "Resin",
+          color: "Gray",
+          due: "Today 18:00",
+          dimensions: [90, 60, 40],
+          time: "1h 20m",
+          cost: 34,
+          priority: "Rush"
+        }
+      });
+      expect(queued.statusCode).toBe(201);
+      const jobId = queued.json().job.id;
+      const headers = { ...auth(token), "idempotency-key": "queue-match-retry-001" };
+      const payload = { dryRun: false, maxActiveSlots: 3, respectMaterial: true, respectBuildVolume: true };
+
+      const committed = await app.inject({ method: "POST", url: "/api/queue/match", headers, payload });
+      expect(committed.statusCode).toBe(200);
+      expect(committed.json().matches.some((match) => match.jobId === jobId)).toBe(true);
+
+      const replay = await app.inject({ method: "POST", url: "/api/queue/match", headers, payload });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json().matches).toEqual(committed.json().matches);
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/queue/match",
+        headers,
+        payload: { ...payload, maxActiveSlots: 1 }
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.queue.find((job) => job.id === jobId)).toMatchObject({ status: "printing", stage: "printing" });
+      expect(persisted.events.filter((event) => event.type === "queue.matched")).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "queue-match-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/queue/match",
+        replayCount: 1,
+        statusCode: 200
+      });
+    });
+  });
+
   it("executes printer actions through persisted API state transitions", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);
