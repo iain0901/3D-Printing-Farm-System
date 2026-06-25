@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 95 committed; push pending
+- Phase: round 95 committed and pushed
 - Started: 2026-06-24 UTC
-- Current state: Round 95 bridge audit hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`; push pending.
+- Current state: Round 95 bridge audit hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
 - Baseline QC: Round 86 passed `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed)
 - Current plan:
   - Add regression coverage requiring bridge setup/diagnostic/sync audit evidence to include workspace/operator and redacted bridge metadata without endpoint paths, query tokens, or API keys.
@@ -24,6 +24,8 @@
   - Full API suite passed: `npm run test -- api/server.test.mjs` (135 tests).
   - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 154 tests passed).
   - Committed round 95 implementation/status/docs as `44d68ef` (`feat: add bridge audit context`).
+  - Committed round 95 final report/status as `c28466f` (`docs: record codex round 95 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
   - Round 94 repo inspection started at 2026-06-25T20:33:52Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route/idempotency surface, file routes, and existing file tests before editing.
   - Selected production-readiness slice: file deletion audit hardening so destructive file-library cleanup leaves compact workspace/operator evidence without exposing file bodies, storage paths, object keys, or raw reference records.
