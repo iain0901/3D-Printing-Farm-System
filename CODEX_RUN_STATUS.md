@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 70 in progress
+- Phase: round 70 committed; push pending
 - Started: 2026-06-24 UTC
-- Current state: Round 70 operator retry-safety hardening is implemented and verified; commit/push pending.
+- Current state: Round 70 operator retry-safety hardening is implemented, verified, and committed; push pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
   - Add regression coverage proving parametric nameplate retries replay without duplicate stored files, linked parts, or audit events.
@@ -21,6 +21,7 @@
   - Targeted retry-safety coverage passed: `npm run test -- api/server.test.mjs -t "parametric nameplate|production templates"` (3 tests) and `npm run test -- src/idempotency.test.ts` (3 tests).
   - Full API suite passed: `npm run test -- api/server.test.mjs` (127 tests).
   - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 146 tests passed).
+  - Committed round 70 implementation/status/final report as `f5201f4` (`feat: add operator catalog retry safety`).
   - Round 69 repo inspection started at 2026-06-25T13:54:56Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route list, readiness/auth/admin/audit code, and existing audit/restore tests before editing.
   - Selected production-readiness slice: workspace-scoped audit-retention safety so one tenant/operator cannot prune another workspace's audit evidence.
