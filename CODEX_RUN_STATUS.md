@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 73 verified; commit/push pending
+- Phase: round 73 implementation committed; final docs/push pending
 - Started: 2026-06-24 UTC
-- Current state: Round 73 auth abuse lockout/backoff hardening is implemented and verified on `codex/production-saas-completion-20260624`; commit/push pending.
+- Current state: Round 73 auth abuse lockout/backoff hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`; final report/push pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
   - Add regression coverage proving repeated password and 2FA failures lock known accounts temporarily, audit the lock, and do not store submitted secrets.
@@ -22,6 +22,7 @@
   - Targeted auth coverage passed: `npm run test -- api/server.test.mjs -t "locks known accounts|authenticates users and supports logout|two-factor auth|supports password changes"` (5 tests).
   - Full API suite passed: `npm run test -- api/server.test.mjs` (130 tests).
   - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 149 tests passed).
+  - Committed round 73 implementation/status as `cbf2b88` (`feat: lock repeated auth failures`).
   - Round 72 repo inspection started at 2026-06-25T15:44:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, auth/session code, audit helpers, and existing auth tests before editing.
   - Selected production-readiness slice: failed authentication audit evidence for password and 2FA failures so production access-review evidence includes rejected attempts without storing submitted secrets.

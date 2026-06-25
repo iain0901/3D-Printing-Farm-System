@@ -5,6 +5,7 @@
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
 - Commits:
+  - `cbf2b88` `feat: lock repeated auth failures`
   - Current `HEAD` `docs: record codex round 72 pushed`
   - `8a490e3` `docs: record codex round 72 push`
   - `b82c05a` `docs: record codex round 72 status`
@@ -152,6 +153,10 @@
   - `7e42cc7` `feat: scope audit retention by workspace`
   - Current `HEAD` `docs: record codex round 69 push`
 - QC result:
+  - Round 73 targeted `npm run test -- api/server.test.mjs -t "locks known accounts|authenticates users and supports logout|two-factor auth"`: failed before implementation as expected, repeated failures returned `401` instead of a lock response.
+  - Round 73 targeted `npm run test -- api/server.test.mjs -t "locks known accounts|authenticates users and supports logout|two-factor auth|supports password changes"`: passed, 5 tests passed.
+  - Round 73 full API `npm run test -- api/server.test.mjs`: passed, 130 tests passed.
+  - Round 73 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 149 tests passed.
   - Round 72 targeted `npm run test -- api/server.test.mjs -t "authenticates users and supports logout|two-factor auth"`: passed, 2 tests passed.
   - Round 72 full API `npm run test -- api/server.test.mjs`: passed, 128 tests passed.
   - Round 72 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 147 tests passed.
@@ -405,6 +410,9 @@
 
 ## Completed Features
 
+- Added known-account authentication lockout/backoff for repeated password and 2FA failures, with configurable `LAYERPILOT_AUTH_LOCK_THRESHOLD` and `LAYERPILOT_AUTH_LOCK_MINUTES` defaults.
+- Locked login attempts return `423`, create `auth.login_locked` evidence, and account threshold crossings create `auth.account_locked` audit events without storing submitted passwords, TOTP codes, or recovery codes.
+- Auth failure counters clear on successful authentication after lock expiry, user password change, or Owner/Admin password reset so legitimate operators have a documented recovery path.
 - Added failed-authentication audit evidence for rejected password and TOTP/recovery-code login attempts.
 - Failed login audit events include known workspace/user context, normalized email, reason, and compact request metadata without storing submitted passwords or second-factor codes.
 - Added regression coverage for sanitized `auth.login_failed` and `auth.2fa_failed` events and documented incident-review expectations in README, operations, and production-readiness docs.
