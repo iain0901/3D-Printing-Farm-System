@@ -1,18 +1,28 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 93 committed and pushed
+- Phase: round 94 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 93 realtime session-token URL hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 94 file deletion audit hardening is in progress on `codex/production-saas-completion-20260624`.
 - Baseline QC: Round 86 passed `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed)
 - Current plan:
-  - Add regression coverage requiring production protected APIs to reject session/API-key query credentials and realtime clients to use one-time tickets.
-  - Harden backend user auth so production ignores `?token=` for session/API-key credentials while issuing short-lived `/api/events/token` realtime tickets.
-  - Update the browser realtime WebSocket/SSE connection flow to use tickets instead of long-lived bearer tokens in URLs.
-  - Update production docs/runbooks for realtime ticket auth.
-  - Run targeted auth/realtime coverage, full API tests, and full QC, then commit and push.
+  - Add regression coverage requiring file deletion audit evidence to include workspace/operator/file context without storage paths, object keys, file bodies, or raw reference records.
+  - Harden `DELETE /api/files/:id` audit writes to use actor-aware compact metadata.
+  - Update production docs/runbooks for file deletion audit review.
+  - Run targeted file coverage, full API tests, and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 94 repo inspection started at 2026-06-25T20:33:52Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route/idempotency surface, file routes, and existing file tests before editing.
+  - Selected production-readiness slice: file deletion audit hardening so destructive file-library cleanup leaves compact workspace/operator evidence without exposing file bodies, storage paths, object keys, or raw reference records.
+  - Added regression coverage requiring `file.deleted` evidence to include workspace/operator context, file identity, storage-backed status, storage cleanup result, force flag, and reference counts while excluding storage paths and file contents.
+  - Targeted file deletion regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "downloads stored files and deletes unreferenced files"` (`file.deleted` lacked actor and compact file metadata).
+  - Implemented compact `file.deleted` audit metadata and passed the authenticated actor through the deletion audit dispatch.
+  - Targeted file deletion coverage passed: `npm run test -- api/server.test.mjs -t "downloads stored files and deletes unreferenced files"` (1 test).
+  - Documented file deletion audit evidence review in README, operations, and production-readiness docs.
+  - Broader file coverage passed: `npm run test -- api/server.test.mjs -t "creates files with validation|file artifact writes|downloads stored files|builds safe file previews|stores uploaded files|model uploads"` (6 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (135 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 154 tests passed).
   - Round 93 repo inspection started at 2026-06-25T20:20:44Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, auth/session helpers, realtime WebSocket/SSE routes, and existing auth/realtime tests before editing.
   - Selected production-readiness slice: realtime session-token URL hardening so production browser connections do not put long-lived user bearer tokens in proxy/access-log URLs.

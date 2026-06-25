@@ -3398,7 +3398,33 @@ endsolid delete_me`;
 
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
       expect(persisted.files.some((file) => file.id === uploaded.json().id)).toBe(false);
-      expect(persisted.events.some((event) => event.type === "file.deleted" && event.data.fileId === uploaded.json().id)).toBe(true);
+      const deleteEvents = persisted.events.filter((event) => event.type === "file.deleted" && event.data?.fileId === uploaded.json().id);
+      expect(deleteEvents).toHaveLength(1);
+      expect(deleteEvents[0]).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          actorEmail: "demo@layerpilot.test",
+          actorType: "user",
+          fileId: uploaded.json().id,
+          fileName: "delete-me.stl",
+          fileType: "STL",
+          material: "PLA",
+          folder: "QC Uploads",
+          storageBacked: true,
+          removedStorage: true,
+          force: false,
+          referenceCounts: {
+            activeQueue: 0,
+            parts: 0,
+            quoteRequests: 0,
+            slicerJobs: 0
+          }
+        }
+      });
+      expect(deleteEvents[0].data.references).toBeUndefined();
+      expect(JSON.stringify(deleteEvents[0])).not.toContain(storagePath);
+      expect(JSON.stringify(deleteEvents[0])).not.toContain("solid delete_me");
     });
   });
 

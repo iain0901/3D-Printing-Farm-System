@@ -4285,6 +4285,15 @@ function fileReferences(data, fileId) {
   };
 }
 
+function fileReferenceCounts(references = {}) {
+  return {
+    activeQueue: Array.isArray(references.activeQueue) ? references.activeQueue.length : 0,
+    parts: Array.isArray(references.parts) ? references.parts.length : 0,
+    quoteRequests: Array.isArray(references.quoteRequests) ? references.quoteRequests.length : 0,
+    slicerJobs: Array.isArray(references.slicerJobs) ? references.slicerJobs.length : 0
+  };
+}
+
 function hasReferences(references) {
   return references.activeQueue.length || references.parts.length || references.quoteRequests.length || references.slicerJobs.length;
 }
@@ -7575,7 +7584,18 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const removedStorage = await removeStoredFile(file);
     database.data.files = database.data.files.filter((item) => item.id !== file.id);
     database.data.queue = (database.data.queue || []).filter((job) => job.fileId !== file.id || ["complete", "failed", "cancelled"].includes(job.status));
-    await dispatchEvent(database, "file.deleted", `${file.name} deleted`, { fileId: file.id, removedStorage, force, references });
+    await dispatchEvent(database, "file.deleted", `${file.name} deleted`, {
+      workspaceId: request.user.workspaceId,
+      fileId: file.id,
+      fileName: file.name || file.id,
+      fileType: file.type || "",
+      material: file.material || "",
+      folder: file.folder || "",
+      storageBacked: Boolean(file.storagePath || file.storageKey),
+      removedStorage,
+      force,
+      referenceCounts: fileReferenceCounts(references)
+    }, { actor: request.user });
     await database.write();
     return { ok: true, file, removedStorage, references };
   });
