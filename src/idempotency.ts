@@ -3,6 +3,11 @@ export type IdempotencyAttempt = {
   key: string;
 };
 
+export type IdempotencyHeaderAttempt = {
+  attempt: IdempotencyAttempt;
+  headers: Record<string, string>;
+};
+
 type RandomByteSource = {
   getRandomValues(buffer: Uint8Array): Uint8Array;
 };
@@ -45,4 +50,14 @@ export function idempotencyKeyForAttempt(
 ): IdempotencyAttempt {
   if (current?.fingerprint === fingerprint) return current;
   return { fingerprint, key: createIdempotencyKey(prefix, randomSource) };
+}
+
+export function idempotencyHeadersForAttempt(
+  current: IdempotencyAttempt | null,
+  prefix: string,
+  payload: unknown,
+  randomSource?: RandomByteSource
+): IdempotencyHeaderAttempt {
+  const attempt = idempotencyKeyForAttempt(current, prefix, idempotencyFingerprint(payload), randomSource);
+  return { attempt, headers: { "Idempotency-Key": attempt.key } };
 }

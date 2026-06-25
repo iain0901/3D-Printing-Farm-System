@@ -66,7 +66,7 @@ import {
   XAxis,
   YAxis
 } from "recharts";
-import { idempotencyFingerprint, idempotencyKeyForAttempt, type IdempotencyAttempt } from "./idempotency";
+import { idempotencyFingerprint, idempotencyHeadersForAttempt, idempotencyKeyForAttempt, type IdempotencyAttempt } from "./idempotency";
 
 const APP_VERSION = packageJson.version;
 
@@ -1520,6 +1520,12 @@ function App() {
     "Nozzle inspection is due today.",
     "Slack integration delivered 18 events today."
   ]);
+  const accountIdempotencyAttempts = useRef<Record<string, IdempotencyAttempt>>({});
+  const accountIdempotencyHeaders = (action: string, payload: unknown) => {
+    const result = idempotencyHeadersForAttempt(accountIdempotencyAttempts.current[action] || null, action, payload);
+    accountIdempotencyAttempts.current[action] = result.attempt;
+    return result.headers;
+  };
 
   const addToast = (message: string, type: Toast["type"] = "success") => {
     const id = crypto.randomUUID();
@@ -2192,13 +2198,16 @@ function App() {
 
   const createUser = async (draft: Omit<User, "id" | "lastSeen"> & { password?: string }) => {
     const fallback: User = { ...draft, id: crypto.randomUUID(), lastSeen: "Invite pending" };
+    const attemptKey = "team-user-invite";
     try {
       const result = await apiRequest<{ user: User; temporaryPassword?: string }>("/api/users", {
         method: "POST",
+        headers: accountIdempotencyHeaders(attemptKey, draft),
         body: JSON.stringify(draft)
       });
       setUsers((items) => [result.user, ...items.filter((item) => item.id !== result.user.id)]);
       setBackendStatus("connected");
+      delete accountIdempotencyAttempts.current[attemptKey];
       return result;
     } catch {
       setUsers((items) => [fallback, ...items]);
@@ -2208,14 +2217,18 @@ function App() {
   };
 
   const updateUser = async (userId: string, patch: Partial<User>) => {
+    const payload = { userId, patch };
+    const attemptKey = `team-user-update:${userId}`;
     setUsers((items) => items.map((user) => user.id === userId ? { ...user, ...patch } : user));
     try {
       const updated = await apiRequest<User>(`/api/users/${userId}`, {
         method: "PATCH",
+        headers: accountIdempotencyHeaders(attemptKey, payload),
         body: JSON.stringify(patch)
       });
       setUsers((items) => items.map((user) => user.id === userId ? updated : user));
       setBackendStatus("connected");
+      delete accountIdempotencyAttempts.current[attemptKey];
       return updated;
     } catch {
       setBackendStatus("local");
@@ -2224,10 +2237,13 @@ function App() {
   };
 
   const resetUserPassword = async (userId: string) => {
+    const payload = { userId };
+    const attemptKey = `team-password-reset:${userId}`;
     try {
-      const result = await apiRequest<{ user: User; temporaryPassword?: string }>(`/api/users/${userId}/reset-password`, { method: "POST", body: JSON.stringify({}) });
+      const result = await apiRequest<{ user: User; temporaryPassword?: string }>(`/api/users/${userId}/reset-password`, { method: "POST", headers: accountIdempotencyHeaders(attemptKey, payload), body: JSON.stringify({}) });
       setUsers((items) => items.map((user) => user.id === userId ? result.user : user));
       setBackendStatus("connected");
+      delete accountIdempotencyAttempts.current[attemptKey];
       return result;
     } catch {
       setBackendStatus("local");
@@ -5082,6 +5098,12 @@ function IntegrationsPage({ apiKeys, setApiKeys, webhooks, setWebhooks, webhookD
   const [apiKeyDraft, setApiKeyDraft] = useState({ name: "Farm scheduler", scopes: "queue:write,files:write,orders:write" });
   const [newApiSecret, setNewApiSecret] = useState("");
   const [bridgeDiagnostic, setBridgeDiagnostic] = useState<BridgeDiagnostic | null>(bridges.find((bridge) => bridge.lastDiagnostics)?.lastDiagnostics || null);
+  const adminIdempotencyAttempts = useRef<Record<string, IdempotencyAttempt>>({});
+  const idempotencyHeaders = (action: string, payload: unknown) => {
+    const result = idempotencyHeadersForAttempt(adminIdempotencyAttempts.current[action] || null, action, payload);
+    adminIdempotencyAttempts.current[action] = result.attempt;
+    return result.headers;
+  };
   const saveBridge = async () => {
     try {
       const saved = await apiRequest<Bridge>("/api/bridges", {
@@ -5150,26 +5172,33 @@ function IntegrationsPage({ apiKeys, setApiKeys, webhooks, setWebhooks, webhookD
     }
   };
   const createApiKey = async () => {
+    const payload = { name: apiKeyDraft.name, scopes: apiKeyDraft.scopes.split(",").map((scope) => scope.trim()).filter(Boolean), enabled: true };
+    const attemptKey = "admin-api-key-create";
     try {
       const result = await apiRequest<{ apiKey: ApiKey; secret: string }>("/api/apiKeys", {
         method: "POST",
-        body: JSON.stringify({ name: apiKeyDraft.name, scopes: apiKeyDraft.scopes.split(",").map((scope) => scope.trim()).filter(Boolean), enabled: true })
+        headers: idempotencyHeaders(attemptKey, payload),
+        body: JSON.stringify(payload)
       });
       setApiKeys((items) => [result.apiKey, ...items.filter((item) => item.id !== result.apiKey.id)]);
       setNewApiSecret(result.secret);
       setBackendStatus("connected");
       addToast(`${result.apiKey.name} API key created`);
+      delete adminIdempotencyAttempts.current[attemptKey];
     } catch {
       setBackendStatus("local");
       addToast("API key creation failed. Check role or API status.", "warning");
     }
   };
   const toggleApiKey = async (key: ApiKey, enabled: boolean) => {
+    const payload = { id: key.id, enabled };
+    const attemptKey = `admin-api-key-update:${key.id}`;
     setApiKeys((items) => items.map((item) => item.id === key.id ? { ...item, enabled } : item));
     try {
-      const updated = await apiRequest<ApiKey>(`/api/apiKeys/${key.id}`, { method: "PATCH", body: JSON.stringify({ enabled }) });
+      const updated = await apiRequest<ApiKey>(`/api/apiKeys/${key.id}`, { method: "PATCH", headers: idempotencyHeaders(attemptKey, payload), body: JSON.stringify({ enabled }) });
       setApiKeys((items) => items.map((item) => item.id === key.id ? updated : item));
       setBackendStatus("connected");
+      delete adminIdempotencyAttempts.current[attemptKey];
     } catch {
       setBackendStatus("local");
       addToast("API key update failed. Reverting on next refresh.", "warning");
@@ -5313,6 +5342,12 @@ function SettingsPage({ settings, setSettings, addToast, setBackendStatus, curre
   const [onboarding, setOnboarding] = useState<OnboardingStatus | null>(null);
   const [supportSnapshot, setSupportSnapshot] = useState<SupportSnapshot | null>(null);
   const [supportBusy, setSupportBusy] = useState(false);
+  const governanceIdempotencyAttempts = useRef<Record<string, IdempotencyAttempt>>({});
+  const idempotencyHeaders = (action: string, payload: unknown) => {
+    const result = idempotencyHeadersForAttempt(governanceIdempotencyAttempts.current[action] || null, action, payload);
+    governanceIdempotencyAttempts.current[action] = result.attempt;
+    return result.headers;
+  };
   const refreshBilling = async () => {
     try {
       const summary = await apiRequest<BillingSummary>("/api/billing");
@@ -5335,15 +5370,19 @@ function SettingsPage({ settings, setSettings, addToast, setBackendStatus, curre
     }).catch(() => setBackendStatus("local"));
   }, []);
   const saveSettings = async (patch: Partial<WorkspaceSettings>, label = "Settings") => {
+    const payload = { label, patch };
+    const attemptKey = `settings:${label}`;
     setSettings((current) => ({ ...current, ...patch }));
     try {
       const updated = await apiRequest<WorkspaceSettings>("/api/workspaceSettings", {
         method: "PATCH",
+        headers: idempotencyHeaders(attemptKey, payload),
         body: JSON.stringify(patch)
       });
       setSettings(updated);
       setBackendStatus("connected");
       addToast(`${label} saved`);
+      delete governanceIdempotencyAttempts.current[attemptKey];
     } catch {
       setBackendStatus("local");
       addToast(`${label} saved locally only`, "warning");
@@ -5456,45 +5495,57 @@ function SettingsPage({ settings, setSettings, addToast, setBackendStatus, curre
     }
   };
   const changePlan = async (planId: string) => {
+    const payload = { planId };
+    const attemptKey = "billing-plan";
     try {
       const result = await apiRequest<{ settings: WorkspaceSettings; billing: BillingSummary }>("/api/billing/plan", {
         method: "PATCH",
-        body: JSON.stringify({ planId })
+        headers: idempotencyHeaders(attemptKey, payload),
+        body: JSON.stringify(payload)
       });
       setSettings(result.settings);
       setBilling(result.billing);
       setBackendStatus("connected");
       addToast(`${result.billing.plan.name} plan activated`, "success");
+      delete governanceIdempotencyAttempts.current[attemptKey];
     } catch {
       setBackendStatus("local");
       addToast("Plan change requires owner/admin access and live API", "warning");
     }
   };
   const managePlan = async () => {
+    const payload = { returnUrl: window.location.href };
+    const attemptKey = "billing-portal";
     try {
       const result = await apiRequest<{ session: { mode: string; url: string }; billing: BillingSummary }>("/api/billing/portal", {
         method: "POST",
-        body: JSON.stringify({ returnUrl: window.location.href })
+        headers: idempotencyHeaders(attemptKey, payload),
+        body: JSON.stringify(payload)
       });
       setBilling(result.billing);
       setBackendStatus("connected");
       if (result.session.url.startsWith("http")) window.open(result.session.url, "_blank", "noopener,noreferrer");
       addToast(result.session.mode === "stripe" ? "Stripe billing opened" : result.session.mode === "external" ? "Billing portal opened" : "Billing session created", "success");
+      delete governanceIdempotencyAttempts.current[attemptKey];
     } catch {
       setBackendStatus("local");
       addToast("Billing session could not be created", "warning");
     }
   };
   const updateOnboardingStep = async (step: OnboardingStep, status: OnboardingStep["status"]) => {
+    const payload = { id: step.id, status, note: step.note || "" };
+    const attemptKey = `onboarding:${step.id}`;
     try {
       const result = await apiRequest<{ settings: WorkspaceSettings; onboarding: OnboardingStatus }>(`/api/onboarding/${step.id}`, {
         method: "PATCH",
+        headers: idempotencyHeaders(attemptKey, payload),
         body: JSON.stringify({ status, note: step.note || "" })
       });
       setSettings(result.settings);
       setOnboarding(result.onboarding);
       setBackendStatus("connected");
       addToast(`${step.title} marked ${status}`, status === "complete" ? "success" : "info");
+      delete governanceIdempotencyAttempts.current[attemptKey];
     } catch {
       setBackendStatus("local");
       addToast("Go-live checklist update failed. Check role or API status.", "warning");
@@ -5502,13 +5553,16 @@ function SettingsPage({ settings, setSettings, addToast, setBackendStatus, curre
   };
   const generateSupportSnapshot = async () => {
     setSupportBusy(true);
+    const payload = { action: "support-snapshot" };
+    const attemptKey = "support-snapshot";
     try {
-      const snapshot = await apiRequest<SupportSnapshot>("/api/support/snapshot", { method: "POST" });
+      const snapshot = await apiRequest<SupportSnapshot>("/api/support/snapshot", { method: "POST", headers: idempotencyHeaders(attemptKey, payload) });
       setSupportSnapshot(snapshot);
       setOnboarding(snapshot.onboarding);
       downloadTextFile(`3dstu-farmflow-support-${Date.now()}.json`, JSON.stringify(snapshot, null, 2), "application/json");
       setBackendStatus("connected");
       addToast("Support snapshot generated", "success");
+      delete governanceIdempotencyAttempts.current[attemptKey];
     } catch {
       setBackendStatus("local");
       addToast("Support snapshot failed. Owner/admin export access is required.", "warning");

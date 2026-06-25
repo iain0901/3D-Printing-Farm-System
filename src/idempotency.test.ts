@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { idempotencyFingerprint, idempotencyKeyForAttempt } from "./idempotency";
+import { idempotencyFingerprint, idempotencyHeadersForAttempt, idempotencyKeyForAttempt } from "./idempotency";
 
 describe("browser idempotency helpers", () => {
   it("reuses a key for the same payload and rotates when the payload changes", () => {
@@ -23,5 +23,26 @@ describe("browser idempotency helpers", () => {
     expect(replay.key).toBe(first.key);
     expect(changed.key).not.toBe(first.key);
     expect(first.key).toMatch(/^public-quote-/);
+  });
+
+  it("builds stable Idempotency-Key headers for repeated browser actions", () => {
+    vi.setSystemTime(new Date("2026-06-25T09:12:00Z"));
+    let fill = 12;
+    const randomSource = {
+      getRandomValues(buffer: Uint8Array) {
+        buffer.fill(fill);
+        fill += 1;
+        return buffer;
+      }
+    };
+
+    const first = idempotencyHeadersForAttempt(null, "settings", { label: "Security", patch: { requireAdmin2fa: true } }, randomSource);
+    const retry = idempotencyHeadersForAttempt(first.attempt, "settings", { patch: { requireAdmin2fa: true }, label: "Security" }, randomSource);
+    const changed = idempotencyHeadersForAttempt(first.attempt, "settings", { label: "Security", patch: { requireAdmin2fa: false } }, randomSource);
+
+    expect(first.headers["Idempotency-Key"]).toBe(first.attempt.key);
+    expect(retry.headers["Idempotency-Key"]).toBe(first.headers["Idempotency-Key"]);
+    expect(changed.headers["Idempotency-Key"]).not.toBe(first.headers["Idempotency-Key"]);
+    expect(first.headers["Idempotency-Key"]).toMatch(/^settings-/);
   });
 });
