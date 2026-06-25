@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 43 in progress
+- Phase: round 43 verified; final docs pending push
 - Started: 2026-06-24 UTC
-- Current state: Round 43 governance setup retry hardening is in progress on `codex/production-saas-completion-20260624`.
+- Current state: Round 43 governance setup retry hardening is implemented, verified, and committed locally on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 125 tests passed)
 - Current plan:
   - Add regression coverage for retry-safe governance setup writes.
@@ -16,6 +16,12 @@
   - Selected production-readiness slice: idempotent governance setup writes for workspace settings, onboarding checklist updates, and support snapshots to prevent duplicate audit events after dropped operator/browser responses.
   - Added failing regression coverage proving governance setup retries need replay semantics.
   - Added workspace settings, onboarding checklist, and support snapshot routes to the persisted `Idempotency-Key` allowlist.
+  - Documented governance setup idempotency in README, operations, and production-readiness docs.
+  - Targeted governance setup idempotency test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "governance setup"` (1 test).
+  - Targeted governance tests passed: `npm run test -- api/server.test.mjs -t "governance"` (3 tests).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (109 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 126 tests passed).
+  - Committed round 43 implementation as `1b194c6` (`feat: add idempotent governance setup writes`).
   - Round 42 repo inspection started at 2026-06-25T08:45:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, and production-readiness docs before editing.
   - Selected production-readiness slice: idempotent direct purchase-request create/update writes to prevent duplicate reorder records and duplicate purchasing audit events after dropped operator/browser responses.

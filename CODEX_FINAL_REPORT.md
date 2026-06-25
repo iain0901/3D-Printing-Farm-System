@@ -74,6 +74,7 @@
   - `1c417a0` `docs: record codex round 41 status`
   - `172616e` `feat: add idempotent purchase requests`
   - `314026b` `docs: record codex round 42 status`
+  - `1b194c6` `feat: add idempotent governance setup writes`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -199,6 +200,10 @@
   - Round 42 targeted `npm run test -- api/server.test.mjs -t "purchase"`: passed, 3 tests passed.
   - Round 42 targeted `npm run test -- api/server.test.mjs`: passed, 108 tests passed.
   - Round 42 final `npm run qc`: passed, build passed, Vitest 10 files / 125 tests passed.
+  - Round 43 targeted `npm run test -- api/server.test.mjs -t "governance setup"`: failed before implementation, then passed, 1 test passed.
+  - Round 43 targeted `npm run test -- api/server.test.mjs -t "governance"`: passed, 3 tests passed.
+  - Round 43 targeted `npm run test -- api/server.test.mjs`: passed, 109 tests passed.
+  - Round 43 final `npm run qc`: passed, build passed, Vitest 10 files / 126 tests passed.
 
 ## Completed Features
 
@@ -335,6 +340,9 @@
 - Added idempotent replay/conflict protection for direct purchase-request create/update writes.
 - Added regression coverage proving purchase-request retries replay without duplicate reorder records or duplicate purchasing audit events, and conflicting retry bodies return `409`.
 - Documented purchase-request write `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for governance setup writes covering workspace settings, onboarding checklist updates, and support snapshot generation.
+- Added regression coverage proving governance setup retries replay without duplicate settings, onboarding, or support snapshot audit events, and conflicting retry bodies return `409`.
+- Documented governance setup `Idempotency-Key` usage in README, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -372,6 +380,7 @@
 - Catalog/profile/printer configuration idempotency now protects setup retries from duplicate setup records and duplicate setup audit events; clients still need stable per-attempt keys when retrying configuration writes.
 - Cost catalog and material-map idempotency now protects catalog governance retries from duplicate pricing/material-normalization audit or run records; clients still need stable per-attempt keys when retrying those governance writes.
 - Integration configuration idempotency now protects webhook, notification channel, commerce connector, add-on, and bridge setup retries from duplicate records and audit events; clients still need stable per-attempt keys when retrying integration setup writes.
+- Governance setup idempotency now protects workspace settings, onboarding checklist updates, and support snapshot generation from duplicate audit events; clients still need stable per-attempt keys when retrying go-live setup actions.
 - Idempotency replay records are intentionally omitted from shared state and admin exports; retry clients should use fresh keys after workspace export/restore rather than expecting replay cache continuity.
 - Audit context now covers the highest-impact production scheduling/queue/bridge/file-version operator actions; remaining lower-risk direct event writes should be migrated only with route-specific delivery and notification review.
 - Ops-check authenticated verification requires valid Owner/Admin credentials or a dedicated smoke account configured in `.env`; otherwise it warns and continues with unauthenticated host checks.
