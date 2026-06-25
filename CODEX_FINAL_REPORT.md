@@ -48,6 +48,7 @@
   - `5577de4` `feat: add idempotent billing writes`
   - `bc5b16c` `docs: record codex round 24 status`
   - `3ca1c29` `feat: add idempotent printer actions`
+  - `39f12ad` `feat: add idempotent quote portal links`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -117,6 +118,9 @@
   - Round 25 targeted `npm run test -- api/server.test.mjs -t "idempotent printer actions"`: passed, 1 test passed.
   - Round 25 targeted `npm run test -- api/server.test.mjs`: passed, 88 tests passed.
   - Round 25 final `npm run qc`: passed, build passed, Vitest 10 files / 105 tests passed.
+  - Round 26 targeted `npm run test -- api/server.test.mjs -t "quote portal link rotations"`: failed before implementation, then passed, 1 test passed.
+  - Round 26 targeted `npm run test -- api/server.test.mjs`: passed, 89 tests passed.
+  - Round 26 final `npm run qc`: passed, build passed, Vitest 10 files / 106 tests passed.
 
 ## Completed Features
 
@@ -202,6 +206,9 @@
 - Added idempotent replay/conflict protection for real printer action commands through `/api/actions`.
 - Added regression coverage proving printer action retries replay without sending duplicate outbound bridge commands or duplicating operator audit events.
 - Documented printer action `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for quote customer portal-link generation and rotation.
+- Added regression coverage proving `rotate: true` portal-link retries replay the original URL/token without rotating again, invalidating the first operator-visible link, or duplicating portal-link audit events.
+- Documented quote portal-link `Idempotency-Key` usage in README, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -228,6 +235,7 @@
 - Audit-retention run idempotency now protects retry-prone governance cleanup runs; broader admin write coverage should still be added only after route-specific replay and response review.
 - Billing idempotency now protects plan-change and portal-session retries; Stripe webhooks still depend on provider event IDs and webhook-secret validation rather than client `Idempotency-Key` headers.
 - Printer action idempotency now protects `/api/actions` retries before bridge dispatch; real hardware validation is still required against the customer's printer fleet before go-live.
+- Quote portal-link idempotency now protects generation and rotation retries; operators should still avoid sharing superseded customer links after intentional manual rotation.
 - Idempotency replay records are intentionally omitted from shared state and admin exports; retry clients should use fresh keys after workspace export/restore rather than expecting replay cache continuity.
 - Audit context now covers the highest-impact production scheduling/queue/bridge/file-version operator actions; remaining lower-risk direct event writes should be migrated only with route-specific delivery and notification review.
 - Ops-check authenticated verification requires valid Owner/Admin credentials or a dedicated smoke account configured in `.env`; otherwise it warns and continues with unauthenticated host checks.

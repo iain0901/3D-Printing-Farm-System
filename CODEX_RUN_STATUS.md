@@ -1,16 +1,27 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 25 pushed
+- Phase: round 26 pushed
 - Started: 2026-06-24 UTC
-- Current state: Round 25 printer action idempotency hardening is implemented, verified, committed, and ready on `origin/codex/production-saas-completion-20260624`.
+- Current state: Round 26 quote portal-link idempotency hardening is implemented, verified, committed, and ready on `origin/codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 96 tests passed)
 - Current plan:
-  - Add persisted idempotency replay/conflict protection for real printer action commands.
-  - Cover retries so they do not send duplicate bridge commands or duplicate operator audit events.
-  - Document supported printer action idempotency, run targeted tests and full QC, then commit and push.
+  - Add persisted idempotency replay/conflict protection for quote customer portal-link generation and rotation.
+  - Cover retries so `rotate: true` does not invalidate the original customer link or duplicate portal-link audit events.
+  - Document supported quote portal-link idempotency, run targeted tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 26 repo inspection started at 2026-06-25T05:41:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent quote customer portal-link generation and rotation retries to prevent duplicate token rotation after operator/network retries.
+  - Added failing regression coverage proving quote portal-link rotation retries need replay semantics to avoid invalidating the first operator-visible link and duplicating portal-link audit events.
+  - Added quote customer-link generation/rotation to the persisted `Idempotency-Key` allowlist.
+  - Documented quote portal-link idempotency in README, operations, and production-readiness docs.
+  - Targeted quote portal-link idempotency test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "quote portal link rotations"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (89 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 106 tests passed).
+  - Committed round 26 implementation as `39f12ad` (`feat: add idempotent quote portal links`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
   - Round 25 repo inspection started at 2026-06-25T05:31:30Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: idempotent printer action command retries to prevent duplicate real bridge commands during operator/network retries.
