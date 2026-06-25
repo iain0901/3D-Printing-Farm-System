@@ -4,8 +4,9 @@
 - Pushed remote: `origin/codex/production-saas-completion-20260624`
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
-- Latest round: Round 79 direct file creation audit context hardening implemented, verified, committed, and pushed.
+- Latest round: Round 80 integration endpoint audit context hardening implemented, verified, committed, and push pending.
 - Commits:
+  - `c8669bc` `feat: add integration endpoint audit context`
   - `2a01df1` `feat: add file creation audit context`
   - `5545b1e` `docs: record codex round 79 status`
   - `32580b6` `docs: record codex round 78 status`
@@ -169,6 +170,10 @@
   - `7e42cc7` `feat: scope audit retention by workspace`
   - Current `HEAD` `docs: record codex round 69 push`
 - QC result:
+  - Round 80 targeted `npm run test -- api/server.test.mjs -t "integration configuration writes|webhooks, delivers matching events|notification channels"`: failed before implementation as expected, integration endpoint configuration/test-send audit events lacked actor metadata and some test-send events lacked workspace metadata.
+  - Round 80 targeted `npm run test -- api/server.test.mjs -t "integration configuration writes|webhooks, delivers matching events|notification channels"`: passed, 3 tests passed.
+  - Round 80 full API `npm run test -- api/server.test.mjs`: passed, 132 tests passed.
+  - Round 80 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 151 tests passed.
   - Round 79 targeted `npm run test -- api/server.test.mjs -t "creates files with validation"`: failed before implementation as expected, direct file creation lacked structured `file.created` audit evidence.
   - Round 79 targeted `npm run test -- api/server.test.mjs -t "creates files with validation"`: passed, 1 test passed.
   - Round 79 broader file `npm run test -- api/server.test.mjs -t "creates files with validation|file artifact writes|model files|stored files|downloads stored files|builds safe file previews"`: passed, 7 tests passed.
@@ -455,6 +460,9 @@
 
 ## Completed Features
 
+- Webhook, notification channel, and commerce connector configuration audit events now include workspace and authenticated operator context while excluding endpoint URLs, URL paths/query strings, and bearer tokens.
+- Webhook and notification test-send events now use the same compact actor-aware audit event shape without faning the one-off test event out to unrelated endpoints.
+- Added regression coverage for integration endpoint audit metadata and documented the review path in README, operations, and production-readiness docs.
 - Inventory and maintenance audit events now use actor-aware dispatch for spool creation, label export, scan/usage/update, purchase request creation/reorder/update/receive, maintenance job creation/update, templates, and problem reports.
 - Added regression coverage proving direct spool and maintenance create/update events include workspace and authenticated operator context.
 - Documented inventory and maintenance audit review in README, operations, and production-readiness docs.
@@ -709,6 +717,7 @@
 - Runtime production readiness now fails hard on unsafe default/demo access or weak/missing deployment secrets; operators must fix `.env` before live smoke checks can pass.
 - Workspace exports intentionally omit customer quote portal bearer tokens; operators should regenerate or rotate portal links after restore when customers need access.
 - API responses intentionally show only host-level metadata for webhook, notification, commerce, and bridge endpoints; operators should re-enter full provider URLs when rotating those integration credentials.
+- Integration endpoint audit events now identify operator/workspace and endpoint record metadata without URLs or tokens; operators still need provider-side logs for exact outbound destinations during credential rotation or delivery troubleshooting.
 - Commerce connector idempotency now protects feed tests, connector imports, and CSV batch retries; broader write API coverage should still be added only after route-specific response and secret review.
 - Quote conversion idempotency now protects authenticated operator retries; public customer quote decisions remain intentionally token-gated and should be reviewed separately before adding public idempotency semantics.
 - Public quote intake and token-verified customer quote decision idempotency now protect customer form submissions and portal approval retries; any broader public portal write coverage should still be added only with route-specific replay and token review.
