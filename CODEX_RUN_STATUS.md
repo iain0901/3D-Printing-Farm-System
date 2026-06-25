@@ -1,16 +1,25 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 85 committed and pushed
+- Phase: round 86 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 85 queue lifecycle retry-safety evidence is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 86 order lifecycle retry-safety evidence is in progress on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage proving queue schedule, priority, complete, and cancel retries replay without duplicate material reservations, material consumption/release, or audit events.
-  - Document queue lifecycle retry-safety evidence in README, operations, and production-readiness docs.
-  - Run targeted queue lifecycle coverage, broader queue/scheduler coverage, full API tests, and full QC, then commit and push.
+  - Add regression coverage proving order status retries replay without duplicate order lifecycle audit events or double material release for generated cancelled order work.
+  - Document order lifecycle retry-safety evidence in README, operations, and production-readiness docs.
+  - Run targeted order lifecycle coverage, broader order/queue coverage, full API tests, and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 86 repo inspection started at 2026-06-25T18:19:59Z.
+  - Reviewed current branch, recent commits, run status, final report, README, install, operations, release, production-readiness, roadmap, package metadata, API route list, idempotency allowlist, order lifecycle routes, UI idempotency headers, and existing order/queue/material tests before editing.
+  - Selected production-readiness slice: order lifecycle retry-safety regression coverage for status changes that mutate generated queue jobs, material reservations, and operator audit evidence.
+  - Added targeted regression coverage requiring cancelled generated-order status retries to return idempotent replays, preserve released spool reservations, avoid duplicate `order.status` audit events, and record replay metadata.
+  - Documented order lifecycle retry-safety evidence in README, operations, and production-readiness docs.
+  - Targeted order lifecycle retry-safety coverage passed: `npm run test -- api/server.test.mjs -t "order lifecycle cancellation"` (1 test).
+  - Broader order/queue coverage passed: `npm run test -- api/server.test.mjs -t "order lifecycle cancellation|order jobs|queue lifecycle updates|catalog records and generates order jobs|quote conversions"` (4 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (134 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed).
   - Round 85 repo inspection started at 2026-06-25T18:00:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, route list, idempotency allowlist, queue lifecycle routes, UI idempotency headers, and existing queue/material reservation tests before editing.
   - Selected production-readiness slice: queue lifecycle retry-safety regression coverage for schedule, priority, complete, and cancel operations that mutate material reservations and operator audit evidence.

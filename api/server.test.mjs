@@ -5059,7 +5059,7 @@ endsolid s3_store`;
     });
   });
 
-  it("cancels generated order work and releases reserved material", async () => {
+  it("replays idempotent order lifecycle cancellation without duplicate material release", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);
       const order = await app.inject({
@@ -5084,8 +5084,14 @@ endsolid s3_store`;
       expect(scheduled.json().job).toMatchObject({ id: jobId, status: "queued", stage: "needs slicing", reservedSpoolId: "s2" });
       expect(scheduled.json().spools.find((item) => item.id === "s2")).toMatchObject({ reserved: expect.any(Number) });
 
-      const cancelled = await app.inject({ method: "PATCH", url: `/api/orders/${order.json().id}/status`, headers: auth(token), payload: { status: "cancelled" } });
+      const cancelHeaders = { ...auth(token), "idempotency-key": "order-status-cancel-retry-001" };
+      const cancelPayload = { status: "cancelled" };
+      const cancelled = await app.inject({ method: "PATCH", url: `/api/orders/${order.json().id}/status`, headers: cancelHeaders, payload: cancelPayload });
+      const cancelledReplay = await app.inject({ method: "PATCH", url: `/api/orders/${order.json().id}/status`, headers: cancelHeaders, payload: cancelPayload });
       expect(cancelled.statusCode).toBe(200);
+      expect(cancelledReplay.statusCode).toBe(200);
+      expect(cancelledReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(cancelledReplay.json()).toEqual(cancelled.json());
       expect(cancelled.json().order).toMatchObject({ id: order.json().id, status: "cancelled" });
       expect(cancelled.json().jobs).toEqual([expect.objectContaining({ id: jobId, status: "cancelled", stage: "blocked" })]);
       expect(cancelled.json().materialChanges).toEqual([expect.objectContaining({ spoolId: "s2" })]);
@@ -5099,7 +5105,13 @@ endsolid s3_store`;
       expect(persisted.orders.find((item) => item.id === order.json().id)).toMatchObject({ status: "cancelled" });
       expect(persisted.queue.find((item) => item.id === jobId)).toMatchObject({ status: "cancelled", stage: "blocked" });
       expect(persisted.spools.find((item) => item.id === "s2")).toMatchObject({ reserved: 0, reservations: [] });
-      expect(persisted.events.some((event) => event.type === "order.status" && event.data?.status === "cancelled")).toBe(true);
+      expect(persisted.events.filter((event) => event.type === "order.status" && event.data?.orderId === order.json().id && event.data?.status === "cancelled")).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "order-status-cancel-retry-001")).toMatchObject({
+        method: "PATCH",
+        path: `/api/orders/${order.json().id}/status`,
+        statusCode: 200,
+        replayCount: 1
+      });
     });
   });
 
