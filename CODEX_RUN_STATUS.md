@@ -1,16 +1,26 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 23 pushed
+- Phase: round 24 ready to push
 - Started: 2026-06-24 UTC
-- Current state: Round 23 audit-retention idempotency hardening is implemented, verified, committed, and ready on `origin/codex/production-saas-completion-20260624`.
+- Current state: Round 24 billing idempotency hardening is implemented, verified, committed, and ready to push on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 96 tests passed)
 - Current plan:
-  - Add persisted idempotency replay/conflict protection for the audit-retention run endpoint.
-  - Cover retries so they do not duplicate retention-run audit events or shift the reported run timestamp.
-  - Document supported audit-retention idempotency, run targeted tests and full QC, then commit and push.
+  - Add persisted idempotency replay/conflict protection for billing plan changes and billing portal session creation.
+  - Cover retries so they do not duplicate invoices, billing sessions, audit events, or external Stripe session calls.
+  - Document supported billing idempotency, run targeted tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 24 repo inspection started at 2026-06-25T05:21:42Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent billing plan and portal writes for retry-safe SaaS billing operations.
+  - Added failing regression coverage proving billing retries need replay semantics to avoid duplicate invoices, portal sessions, and billing audit events.
+  - Added billing plan and billing portal routes to the persisted `Idempotency-Key` allowlist.
+  - Added Stripe billing portal replay coverage proving retries do not create a second external checkout session.
+  - Targeted billing idempotency tests passed: `npm run test -- api/server.test.mjs -t "billing"` (3 tests).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (87 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 104 tests passed).
+  - Committed round 24 implementation as `5577de4` (`feat: add idempotent billing writes`).
   - Round 23 repo inspection started at 2026-06-25T05:13:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: idempotent admin audit-retention runs for retry-safe governance operations.
