@@ -29,7 +29,7 @@
   - `625f290` `feat: add authenticated ops checks`
   - Current `HEAD` `docs: record codex round 13 push`
   - `75e7dae` `feat: redact support snapshot urls`
-  - Current `HEAD` `feat: add idempotent quote conversion`
+  - `dc29e63` `feat: add idempotent quote conversion`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
