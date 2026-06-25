@@ -4,8 +4,9 @@
 - Pushed remote: `origin/codex/production-saas-completion-20260624`
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
-- Latest round: Round 90 printer action audit actor-context hardening implemented, verified, committed, and pushed.
+- Latest round: Round 91 restore-prepared audit evidence hardening implemented, verified, committed, and ready to push.
 - Commits:
+  - `273a436` `feat: add restore prepared audit context`
   - `71dca69` `docs: record codex round 90 status`
   - `71ccd09` `feat: add printer action audit context`
   - `cf4796d` `docs: record codex round 89 status`
@@ -193,6 +194,10 @@
   - `7e42cc7` `feat: scope audit retention by workspace`
   - Current `HEAD` `docs: record codex round 69 push`
 - QC result:
+  - Round 91 targeted `npm run test -- api/server.test.mjs -t "previews and commits sanitized workspace restores"`: failed before implementation as expected, `admin.restore_prepared` audit evidence lacked actor/context metadata.
+  - Round 91 targeted `npm run test -- api/server.test.mjs -t "previews and commits sanitized workspace restores"`: passed, 1 test passed.
+  - Round 91 full API `npm run test -- api/server.test.mjs`: passed, 134 tests passed.
+  - Round 91 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 153 tests passed.
   - Round 90 targeted `npm run test -- api/server.test.mjs -t "idempotent printer actions"`: failed before implementation as expected, `printer.action` audit events lacked actor metadata.
   - Round 90 targeted `npm run test -- api/server.test.mjs -t "idempotent printer actions"`: passed, 1 test passed.
   - Round 90 broader printer/bridge `npm run test -- api/server.test.mjs -t "printer actions|bridge diagnostics|production scheduling, bridge, and file-version|direct printer status|printer capability"`: passed, 7 tests passed.
@@ -758,6 +763,8 @@
 - Added a production `/api/readiness` gate for persisted invalid or empty API-key IP allowlists, plus regression coverage and README/install/operations/production-readiness/deploy documentation.
 - Scoped manual audit-retention runs to the authenticated workspace and that workspace's retention settings, so a tenant/operator cannot prune another workspace's non-protected audit evidence.
 - Added regression coverage for cross-workspace audit-retention preservation and documented the tenant-scoped retention contract in README, operations, and production-readiness docs.
+- Hardened committed restore-prepared audit evidence so destructive restores add `admin.restore_prepared` metadata with workspace/operator context, collection counts, warning count, stripped-storage-path count, restored file-payload count, and compact file-payload coverage counts.
+- Added regression coverage proving `admin.restore_prepared` omits restored backup record names, restored backup user emails, stripped storage paths, file bytes, and backup contents, and documented the evidence review in README, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -772,6 +779,7 @@
 - Full API JSON file-byte exports are intentionally capped by `LAYERPILOT_FULL_BACKUP_MAX_BYTES`; large production farms should rely on verified volume/object-storage backups unless an operator deliberately raises the API export ceiling.
 - Full API JSON file-byte exports now fail closed when stored file payloads are missing; `allowMissingFiles=true` should be used only with a documented separate volume/object-storage recovery plan.
 - Restore previews now report incomplete JSON file-payload coverage, but operators must still verify any separate volume/object-storage restore path before committing a restore that intentionally omits file bytes.
+- Restore-prepared audit evidence now records compact counts and operator context after committed restores, but operators must still verify the actual restored records and separate file-byte recovery plan during live restore drills.
 - Admin integrity checks, authenticated production smoke, and authenticated ops-check runs now report and audit current storage coverage with `checkStorage=true`, but operators must still run verified volume/object-storage backups and restore drills for the actual deployment target.
 - Idempotency coverage is route-specific; token- or secret-returning replay records are intentionally retained only in internal server metadata and omitted from shared state/admin exports.
 - Session expiry policy should be reviewed against the customer's shared-device operating model before go-live.
