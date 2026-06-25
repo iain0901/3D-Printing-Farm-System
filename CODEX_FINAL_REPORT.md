@@ -4,8 +4,9 @@
 - Pushed remote: `origin/codex/production-saas-completion-20260624`
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
-- Latest round: Round 93 realtime session-token URL hardening implemented, verified, committed, and pushed.
+- Latest round: Round 94 file deletion audit hardening implemented, verified, committed, and push pending.
 - Commits:
+  - `163957a` `feat: add file deletion audit context`
   - `0a9646f` `docs: record codex round 93 push`
   - `449b773` `docs: record codex round 93 status`
   - `9e67961` `feat: add realtime auth tickets`
@@ -201,6 +202,11 @@
   - `7e42cc7` `feat: scope audit retention by workspace`
   - Current `HEAD` `docs: record codex round 69 push`
 - QC result:
+  - Round 94 targeted `npm run test -- api/server.test.mjs -t "downloads stored files and deletes unreferenced files"`: failed before implementation as expected, `file.deleted` audit evidence lacked authenticated actor and compact file metadata.
+  - Round 94 targeted `npm run test -- api/server.test.mjs -t "downloads stored files and deletes unreferenced files"`: passed, 1 test passed.
+  - Round 94 broader file coverage `npm run test -- api/server.test.mjs -t "creates files with validation|file artifact writes|downloads stored files|builds safe file previews|stores uploaded files|model uploads"`: passed, 6 tests passed.
+  - Round 94 full API `npm run test -- api/server.test.mjs`: passed, 135 tests passed.
+  - Round 94 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 154 tests passed.
   - Round 93 targeted `npm run test -- api/server.test.mjs -t "realtime tickets"`: failed before implementation as expected, production `/api/state?token=<session>` accepted a full session token from the URL query and returned `200`.
   - Round 93 targeted `npm run test -- api/server.test.mjs -t "realtime tickets"`: passed, 1 test passed.
   - Round 93 adjacent auth/realtime `npm run test -- api/server.test.mjs -t "realtime|authenticates users and supports logout|production Owner and Admin sessions"`: passed, 4 tests passed.
