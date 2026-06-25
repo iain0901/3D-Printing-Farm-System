@@ -46,6 +46,7 @@
   - `3f9ed15` `feat: add idempotent maintenance workflows`
   - `6fb7ada` `feat: add idempotent audit retention runs`
   - `5577de4` `feat: add idempotent billing writes`
+  - `bc5b16c` `docs: record codex round 24 status`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
