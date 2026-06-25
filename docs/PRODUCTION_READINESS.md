@@ -26,6 +26,7 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 - [ ] API keys are tested against their intended read endpoints and are blocked from unrelated UI/admin resources.
 - [ ] API-key creation and rotation are performed from a logged-in Owner/Admin user session, not from another API key.
 - [ ] API key IP/CIDR allowlists are enabled when automation runs from fixed networks.
+- [ ] `/api/audit` shows login, logout, password-change, signup, and 2FA setup/enable/verify/disable events with workspace, user, actor, and session metadata where applicable, and without bearer tokens, passwords, TOTP secrets, or recovery codes.
 - [ ] `/api/audit` shows recent production/admin events with the expected workspace and operator context, including scheduling, queue, bridge, file-version, history annotation/reprint, onboarding, support snapshot, settings, billing, add-on, cost catalog, material mapping, API-key, and user-management changes; filtered audit review and CSV exports have been checked with `type`, `search`, `limit`, and `offset` so the matched count and `hasMore` metadata line up with operator evidence.
 
 ## Production Workflows

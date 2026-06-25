@@ -5683,15 +5683,16 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       if (!parsed.data.twoFactorCode) return reply.code(409).send({ error: "Two-factor code required", requiresTwoFactor: true });
       const verification = verifyAndConsumeTwoFactorCode(user, parsed.data.twoFactorCode);
       if (!verification.ok) return reply.code(401).send({ error: "Invalid two-factor code", requiresTwoFactor: true });
-      database.data.events.unshift({ id: randomUUID(), type: "auth.2fa_verified", message: `${user.email} completed 2FA`, at: new Date().toISOString(), data: { userId: user.id, method: verification.method } });
+      await dispatchEvent(database, "auth.2fa_verified", `${user.email} completed 2FA`, { userId: user.id, method: verification.method }, { actor: user });
     }
     const token = randomBytes(32).toString("hex");
     const now = new Date().toISOString();
     user.lastSeen = "Now";
     user.updatedAt = now;
     user.workspaceId ||= DEFAULT_WORKSPACE_ID;
-    database.data.sessions.push(createSession({ token, user, workspaceId: user.workspaceId, now: new Date(now) }));
-    database.data.events.unshift({ id: randomUUID(), type: "auth.login", message: `${user.email} signed in`, at: now });
+    const session = createSession({ token, user, workspaceId: user.workspaceId, now: new Date(now) });
+    database.data.sessions.push(session);
+    await dispatchEvent(database, "auth.login", `${user.email} signed in`, { userId: user.id, sessionId: session.id }, { actor: user, at: now });
     await database.write();
     return { token, user: sanitizeUser(user) };
   });
@@ -5729,7 +5730,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     database.data.workspaces.push(workspace);
     database.data.users.push(user);
     database.data.sessions.push(createSession({ token, user, workspaceId, now: new Date(now) }));
-    database.data.events.unshift({ id: randomUUID(), workspaceId, type: "auth.signup", message: `${user.email} created ${parsed.data.workspace}`, at: now });
+    await dispatchEvent(database, "auth.signup", `${user.email} created ${parsed.data.workspace}`, { workspaceId, userId: user.id }, { actor: user, at: now });
     await database.write();
     return reply.code(201).send({ token, user: sanitizeUser(user) });
   });
@@ -5750,7 +5751,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!session || !user) return reply.code(401).send({ error: "User session required" });
     const secret = base32Encode(randomBytes(20));
     const issuer = database.data.workspaceSettings?.organizationName || "3DSTU FarmFlow";
-    await dispatchEvent(database, "auth.2fa_setup_started", `${user.email} started 2FA setup`, { userId: user.id });
+    await dispatchEvent(database, "auth.2fa_setup_started", `${user.email} started 2FA setup`, { userId: user.id }, { actor: user });
     await database.write();
     return { secret, otpauthUrl: buildOtpAuthUrl({ secret, user, issuer }), user: sanitizeUser(user) };
   });
@@ -5767,7 +5768,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     user.twoFactorEnrolledAt = new Date().toISOString();
     user.twoFactorRecoveryCodeHashes = recoveryCodes.map(createPasswordHash);
     user.updatedAt = user.twoFactorEnrolledAt;
-    await dispatchEvent(database, "auth.2fa_enabled", `${user.email} enabled 2FA`, { userId: user.id });
+    await dispatchEvent(database, "auth.2fa_enabled", `${user.email} enabled 2FA`, { userId: user.id, recoveryCodesIssued: recoveryCodes.length }, { actor: user });
     await database.write();
     return { user: sanitizeUser(user), recoveryCodes };
   });
@@ -5791,7 +5792,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     user.twoFactorEnrolledAt = "";
     user.twoFactorRecoveryCodeHashes = [];
     user.updatedAt = new Date().toISOString();
-    await dispatchEvent(database, "auth.2fa_disabled", `${user.email} disabled 2FA`, { userId: user.id });
+    await dispatchEvent(database, "auth.2fa_disabled", `${user.email} disabled 2FA`, { userId: user.id }, { actor: user });
     await database.write();
     return { user: sanitizeUser(user) };
   });
@@ -5805,19 +5806,27 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const persistedUser = database.data.users.find((item) => item.id === user.id);
     if (!persistedUser || !verifyPassword(parsed.data.currentPassword, persistedUser.passwordHash)) return reply.code(401).send({ error: "Current password is incorrect" });
     if (parsed.data.currentPassword === parsed.data.newPassword) return reply.code(409).send({ error: "New password must be different" });
+    const sessionsBeforeChange = (database.data.sessions || []).filter((item) => item.userId === persistedUser.id).length;
     persistedUser.passwordHash = createPasswordHash(parsed.data.newPassword);
     persistedUser.passwordResetRequired = false;
     persistedUser.updatedAt = new Date().toISOString();
     database.data.sessions = (database.data.sessions || []).filter((item) => item.userId !== persistedUser.id || sessionMatchesToken(item, token));
-    await dispatchEvent(database, "auth.password_changed", `${persistedUser.email} changed password`, { userId: persistedUser.id });
+    const sessionsAfterChange = (database.data.sessions || []).filter((item) => item.userId === persistedUser.id).length;
+    await dispatchEvent(database, "auth.password_changed", `${persistedUser.email} changed password`, { userId: persistedUser.id, sessionsRevoked: Math.max(0, sessionsBeforeChange - sessionsAfterChange) }, { actor: persistedUser });
     await database.write();
     return { ok: true, user: sanitizeUser(persistedUser) };
   });
 
   app.post("/api/auth/logout", async (request, reply) => {
-    const { token, user } = userFromRequest(database, request);
+    const { token, session, user } = userFromRequest(database, request);
     if (!user) return reply.code(401).send({ error: "Authentication required" });
+    const sessionsBeforeLogout = database.data.sessions.length;
     database.data.sessions = database.data.sessions.filter((session) => !sessionMatchesToken(session, token));
+    await dispatchEvent(database, "auth.logout", `${user.email} signed out`, {
+      userId: user.id,
+      sessionId: session?.id || "",
+      revokedSessions: Math.max(0, sessionsBeforeLogout - database.data.sessions.length)
+    }, { actor: user });
     await database.write();
     return { ok: true };
   });

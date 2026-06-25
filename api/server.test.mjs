@@ -617,6 +617,35 @@ describe("3DSTU FarmFlow API", () => {
 
       const locked = await app.inject({ method: "GET", url: "/api/state", headers: auth(token) });
       expect(locked.statusCode).toBe(401);
+
+      const loginEvent = db.data.events.find((event) => event.type === "auth.login" && event.data?.userId === "u1");
+      expect(loginEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          userId: "u1",
+          actorId: "u1",
+          actorEmail: "owner@layerpilot.test",
+          actorRole: "Owner",
+          actorType: "user",
+          sessionId: session.id
+        }
+      });
+      const logoutEvent = db.data.events.find((event) => event.type === "auth.logout" && event.data?.userId === "u1");
+      expect(logoutEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          userId: "u1",
+          actorId: "u1",
+          actorEmail: "owner@layerpilot.test",
+          actorRole: "Owner",
+          actorType: "user",
+          sessionId: session.id,
+          revokedSessions: 1
+        }
+      });
+      expect(JSON.stringify([loginEvent, logoutEvent])).not.toContain(token);
     });
   });
 
@@ -699,9 +728,23 @@ describe("3DSTU FarmFlow API", () => {
       await login(app, "password.qc@layerpilot.test", reset.json().temporaryPassword);
 
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
-      expect(persisted.events.some((event) => event.type === "auth.password_changed")).toBe(true);
+      const passwordEvent = persisted.events.find((event) => event.type === "auth.password_changed" && event.data?.userId === invited.json().user.id);
+      expect(passwordEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          userId: invited.json().user.id,
+          actorId: invited.json().user.id,
+          actorEmail: "password.qc@layerpilot.test",
+          actorRole: "Operator",
+          actorType: "user",
+          sessionsRevoked: 0
+        }
+      });
       expect(persisted.events.some((event) => event.type === "user.password_reset")).toBe(true);
       expect(persisted.users.find((user) => user.email === "password.qc@layerpilot.test")).toMatchObject({ passwordResetRequired: true });
+      expect(JSON.stringify(passwordEvent)).not.toContain("operator-secret-1");
+      expect(JSON.stringify(passwordEvent)).not.toContain(operatorPassword);
     });
   });
 
@@ -767,9 +810,27 @@ describe("3DSTU FarmFlow API", () => {
       expect(plainLogin.statusCode).toBe(200);
 
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
-      expect(persisted.events.some((event) => event.type === "auth.2fa_enabled")).toBe(true);
-      expect(persisted.events.some((event) => event.type === "auth.2fa_verified")).toBe(true);
-      expect(persisted.events.some((event) => event.type === "auth.2fa_disabled")).toBe(true);
+      const setupEvent = persisted.events.find((event) => event.type === "auth.2fa_setup_started");
+      const enabledEvent = persisted.events.find((event) => event.type === "auth.2fa_enabled");
+      const verifiedEvent = persisted.events.find((event) => event.type === "auth.2fa_verified" && event.data?.method === "totp");
+      const disabledEvent = persisted.events.find((event) => event.type === "auth.2fa_disabled");
+      for (const event of [setupEvent, enabledEvent, verifiedEvent, disabledEvent]) {
+        expect(event).toMatchObject({
+          workspaceId: "ws-default",
+          data: {
+            workspaceId: "ws-default",
+            userId: "u0",
+            actorId: "u0",
+            actorEmail: "demo@layerpilot.test",
+            actorRole: "Admin",
+            actorType: "user"
+          }
+        });
+      }
+      expect(verifiedEvent.data).toMatchObject({ method: "totp" });
+      const serializedEvents = JSON.stringify([setupEvent, enabledEvent, verifiedEvent, disabledEvent]);
+      expect(serializedEvents).not.toContain(setup.json().secret);
+      expect(serializedEvents).not.toContain(recoveryCode);
     });
   });
 

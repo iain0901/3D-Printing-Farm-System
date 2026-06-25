@@ -298,7 +298,7 @@ Use the seeded demo account on the auth screen:
 - Email: `demo@layerpilot.test`
 - Password: `layerpilot`
 
-The API uses local bearer-token sessions, password hashes, optional TOTP two-factor auth with one-time recovery codes, and role-based write permissions for core production actions. User responses, state exports, and backup exports strip password hashes, 2FA secrets, recovery-code hashes, quote portal bearer tokens, API-key secrets, idempotency replay records, and credential-bearing integration endpoint URL paths/query strings.
+The API uses local bearer-token sessions, password hashes, optional TOTP two-factor auth with one-time recovery codes, and role-based write permissions for core production actions. Login, logout, password-change, signup, and 2FA setup/enable/verify/disable events are written to the audit trail with workspace, user, actor, and session metadata where applicable, without storing bearer tokens, passwords, TOTP secrets, or recovery codes. User responses, state exports, and backup exports strip password hashes, 2FA secrets, recovery-code hashes, quote portal bearer tokens, API-key secrets, idempotency replay records, and credential-bearing integration endpoint URL paths/query strings.
 
 ## Implemented MVP Areas
 

@@ -25,6 +25,7 @@ Stripe billing webhooks on `/api/billing/webhook/stripe` verify the official `St
 - Password changes keep only the current session; admin password resets revoke all sessions for the reset user.
 - In `NODE_ENV=production`, Owner/Admin sessions are limited to identity, password, logout, and TOTP setup/enable endpoints while workspace `requireAdmin2fa` is enabled and the account has not enrolled two-factor authentication.
 - In `NODE_ENV=production`, Owner/Admin users cannot disable TOTP while workspace `requireAdmin2fa` remains enabled. Disable that workspace policy first for a planned 2FA reset, then re-enable the policy after the account is remediated.
+- Review `/api/audit` for login, logout, password-change, signup, and 2FA setup/enable/verify/disable events during access reviews or incident response. These events include workspace, user, actor, and session metadata where applicable, but do not store bearer tokens, passwords, TOTP secrets, or recovery codes.
 
 ## API Key Policy
 
