@@ -4,8 +4,9 @@
 - Pushed remote: `origin/codex/production-saas-completion-20260624`
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
-- Latest round: Round 88 TOTP enrollment password-proof hardening implemented, verified, committed, and pushed.
+- Latest round: Round 89 Stripe webhook duplicate-delivery hardening implemented, verified, and committed; push pending.
 - Commits:
+  - `2115f11` `feat: dedupe stripe webhooks`
   - `d92b164` `feat: require password for 2fa enablement`
   - `cd308d8` `docs: record codex round 88 status`
   - `c224949` `feat: scope cost catalogs by workspace`
@@ -189,6 +190,10 @@
   - `7e42cc7` `feat: scope audit retention by workspace`
   - Current `HEAD` `docs: record codex round 69 push`
 - QC result:
+  - Round 89 targeted `npm run test -- api/server.test.mjs -t "Stripe billing"`: failed before implementation as expected, duplicate Stripe webhook delivery lacked the replay header and would create duplicate audit evidence.
+  - Round 89 targeted `npm run test -- api/server.test.mjs -t "Stripe billing"`: passed, 1 test passed.
+  - Round 89 full API `npm run test -- api/server.test.mjs`: passed, 134 tests passed.
+  - Round 89 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 153 tests passed.
   - Round 88 targeted `npm run test -- api/server.test.mjs -t "two-factor|2FA"`: failed before implementation as expected, wrong-password TOTP enablement returned `200`.
   - Round 88 targeted `npm run test -- api/server.test.mjs -t "two-factor|2FA"`: passed, 4 tests passed.
   - Round 88 broader auth `npm run test -- api/server.test.mjs -t "authenticates users and supports logout|two-factor auth|2FA|password changes|production Owner and Admin"`: passed, 6 tests passed.
@@ -782,7 +787,7 @@
 - Maintenance idempotency now protects job creation, job updates, template saves, and problem-report intake retries; broader maintenance write coverage should still be added only after route-specific replay and response review.
 - Audit-retention run idempotency now protects retry-prone governance cleanup runs; broader admin write coverage should still be added only after route-specific replay and response review.
 - Audit-retention pruning is now workspace-scoped, but operators still need to review each workspace's retention policy against customer compliance requirements before enabling aggressive retention windows.
-- Billing idempotency now protects plan-change and portal-session retries; Stripe webhooks now verify direct `Stripe-Signature` deliveries or the trusted-proxy shared-secret fallback rather than client `Idempotency-Key` headers.
+- Billing idempotency now protects plan-change and portal-session retries; Stripe webhooks now verify direct `Stripe-Signature` deliveries or the trusted-proxy shared-secret fallback rather than client `Idempotency-Key` headers, and duplicate Stripe provider event IDs replay without duplicating `billing.stripe_webhook` audit evidence.
 - Printer action idempotency now protects `/api/actions` retries before bridge dispatch; real hardware validation is still required against the customer's printer fleet before go-live.
 - Direct printer status idempotency now protects manual status update retries from duplicate `printer.status` audit events; real hardware status correctness still depends on bridge validation against the customer's printer fleet.
 - Quote portal-link idempotency now protects generation and rotation retries; operators should still avoid sharing superseded customer links after intentional manual rotation.
