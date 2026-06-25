@@ -5997,6 +5997,40 @@ endsolid s3_store`;
     });
   });
 
+  it("rejects full backup exports that exceed the configured byte limit", async () => {
+    await withApp(async ({ app }) => {
+      const token = await login(app);
+      const sample = await app.inject({
+        method: "POST",
+        url: "/api/files/sample",
+        headers: auth(token),
+        payload: { name: "Oversized Backup Bracket", material: "PETG", folder: "Backups" }
+      });
+      expect(sample.statusCode).toBe(201);
+
+      const limited = await app.inject({ method: "GET", url: "/api/admin/export?includeFiles=true&maxBytes=1", headers: auth(token) });
+      expect(limited.statusCode).toBe(413);
+      expect(limited.json()).toMatchObject({
+        error: "Full backup export exceeds the configured byte limit",
+        storage: {
+          included: false,
+          limitBytes: 1,
+          oversized: true,
+          count: expect.any(Number),
+          bytes: expect.any(Number)
+        }
+      });
+      expect(limited.json().storage.bytes).toBeGreaterThan(1);
+      expect(limited.json().storage.files[0]).toMatchObject({ fileId: sample.json().file.id, size: expect.any(Number) });
+
+      const audit = await app.inject({ method: "GET", url: "/api/audit?type=admin.export", headers: auth(token) });
+      expect(audit.statusCode).toBe(200);
+      expect(audit.json().events.find((event) => event.data?.includeFiles === true)).toMatchObject({
+        data: expect.objectContaining({ blocked: true, limitBytes: 1 })
+      });
+    });
+  });
+
   it("stores bridge configs without exposing api keys and syncs printer status", async () => {
     await withApp(async ({ app, dbPath }) => {
       const originalFetch = global.fetch;

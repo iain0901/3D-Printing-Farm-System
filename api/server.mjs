@@ -60,6 +60,7 @@ const DEFAULT_WORKSPACE_ID = "ws-default";
 const IDEMPOTENCY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const IDEMPOTENCY_MAX_RECORDS = 500;
 const IDEMPOTENCY_MAX_RESPONSE_BYTES = 256 * 1024;
+const DEFAULT_FULL_BACKUP_MAX_BYTES = 512 * 1024 * 1024;
 const DEFAULT_SESSION_TTL_HOURS = 7 * 24;
 const DEFAULT_SESSION_IDLE_TIMEOUT_HOURS = 24;
 const API_KEY_GRANTABLE_SCOPES = [
@@ -1880,21 +1881,65 @@ function normalizeRestoredStoragePaths(data, preserveStoragePaths) {
   return stripped;
 }
 
-async function buildBackupFilePayloads(data) {
-  const payloads = [];
+function parseBackupByteLimit(value, fallback = DEFAULT_FULL_BACKUP_MAX_BYTES) {
+  if (value === undefined || value === null || value === "") return fallback;
+  const parsed = parseHumanFileSize(value);
+  return parsed > 0 ? parsed : fallback;
+}
+
+function fullBackupMaxBytes(query = {}) {
+  const envLimit = parseBackupByteLimit(process.env.LAYERPILOT_FULL_BACKUP_MAX_BYTES);
+  const queryLimit = parseBackupByteLimit(query.maxBytes, envLimit);
+  return Math.min(envLimit, queryLimit);
+}
+
+async function buildBackupStorageManifest(data, maxBytes = DEFAULT_FULL_BACKUP_MAX_BYTES) {
+  const files = [];
   const missing = [];
   let bytes = 0;
   for (const file of data.files || []) {
     if (!file.storagePath) continue;
     try {
+      const size = await statStoredObject(file);
+      bytes += size;
+      files.push({
+        fileId: file.id,
+        name: file.name || path.basename(file.storagePath || file.storageKey || file.id),
+        type: file.type || "",
+        size,
+        originalPath: file.storageKey || (file.storageProvider === "s3" ? String(file.storagePath || "") : path.relative(storageRoot(), file.storagePath).replace(/\\/g, "/"))
+      });
+    } catch (error) {
+      missing.push({ fileId: file.id, name: file.name, reason: error instanceof Error ? error.message : "stat failed" });
+    }
+  }
+  return {
+    included: false,
+    count: files.length,
+    bytes,
+    limitBytes: maxBytes,
+    oversized: bytes > maxBytes,
+    files,
+    missing
+  };
+}
+
+async function buildBackupFilePayloads(data, manifest) {
+  const payloads = [];
+  const missing = [...(manifest?.missing || [])];
+  let bytes = 0;
+  for (const fileInfo of manifest?.files || []) {
+    const file = (data.files || []).find((item) => item.id === fileInfo.fileId);
+    if (!file) continue;
+    try {
       const buffer = await readStoredObject(file);
       bytes += buffer.length;
       payloads.push({
         fileId: file.id,
-        name: file.name || path.basename(file.storagePath),
-        type: file.type || "",
+        name: fileInfo.name,
+        type: fileInfo.type,
         size: buffer.length,
-        originalPath: file.storageKey || (file.storageProvider === "s3" ? String(file.storagePath || "") : path.relative(storageRoot(), file.storagePath).replace(/\\/g, "/")),
+        originalPath: fileInfo.originalPath,
         bytesBase64: buffer.toString("base64")
       });
     } catch (error) {
@@ -1907,6 +1952,7 @@ async function buildBackupFilePayloads(data) {
       included: true,
       count: payloads.length,
       bytes,
+      limitBytes: manifest?.limitBytes || DEFAULT_FULL_BACKUP_MAX_BYTES,
       missing
     }
   };
@@ -6054,11 +6100,25 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!hasPermission(request.user, "admin:export")) return reply.code(403).send({ error: "Missing permission: admin:export" });
     const exportedAt = new Date().toISOString();
     const includeFiles = request.query?.includeFiles === "true";
-    await dispatchEvent(database, "admin.export", `${request.user.email} exported workspace data`, { exportedAt, userId: request.user.id, includeFiles }, { actor: request.user });
+    const scoped = workspaceScopeForUser(database.data, request.user);
+    let filePayloads = { storage: { included: false, count: 0, bytes: 0, missing: [] } };
+    if (includeFiles) {
+      const limitBytes = fullBackupMaxBytes(request.query || {});
+      const manifest = await buildBackupStorageManifest(scoped, limitBytes);
+      if (manifest.oversized) {
+        await dispatchEvent(database, "admin.export", `${request.user.email} export blocked by full backup size limit`, { exportedAt, userId: request.user.id, includeFiles, blocked: true, limitBytes, bytes: manifest.bytes, files: manifest.count }, { actor: request.user });
+        await database.write();
+        return reply.code(413).send({
+          error: "Full backup export exceeds the configured byte limit",
+          storage: manifest,
+          remediation: "Use the verified Ubuntu volume backup or raise LAYERPILOT_FULL_BACKUP_MAX_BYTES for this instance before exporting stored file bytes."
+        });
+      }
+      filePayloads = await buildBackupFilePayloads(scoped, manifest);
+    }
+    await dispatchEvent(database, "admin.export", `${request.user.email} exported workspace data`, { exportedAt, userId: request.user.id, includeFiles, limitBytes: filePayloads.storage.limitBytes || undefined, bytes: filePayloads.storage.bytes, files: filePayloads.storage.count }, { actor: request.user });
     await database.write();
     reply.header("content-disposition", `attachment; filename="layerpilot-export-${exportedAt.slice(0, 10)}.json"`);
-    const scoped = workspaceScopeForUser(database.data, request.user);
-    const filePayloads = includeFiles ? await buildBackupFilePayloads(scoped) : { storage: { included: false, count: 0, bytes: 0, missing: [] } };
     return {
       exportedAt,
       service: "3DSTU FarmFlow",

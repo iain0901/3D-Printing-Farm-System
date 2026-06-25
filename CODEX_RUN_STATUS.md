@@ -1,18 +1,28 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 53 committed and pushed
+- Phase: round 54 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 53 retry-safe direct printer status updates are implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 54 full backup export size guard is in progress on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage proving `PATCH /api/printers/:id/status` retries replay the original status response without duplicating `printer.status` audit events.
-  - Add direct printer status updates to the persisted `Idempotency-Key` allowlist.
-  - Wire the built-in printer controls to generate and reuse browser `Idempotency-Key` headers for the same attempted payload until success.
-  - Document direct printer status retry safety in README, operations, and production-readiness docs.
-  - Run targeted printer/idempotency tests and full QC, then commit and push.
+  - Add regression coverage proving full file-byte exports fail with a clear `413` before reading oversized stored objects.
+  - Add a configurable full backup byte ceiling for `/api/admin/export?includeFiles=true`.
+  - Document the full backup export guard and the recommended volume/object-storage backup path for large production farms.
+  - Run targeted backup/export tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 54 repo inspection started at 2026-06-25T11:08:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, admin export/restore code, full backup UI, and existing backup/restore tests before editing.
+  - Selected production-readiness slice: full backup export size guard for safer backup/export operations.
+  - Added regression coverage proving oversized full file-byte exports return `413` with a storage manifest instead of embedding stored file bytes.
+  - Targeted full-backup limit regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "configured byte limit"` (received `200`).
+  - Added a configurable `LAYERPILOT_FULL_BACKUP_MAX_BYTES` ceiling with a storage-manifest preflight for `/api/admin/export?includeFiles=true`.
+  - Targeted full-backup limit regression passed: `npm run test -- api/server.test.mjs -t "configured byte limit"` (1 test).
+  - Existing local full-backup/restore and restore commit tests passed: `npm run test -- api/server.test.mjs -t "exports and restores stored model bytes|previews and commits sanitized workspace restores|builds analytics, print history, reprints completed jobs, and exports backups"` (3 tests).
+  - S3/full-backup targeted coverage passed: `npm run test -- api/server.test.mjs -t "S3-compatible object store|configured byte limit|exports and restores stored model bytes"` (3 tests).
+  - Documented the full-backup export ceiling in `.env.example`, README, operations, and production-readiness docs.
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (117 tests).
   - Round 53 repo inspection started at 2026-06-25T10:48:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, mutating API routes, idempotency allowlist, direct printer status route/UI, and existing printer tests before editing.
   - Selected production-readiness slice: idempotent direct printer status updates for retry-safe operator controls.

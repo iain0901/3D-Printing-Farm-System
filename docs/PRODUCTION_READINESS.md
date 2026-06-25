@@ -47,6 +47,7 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 - [ ] If S3 object storage is enabled, live `/api/readiness` passes with bucket, region, access key, and secret key configured.
 - [ ] `scripts/ubuntu-backup.sh backup` creates a verified archive.
 - [ ] `scripts/ubuntu-backup.sh restore-drill <archive>` succeeds without touching production data.
+- [ ] Full API JSON file-byte exports are either below `LAYERPILOT_FULL_BACKUP_MAX_BYTES` or intentionally replaced by verified volume/object-storage backups for large file libraries.
 - [ ] `/api/admin/restore` dry-run automation is scoped with `admin:restore`, and destructive restore commits are performed only from a logged-in Owner/Admin session.
 - [ ] Destructive `/api/admin/restore` commits are submitted with an `Idempotency-Key`, and an exact retry has been smoke-tested to replay the restored summary after the successful commit revokes the original session.
 - [ ] Customer quote portal links are regenerated or rotated after restore when needed; workspace exports redact portal bearer tokens and record only whether one exists.

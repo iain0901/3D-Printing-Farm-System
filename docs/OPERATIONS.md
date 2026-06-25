@@ -174,6 +174,7 @@ Confirmed restore commits accept an `Idempotency-Key`; if the success response i
 Workspace exports and shared state redact customer quote portal bearer tokens. Restored or migrated quote records receive fresh portal tokens automatically; operators should use the quote customer-link action to generate or rotate customer-facing URLs after a restore.
 Workspace exports and shared state also redact credential-bearing integration endpoint paths/query strings for webhooks, notifications, commerce connectors, delivery logs, and printer bridges while preserving host hints and stored-server-side operation.
 Workspace exports and shared state also omit internal idempotency replay records; retries after a restore should use fresh `Idempotency-Key` values.
+`/api/admin/export?includeFiles=true` includes stored model/G-code bytes only when the preflight storage manifest is within `LAYERPILOT_FULL_BACKUP_MAX_BYTES` (default 512 MiB). Oversized full exports return `413` with file counts, total bytes, the limit, and missing-object details before any file bytes are embedded in JSON. For larger production farms, use `scripts/ubuntu-backup.sh backup` plus object-storage lifecycle/backups rather than raising the API JSON export limit casually.
 
 ## Updates And Rollback
 
