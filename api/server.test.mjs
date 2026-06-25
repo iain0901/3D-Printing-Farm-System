@@ -6035,6 +6035,41 @@ endsolid s3_store`;
     });
   });
 
+  it("reports missing file payload coverage during restore preview", async () => {
+    await withApp(async ({ app }) => {
+      const token = await login(app);
+      const sample = await app.inject({
+        method: "POST",
+        url: "/api/files/sample",
+        headers: auth(token),
+        payload: { name: "Partial Backup Bracket", material: "PETG", folder: "Backups" }
+      });
+      expect(sample.statusCode).toBe(201);
+      const sampleFile = sample.json().file;
+
+      const exported = await app.inject({ method: "GET", url: "/api/admin/export?includeFiles=true", headers: auth(token) });
+      expect(exported.statusCode).toBe(200);
+      const backup = exported.json();
+      backup.filePayloads = backup.filePayloads.filter((payload) => payload.fileId !== sampleFile.id);
+
+      const preview = await app.inject({
+        method: "POST",
+        url: "/api/admin/restore",
+        headers: auth(token),
+        payload: { backup, dryRun: true }
+      });
+      expect(preview.statusCode).toBe(200);
+      expect(preview.json().filePayloadCoverage).toMatchObject({
+        complete: false,
+        expected: expect.any(Number),
+        included: expect.any(Number),
+        missing: expect.arrayContaining([expect.objectContaining({ fileId: sampleFile.id, name: sampleFile.name })])
+      });
+      expect(preview.json().filePayloadCoverage.expected).toBeGreaterThan(preview.json().filePayloadCoverage.included);
+      expect(preview.json().warnings).toEqual(expect.arrayContaining([expect.stringContaining("missing file payloads")]));
+    });
+  });
+
   it("rejects full backup exports that exceed the configured byte limit", async () => {
     await withApp(async ({ app }) => {
       const token = await login(app);

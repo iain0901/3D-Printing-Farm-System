@@ -1992,7 +1992,30 @@ async function restoreBackupFilePayloads(data, backup, options = {}) {
   return { restored, warnings };
 }
 
-function summarizeRestoreData(data, warnings = [], storagePathsStripped = 0, filePayloadsRestored = 0) {
+function summarizeBackupFilePayloadCoverage(backup, incomingData) {
+  const files = Array.isArray(incomingData?.files) ? incomingData.files : [];
+  const payloads = Array.isArray(backup?.filePayloads) ? backup.filePayloads : [];
+  const storedFiles = files.filter((file) => file?.storagePath || file?.storageKey);
+  const filesById = new Map(files.map((file) => [file.id, file]));
+  const payloadIds = new Set(payloads.map((payload) => payload?.fileId).filter(Boolean));
+  const missing = storedFiles
+    .filter((file) => !payloadIds.has(file.id))
+    .map((file) => ({ fileId: file.id, name: file.name || file.id }));
+  const extra = payloads
+    .filter((payload) => payload?.fileId && !filesById.has(payload.fileId))
+    .map((payload) => ({ fileId: payload.fileId, name: payload.name || payload.fileId }));
+  const included = storedFiles.length - missing.length;
+  return {
+    complete: missing.length === 0 && extra.length === 0,
+    expected: storedFiles.length,
+    included,
+    missing,
+    extra,
+    storageIncluded: backup?.storage?.included === true || payloads.length > 0
+  };
+}
+
+function summarizeRestoreData(data, warnings = [], storagePathsStripped = 0, filePayloadsRestored = 0, filePayloadCoverage = null) {
   const collectionCounts = {};
   for (const key of RESTORABLE_KEYS) {
     if (Array.isArray(data[key])) collectionCounts[key] = data[key].length;
@@ -2007,6 +2030,7 @@ function summarizeRestoreData(data, warnings = [], storagePathsStripped = 0, fil
     files: (data.files || []).length,
     storagePathsStripped,
     filePayloadsRestored,
+    filePayloadCoverage,
     warnings
   };
 }
@@ -2014,6 +2038,7 @@ function summarizeRestoreData(data, warnings = [], storagePathsStripped = 0, fil
 async function prepareRestoreData(currentData, backup, options = {}, actor = null) {
   const incoming = extractBackupData(backup);
   if (!incoming) return { error: "Backup payload must include an object or { data } object" };
+  const filePayloadCoverage = summarizeBackupFilePayloadCoverage(backup, incoming);
   const restored = structuredClone(seedData);
   for (const key of RESTORABLE_KEYS) {
     if (incoming[key] === undefined) continue;
@@ -2032,8 +2057,11 @@ async function prepareRestoreData(currentData, backup, options = {}, actor = nul
     at: new Date().toISOString()
   });
   const restoredPayloads = await restoreBackupFilePayloads(restored, backup, { enabled: options.restoreFilePayloads === true });
-  const warnings = [...userResult.warnings, ...secretWarnings, ...restoredPayloads.warnings];
-  return { data: restored, summary: summarizeRestoreData(restored, warnings, storagePathsStripped, restoredPayloads.restored) };
+  const coverageWarnings = [];
+  if (filePayloadCoverage.missing.length) coverageWarnings.push(`Backup is missing file payloads for ${filePayloadCoverage.missing.length} stored file${filePayloadCoverage.missing.length === 1 ? "" : "s"}; restore will mark them for re-upload unless storage is restored separately`);
+  if (filePayloadCoverage.extra.length) coverageWarnings.push(`Backup includes ${filePayloadCoverage.extra.length} file payload${filePayloadCoverage.extra.length === 1 ? "" : "s"} without matching file records; those payloads will be skipped`);
+  const warnings = [...userResult.warnings, ...secretWarnings, ...coverageWarnings, ...restoredPayloads.warnings];
+  return { data: restored, summary: summarizeRestoreData(restored, warnings, storagePathsStripped, restoredPayloads.restored, filePayloadCoverage) };
 }
 
 function sendSse(raw, event, data) {
