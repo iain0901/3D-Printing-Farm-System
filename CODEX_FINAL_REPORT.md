@@ -94,6 +94,8 @@
   - `abbdff8` `docs: record codex round 48 push prep`
   - `6ffee13` `docs: record codex round 48 push`
   - Current `HEAD` `docs: record codex round 48 final report`
+  - `3558b1a` `feat: prevent required admin 2fa disable`
+  - Current `HEAD` `docs: record codex round 49 status`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -247,6 +249,11 @@
   - Round 48 targeted `npm run test -- api/server.test.mjs`: passed, 111 tests passed.
   - Round 48 targeted `npm run build`: passed.
   - Round 48 final `npm run qc`: passed, build passed, Vitest 10 files / 129 tests passed.
+  - Round 49 targeted `npm run test -- api/server.test.mjs -t "prevents production Owner and Admin users"`: failed before implementation, then passed, 1 test passed.
+  - Round 49 targeted `npm run test -- api/server.test.mjs -t "TOTP two-factor"`: passed, 1 test passed.
+  - Round 49 targeted `npm run test -- api/server.test.mjs -t "production Owner and Admin sessions"`: passed, 1 test passed.
+  - Round 49 targeted `npm run test -- api/server.test.mjs`: passed, 112 tests passed.
+  - Round 49 final `npm run qc`: passed, build passed, Vitest 10 files / 130 tests passed.
 
 ## Completed Features
 
@@ -402,6 +409,8 @@
 - Kept restore previews authenticated and outside the post-commit replay path.
 - Wired the Settings restore commit action to generate and reuse a stable browser idempotency key for the same backup payload until success.
 - Added regression coverage proving restore commit retries do not duplicate `admin.restore` audit events, and documented the restore retry contract in README, operations, and production-readiness docs.
+- Prevented production Owner/Admin users from disabling TOTP while workspace `requireAdmin2fa` remains enabled, closing a path that could make an enrolled admin session non-compliant again.
+- Added regression coverage for the required-admin-2FA disable guard and documented the controlled reset path in README, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -413,6 +422,7 @@
 - Idempotency coverage is route-specific; token- or secret-returning replay records are intentionally retained only in internal server metadata and omitted from shared state/admin exports.
 - Session expiry policy should be reviewed against the customer's shared-device operating model before go-live.
 - Production Owner/Admin users must enroll TOTP before protected API access when workspace `requireAdmin2fa` remains enabled; this is now enforced in `NODE_ENV=production`.
+- Production Owner/Admin users cannot disable TOTP while workspace `requireAdmin2fa` remains enabled; controlled resets should temporarily disable the workspace policy, remediate the account, then re-enable the policy.
 - First-time destructive restore commits still require a logged-in Owner/Admin user session; automation should use dry-run restore validation and hand off final commit to an operator.
 - Confirmed destructive restore commits now support route-specific idempotent replay after session revocation, but operators should still use fresh `Idempotency-Key` values after restoring from an exported backup because exports omit internal replay records.
 - API-key grants are intentionally limited to automation scopes; account, settings, and API-key administration should remain user-session-only unless a customer-specific security review changes that policy.

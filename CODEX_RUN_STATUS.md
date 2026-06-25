@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 49 in progress
+- Phase: round 49 push prep
 - Started: 2026-06-24 UTC
-- Current state: Round 49 production admin 2FA disable hardening is in progress on `codex/production-saas-completion-20260624`.
+- Current state: Round 49 production admin 2FA disable hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`; final report update and push are in progress.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
   - Add regression coverage proving production Owner/Admin users cannot disable 2FA while workspace `requireAdmin2fa` remains enabled.
@@ -22,6 +22,7 @@
   - Documented production 2FA disable behavior in README, operations, and production-readiness docs.
   - Full API suite passed: `npm run test -- api/server.test.mjs` (112 tests).
   - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 130 tests passed).
+  - Committed round 49 implementation as `3558b1a` (`feat: prevent required admin 2fa disable`).
   - Round 48 repo inspection started at 2026-06-25T09:50:47Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, restore/idempotency server code, restore UI code, and restore tests before editing.
   - Selected production-readiness slice: idempotent admin restore commits that can replay the successful restore response after the commit invalidates the original user session.
