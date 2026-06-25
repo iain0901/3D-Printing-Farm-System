@@ -119,7 +119,7 @@ Useful production environment variables:
 
 The production API also enables security headers through `@fastify/helmet` and route-level rate limiting through `@fastify/rate-limit` for authentication, API key creation, billing sessions, and admin exports.
 
-Retry-prone order, queue, public quote intake, public quote decision, quote conversion, production-template, and commerce import writes accept an `Idempotency-Key` header. Supported routes replay the original successful response for the same actor, route, key, and body, and return `409` when a key is reused with different input.
+Retry-prone order, queue, public quote intake, public quote decision, quote conversion, production-template, and commerce import writes accept an `Idempotency-Key` header. Supported routes replay the original successful response for the same actor, route, key, and body, and return `409` when a key is reused with different input. Replay records are internal server metadata only; shared state and admin exports omit the idempotency ledger so response bodies from token-returning routes are not included in handoff bundles.
 
 - `GET /api/health`
 - `GET /api/readiness`
@@ -287,7 +287,7 @@ Use the seeded demo account on the auth screen:
 - Email: `demo@layerpilot.test`
 - Password: `layerpilot`
 
-The API uses local bearer-token sessions, password hashes, optional TOTP two-factor auth with one-time recovery codes, and role-based write permissions for core production actions. User responses, state exports, and backup exports strip password hashes, 2FA secrets, recovery-code hashes, quote portal bearer tokens, API-key secrets, and credential-bearing integration endpoint URL paths/query strings.
+The API uses local bearer-token sessions, password hashes, optional TOTP two-factor auth with one-time recovery codes, and role-based write permissions for core production actions. User responses, state exports, and backup exports strip password hashes, 2FA secrets, recovery-code hashes, quote portal bearer tokens, API-key secrets, idempotency replay records, and credential-bearing integration endpoint URL paths/query strings.
 
 ## Implemented MVP Areas
 

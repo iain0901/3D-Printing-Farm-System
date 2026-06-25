@@ -355,13 +355,24 @@ describe("3DSTU FarmFlow API", () => {
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
       expect(persisted.quoteRequests.filter((quote) => quote.email === payload.email)).toHaveLength(1);
       expect(persisted.events.filter((event) => event.type === "quote_request.created" && event.data?.quoteRequestId === first.json().quoteRequest.id)).toHaveLength(1);
-      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "public-quote-intake-001")).toMatchObject({
+      const ledgerRecord = persisted.dataMeta.idempotencyKeys.find((record) => record.key === "public-quote-intake-001");
+      expect(ledgerRecord).toMatchObject({
         actorId: "public:quote-intake",
         method: "POST",
         path: "/api/public/quoteRequests",
         replayCount: 1,
         statusCode: 201
       });
+      expect(ledgerRecord.responseBody).toContain(first.json().quoteRequest.accessToken);
+
+      const token = await login(app);
+      for (const url of ["/api/state", "/api/admin/export"]) {
+        const sanitized = await app.inject({ method: "GET", url, headers: auth(token) });
+        expect(sanitized.statusCode).toBe(200);
+        expect(sanitized.body).not.toContain("idempotencyKeys");
+        expect(sanitized.body).not.toContain("responseBody");
+        expect(sanitized.body).not.toContain(first.json().quoteRequest.accessToken);
+      }
     });
   });
 

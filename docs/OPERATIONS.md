@@ -34,6 +34,7 @@ In `NODE_ENV=production`, `/api/readiness` is a deployment gate, not just a live
 
 - Use dry-run job generation before committing SKU-linked orders.
 - API clients and public quote forms that submit customer quote requests, accept/reject/request quote changes, create orders, convert quotes, queue work, or import commerce batches should send a unique `Idempotency-Key` on retry-prone requests. Supported routes replay the original 2xx response for the same actor, key, route, and body, and return `409` if the same key is reused with different input.
+- Idempotency replay records are retained only as internal server metadata. `/api/state` and `/api/admin/export` omit the ledger so replay response bodies from token-returning routes are not included in support or backup handoff files.
 - Review `/api/audit` after core production changes; order, catalog, scheduling, queue, bridge, file-version, history/reprint, admin export, integrity, restore, and job-generation events include the workspace and authenticated operator context for traceability.
 - Use Hold when an order should stop progressing but remain recoverable.
 - Use Cancel when the customer or operator stops the order. Cancelled orders cascade to linked non-terminal generated jobs and release reserved filament.
@@ -96,6 +97,7 @@ The restore command creates a pre-restore safeguard archive unless `LAYERPILOT_P
 Workspace restore previews may be run with a scoped `admin:restore` API key for automation drills, but committing a restore through `/api/admin/restore` requires a logged-in user session and `confirm: "RESTORE"`.
 Workspace exports and shared state redact customer quote portal bearer tokens. Restored or migrated quote records receive fresh portal tokens automatically; operators should use the quote customer-link action to generate or rotate customer-facing URLs after a restore.
 Workspace exports and shared state also redact credential-bearing integration endpoint paths/query strings for webhooks, notifications, commerce connectors, delivery logs, and printer bridges while preserving host hints and stored-server-side operation.
+Workspace exports and shared state also omit internal idempotency replay records; retries after a restore should use fresh `Idempotency-Key` values.
 
 ## Updates And Rollback
 

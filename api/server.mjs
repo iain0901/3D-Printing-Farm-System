@@ -1175,6 +1175,11 @@ function sanitizeUser(user) {
   return { ...safeUser, twoFactor: twoFactorStatus(user), twoFactorEnabled: twoFactorStatus(user).enabled };
 }
 
+function sanitizeDataMeta(meta = {}) {
+  const { idempotencyKeys, ...safeMeta } = meta || {};
+  return safeMeta;
+}
+
 function endpointHost(value) {
   const raw = String(value || "").trim();
   if (!raw) return "";
@@ -1621,6 +1626,7 @@ function publicState(data) {
   const { sessions, ...safeState } = data;
   return {
     ...safeState,
+    dataMeta: sanitizeDataMeta(data.dataMeta),
     users: data.users.map(sanitizeUser),
     bridges: (data.bridges || []).map(sanitizeBridge),
     webhooks: (data.webhooks || []).map(sanitizeWebhook),

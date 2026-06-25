@@ -32,6 +32,7 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 - [ ] Orders can be created from manual entry, CSV, connector import, or quote conversion.
 - [ ] SKU-linked orders can dry-run job generation before committing queue jobs.
 - [ ] External clients and public quote forms use `Idempotency-Key` for retry-prone quote intake, customer quote decisions, order, quote conversion, queue, and commerce import write APIs.
+- [ ] State/export handoff files have been checked to confirm internal idempotency replay records are omitted.
 - [ ] Cancelled orders stop linked active generated jobs and release material reservations.
 - [ ] Queue jobs can be scheduled, started, paused, completed, failed, or cancelled.
 - [ ] Spool inventory shows remaining, reserved, and available material.
@@ -47,6 +48,7 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 - [ ] `scripts/ubuntu-backup.sh restore-drill <archive>` succeeds without touching production data.
 - [ ] `/api/admin/restore` dry-run automation is scoped with `admin:restore`, and destructive restore commits are performed only from a logged-in Owner/Admin session.
 - [ ] Customer quote portal links are regenerated or rotated after restore when needed; workspace exports redact portal bearer tokens and record only whether one exists.
+- [ ] Retry clients use fresh `Idempotency-Key` values after restore because exported backups do not include internal replay records.
 - [ ] Integration endpoint URLs are re-entered or verified after restore/rotation when provider tokens changed; exports show only redacted host metadata and `hasUrl`/`hasBaseUrl` flags.
 - [ ] `layerpilot-backup.timer` is enabled on Ubuntu production hosts.
 - [ ] Restore and rollback responsibility is assigned to a named operator.
