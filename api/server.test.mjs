@@ -5879,6 +5879,41 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent telemetry ticks without double advancing progress", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const headers = { ...auth(token), "idempotency-key": "telemetry-tick-retry-001" };
+      const payload = { increment: 10 };
+
+      const first = await app.inject({ method: "POST", url: "/api/telemetry/tick", headers, payload });
+      expect(first.statusCode).toBe(200);
+      expect(first.json()).toMatchObject({ changed: true });
+      const afterFirst = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(afterFirst.printers.find((printer) => printer.id === "p1")).toMatchObject({ status: "printing", progress: 72 });
+      expect(afterFirst.queue.find((job) => job.id === "q1")).toMatchObject({ status: "printing", stage: "printing" });
+
+      const replay = await app.inject({ method: "POST", url: "/api/telemetry/tick", headers, payload });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(first.json());
+
+      const conflict = await app.inject({ method: "POST", url: "/api/telemetry/tick", headers, payload: { increment: 20 } });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.printers.find((printer) => printer.id === "p1")).toMatchObject({ status: "printing", progress: 72 });
+      expect(persisted.queue.find((job) => job.id === "q1")).toMatchObject({ status: "printing", stage: "printing" });
+      expect(persisted.events.filter((event) => event.type === "print.completed" && event.data?.jobId === "q1")).toHaveLength(0);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "telemetry-tick-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/telemetry/tick",
+        replayCount: 1,
+        statusCode: 200
+      });
+    });
+  });
+
   it("builds analytics, print history, reprints completed jobs, and exports backups", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);

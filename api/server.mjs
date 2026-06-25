@@ -1562,6 +1562,7 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "POST" && routePath === "/api/admin/audit-retention/run") return true;
   if (method === "POST" && routePath === "/api/support/snapshot") return true;
   if (method === "POST" && routePath === "/api/billing/portal") return true;
+  if (method === "POST" && routePath === "/api/telemetry/tick") return true;
   if (method === "POST" && routePath === "/api/bridges/sync") return true;
   if (method === "POST" && routePath === "/api/slicer/jobs") return true;
   if (method === "POST" && /^\/api\/schedule\/(auto|optimize|constraint)$/.test(routePath)) return true;
