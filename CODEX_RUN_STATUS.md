@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 80 implementation committed; final report update pending push
+- Phase: round 80 committed and pushed
 - Started: 2026-06-24 UTC
-- Current state: Round 80 integration endpoint audit context hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`; final report update and push are pending.
+- Current state: Round 80 integration endpoint audit context hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
   - Add regression coverage proving webhook, notification, and commerce endpoint configuration/test-send audit events include workspace/operator context without endpoint URLs or tokens.
@@ -23,6 +23,8 @@
   - Full API suite passed: `npm run test -- api/server.test.mjs` (132 tests).
   - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 151 tests passed).
   - Committed round 80 implementation/status/docs as `c8669bc` (`feat: add integration endpoint audit context`).
+  - Committed round 80 final report/status as `effe6ed` (`docs: record codex round 80 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
   - Round 79 repo inspection started at 2026-06-25T17:05:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route list, idempotency surface, admin export coverage, direct file creation route, audit dispatcher, and existing file tests before editing.
   - Selected production-readiness slice: direct file creation audit context hardening so metadata-created model/G-code records are traceable to the authenticated workspace/operator like upload, generated, preview, and download paths.
