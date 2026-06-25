@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 8 in progress
+- Phase: round 8 pushed
 - Started: 2026-06-24 UTC
-- Current state: Round 8 runtime production readiness gates implemented; targeted tests and full QC passed.
+- Current state: Round 8 runtime production readiness gates implemented, targeted tests and full QC passed, and branch pushed to `origin/codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 9 files / 79 tests passed)
 - Current plan:
   - Add regression coverage for `/api/readiness` rejecting production deployments with default demo access or weak/missing ops tokens.
@@ -20,6 +20,8 @@
   - Documented the runtime readiness deployment gate in operations and production-readiness docs.
   - Targeted API suite passed: `npm run test -- api/server.test.mjs` (69 tests).
   - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 85 tests passed).
+  - Committed round 8 as `9132a52` (`feat: gate production readiness config`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
   - Round 7 repo inspection started at 2026-06-25T02:24:30Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: API-key read-scope hardening for automation least privilege.
