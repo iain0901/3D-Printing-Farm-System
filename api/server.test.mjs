@@ -280,8 +280,71 @@ describe("3DSTU FarmFlow API", () => {
         expect(readiness.json().checks).toEqual(expect.arrayContaining([
           expect.objectContaining({ name: "production-env-required", ok: true }),
           expect.objectContaining({ name: "production-secrets", ok: true }),
-          expect.objectContaining({ name: "production-default-access", ok: true })
+          expect.objectContaining({ name: "production-default-access", ok: true }),
+          expect.objectContaining({ name: "production-public-signup", ok: true, enabled: false })
         ]));
+      });
+    });
+  });
+
+  it("blocks public signup in production unless explicitly enabled", async () => {
+    const productionEnv = {
+      NODE_ENV: "production",
+      LAYERPILOT_ADMIN_EMAIL: "owner@example.com",
+      LAYERPILOT_ADMIN_PASSWORD: "production-owner-password",
+      LAYERPILOT_WORKER_TOKEN: "worker-token-32-characters-minimum",
+      LAYERPILOT_METRICS_TOKEN: "metrics-token-32-characters-minimum",
+      LAYERPILOT_DISABLE_DEFAULT_USERS: "true",
+      LAYERPILOT_DISABLE_DEMO_LOGIN: "true",
+      LAYERPILOT_WORKER_TELEMETRY: "false",
+      LAYERPILOT_WORKER_BRIDGE_POLLING: "false",
+      LAYERPILOT_ENABLE_PUBLIC_SIGNUP: ""
+    };
+    await withEnv(productionEnv, async () => {
+      await withApp(async ({ app, db }) => {
+        const readiness = await app.inject({ method: "GET", url: "/api/readiness" });
+        expect(readiness.statusCode).toBe(200);
+        expect(readiness.json().checks).toEqual(expect.arrayContaining([
+          expect.objectContaining({ name: "production-public-signup", ok: true, enabled: false })
+        ]));
+
+        const blocked = await app.inject({
+          method: "POST",
+          url: "/api/auth/signup",
+          payload: {
+            name: "Customer Owner",
+            email: "customer@example.com",
+            password: "customer-owner-password",
+            workspace: "Customer Farm"
+          }
+        });
+        expect(blocked.statusCode).toBe(403);
+        expect(blocked.json()).toMatchObject({ error: "Public signup is disabled in production" });
+        expect(db.data.users.some((user) => user.email === "customer@example.com")).toBe(false);
+      });
+    });
+
+    await withEnv({ ...productionEnv, LAYERPILOT_ENABLE_PUBLIC_SIGNUP: "true" }, async () => {
+      await withApp(async ({ app, db }) => {
+        const readiness = await app.inject({ method: "GET", url: "/api/readiness" });
+        expect(readiness.statusCode).toBe(200);
+        expect(readiness.json().checks).toEqual(expect.arrayContaining([
+          expect.objectContaining({ name: "production-public-signup", ok: true, enabled: true })
+        ]));
+
+        const created = await app.inject({
+          method: "POST",
+          url: "/api/auth/signup",
+          payload: {
+            name: "Customer Owner",
+            email: "customer@example.com",
+            password: "customer-owner-password",
+            workspace: "Customer Farm"
+          }
+        });
+        expect(created.statusCode).toBe(201);
+        expect(created.json().user).toMatchObject({ email: "customer@example.com", role: "Owner" });
+        expect(db.data.users.some((user) => user.email === "customer@example.com" && user.role === "Owner")).toBe(true);
       });
     });
   });

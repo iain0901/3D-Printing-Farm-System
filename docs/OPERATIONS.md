@@ -19,6 +19,8 @@ Stripe billing webhooks on `/api/billing/webhook/stripe` verify the official `St
 
 In production, send operational shared tokens only in headers. Metrics scrapers must use `x-layerpilot-metrics-token`, and worker-to-API broadcasts must use `x-layerpilot-worker-token`; token query parameters are accepted only outside production for local compatibility so secrets do not land in proxy or access-log URLs.
 
+Public signup is closed by default in `NODE_ENV=production` so an exposed customer VPS cannot mint arbitrary new Owner workspaces. Keep `LAYERPILOT_ENABLE_PUBLIC_SIGNUP=false` for normal customer deployments; set it to `true` only for an intentional self-service SaaS registration flow, then confirm `/api/readiness` reports `production-public-signup` as explicitly enabled.
+
 ## Session Policy
 
 - User bearer tokens are stored only as server-side hashes in persisted data.

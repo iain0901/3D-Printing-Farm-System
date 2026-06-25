@@ -8,10 +8,11 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 - [ ] `scripts/ubuntu-deploy.sh doctor` passes on the target host.
 - [ ] `LAYERPILOT_ADMIN_EMAIL` and `LAYERPILOT_ADMIN_PASSWORD` are set to real owner credentials.
 - [ ] `LAYERPILOT_DISABLE_DEFAULT_USERS=true` and `LAYERPILOT_DISABLE_DEMO_LOGIN=true` are set for customer production.
+- [ ] `LAYERPILOT_ENABLE_PUBLIC_SIGNUP=false` for customer VPS deployments, unless self-service tenant registration is intentionally exposed and monitored.
 - [ ] `LAYERPILOT_WORKER_TOKEN` and `LAYERPILOT_METRICS_TOKEN` are unique strong values.
 - [ ] Metrics scraping uses the `x-layerpilot-metrics-token` header and worker broadcasts use the `x-layerpilot-worker-token` header; production does not accept these shared tokens in URL query parameters.
 - [ ] `.env` is not committed and is readable only by the deployment user.
-- [ ] `/api/readiness` reports `ok: true`; in `NODE_ENV=production`, this also verifies required owner credentials, strong non-default worker/metrics tokens, disabled default/demo access, valid API-key IP allowlist configuration when restrictions are enabled, consistent optional S3, Stripe, and MQTT dependency configuration, and a fresh worker heartbeat when `LAYERPILOT_WORKER_TELEMETRY` or `LAYERPILOT_WORKER_BRIDGE_POLLING` is enabled.
+- [ ] `/api/readiness` reports `ok: true`; in `NODE_ENV=production`, this also verifies required owner credentials, strong non-default worker/metrics tokens, disabled default/demo access, reports whether public signup is closed or explicitly enabled, validates API-key IP allowlist configuration when restrictions are enabled, checks consistent optional S3, Stripe, and MQTT dependency configuration, and requires a fresh worker heartbeat when `LAYERPILOT_WORKER_TELEMETRY` or `LAYERPILOT_WORKER_BRIDGE_POLLING` is enabled.
 - [ ] `npm run smoke:prod` passes against the live URL.
 - [ ] `scripts/ubuntu-deploy.sh ops-check` passes with authenticated state, audit, and metrics checks enabled through `LAYERPILOT_OPS_EMAIL`/`LAYERPILOT_OPS_PASSWORD` or the bootstrap admin credentials.
 - [ ] Authenticated `npm run smoke:prod` and `scripts/ubuntu-deploy.sh ops-check` runs report storage-aware integrity with `storage.complete: true`, and `/api/audit` shows `admin.integrity_checked` metadata with `checkStorage: true` and `storageComplete: true`.

@@ -1,17 +1,27 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 70 committed and pushed
+- Phase: round 71 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 70 operator retry-safety hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 71 production public-signup hardening is in progress on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage proving parametric nameplate retries replay without duplicate stored files, linked parts, or audit events.
-  - Wire built-in production-template and parametric-nameplate operator actions to send stable `Idempotency-Key` headers.
-  - Document built-in retry safety for production-template runs and parametric nameplates.
-  - Run targeted API/browser tests, full API tests, and full QC, then commit and push.
+  - Add regression coverage proving production public signup is blocked by default and allowed only with explicit opt-in.
+  - Add readiness/deployment visibility for the production public-signup gate.
+  - Document the public-signup production gate across README, install, operations, production-readiness, and Ubuntu deployment docs.
+  - Run targeted API/deploy tests, full API tests, and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 71 repo inspection started at 2026-06-25T15:22:07Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, auth/signup route, readiness checks, deployment doctor, env example, and existing auth/readiness tests before editing.
+  - Selected production-readiness slice: production public-signup hardening so a customer VPS cannot mint arbitrary new Owner workspaces unless the operator explicitly opts in.
+  - Added production signup regression coverage proving `/api/auth/signup` returns `403` by default in production, does not create the requested user, and succeeds only when `LAYERPILOT_ENABLE_PUBLIC_SIGNUP=true`.
+  - Added a `production-public-signup` readiness check that reports whether production public signup is disabled or explicitly enabled.
+  - Wired Ubuntu deployment env generation and doctor validation to include `LAYERPILOT_ENABLE_PUBLIC_SIGNUP=false` by default.
+  - Documented the public-signup production gate in README, install docs, operations, production-readiness, Ubuntu deployment docs, and `.env.example`.
+  - Targeted public-signup/readiness coverage passed: `npm run test -- api/server.test.mjs -t "public signup|production readiness"` (6 tests).
+  - Deployment coverage passed: `npm run test -- api/deploy.test.mjs` (3 tests).
+  - Deploy script syntax check passed: `bash -n scripts/ubuntu-deploy.sh`.
   - Round 70 repo inspection started at 2026-06-25T15:06:58Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, idempotency matcher, production-template routes, parametric-nameplate route/UI, and existing catalog tests before editing.
   - Selected production-readiness slice: operator retry safety for built-in production-template runs and parametric nameplate generation so dropped browser responses do not duplicate queue jobs or catalog artifacts.

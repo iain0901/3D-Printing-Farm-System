@@ -802,6 +802,11 @@ function envFlagWithDefault(name, fallback, env = process.env) {
   return ["1", "true", "yes", "on"].includes(value.toLowerCase());
 }
 
+function publicSignupEnabled(env = process.env) {
+  if (env.NODE_ENV !== "production") return true;
+  return envFlag("LAYERPILOT_ENABLE_PUBLIC_SIGNUP", env);
+}
+
 function envFlagDefault(name, fallback = true) {
   const value = String(process.env[name] || "").trim();
   if (!value) return fallback;
@@ -3613,6 +3618,14 @@ function productionReadinessConfigChecks(data, env = process.env) {
     detail: defaultUserIssues.length ? defaultUserIssues.join("; ") : "default and demo access disabled"
   });
 
+  const signupEnabled = publicSignupEnabled(env);
+  checks.push({
+    name: "production-public-signup",
+    ok: true,
+    enabled: signupEnabled,
+    detail: signupEnabled ? "public signup explicitly enabled" : "public signup disabled by default"
+  });
+
   const settings = data.workspaceSettings || {};
   const allowlist = Array.isArray(settings.allowedApiIps) ? settings.allowedApiIps : [];
   const allowlistIssues = [];
@@ -5807,6 +5820,12 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   });
 
   app.post("/api/auth/signup", { config: { rateLimit: authRateLimit } }, async (request, reply) => {
+    if (!publicSignupEnabled()) {
+      return reply.code(403).send({
+        error: "Public signup is disabled in production",
+        remediation: "Set LAYERPILOT_ENABLE_PUBLIC_SIGNUP=true only when tenant self-service registration is intentionally enabled."
+      });
+    }
     const parsed = signupSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Invalid signup payload", issues: parsed.error.issues });
     const exists = database.data.users.some((item) => item.email.toLowerCase() === parsed.data.email.toLowerCase());
