@@ -6239,7 +6239,17 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const report = await buildDataIntegrityReport(workspaceScopeForUser(database.data, request.user), { checkStorage: request.query?.checkStorage === "true" });
     database.data.dataMeta ||= {};
     database.data.dataMeta.integrityLastCheckedAt = report.checkedAt;
-    await dispatchEvent(database, "admin.integrity_checked", `${request.user.email} checked data integrity`, { ok: report.ok, errors: report.errors.length, warnings: report.warnings.length }, { actor: request.user });
+    await dispatchEvent(database, "admin.integrity_checked", `${request.user.email} checked data integrity`, {
+      ok: report.ok,
+      errors: report.errors.length,
+      warnings: report.warnings.length,
+      checkStorage: report.storage.checked,
+      storageComplete: report.storage.complete,
+      storageExpected: report.storage.expected,
+      storagePresent: report.storage.present,
+      storageBytes: report.storage.bytes,
+      storageMissingFiles: report.storage.missing.length
+    }, { actor: request.user });
     await database.write();
     return report;
   });

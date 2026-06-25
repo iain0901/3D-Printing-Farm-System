@@ -13,7 +13,7 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 - [ ] `/api/readiness` reports `ok: true`; in `NODE_ENV=production`, this also verifies required owner credentials, strong non-default worker/metrics tokens, disabled default/demo access, and consistent optional S3, Stripe, and MQTT dependency configuration.
 - [ ] `npm run smoke:prod` passes against the live URL.
 - [ ] `scripts/ubuntu-deploy.sh ops-check` passes with authenticated state, audit, and metrics checks enabled through `LAYERPILOT_OPS_EMAIL`/`LAYERPILOT_OPS_PASSWORD` or the bootstrap admin credentials.
-- [ ] Authenticated `npm run smoke:prod` and `scripts/ubuntu-deploy.sh ops-check` runs report storage-aware integrity with `storage.complete: true`.
+- [ ] Authenticated `npm run smoke:prod` and `scripts/ubuntu-deploy.sh ops-check` runs report storage-aware integrity with `storage.complete: true`, and `/api/audit` shows `admin.integrity_checked` metadata with `checkStorage: true` and `storageComplete: true`.
 
 ## Access Control
 
@@ -46,7 +46,7 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 - [ ] Persistent data is stored in the Docker volume or configured database path.
 - [ ] Local uploaded model storage or S3-compatible storage is configured intentionally.
 - [ ] If S3 object storage is enabled, live `/api/readiness` passes with bucket, region, access key, and secret key configured.
-- [ ] `/api/admin/integrity?checkStorage=true` reports `storage.complete: true` before relying on a file-byte backup or restore drill.
+- [ ] `/api/admin/integrity?checkStorage=true` reports `storage.complete: true` before relying on a file-byte backup or restore drill, and its audit event records storage expected/present counts, total bytes, and missing-file count.
 - [ ] `scripts/ubuntu-backup.sh backup` creates a verified archive.
 - [ ] `scripts/ubuntu-backup.sh restore-drill <archive>` succeeds without touching production data.
 - [ ] Full API JSON file-byte exports are below `LAYERPILOT_FULL_BACKUP_MAX_BYTES`, return no missing stored-file payloads, or are intentionally replaced by verified volume/object-storage backups for large file libraries.

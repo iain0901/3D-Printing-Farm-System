@@ -1,17 +1,27 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 61 committed and pushed
+- Phase: round 62 verified, commit pending
 - Started: 2026-06-24 UTC
-- Current state: Round 61 ops-check storage integrity slice is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 62 audit evidence for storage-aware integrity checks is implemented and verified on `codex/production-saas-completion-20260624`; commit and push are pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage that production smoke and authenticated ops checks call `/api/admin/integrity?checkStorage=true`.
-  - Wire live smoke and ops scripts to fail when storage-aware integrity reports missing stored model/G-code bytes.
-  - Document that ops-check/smoke now include storage-aware integrity coverage.
-  - Run targeted deployment/script tests and full QC, then commit and push.
+  - Add regression coverage that `/api/admin/integrity?checkStorage=true` audit events include storage coverage evidence.
+  - Wire integrity audit metadata to record whether storage was checked, whether coverage was complete, and missing counts without exposing file contents.
+  - Document audit evidence for storage-aware integrity checks.
+  - Run targeted API tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 62 repo inspection started at 2026-06-25T12:27:57Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, admin integrity code, and audit/idempotency surface before editing.
+  - Selected production-readiness slice: audit trail evidence for storage-aware integrity checks so backup/restore gate results remain reviewable after live ops checks.
+  - Added regression coverage proving `/api/admin/integrity?checkStorage=true` writes compact storage coverage metadata to the `admin.integrity_checked` audit event.
+  - Targeted storage-audit regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "storage payload coverage"` (audit event lacked storage-specific metadata).
+  - Added integrity audit metadata for `checkStorage`, storage completeness, expected/present counts, bytes, and missing-file count without exposing stored file contents.
+  - Targeted storage-audit regression passed: `npm run test -- api/server.test.mjs -t "storage payload coverage"` (1 test).
+  - Documented storage-aware integrity audit evidence in README, operations, and production-readiness docs.
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (121 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 139 tests passed).
   - Round 61 repo inspection started at 2026-06-25T12:22:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, ops/smoke scripts, deployment packaging tests, and admin integrity code before editing.
   - Selected production-readiness slice: live ops/smoke storage-aware integrity verification before backup/restore trust.

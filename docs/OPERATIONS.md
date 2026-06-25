@@ -7,7 +7,7 @@ This runbook covers routine production operation for a 3DSTU FarmFlow VPS.
 - Open the dashboard and review printer state, blocked jobs, due-risk work, and low inventory.
 - Check `/api/readiness` or the ops-check timer result.
 - Confirm the latest backup exists and was verified.
-- Before trusting a file-byte backup or restore drill, run `/api/admin/integrity?checkStorage=true` and confirm `storage.complete` is true.
+- Before trusting a file-byte backup or restore drill, run `/api/admin/integrity?checkStorage=true`, confirm `storage.complete` is true, and verify the `admin.integrity_checked` audit event records `checkStorage`, `storageComplete`, storage counts, and missing-file count.
 - Review failed webhook, notification, MQTT, commerce, and bridge delivery logs.
 - Resolve generated todos for slicing, scheduling, material, maintenance, and exceptions.
 
@@ -15,7 +15,7 @@ In `NODE_ENV=production`, `/api/readiness` is a deployment gate, not just a live
 
 Stripe billing webhooks on `/api/billing/webhook/stripe` verify the official `Stripe-Signature` header against `LAYERPILOT_STRIPE_WEBHOOK_SECRET` when Stripe calls the app directly. Deployments that terminate or transform webhook bodies at a trusted edge proxy can instead inject `x-layerpilot-billing-webhook-secret` with the same configured secret; do not expose that fallback header to arbitrary clients.
 
-`scripts/ubuntu-deploy.sh ops-check` also runs an authenticated API check when credentials are available from `.env`. It verifies login, `/api/state`, `/api/audit`, storage-aware `/api/admin/integrity?checkStorage=true`, and `/api/metrics` when `LAYERPILOT_METRICS_TOKEN` is configured. The check fails if integrity errors exist or `storage.complete` is false, so backup/storage drift is caught by the timer before a restore drill depends on it. Set `LAYERPILOT_OPS_EMAIL` and `LAYERPILOT_OPS_PASSWORD` to use a dedicated Owner/Admin smoke account; otherwise it falls back to the bootstrap admin credentials.
+`scripts/ubuntu-deploy.sh ops-check` also runs an authenticated API check when credentials are available from `.env`. It verifies login, `/api/state`, `/api/audit`, storage-aware `/api/admin/integrity?checkStorage=true`, and `/api/metrics` when `LAYERPILOT_METRICS_TOKEN` is configured. The check fails if integrity errors exist or `storage.complete` is false, so backup/storage drift is caught by the timer before a restore drill depends on it; the corresponding audit event keeps compact storage coverage evidence for later review. Set `LAYERPILOT_OPS_EMAIL` and `LAYERPILOT_OPS_PASSWORD` to use a dedicated Owner/Admin smoke account; otherwise it falls back to the bootstrap admin credentials.
 
 ## Session Policy
 

@@ -539,7 +539,7 @@ describe("3DSTU FarmFlow API", () => {
   });
 
   it("reports storage payload coverage during admin integrity checks", async () => {
-    await withApp(async ({ app }) => {
+    await withApp(async ({ app, db }) => {
       const token = await login(app);
       const sample = await app.inject({
         method: "POST",
@@ -563,6 +563,14 @@ describe("3DSTU FarmFlow API", () => {
       });
       expect(checked.json().storage.expected).toBeGreaterThan(checked.json().storage.present);
       expect(checked.json().warnings.map((warning) => warning.code)).toEqual(expect.arrayContaining(["file.storage_missing"]));
+      const auditEvent = db.data.events.find((event) => event.type === "admin.integrity_checked");
+      expect(auditEvent?.data).toMatchObject({
+        checkStorage: true,
+        storageComplete: false,
+        storageExpected: checked.json().storage.expected,
+        storagePresent: checked.json().storage.present,
+        storageMissingFiles: checked.json().storage.missing.length
+      });
     });
   });
 
