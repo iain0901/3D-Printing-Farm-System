@@ -3038,7 +3038,25 @@ endsolid retry`;
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
       expect(persisted.fileFolders.find((item) => item.name === "Inbox / QC Review")).toMatchObject({ fileCount: 1 });
       expect(persisted.files.find((item) => item.id === sample.json().file.id)).toMatchObject({ storagePath: sample.json().file.storagePath });
-      expect(persisted.events.some((event) => event.type === "file.sample_generated")).toBe(true);
+      const sampleEvent = persisted.events.find((event) => event.type === "file.sample_generated" && event.data?.fileId === sample.json().file.id);
+      expect(sampleEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          actorEmail: "demo@layerpilot.test",
+          actorType: "user",
+          fileId: sample.json().file.id,
+          fileName: sample.json().file.name,
+          fileType: "STL",
+          material: "PETG",
+          folderId: sample.json().folder.id,
+          folderName: "Inbox / QC Review",
+          storageBacked: true,
+          stlBytes: expect.any(Number)
+        }
+      });
+      expect(JSON.stringify(sampleEvent.data)).not.toContain(sample.json().file.storagePath);
+      expect(JSON.stringify(sampleEvent.data)).not.toContain("solid layerpilot_sample_qc-sample-bracket");
     });
   });
 
@@ -3079,7 +3097,22 @@ endsolid retry`;
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
       expect(persisted.files.filter((file) => file.tags.includes("hot-drop"))).toHaveLength(3);
       expect(persisted.queue.filter((job) => job.added === "Hot Drop")).toHaveLength(2);
-      expect(persisted.events.some((event) => event.type === "hot_drop.handled")).toBe(true);
+      const hotDropEvent = persisted.events.find((event) => event.type === "hot_drop.handled" && event.data?.fileId === autoQueue.json().file.id);
+      expect(hotDropEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          actorEmail: "demo@layerpilot.test",
+          actorType: "user",
+          mode: "Auto-Queue",
+          fileId: autoQueue.json().file.id,
+          fileName: autoQueue.json().file.name,
+          material: "PETG",
+          jobId: autoQueue.json().job.id,
+          directMatched: false
+        }
+      });
+      expect(JSON.stringify(hotDropEvent.data)).not.toContain(autoQueue.json().file.storagePath);
     });
   });
 
@@ -5626,7 +5659,25 @@ endsolid s3_store`;
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
       expect(persisted.files.find((file) => file.id === generated.json().file.id)).toMatchObject({ storagePath: generated.json().file.storagePath, status: "uploaded" });
       expect(persisted.parts.find((part) => part.id === generated.json().part.id)).toMatchObject({ fileId: generated.json().file.id });
-      expect(persisted.events.some((event) => event.type === "parametric.generated")).toBe(true);
+      const parametricEvent = persisted.events.find((event) => event.type === "parametric.generated" && event.data?.fileId === generated.json().file.id);
+      expect(parametricEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          actorEmail: "demo@layerpilot.test",
+          actorType: "user",
+          fileId: generated.json().file.id,
+          fileName: generated.json().file.name,
+          fileType: "STL",
+          material: "PLA",
+          partId: generated.json().part.id,
+          generator: "nameplate-box-stl",
+          storageBacked: true,
+          stlBytes: generated.json().stlBytes
+        }
+      });
+      expect(JSON.stringify(parametricEvent.data)).not.toContain(generated.json().file.storagePath);
+      expect(JSON.stringify(parametricEvent.data)).not.toContain("solid layerpilot_nameplate_qc-badge");
     });
   });
 
@@ -6431,7 +6482,34 @@ endsolid s3_store`;
 
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
       expect(persisted.printers.find((printer) => printer.id === created.json().id)).toMatchObject({ name: "QC CoreXY", buildVolume: [350, 350, 420], filament: "PETG Black" });
-      expect(persisted.events.some((event) => event.type === "printer.created" && event.data.printerId === created.json().id)).toBe(true);
+      const createdEvent = persisted.events.find((event) => event.type === "printer.created" && event.data.printerId === created.json().id);
+      expect(createdEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          actorEmail: "demo@layerpilot.test",
+          actorType: "user",
+          printerId: created.json().id,
+          printerName: "QC CoreXY",
+          connection: "Klipper / Moonraker",
+          buildVolume: [500, 500, 500],
+          compatibleMaterials: ["ASA", "PETG"]
+        }
+      });
+      const updatedEvent = persisted.events.find((event) => event.type === "printer.updated" && event.data.printerId === created.json().id);
+      expect(updatedEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          actorEmail: "demo@layerpilot.test",
+          actorType: "user",
+          printerId: created.json().id,
+          printerName: "QC CoreXY",
+          connection: updated.json().connection,
+          buildVolume: [350, 350, 420],
+          compatibleMaterials: ["PLA", "PETG", "TPU"]
+        }
+      });
     });
   });
 

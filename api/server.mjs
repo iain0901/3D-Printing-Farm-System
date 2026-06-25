@@ -6925,7 +6925,14 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       updatedAt: new Date().toISOString()
     };
     database.data.printers.push(printer);
-    await dispatchEvent(database, "printer.created", `${printer.name} added`, { printerId: printer.id, connection: printer.connection, buildVolume: printer.buildVolume });
+    await dispatchEvent(database, "printer.created", `${printer.name} added`, {
+      workspaceId: request.user.workspaceId,
+      printerId: printer.id,
+      printerName: printer.name,
+      connection: printer.connection,
+      buildVolume: printer.buildVolume,
+      compatibleMaterials: printer.compatibleMaterials || []
+    }, { actor: request.user });
     await database.write();
     return reply.code(201).send(printer);
   });
@@ -6940,7 +6947,14 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       return reply.code(409).send({ error: "Printer name already exists" });
     }
     Object.assign(printer, parsed.data, { updatedAt: new Date().toISOString() });
-    await dispatchEvent(database, "printer.updated", `${printer.name} updated`, { printerId: printer.id, connection: printer.connection, buildVolume: printer.buildVolume });
+    await dispatchEvent(database, "printer.updated", `${printer.name} updated`, {
+      workspaceId: request.user.workspaceId,
+      printerId: printer.id,
+      printerName: printer.name,
+      connection: printer.connection,
+      buildVolume: printer.buildVolume,
+      compatibleMaterials: printer.compatibleMaterials || []
+    }, { actor: request.user });
     await database.write();
     return printer;
   });
@@ -7054,7 +7068,13 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const parsed = fileFolderSchema.safeParse(request.body || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid file folder payload", issues: parsed.error.issues });
     const result = ensureFileFolder(database.data, { ...parsed.data, workspaceId: request.user.workspaceId });
-    await dispatchEvent(database, result.created ? "file_folder.created" : "file_folder.reused", `${result.folder.name} folder ${result.created ? "created" : "reused"}`, { folderId: result.folder.id, name: result.folder.name });
+    await dispatchEvent(database, result.created ? "file_folder.created" : "file_folder.reused", `${result.folder.name} folder ${result.created ? "created" : "reused"}`, {
+      workspaceId: request.user.workspaceId,
+      folderId: result.folder.id,
+      name: result.folder.name,
+      purpose: result.folder.purpose || "",
+      parent: result.folder.parent || ""
+    }, { actor: request.user });
     await database.write();
     return reply.code(result.created ? 201 : 200).send({ ...result, folders: database.data.fileFolders });
   });
@@ -7102,7 +7122,17 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const parsed = sampleFileSchema.safeParse(request.body || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid sample file payload", issues: parsed.error.issues });
     const result = await createSampleFile(database, parsed.data, { workspaceId: request.user.workspaceId });
-    await dispatchEvent(database, "file.sample_generated", `${result.file.name} sample STL generated`, { fileId: result.file.id, folderId: result.folder.id, stlBytes: result.stlBytes });
+    await dispatchEvent(database, "file.sample_generated", `${result.file.name} sample STL generated`, {
+      workspaceId: request.user.workspaceId,
+      fileId: result.file.id,
+      fileName: result.file.name,
+      fileType: result.file.type || "STL",
+      material: result.file.material || "",
+      folderId: result.folder.id,
+      folderName: result.folder.name,
+      storageBacked: Boolean(result.file.storagePath || result.file.storageKey),
+      stlBytes: result.stlBytes
+    }, { actor: request.user });
     await database.write();
     return reply.code(201).send({ ...result, files: database.data.files, folders: database.data.fileFolders });
   });
@@ -7121,7 +7151,18 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
 
     const result = await createSampleFile(database, { name: parsed.data.name, material: parsed.data.material, folder: parsed.data.folder }, { workspaceId: request.user.workspaceId });
     result.file.tags = Array.from(new Set([...(result.file.tags || []), "hot-drop", mode.toLowerCase().replace(" ", "-")]));
-    await dispatchEvent(database, "file.sample_generated", `${result.file.name} generated from Hot Drop`, { fileId: result.file.id, folderId: result.folder.id, stlBytes: result.stlBytes, mode });
+    await dispatchEvent(database, "file.sample_generated", `${result.file.name} generated from Hot Drop`, {
+      workspaceId: request.user.workspaceId,
+      fileId: result.file.id,
+      fileName: result.file.name,
+      fileType: result.file.type || "STL",
+      material: result.file.material || "",
+      folderId: result.folder.id,
+      folderName: result.folder.name,
+      storageBacked: Boolean(result.file.storagePath || result.file.storageKey),
+      stlBytes: result.stlBytes,
+      mode
+    }, { actor: request.user });
 
     let job = null;
     let match = null;
@@ -7148,14 +7189,35 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       };
       job.scheduleWarnings = getScheduleWarnings(database.data, job, printer);
       database.data.queue.push(job);
-      await dispatchEvent(database, "queue.created", `${job.file} queued from Hot Drop`, { jobId: job.id, fileId: job.fileId, printerId: job.printerId, material: job.material, mode });
+      await dispatchEvent(database, "queue.created", `${job.file} queued from Hot Drop`, {
+        workspaceId: request.user.workspaceId,
+        jobId: job.id,
+        fileId: job.fileId,
+        fileName: job.file,
+        printerId: job.printerId,
+        material: job.material,
+        mode
+      }, { actor: request.user });
       if (mode === "Direct Print" && printable) {
         match = matchQueueNow(workspaceScopeForUser(database.data, request.user), { dryRun: false, maxActiveSlots: 3, respectMaterial: true, respectBuildVolume: true });
-        await dispatchEvent(database, "queue.matched", `${match.matches.length} Hot Drop jobs started`, { matches: match.matches.map((item) => ({ jobId: item.jobId, printerId: item.printerId })), skipped: match.skipped.length, mode });
+        await dispatchEvent(database, "queue.matched", `${match.matches.length} Hot Drop jobs started`, {
+          workspaceId: request.user.workspaceId,
+          matches: match.matches.map((item) => ({ jobId: item.jobId, printerId: item.printerId })),
+          skipped: match.skipped.length,
+          mode
+        }, { actor: request.user });
       }
     }
 
-    await dispatchEvent(database, "hot_drop.handled", `Hot Drop handled as ${mode}`, { mode, fileId: result.file.id, jobId: job?.id || "", directMatched: Boolean(match?.matches?.length) });
+    await dispatchEvent(database, "hot_drop.handled", `Hot Drop handled as ${mode}`, {
+      workspaceId: request.user.workspaceId,
+      mode,
+      fileId: result.file.id,
+      fileName: result.file.name,
+      material: result.file.material || "",
+      jobId: job?.id || "",
+      directMatched: Boolean(match?.matches?.length)
+    }, { actor: request.user });
     await database.write();
     return reply.code(201).send({
       mode,
@@ -7195,7 +7257,18 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const parsed = parametricNameplateSchema.safeParse(request.body || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid parametric nameplate payload", issues: parsed.error.issues });
     const result = await createParametricNameplate(database, parsed.data, { workspaceId: request.user.workspaceId });
-    await dispatchEvent(database, "parametric.generated", `${result.file.name} generated`, { fileId: result.file.id, partId: result.part?.id || "", generator: result.file.parametric.generator, estimates: result.estimates });
+    await dispatchEvent(database, "parametric.generated", `${result.file.name} generated`, {
+      workspaceId: request.user.workspaceId,
+      fileId: result.file.id,
+      fileName: result.file.name,
+      fileType: result.file.type || "STL",
+      material: result.file.material || "",
+      partId: result.part?.id || "",
+      generator: result.file.parametric.generator,
+      storageBacked: Boolean(result.file.storagePath || result.file.storageKey),
+      stlBytes: result.stlBytes,
+      estimates: result.estimates
+    }, { actor: request.user });
     await database.write();
     return reply.code(201).send({ ...result, files: database.data.files, parts: database.data.parts });
   });

@@ -4,8 +4,9 @@
 - Pushed remote: `origin/codex/production-saas-completion-20260624`
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
-- Latest round: Round 80 integration endpoint audit context hardening implemented, verified, committed, and pushed.
+- Latest round: Round 81 printer/file generation audit context hardening implemented and verified; commit/push pending.
 - Commits:
+  - Pending `feat: add printer file generation audit context`
   - `effe6ed` `docs: record codex round 80 status`
   - `c8669bc` `feat: add integration endpoint audit context`
   - `2a01df1` `feat: add file creation audit context`
@@ -171,6 +172,10 @@
   - `7e42cc7` `feat: scope audit retention by workspace`
   - Current `HEAD` `docs: record codex round 69 push`
 - QC result:
+  - Round 81 targeted `npm run test -- api/server.test.mjs -t "creates file folders|handles Hot Drop|parametric nameplate|printer capability"`: failed before implementation as expected, printer/file-generation audit events lacked actor context and compact file/printer identity metadata.
+  - Round 81 targeted `npm run test -- api/server.test.mjs -t "creates file folders|handles Hot Drop|parametric nameplate|printer capability"`: passed, 6 tests passed.
+  - Round 81 full API `npm run test -- api/server.test.mjs`: passed, 132 tests passed.
+  - Round 81 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 151 tests passed.
   - Round 80 targeted `npm run test -- api/server.test.mjs -t "integration configuration writes|webhooks, delivers matching events|notification channels"`: failed before implementation as expected, integration endpoint configuration/test-send audit events lacked actor metadata and some test-send events lacked workspace metadata.
   - Round 80 targeted `npm run test -- api/server.test.mjs -t "integration configuration writes|webhooks, delivers matching events|notification channels"`: passed, 3 tests passed.
   - Round 80 full API `npm run test -- api/server.test.mjs`: passed, 132 tests passed.

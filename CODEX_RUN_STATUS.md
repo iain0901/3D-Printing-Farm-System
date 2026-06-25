@@ -1,17 +1,27 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 80 committed and pushed
+- Phase: round 81 verified, ready to commit
 - Started: 2026-06-24 UTC
-- Current state: Round 80 integration endpoint audit context hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 81 printer/file generation audit context hardening is implemented and verified on `codex/production-saas-completion-20260624`; commit/push pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage proving webhook, notification, and commerce endpoint configuration/test-send audit events include workspace/operator context without endpoint URLs or tokens.
-  - Replace remaining bare integration endpoint audit writes with actor-aware compact audit records.
-  - Document integration endpoint audit evidence review in README, operations, and production-readiness docs.
-  - Run targeted integration tests, full API tests, and full QC, then commit and push.
+  - Add regression coverage proving printer create/update and file-generation audit events include workspace/operator context without storing generated model bodies or storage paths.
+  - Replace remaining bare printer setup and generated-file audit writes with actor-aware compact audit records.
+  - Document printer/file-generation audit evidence review in README, operations, and production-readiness docs.
+  - Run targeted audit tests, full API tests, and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 81 repo inspection started at 2026-06-25T17:18:41Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, API route list, idempotency allowlist, audit dispatcher usage, file/printer routes, and existing backup/file/printer tests before editing.
+  - Selected production-readiness slice: actor-aware audit context for printer setup/update and generated-file flows so core production asset creation is traceable to the authenticated workspace/operator without exposing generated file bodies or storage locations.
+  - Added regression coverage requiring printer create/update, generated sample STL, Hot Drop, and parametric nameplate audit events to include workspace/operator context and compact production metadata without generated model bodies or storage paths.
+  - Targeted audit regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "creates file folders|handles Hot Drop|parametric nameplate|printer capability"` (4 tests failed because audit events lacked actor context and compact file/printer identity metadata).
+  - Replaced remaining bare printer setup and generated-file audit writes for printer create/update, file-folder create/reuse, sample STL generation, Hot Drop generated-file/queue/handled events, and parametric nameplate generation with actor-aware compact audit records.
+  - Documented printer setup and generated-file audit evidence review in README, operations, and production-readiness docs.
+  - Targeted printer/file-generation audit coverage passed: `npm run test -- api/server.test.mjs -t "creates file folders|handles Hot Drop|parametric nameplate|printer capability"` (6 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (132 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 151 tests passed).
   - Round 80 repo inspection started at 2026-06-25T17:05:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route list, audit dispatcher, integration endpoint routes, and existing integration tests before editing.
   - Selected production-readiness slice: actor-aware audit context for integration endpoint configuration and test sends so webhook, notification, and commerce endpoint changes are traceable without exposing endpoint URLs or tokens.
