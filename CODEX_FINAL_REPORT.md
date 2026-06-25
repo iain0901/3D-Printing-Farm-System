@@ -43,7 +43,7 @@
   - Current `HEAD` `feat: add idempotent filament purchasing`
   - `dabbdc2` `feat: add idempotent inventory writes`
   - Current `HEAD` `docs: record codex round 21 push`
-  - Current `HEAD` `feat: add idempotent maintenance workflows`
+  - `3f9ed15` `feat: add idempotent maintenance workflows`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
