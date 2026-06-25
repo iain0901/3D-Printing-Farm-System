@@ -66,6 +66,7 @@
   - `f03111a` `docs: record codex round 37 status`
   - `56b86c8` `feat: add idempotent slicer retries`
   - `57b071e` `docs: record codex round 38 status`
+  - `57942fd` `feat: add idempotent history annotations`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -178,6 +179,9 @@
   - Round 38 targeted `npm run test -- api/server.test.mjs -t "slicer"`: failed before implementation, then passed, 4 tests passed.
   - Round 38 targeted `npm run test -- api/server.test.mjs`: passed, 104 tests passed.
   - Round 38 final `npm run qc`: passed, build passed, Vitest 10 files / 121 tests passed.
+  - Round 39 targeted `npm run test -- api/server.test.mjs -t "history annotations"`: failed before implementation, then passed, 1 test passed.
+  - Round 39 targeted `npm run test -- api/server.test.mjs`: passed, 105 tests passed.
+  - Round 39 final `npm run qc`: passed, build passed, Vitest 10 files / 122 tests passed.
 
 ## Completed Features
 
@@ -266,6 +270,9 @@
 - Added idempotent replay/conflict protection for backend slicer job runs and quick file-slice actions.
 - Added regression coverage proving slicer retries replay without duplicate slicer job records, stored G-code artifacts, file-version increments, or slicer audit events.
 - Documented slicer `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for print-history annotations.
+- Added regression coverage proving history annotation retries replay issue/waste updates without double-deducting spool inventory or duplicating `history.annotated` audit events.
+- Documented history annotation `Idempotency-Key` usage in README, operations, and production-readiness docs.
 - Added idempotent replay/conflict protection for billing plan changes and billing portal session creation.
 - Added regression coverage proving billing retries replay without duplicate invoices, billing sessions, billing audit events, or duplicate external Stripe checkout session calls.
 - Documented billing `Idempotency-Key` usage in README, operations, and production-readiness docs.
@@ -334,6 +341,7 @@
 - Quote update idempotency now protects authenticated operator quote-review retries from duplicate audit events; clients still need stable per-attempt keys when operators retry quote updates.
 - Queue matching idempotency now protects committed production assignment retries from duplicate audit events; clients still need stable per-attempt keys when operators retry queue matching commits.
 - History reprint idempotency now protects operator reprint retries from duplicate queue jobs, generated todos, and audit events; clients still need stable per-attempt keys when retrying history reprint actions.
+- History annotation idempotency now protects operator issue/waste updates from duplicate audit events and double inventory deduction; clients still need stable per-attempt keys when retrying history annotations.
 - Catalog/profile/printer configuration idempotency now protects setup retries from duplicate setup records and duplicate setup audit events; clients still need stable per-attempt keys when retrying configuration writes.
 - Cost catalog and material-map idempotency now protects catalog governance retries from duplicate pricing/material-normalization audit or run records; clients still need stable per-attempt keys when retrying those governance writes.
 - Idempotency replay records are intentionally omitted from shared state and admin exports; retry clients should use fresh keys after workspace export/restore rather than expecting replay cache continuity.

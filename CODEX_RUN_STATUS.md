@@ -1,16 +1,26 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 38 committed and pushed
+- Phase: round 39 committed; push pending
 - Started: 2026-06-24 UTC
-- Current state: Round 38 slicer retry hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 39 history annotation retry hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`; push pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 96 tests passed)
 - Current plan:
-  - Add regression coverage for retry-safe slicer job runs and quick file-slice actions.
-  - Add slicer job and file-slice routes to the persisted `Idempotency-Key` allowlist.
-  - Document slicer retry idempotency, run targeted tests and full QC, then commit and push.
+  - Add regression coverage for retry-safe print-history annotations with waste inventory deduction.
+  - Add history annotation updates to the persisted `Idempotency-Key` allowlist.
+  - Document history annotation retry idempotency, run targeted tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 39 repo inspection started at 2026-06-25T08:10:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, and production-readiness docs before editing.
+  - Selected production-readiness slice: idempotent print-history annotation retries to prevent duplicate waste inventory deductions and duplicate history audit events after dropped operator/browser responses.
+  - Added failing regression coverage proving history annotation retries need replay semantics to avoid double-deducting spool inventory or duplicating `history.annotated` audit events.
+  - Added `PATCH /api/history/:id` to the persisted `Idempotency-Key` allowlist.
+  - Documented history annotation idempotency in README, operations, and production-readiness docs.
+  - Targeted history annotation idempotency test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "history annotations"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (105 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 122 tests passed).
+  - Committed round 39 implementation as `57942fd` (`feat: add idempotent history annotations`).
   - Round 38 repo inspection started at 2026-06-25T07:58:56Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: idempotent slicer retries to prevent duplicate slicer job records, file-version increments, G-code artifacts, and slicer audit events after dropped operator/browser responses.
