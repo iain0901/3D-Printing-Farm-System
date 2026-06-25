@@ -47,6 +47,7 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 - [ ] `scripts/ubuntu-backup.sh backup` creates a verified archive.
 - [ ] `scripts/ubuntu-backup.sh restore-drill <archive>` succeeds without touching production data.
 - [ ] `/api/admin/restore` dry-run automation is scoped with `admin:restore`, and destructive restore commits are performed only from a logged-in Owner/Admin session.
+- [ ] Destructive `/api/admin/restore` commits are submitted with an `Idempotency-Key`, and an exact retry has been smoke-tested to replay the restored summary after the successful commit revokes the original session.
 - [ ] Customer quote portal links are regenerated or rotated after restore when needed; workspace exports redact portal bearer tokens and record only whether one exists.
 - [ ] Retry clients use fresh `Idempotency-Key` values after restore because exported backups do not include internal replay records.
 - [ ] Integration endpoint URLs are re-entered or verified after restore/rotation when provider tokens changed; exports show only redacted host metadata and `hasUrl`/`hasBaseUrl` flags.

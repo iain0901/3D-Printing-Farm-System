@@ -1,17 +1,30 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 47 committed and pushed
+- Phase: round 48 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 47 production admin 2FA enforcement hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 48 is in progress on `codex/production-saas-completion-20260624`, focused on retry-safe admin restore commits after session invalidation.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage for production `requireAdmin2fa` enforcement on Owner/Admin sessions.
-  - Gate production Owner/Admin API access until 2FA is enrolled while preserving remediation endpoints.
-  - Document the production 2FA enforcement behavior.
-  - Run targeted auth tests and full QC, then commit and push.
+  - Add regression coverage for idempotent `/api/admin/restore` commits after the successful restore revokes the original session.
+  - Implement route-specific restore commit replay without making dry-run restore previews public.
+  - Wire the Settings restore commit action to send a stable browser idempotency key.
+  - Document restore commit retry behavior.
+  - Run targeted restore tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 48 repo inspection started at 2026-06-25T09:50:47Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, restore/idempotency server code, restore UI code, and restore tests before editing.
+  - Selected production-readiness slice: idempotent admin restore commits that can replay the successful restore response after the commit invalidates the original user session.
+  - Added regression coverage proving a confirmed restore commit with an `Idempotency-Key` replays after the original session is revoked and does not duplicate `admin.restore` events.
+  - Targeted restore test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "sanitized workspace restores"` (1 test).
+  - Added route-specific restore commit idempotency handling without making restore previews public replay routes.
+  - Wired the Settings restore commit action to send and reuse a browser idempotency key for the same attempted payload.
+  - Targeted browser idempotency helper test passed: `npm run test -- src/idempotency.test.ts` (2 tests).
+  - Documented confirmed restore commit retry behavior in README, operations, and production-readiness docs.
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (111 tests).
+  - Production build passed: `npm run build`.
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 129 tests passed).
   - Round 47 repo inspection started at 2026-06-25T09:30:45Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, and auth/session/readiness code before editing.
   - Selected production-readiness slice: enforce the documented admin 2FA deployment gate in production so Owner/Admin sessions without enrolled TOTP cannot access protected production APIs until they enroll.

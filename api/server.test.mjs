@@ -5673,17 +5673,29 @@ endsolid s3_store`;
       });
       expect(missingConfirm.statusCode).toBe(409);
 
+      const restoreCommitPayload = { backup, dryRun: false, confirm: "RESTORE" };
+      const restoreCommitHeaders = { ...auth(token), "idempotency-key": "restore-commit-retry-001" };
       const committed = await app.inject({
         method: "POST",
         url: "/api/admin/restore",
-        headers: auth(token),
-        payload: { backup, dryRun: false, confirm: "RESTORE" }
+        headers: restoreCommitHeaders,
+        payload: restoreCommitPayload
       });
       expect(committed.statusCode).toBe(200);
       expect(committed.json()).toMatchObject({ dryRun: false, restored: true, printers: backup.data.printers.length, storagePathsStripped: 1 });
 
       const oldTokenLocked = await app.inject({ method: "GET", url: "/api/state", headers: auth(token) });
       expect(oldTokenLocked.statusCode).toBe(401);
+
+      const replayedCommit = await app.inject({
+        method: "POST",
+        url: "/api/admin/restore",
+        headers: restoreCommitHeaders,
+        payload: restoreCommitPayload
+      });
+      expect(replayedCommit.statusCode).toBe(200);
+      expect(replayedCommit.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replayedCommit.json()).toEqual(committed.json());
 
       const freshToken = await login(app);
       const state = await app.inject({ method: "GET", url: "/api/state", headers: auth(freshToken) });
@@ -5700,7 +5712,13 @@ endsolid s3_store`;
       expect(persisted.printers[0].name).toBe("Restored Forge");
       expect(persisted.users.find((user) => user.email === "restored@example.com")).toMatchObject({ passwordResetRequired: true });
       expect(persisted.apiKeys.find((key) => key.id === "restored-key")).toMatchObject({ enabled: false });
-      expect(persisted.events.some((event) => event.type === "admin.restore")).toBe(true);
+      expect(persisted.events.filter((event) => event.type === "admin.restore")).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "restore-commit-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/admin/restore",
+        statusCode: 200,
+        replayCount: 1
+      });
     });
   });
 

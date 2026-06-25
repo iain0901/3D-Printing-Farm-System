@@ -5577,13 +5577,16 @@ function SettingsPage({ settings, setSettings, addToast, setBackendStatus, curre
     if (!window.confirm(`Restore ${restoreSummary.printers} printers, ${restoreSummary.queue} jobs, and ${restoreSummary.files} files?`)) return;
     setRestoreBusy(true);
     try {
+      const payload = { backup: restoreBackup, dryRun: false, confirm: "RESTORE" };
       const result = await apiRequest<RestoreSummary>("/api/admin/restore", {
         method: "POST",
-        body: JSON.stringify({ backup: restoreBackup, dryRun: false, confirm: "RESTORE" })
+        headers: idempotencyHeaders("restore:commit", payload),
+        body: JSON.stringify(payload)
       });
       setRestoreSummary(result);
       setBackendStatus("connected");
       addToast("Workspace restored. Reloading state.", "success");
+      delete governanceIdempotencyAttempts.current["restore:commit"];
       window.setTimeout(() => window.location.reload(), 900);
     } catch {
       setBackendStatus("local");

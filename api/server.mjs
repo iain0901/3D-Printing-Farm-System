@@ -1637,6 +1637,39 @@ function idempotencyFingerprint({ method, path: routePath, workspaceId, bodyDige
   return sha256([method, routePath, workspaceId || DEFAULT_WORKSPACE_ID, bodyDigest].join("\n"));
 }
 
+function sendIdempotentReplay(reply, record) {
+  reply.header("x-layerpilot-idempotent-replay", "true");
+  if (record.contentType) reply.header("content-type", record.contentType);
+  reply.code(record.statusCode || 200).send(record.responseBody || "");
+}
+
+function isRestoreCommitRequest(method, routePath, body) {
+  return method === "POST" && routePath === "/api/admin/restore" && body?.dryRun === false && body?.confirm === "RESTORE";
+}
+
+async function replayCommittedRestoreRequest(database, request, reply, { workspaceId, actorId } = {}) {
+  const method = String(request.method || "").toUpperCase();
+  const routePath = request.url.split("?")[0];
+  if (!isRestoreCommitRequest(method, routePath, request.body)) return false;
+  const key = idempotencyKeyFromRequest(request);
+  if (!/^[A-Za-z0-9._:-]{8,160}$/.test(key)) return false;
+  const bodyDigest = requestBodyDigest(request.body);
+  const ledger = pruneIdempotencyLedger(database.data);
+  const existing = ledger.find((record) => {
+    if (record.key !== key || record.method !== method || record.path !== routePath) return false;
+    if (workspaceId && record.workspaceId !== workspaceId) return false;
+    if (actorId && record.actorId !== actorId) return false;
+    const fingerprint = idempotencyFingerprint({ method, path: routePath, workspaceId: record.workspaceId, bodyDigest });
+    return record.fingerprint === fingerprint && Number(record.statusCode || 0) >= 200 && Number(record.statusCode || 0) < 300;
+  });
+  if (!existing) return false;
+  existing.replayCount = Number(existing.replayCount || 0) + 1;
+  existing.updatedAt = new Date().toISOString();
+  await database.write();
+  sendIdempotentReplay(reply, existing);
+  return true;
+}
+
 function publicIdempotencyContext(method, routePath) {
   if (method === "POST" && routePath === "/api/public/quoteRequests") {
     return { workspaceId: DEFAULT_WORKSPACE_ID, actorId: "public:quote-intake" };
@@ -1671,12 +1704,35 @@ async function prepareIdempotentRequest(database, request, reply, { workspaceId,
     existing.replayCount = Number(existing.replayCount || 0) + 1;
     existing.updatedAt = new Date().toISOString();
     await database.write();
-    reply.header("x-layerpilot-idempotent-replay", "true");
-    if (existing.contentType) reply.header("content-type", existing.contentType);
-    reply.code(existing.statusCode || 200).send(existing.responseBody || "");
+    sendIdempotentReplay(reply, existing);
     return true;
   }
   request.idempotency = { key, method, path: routePath, workspaceId, actorId, bodyDigest, fingerprint, createdAt: new Date().toISOString() };
+  return false;
+}
+
+async function prepareRestoreCommitIdempotentRequest(database, request, reply, { workspaceId, actorId }) {
+  const method = String(request.method || "").toUpperCase();
+  const routePath = request.url.split("?")[0];
+  if (!isRestoreCommitRequest(method, routePath, request.body)) return false;
+  const key = idempotencyKeyFromRequest(request);
+  if (!key) return false;
+  if (!/^[A-Za-z0-9._:-]{8,160}$/.test(key)) {
+    reply.code(400).send({ error: "Invalid Idempotency-Key" });
+    return true;
+  }
+  if (await replayCommittedRestoreRequest(database, request, reply, { workspaceId, actorId })) return true;
+  const bodyDigest = requestBodyDigest(request.body);
+  request.idempotency = {
+    key,
+    method,
+    path: routePath,
+    workspaceId,
+    actorId,
+    bodyDigest,
+    fingerprint: idempotencyFingerprint({ method, path: routePath, workspaceId, bodyDigest }),
+    createdAt: new Date().toISOString()
+  };
   return false;
 }
 
@@ -5331,6 +5387,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const routePath = request.url.split("?")[0];
     const publicRoute = routePath === "/api/health" || routePath === "/api/readiness" || routePath === "/api/metrics" && hasValidMetricsToken(request) || routePath === "/api/internal/worker-broadcast" && hasValidWorkerToken(request) || routePath === "/api/billing/webhook/stripe" || routePath === "/api/public/quoteRequests" || routePath.startsWith("/api/public/quoteRequests/") || routePath.startsWith("/api/auth/") || serveStatic && !routePath.startsWith("/api/");
     if (publicRoute) return;
+    if (await replayCommittedRestoreRequest(database, request, reply)) return;
     const { session, user, apiKey } = userFromRequest(database, request);
     if (!user) return reply.code(401).send({ error: "Authentication required" });
     if (apiKey && !isApiKeyIpAllowed(workspaceScopeForUser(database.data, user).workspaceSettings, request)) {
@@ -5350,6 +5407,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     }
     const workspaceId = user.workspaceId || DEFAULT_WORKSPACE_ID;
     const actorId = apiKey ? `api-key:${apiKey.id}` : `user:${user.id}`;
+    if (!apiKey && await prepareRestoreCommitIdempotentRequest(database, request, reply, { workspaceId, actorId })) return;
     if (await prepareIdempotentRequest(database, request, reply, { workspaceId, actorId })) return;
     const now = new Date().toISOString();
     if (session) session.lastSeenAt = now;
