@@ -23,6 +23,7 @@ This runbook covers routine production operation for a 3DSTU FarmFlow VPS.
 - API keys cannot create, update, or rotate other API keys.
 - API keys cannot be granted wildcard or account-management scopes.
 - Grant only the automation scopes needed for the integration: `actions:write`, `admin:export`, `admin:restore`, `catalog:write`, `commerce:write`, `files:write`, `inventory:write`, `maintenance:write`, `metrics:read`, `notifications:write`, `orders:write`, `printers:control`, `queue:write`, or `webhooks:write`.
+- API-key read access is scope-gated too. For example, `queue:write` keys can read queue-adjacent production resources but cannot read users, workspace settings, API keys, or audit logs.
 - Use `admin:restore` keys only for restore dry-runs; destructive restore commits still require a user session.
 
 ## Order And Queue Handling

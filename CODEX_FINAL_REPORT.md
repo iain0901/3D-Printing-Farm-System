@@ -16,6 +16,7 @@
   - `6a7f6b4` `feat: require user session for restore commits`
   - `85e949a` `feat: harden api key scope grants`
   - Current `HEAD` `docs: record codex round 6 push`
+  - Current `HEAD` `feat: scope api key read access`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -30,6 +31,8 @@
   - Round 5 final `npm run qc`: passed, build passed, Vitest 9 files / 82 tests passed.
   - Round 6 targeted `npm run test -- api/server.test.mjs`: passed, 67 tests passed.
   - Round 6 final `npm run qc`: passed, build passed, Vitest 9 files / 83 tests passed.
+  - Round 7 targeted `npm run test -- api/server.test.mjs`: passed, 67 tests passed.
+  - Round 7 final `npm run qc`: passed, build passed, Vitest 9 files / 83 tests passed.
 
 ## Completed Features
 
@@ -59,6 +62,9 @@
 - Added conservative legacy scope normalization that disables restored keys containing only invalid automation scopes.
 - Added regression coverage for wildcard, unknown, and credential-management API-key scope rejection.
 - Documented API-key scope minimization and session-only key management in operations and production-readiness docs.
+- Added centralized API-key read-scope enforcement so automation keys can read only resources implied by their grantable scopes.
+- Added regression coverage proving metrics-only, queue-only, and admin-export API keys cannot read unrelated UI/admin resources.
+- Documented API-key read-scope validation in operations and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -71,3 +77,4 @@
 - Session expiry policy should be reviewed against the customer's shared-device operating model before go-live.
 - Destructive restore commits now require a logged-in Owner/Admin user session; automation should use dry-run restore validation and hand off final commit to an operator.
 - API-key grants are intentionally limited to automation scopes; account, settings, and API-key administration should remain user-session-only unless a customer-specific security review changes that policy.
+- API-key read access is intentionally allowlisted by route and scope; integrations that need broader reads should be reviewed and granted a purpose-specific automation scope instead of falling back to user sessions.

@@ -221,6 +221,10 @@ describe("3DSTU FarmFlow API", () => {
         const keyMetrics = await app.inject({ method: "GET", url: "/api/metrics", headers: auth(created.json().secret) });
         expect(keyMetrics.statusCode).toBe(200);
         expect(keyMetrics.body).toContain("layerpilot_printers_total");
+
+        const metricsKeyQueue = await app.inject({ method: "GET", url: "/api/queue", headers: auth(created.json().secret) });
+        expect(metricsKeyQueue.statusCode).toBe(403);
+        expect(metricsKeyQueue.json()).toMatchObject({ error: "API key scope does not allow reading this resource" });
       });
     });
   });
@@ -797,6 +801,16 @@ describe("3DSTU FarmFlow API", () => {
       });
       expect(allowedByCidr.statusCode).toBe(201);
 
+      const queueRead = await app.inject({ method: "GET", url: "/api/queue", headers: auth(created.json().secret) });
+      expect(queueRead.statusCode).toBe(200);
+      expect(queueRead.json().some((job) => job.file === "Allowed IP key.gcode")).toBe(true);
+
+      for (const url of ["/api/users", "/api/apiKeys", "/api/workspaceSettings", "/api/audit"]) {
+        const scopedReadDenied = await app.inject({ method: "GET", url, headers: auth(created.json().secret) });
+        expect(scopedReadDenied.statusCode).toBe(403);
+        expect(scopedReadDenied.json()).toMatchObject({ error: "API key scope does not allow reading this resource" });
+      }
+
       const disabled = await app.inject({ method: "PATCH", url: `/api/apiKeys/${created.json().apiKey.id}`, headers: auth(token), payload: { enabled: false } });
       expect(disabled.statusCode).toBe(200);
       expect(disabled.json()).toMatchObject({ enabled: false });
@@ -1322,6 +1336,25 @@ describe("3DSTU FarmFlow API", () => {
       });
       const denied = await app.inject({ method: "GET", url: "/api/audit/export", headers: auth(apiKey.json().secret) });
       expect(denied.statusCode).toBe(403);
+
+      const exportKey = await app.inject({
+        method: "POST",
+        url: "/api/apiKeys",
+        headers: auth(token),
+        payload: { name: "Audit export automation", scopes: ["admin:export"], enabled: true }
+      });
+      expect(exportKey.statusCode).toBe(201);
+
+      const keyAudit = await app.inject({ method: "GET", url: "/api/audit?type=cost_catalog.updated", headers: auth(exportKey.json().secret) });
+      expect(keyAudit.statusCode).toBe(200);
+      expect(keyAudit.json().events[0]).toMatchObject({ type: "cost_catalog.updated" });
+
+      const keyExport = await app.inject({ method: "GET", url: "/api/audit/export?type=cost_catalog.updated", headers: auth(exportKey.json().secret) });
+      expect(keyExport.statusCode).toBe(200);
+      expect(keyExport.body).toContain("cost_catalog.updated");
+
+      const keyListDenied = await app.inject({ method: "GET", url: "/api/apiKeys", headers: auth(exportKey.json().secret) });
+      expect(keyListDenied.statusCode).toBe(403);
     });
   });
 

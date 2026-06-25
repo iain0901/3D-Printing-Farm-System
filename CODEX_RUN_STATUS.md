@@ -1,16 +1,25 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 6 pushed
+- Phase: round 7 committed
 - Started: 2026-06-24 UTC
-- Current state: Round 6 API-key scope hardening implemented, targeted tests and full QC passed, and branch pushed to `origin/codex/production-saas-completion-20260624`.
+- Current state: Round 7 API-key read-scope hardening implemented, targeted tests and full QC passed, committed at current `HEAD`, and pending push.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 9 files / 79 tests passed)
 - Current plan:
-  - Add regression coverage proving API keys cannot be created with wildcard, unknown, or credential-management scopes.
-  - Restrict API-key grants to known automation scopes and require a user session for API-key management.
+  - Add regression coverage proving API keys can read only resources implied by their automation scopes.
+  - Add a central read-route allowlist for API-key requests while preserving user-session UI access.
   - Run targeted API tests, full `npm run qc`, commit, and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 7 repo inspection started at 2026-06-25T02:24:30Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: API-key read-scope hardening for automation least privilege.
+  - Added a central API-key read-route scope allowlist.
+  - Added regression coverage for metrics-only, queue-only, and admin-export API-key reads.
+  - Documented API-key read-scope expectations in operations and readiness docs.
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (67 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 83 tests passed).
+  - Committed round 7 as current `HEAD` (`feat: scope api key read access`).
   - Round 6 repo inspection started at 2026-06-25T02:11:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Added regression coverage for over-scoped API-key creation and API-key credential chaining.

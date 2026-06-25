@@ -1420,6 +1420,38 @@ function hasPermission(user, permission) {
   return permissions.has("*") || permissions.has(permission);
 }
 
+const apiKeyReadScopeRules = [
+  { pattern: /^\/api\/metrics$/, scopes: ["metrics:read"] },
+  { pattern: /^\/api\/audit(?:\/export)?$/, scopes: ["admin:export"] },
+  { pattern: /^\/api\/admin\/(?:export|integrity)$/, scopes: ["admin:export"] },
+  { pattern: /^\/api\/catalog\/export$/, scopes: ["catalog:write"] },
+  { pattern: /^\/api\/costCatalog$/, scopes: ["catalog:write"] },
+  { pattern: /^\/api\/(?:parts|skus|profiles|productionTemplates|materialMappings|materialMapRuns)$/, scopes: ["catalog:write", "orders:write", "queue:write"] },
+  { pattern: /^\/api\/(?:orders|quoteRequests)$/, scopes: ["orders:write", "commerce:write", "queue:write"] },
+  { pattern: /^\/api\/(?:queue|todos|history|schedule\/diagnostics|slicer\/jobs)$/, scopes: ["queue:write", "actions:write"] },
+  { pattern: /^\/api\/(?:printers|bridges)$/, scopes: ["printers:control", "queue:write", "maintenance:write"] },
+  { pattern: /^\/api\/(?:files|fileFolders)$/, scopes: ["files:write", "queue:write", "orders:write"] },
+  { pattern: /^\/api\/files\/[^/]+\/(?:download|preview)$/, scopes: ["files:write"] },
+  { pattern: /^\/api\/(?:spools|purchaseRequests)$/, scopes: ["inventory:write", "queue:write"] },
+  { pattern: /^\/api\/(?:maintenance|maintenanceTemplates|maintenanceReports)$/, scopes: ["maintenance:write"] },
+  { pattern: /^\/api\/(?:webhooks|webhookDeliveries)$/, scopes: ["webhooks:write"] },
+  { pattern: /^\/api\/(?:notificationChannels|notificationDeliveries)$/, scopes: ["notifications:write"] },
+  { pattern: /^\/api\/(?:commerceConnectors|commerceImports)$/, scopes: ["commerce:write"] },
+  { pattern: /^\/api\/admin\/restore$/, scopes: ["admin:restore"] }
+];
+
+function apiKeyReadScopesForRoute(method, routePath) {
+  if (String(method || "").toUpperCase() !== "GET") return null;
+  const normalized = String(routePath || "").replace(/\/+$/, "") || "/";
+  return apiKeyReadScopeRules.find((rule) => rule.pattern.test(normalized))?.scopes || [];
+}
+
+function apiKeyCanReadRoute(user, method, routePath) {
+  const scopes = apiKeyReadScopesForRoute(method, routePath);
+  if (scopes === null) return true;
+  return scopes.some((scope) => hasPermission(user, scope));
+}
+
 function normalizeApiKeyScopes(scopes) {
   const normalized = [];
   for (const scope of Array.isArray(scopes) ? scopes : []) {
@@ -5015,6 +5047,9 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     }
     request.user = user;
     request.apiKey = apiKey || null;
+    if (apiKey && !apiKeyCanReadRoute(user, request.method, routePath)) {
+      return reply.code(403).send({ error: "API key scope does not allow reading this resource" });
+    }
     if (isMutatingApiRequest(request)) {
       const key = idempotencyKeyFromRequest(request);
       if (key) {
