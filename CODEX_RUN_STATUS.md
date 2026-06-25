@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 84 committed; preparing push
+- Phase: round 84 committed and pushed
 - Started: 2026-06-24 UTC
-- Current state: Round 84 quote/order/catalog audit context hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`; push pending.
+- Current state: Round 84 quote/order/catalog audit context hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
   - Add regression coverage proving operator-driven quote updates, quote portal-link generation/rotation, order lifecycle/job generation, and part/SKU setup audit events include workspace/operator context without storing customer notes, portal tokens, or bulky generated job payloads.
@@ -24,6 +24,8 @@
   - Full API suite passed: `npm run test -- api/server.test.mjs` (133 tests).
   - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 152 tests passed).
   - Committed round 84 implementation/status/docs as `be6ef57` (`feat: add quote order audit context`).
+  - Committed round 84 status/final report as `60033a3` (`docs: record codex round 84 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
   - Round 83 repo inspection started at 2026-06-25T17:45:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route list, audit dispatcher, production-template/profile routes, and existing profile/template tests before editing.
   - Selected production-readiness slice: actor-aware audit context for slicer profile and production-template configuration/run events so changes affecting generated production jobs and slicer selection are traceable to the authenticated workspace/operator without dumping full settings or queue response bodies.

@@ -4,8 +4,9 @@
 - Pushed remote: `origin/codex/production-saas-completion-20260624`
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
-- Latest round: Round 84 quote/order/catalog audit context hardening implemented, verified, committed, and push pending.
+- Latest round: Round 84 quote/order/catalog audit context hardening implemented, verified, committed, and pushed.
 - Commits:
+  - `60033a3` `docs: record codex round 84 status`
   - `be6ef57` `feat: add quote order audit context`
   - `3b09db4` `docs: record codex round 83 status`
   - `7efd401` `feat: add profile template audit context`
