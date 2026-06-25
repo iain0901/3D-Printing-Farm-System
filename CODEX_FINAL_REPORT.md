@@ -7,7 +7,8 @@
 - Commits:
   - `2191e6f` `feat: harden production farm operations`
   - Current `HEAD` `docs: add codex final report`
-  - Round 2 pending commit: `feat: add idempotent production write APIs`
+  - `b5620df` `feat: add idempotent production write APIs`
+  - Current `HEAD` `docs: update codex round 2 report`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.

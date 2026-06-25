@@ -3,7 +3,7 @@
 - Branch: `codex/production-saas-completion-20260624`
 - Phase: round 2 report and push
 - Started: 2026-06-24 UTC
-- Current state: full QC passed; updating final report before commit and push.
+- Current state: feature commit created; final report hash updated before push.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 9 files / 79 tests passed)
 - Current plan:
   - Add UI affordances for the new production order states.
