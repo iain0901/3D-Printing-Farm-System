@@ -8,6 +8,7 @@
 - Commits:
   - `c224949` `feat: scope cost catalogs by workspace`
   - `8805eef` `docs: record codex round 87 status`
+  - `e17cd95` `docs: record codex round 87 push`
   - `c9d4b41` `docs: record codex round 86 push`
   - `5d60b0c` `docs: record codex round 86 status`
   - `cdacddd` `test: cover order lifecycle retries`

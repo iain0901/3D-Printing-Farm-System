@@ -24,6 +24,7 @@
   - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed).
   - Committed round 87 implementation/status/docs as `c224949` (`feat: scope cost catalogs by workspace`).
   - Committed round 87 status/final report as `8805eef` (`docs: record codex round 87 status`).
+  - Committed round 87 push status as `e17cd95` (`docs: record codex round 87 push`).
   - Pushed branch: `origin/codex/production-saas-completion-20260624`.
   - Round 86 repo inspection started at 2026-06-25T18:19:59Z.
   - Reviewed current branch, recent commits, run status, final report, README, install, operations, release, production-readiness, roadmap, package metadata, API route list, idempotency allowlist, order lifecycle routes, UI idempotency headers, and existing order/queue/material tests before editing.
