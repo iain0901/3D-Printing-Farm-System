@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 48 in progress
+- Phase: round 48 implementation committed; report update pending push
 - Started: 2026-06-24 UTC
-- Current state: Round 48 is in progress on `codex/production-saas-completion-20260624`, focused on retry-safe admin restore commits after session invalidation.
+- Current state: Round 48 retry-safe admin restore commits are implemented, verified, and committed on `codex/production-saas-completion-20260624`; final report/status docs are being prepared for push.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
   - Add regression coverage for idempotent `/api/admin/restore` commits after the successful restore revokes the original session.
@@ -25,6 +25,7 @@
   - Full API suite passed: `npm run test -- api/server.test.mjs` (111 tests).
   - Production build passed: `npm run build`.
   - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 129 tests passed).
+  - Committed round 48 implementation as `166e6bc` (`feat: add idempotent restore commits`).
   - Round 47 repo inspection started at 2026-06-25T09:30:45Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, and auth/session/readiness code before editing.
   - Selected production-readiness slice: enforce the documented admin 2FA deployment gate in production so Owner/Admin sessions without enrolled TOTP cannot access protected production APIs until they enroll.

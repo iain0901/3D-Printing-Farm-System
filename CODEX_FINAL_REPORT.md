@@ -89,6 +89,7 @@
   - `0155d47` `feat: enforce production admin 2fa`
   - `9ea77a6` `docs: record codex round 47 status`
   - `51048dc` `docs: record codex round 47 push prep`
+  - `166e6bc` `feat: add idempotent restore commits`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -237,6 +238,11 @@
   - Round 47 targeted `npm run test -- api/i18n.test.mjs`: passed, 2 tests passed.
   - Round 47 targeted `npm run test -- api/server.test.mjs`: passed, 111 tests passed.
   - Round 47 final `npm run qc`: passed, build passed, Vitest 10 files / 129 tests passed.
+  - Round 48 targeted `npm run test -- api/server.test.mjs -t "sanitized workspace restores"`: failed before implementation, then passed, 1 test passed.
+  - Round 48 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
+  - Round 48 targeted `npm run test -- api/server.test.mjs`: passed, 111 tests passed.
+  - Round 48 targeted `npm run build`: passed.
+  - Round 48 final `npm run qc`: passed, build passed, Vitest 10 files / 129 tests passed.
 
 ## Completed Features
 
@@ -388,6 +394,10 @@
 - Preserved remediation routes for unenrolled production admins: `/api/auth/me`, password change, logout, TOTP setup, and TOTP enablement remain available.
 - Updated the browser to route production 2FA enrollment blocks to Settings instead of falling back to local/demo state, with Traditional Chinese translation coverage for the new notices.
 - Documented production admin 2FA enforcement in README, operations, and production-readiness docs.
+- Added route-specific idempotent replay for confirmed `/api/admin/restore` commits so the original success response can be replayed after the successful restore revokes the old session.
+- Kept restore previews authenticated and outside the post-commit replay path.
+- Wired the Settings restore commit action to generate and reuse a stable browser idempotency key for the same backup payload until success.
+- Added regression coverage proving restore commit retries do not duplicate `admin.restore` audit events, and documented the restore retry contract in README, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -399,7 +409,8 @@
 - Idempotency coverage is route-specific; token- or secret-returning replay records are intentionally retained only in internal server metadata and omitted from shared state/admin exports.
 - Session expiry policy should be reviewed against the customer's shared-device operating model before go-live.
 - Production Owner/Admin users must enroll TOTP before protected API access when workspace `requireAdmin2fa` remains enabled; this is now enforced in `NODE_ENV=production`.
-- Destructive restore commits now require a logged-in Owner/Admin user session; automation should use dry-run restore validation and hand off final commit to an operator.
+- First-time destructive restore commits still require a logged-in Owner/Admin user session; automation should use dry-run restore validation and hand off final commit to an operator.
+- Confirmed destructive restore commits now support route-specific idempotent replay after session revocation, but operators should still use fresh `Idempotency-Key` values after restoring from an exported backup because exports omit internal replay records.
 - API-key grants are intentionally limited to automation scopes; account, settings, and API-key administration should remain user-session-only unless a customer-specific security review changes that policy.
 - API-key read access is intentionally allowlisted by route and scope; integrations that need broader reads should be reviewed and granted a purpose-specific automation scope instead of falling back to user sessions.
 - Runtime production readiness now fails hard on unsafe default/demo access or weak/missing deployment secrets; operators must fix `.env` before live smoke checks can pass.
@@ -428,8 +439,8 @@
 - Integration configuration idempotency now protects webhook, notification channel, commerce connector, add-on, and bridge setup retries from duplicate records and audit events; clients still need stable per-attempt keys when retrying integration setup writes.
 - Governance setup idempotency now protects workspace settings, onboarding checklist updates, and support snapshot generation from duplicate audit events; clients still need stable per-attempt keys when retrying go-live setup actions.
 - Admin account management idempotency now protects API-key create/update, user invite/update, and password-reset retries from duplicate generated secrets and duplicate governance audit events; clients still need stable per-attempt keys when retrying owner/admin actions.
-- The built-in Team, API-key, Settings governance, support snapshot, and billing UI now generates stable per-attempt idempotency headers for supported retry-prone writes; restore preview/commit remains outside this browser-idempotency slice because destructive restore commits intentionally invalidate the old session and need route-specific replay design.
-- The built-in daily operator UI now generates stable per-attempt idempotency headers for supported queue, scheduler, order, quote, file, slicer, printer, todo, spool, and purchasing writes; multipart uploads, restore commits, and lower-risk integration/history components still need route-specific browser retry handling before claiming complete UI coverage.
+- The built-in Team, API-key, Settings governance, support snapshot, billing, and confirmed restore commit UI now generates stable per-attempt idempotency headers for supported retry-prone writes.
+- The built-in daily operator UI now generates stable per-attempt idempotency headers for supported queue, scheduler, order, quote, file, slicer, printer, todo, spool, and purchasing writes; multipart uploads and lower-risk integration/history components still need route-specific browser retry handling before claiming complete UI coverage.
 - Idempotency replay records are intentionally omitted from shared state and admin exports; retry clients should use fresh keys after workspace export/restore rather than expecting replay cache continuity.
 - Audit context now covers the highest-impact production scheduling/queue/bridge/file-version operator actions; remaining lower-risk direct event writes should be migrated only with route-specific delivery and notification review.
 - Ops-check authenticated verification requires valid Owner/Admin credentials or a dedicated smoke account configured in `.env`; otherwise it warns and continues with unauthenticated host checks.
