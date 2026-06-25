@@ -1,16 +1,26 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 17 pushed
+- Phase: round 18 verified
 - Started: 2026-06-24 UTC
-- Current state: Round 17 public quote-decision idempotency hardening is implemented, verified, committed, and pushed to `origin/codex/production-saas-completion-20260624`.
+- Current state: Round 18 idempotency replay export safety is implemented, verified, and committed locally; final report/push is in progress.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 9 files / 92 tests passed)
 - Current plan:
-  - Add retry-safe idempotency coverage for public customer quote decisions.
-  - Extend the persisted `Idempotency-Key` ledger to token-verified public quote decision routes.
+  - Redact internal idempotency replay ledger records from shared state and admin export surfaces.
+  - Prove token-returning quote intake replay records remain internal while retries still work.
   - Update operations/readiness docs, run targeted tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 18 repo inspection started at 2026-06-25T04:21:51Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotency replay export safety for token-returning retry routes.
+  - Added regression coverage proving a public quote intake replay record can contain the customer token internally while `/api/state` and `/api/admin/export` omit the idempotency ledger, replay body, and token.
+  - Added sanitized public `dataMeta` serialization that excludes `idempotencyKeys` from shared state and admin export payloads.
+  - Documented idempotency ledger export behavior and fresh-key-after-restore expectations in README, operations, and production-readiness docs.
+  - Targeted public quote intake regression passed: `npm run test -- api/server.test.mjs -t "public quote intake retries"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (76 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 92 tests passed).
+  - Committed round 18 implementation as `033726c` (`feat: redact idempotency replay metadata`).
   - Round 17 repo inspection started at 2026-06-25T04:10:01Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: idempotent public quote decision retries to prevent duplicate customer approval handoff errors after an accepted quote creates an order.

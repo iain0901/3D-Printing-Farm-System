@@ -35,6 +35,7 @@
   - `2d85a39` `feat: add idempotent public quote decisions`
   - `e8d1d0a` `docs: record codex round 17 status`
   - Current `HEAD` `docs: record codex round 17 push`
+  - `033726c` `feat: redact idempotency replay metadata`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -79,6 +80,9 @@
   - Round 17 targeted `npm run test -- api/server.test.mjs -t "idempotent public quote approvals"`: passed, 1 test passed.
   - Round 17 targeted `npm run test -- api/server.test.mjs`: passed, 76 tests passed.
   - Round 17 final `npm run qc`: passed, build passed, Vitest 9 files / 92 tests passed.
+  - Round 18 targeted `npm run test -- api/server.test.mjs -t "public quote intake retries"`: passed, 1 test passed.
+  - Round 18 targeted `npm run test -- api/server.test.mjs`: passed, 76 tests passed.
+  - Round 18 final `npm run qc`: passed, build passed, Vitest 9 files / 92 tests passed.
 
 ## Completed Features
 
@@ -140,6 +144,9 @@
 - Added token-verified idempotent replay/conflict protection for public customer quote decisions.
 - Added regression coverage proving public quote approval retries replay the original response without creating duplicate orders or duplicate customer-accepted/converted audit events.
 - Documented public quote decision `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Redacted internal idempotency replay ledger records from shared state and admin export payloads.
+- Added regression coverage proving token-returning public quote intake replay records remain internal while `/api/state` and `/api/admin/export` omit the ledger, replay body, and customer token.
+- Documented that idempotency replay caches are internal-only and that restore clients should use fresh `Idempotency-Key` values after workspace export/restore.
 
 ## Remaining Blockers
 
@@ -159,6 +166,7 @@
 - Commerce import idempotency now protects connector and CSV batch retries; broader write API coverage should still be added only after route-specific response and secret review.
 - Quote conversion idempotency now protects authenticated operator retries; public customer quote decisions remain intentionally token-gated and should be reviewed separately before adding public idempotency semantics.
 - Public quote intake and token-verified customer quote decision idempotency now protect customer form submissions and portal approval retries; any broader public portal write coverage should still be added only with route-specific replay and token review.
+- Idempotency replay records are intentionally omitted from shared state and admin exports; retry clients should use fresh keys after workspace export/restore rather than expecting replay cache continuity.
 - Audit context now covers the highest-impact production scheduling/queue/bridge/file-version operator actions; remaining lower-risk direct event writes should be migrated only with route-specific delivery and notification review.
 - Ops-check authenticated verification requires valid Owner/Admin credentials or a dedicated smoke account configured in `.env`; otherwise it warns and continues with unauthenticated host checks.
 - Support snapshots now redact secret-like fields and URL paths/query strings, but operators should still review generated support bundles before sharing customer evidence externally.
