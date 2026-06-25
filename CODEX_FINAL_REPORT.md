@@ -4,8 +4,9 @@
 - Pushed remote: `origin/codex/production-saas-completion-20260624`
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
-- Latest round: Round 95 bridge audit hardening implemented and verified; commit/push pending.
+- Latest round: Round 95 bridge audit hardening implemented, verified, and committed; push pending.
 - Commits:
+  - `44d68ef` `feat: add bridge audit context`
   - `91e48b5` `docs: record codex round 94 status`
   - `163957a` `feat: add file deletion audit context`
   - `0a9646f` `docs: record codex round 93 push`
