@@ -44,6 +44,7 @@
   - `dabbdc2` `feat: add idempotent inventory writes`
   - Current `HEAD` `docs: record codex round 21 push`
   - `3f9ed15` `feat: add idempotent maintenance workflows`
+  - `6fb7ada` `feat: add idempotent audit retention runs`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -104,6 +105,9 @@
   - Round 22 targeted `npm run test -- api/server.test.mjs -t "idempotent maintenance"`: passed, 3 tests passed.
   - Round 22 targeted `npm run test -- api/server.test.mjs`: passed, 85 tests passed.
   - Round 22 final `npm run qc`: passed, build passed, Vitest 10 files / 102 tests passed.
+  - Round 23 targeted `npm run test -- api/server.test.mjs -t "audit retention runs"`: passed, 1 test passed.
+  - Round 23 targeted `npm run test -- api/server.test.mjs`: passed, 86 tests passed.
+  - Round 23 final `npm run qc`: passed, build passed, Vitest 10 files / 103 tests passed.
 
 ## Completed Features
 
@@ -180,6 +184,9 @@
 - Added idempotent replay/conflict protection for maintenance job creation, maintenance template saves, and maintenance problem-report intake.
 - Added regression coverage proving maintenance retries replay without duplicate maintenance jobs, duplicate templates/update events, duplicate reports, or duplicate linked jobs.
 - Documented maintenance `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for admin audit-retention runs.
+- Added regression coverage proving audit-retention retries replay without duplicate `admin.audit_retention_run` events while still pruning stale audit entries and preserving protected restore events.
+- Documented audit-retention `Idempotency-Key` usage in README, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -203,6 +210,7 @@
 - Filament purchasing idempotency now protects reorder-plan and receive retries; broader inventory write coverage should still be added only after route-specific replay and response review.
 - Inventory idempotency now protects spool creation, usage logging, and scan-based usage retries; broader inventory write coverage should still be added only after route-specific replay and response review.
 - Maintenance idempotency now protects job creation, template saves, and problem-report intake retries; broader maintenance update coverage should still be added only after route-specific replay and response review.
+- Audit-retention run idempotency now protects retry-prone governance cleanup runs; broader admin write coverage should still be added only after route-specific replay and response review.
 - Idempotency replay records are intentionally omitted from shared state and admin exports; retry clients should use fresh keys after workspace export/restore rather than expecting replay cache continuity.
 - Audit context now covers the highest-impact production scheduling/queue/bridge/file-version operator actions; remaining lower-risk direct event writes should be migrated only with route-specific delivery and notification review.
 - Ops-check authenticated verification requires valid Owner/Admin credentials or a dedicated smoke account configured in `.env`; otherwise it warns and continues with unauthenticated host checks.
