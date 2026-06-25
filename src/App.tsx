@@ -1526,6 +1526,15 @@ function App() {
     accountIdempotencyAttempts.current[action] = result.attempt;
     return result.headers;
   };
+  const operatorIdempotencyAttempts = useRef<Record<string, IdempotencyAttempt>>({});
+  const operatorIdempotencyHeaders = (action: string, payload: unknown) => {
+    const result = idempotencyHeadersForAttempt(operatorIdempotencyAttempts.current[action] || null, action, payload);
+    operatorIdempotencyAttempts.current[action] = result.attempt;
+    return result.headers;
+  };
+  const clearOperatorIdempotency = (action: string) => {
+    delete operatorIdempotencyAttempts.current[action];
+  };
 
   const addToast = (message: string, type: Toast["type"] = "success") => {
     const id = crypto.randomUUID();
@@ -1632,13 +1641,16 @@ function App() {
 
   const createQueueJob = async (job: Omit<QueueItem, "id">) => {
     const fallback: QueueItem = { ...job, id: crypto.randomUUID() };
+    const attemptKey = "queue-create";
     try {
       const created = await apiRequest<{ job: QueueItem }>("/api/queue", {
         method: "POST",
+        headers: operatorIdempotencyHeaders(attemptKey, job),
         body: JSON.stringify(job)
       });
       setQueue((items) => [...items, created.job]);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return created.job;
     } catch {
       setQueue((items) => [...items, fallback]);
@@ -1650,15 +1662,19 @@ function App() {
   const scheduleQueueJob = async (jobId: string, printer: Printer, scheduledStart = "13:00") => {
     const currentJob = queue.find((item) => item.id === jobId);
     const localWarnings = currentJob ? getScheduleWarnings(currentJob, printer) : [];
+    const payload = { printerId: printer.id, scheduledStart };
+    const attemptKey = `queue-schedule:${jobId}`;
     setQueue((items) => items.map((item) => item.id === jobId ? { ...item, printerId: printer.id, printer: printer.name, scheduledStart: item.scheduledStart || scheduledStart, scheduleWarnings: localWarnings, stage: item.stage === "needs slicing" ? "needs slicing" : "scheduled" } : item));
     try {
       const scheduled = await apiRequest<{ job: QueueItem; warnings?: string[]; spools?: Spool[] }>(`/api/queue/${jobId}/schedule`, {
         method: "PATCH",
-        body: JSON.stringify({ printerId: printer.id, scheduledStart })
+        headers: operatorIdempotencyHeaders(attemptKey, { jobId, ...payload }),
+        body: JSON.stringify(payload)
       });
       setQueue((items) => items.map((item) => item.id === jobId ? scheduled.job : item));
       if (scheduled.spools) setSpools(scheduled.spools);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return scheduled.warnings || scheduled.job.scheduleWarnings || [];
     } catch {
       setBackendStatus("local");
@@ -1667,14 +1683,18 @@ function App() {
   };
 
   const autoScheduleQueueJobs = async () => {
+    const payload = { includeBusyPrinters: true, respectMaterial: true, respectBuildVolume: true, startMinute: 8 * 60 };
+    const attemptKey = "schedule-auto";
     try {
       const result = await apiRequest<AutoScheduleResult>("/api/schedule/auto", {
         method: "POST",
-        body: JSON.stringify({ includeBusyPrinters: true, respectMaterial: true, respectBuildVolume: true, startMinute: 8 * 60 })
+        headers: operatorIdempotencyHeaders(attemptKey, payload),
+        body: JSON.stringify(payload)
       });
       setQueue((items) => items.map((item) => result.jobs.find((job) => job.id === item.id) || item));
       if (result.spools) setSpools(result.spools);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return result;
     } catch {
       const draft = queue.map((job) => ({ ...job }));
@@ -1714,14 +1734,18 @@ function App() {
   };
 
   const optimizeScheduleJobs = async (strategy: OptimizeScheduleStrategy) => {
+    const payload = { strategy, includeBusyPrinters: true, respectMaterial: true, respectBuildVolume: true, startMinute: 8 * 60 };
+    const attemptKey = `schedule-optimize:${strategy}`;
     try {
       const result = await apiRequest<AutoScheduleResult>("/api/schedule/optimize", {
         method: "POST",
-        body: JSON.stringify({ strategy, includeBusyPrinters: true, respectMaterial: true, respectBuildVolume: true, startMinute: 8 * 60 })
+        headers: operatorIdempotencyHeaders(attemptKey, payload),
+        body: JSON.stringify(payload)
       });
       setQueue((items) => items.map((item) => result.jobs.find((job) => job.id === item.id) || item));
       if (result.spools) setSpools(result.spools);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return result;
     } catch {
       const draft = queue.map((job) => ({ ...job }));
@@ -1752,14 +1776,18 @@ function App() {
   };
 
   const solveScheduleJobs = async (objective: ConstraintObjective) => {
+    const payload = { objective, includeBusyPrinters: true, respectMaterial: true, respectBuildVolume: true, startMinute: 8 * 60, maxJobs: 80 };
+    const attemptKey = `schedule-constraint:${objective}`;
     try {
       const result = await apiRequest<AutoScheduleResult>("/api/schedule/constraint", {
         method: "POST",
-        body: JSON.stringify({ objective, includeBusyPrinters: true, respectMaterial: true, respectBuildVolume: true, startMinute: 8 * 60, maxJobs: 80 })
+        headers: operatorIdempotencyHeaders(attemptKey, payload),
+        body: JSON.stringify(payload)
       });
       setQueue((items) => items.map((item) => result.jobs.find((job) => job.id === item.id) || item));
       if (result.spools) setSpools(result.spools);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return result;
     } catch {
       const fallback = await optimizeScheduleJobs(objective === "changeover-min" ? "material-color" : objective === "due-risk" ? "due-priority" : "load-balance");
@@ -1773,10 +1801,13 @@ function App() {
   };
 
   const matchQueueJobs = async (dryRun: boolean) => {
+    const payload = { dryRun, maxActiveSlots: 3, respectMaterial: true, respectBuildVolume: true };
+    const attemptKey = `queue-match:${dryRun ? "dry-run" : "commit"}`;
     try {
       const result = await apiRequest<QueueMatchResult>("/api/queue/match", {
         method: "POST",
-        body: JSON.stringify({ dryRun, maxActiveSlots: 3, respectMaterial: true, respectBuildVolume: true })
+        headers: operatorIdempotencyHeaders(attemptKey, payload),
+        body: JSON.stringify(payload)
       });
       if (!dryRun) {
         setQueue((items) => items.map((item) => result.jobs.find((job) => job.id === item.id) || item));
@@ -1784,6 +1815,7 @@ function App() {
         if (result.spools) setSpools(result.spools);
       }
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return result;
     } catch {
       const active = queue.filter((job) => job.status === "printing" || job.status === "paused").length;
@@ -1804,29 +1836,37 @@ function App() {
   };
 
   const updateQueueStatus = async (jobId: string, status: JobStatus) => {
+    const payload = { status };
+    const attemptKey = `queue-status:${jobId}`;
     setQueue((items) => items.map((job) => job.id === jobId ? { ...job, status } : job));
     try {
       const updated = await apiRequest<{ job: QueueItem; spools?: Spool[] }>(`/api/queue/${jobId}/status`, {
         method: "PATCH",
-        body: JSON.stringify({ status })
+        headers: operatorIdempotencyHeaders(attemptKey, { jobId, ...payload }),
+        body: JSON.stringify(payload)
       });
       setQueue((items) => items.map((job) => job.id === jobId ? updated.job : job));
       if (updated.spools) setSpools(updated.spools);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
     } catch {
       setBackendStatus("local");
     }
   };
 
   const updateQueuePriority = async (jobId: string, priority: QueueItem["priority"]) => {
+    const payload = { priority };
+    const attemptKey = `queue-priority:${jobId}`;
     setQueue((items) => items.map((job) => job.id === jobId ? { ...job, priority } : job));
     try {
       const updated = await apiRequest<{ job: QueueItem }>(`/api/queue/${jobId}/priority`, {
         method: "PATCH",
-        body: JSON.stringify({ priority })
+        headers: operatorIdempotencyHeaders(attemptKey, { jobId, ...payload }),
+        body: JSON.stringify(payload)
       });
       setQueue((items) => items.map((job) => job.id === jobId ? updated.job : job));
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
     } catch {
       setBackendStatus("local");
     }
@@ -1834,13 +1874,16 @@ function App() {
 
   const createOrder = async (draft: Omit<Order, "id">) => {
     const fallback: Order = { ...draft, id: `ord-${1051 + orders.length}` };
+    const attemptKey = "order-create";
     try {
       const created = await apiRequest<Order>("/api/orders", {
         method: "POST",
+        headers: operatorIdempotencyHeaders(attemptKey, draft),
         body: JSON.stringify(draft)
       });
       setOrders((items) => [...items, created]);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return created;
     } catch {
       setOrders((items) => [...items, fallback]);
@@ -1850,11 +1893,14 @@ function App() {
   };
 
   const updateOrderStatus = async (orderId: string, status: Order["status"]) => {
+    const payload = { status };
+    const attemptKey = `order-status:${orderId}`;
     setOrders((items) => items.map((order) => order.id === orderId ? { ...order, status } : order));
     try {
       const updated = await apiRequest<OrderStatusUpdateResult>(`/api/orders/${orderId}/status`, {
         method: "PATCH",
-        body: JSON.stringify({ status })
+        headers: operatorIdempotencyHeaders(attemptKey, { orderId, ...payload }),
+        body: JSON.stringify(payload)
       });
       const nextOrder = updated.order || updated;
       setOrders((items) => items.map((order) => order.id === orderId ? nextOrder : order));
@@ -1863,6 +1909,7 @@ function App() {
       }
       if (updated.spools) setSpools(updated.spools);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return nextOrder;
     } catch {
       setBackendStatus("local");
@@ -1871,14 +1918,17 @@ function App() {
   };
 
   const updateQuoteRequest = async (quoteId: string, patch: Partial<Pick<QuoteRequest, "status" | "priority" | "quotedValue" | "validUntil" | "internalNote">>) => {
+    const attemptKey = `quote-update:${quoteId}`;
     setQuoteRequests((items) => items.map((quote) => quote.id === quoteId ? { ...quote, ...patch } : quote));
     try {
       const updated = await apiRequest<QuoteRequest>(`/api/quoteRequests/${quoteId}`, {
         method: "PATCH",
+        headers: operatorIdempotencyHeaders(attemptKey, { quoteId, patch }),
         body: JSON.stringify(patch)
       });
       setQuoteRequests((items) => items.map((quote) => quote.id === quoteId ? updated : quote));
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return updated;
     } catch {
       setBackendStatus("local");
@@ -1887,13 +1937,17 @@ function App() {
   };
 
   const createQuotePortalLink = async (quote: QuoteRequest, rotate = false) => {
+    const payload = { rotate };
+    const attemptKey = `quote-portal-link:${quote.id}`;
     try {
       const result = await apiRequest<{ quoteRequest: QuoteRequest; url: string; accessToken: string }>(`/api/quoteRequests/${quote.id}/customer-link`, {
         method: "POST",
-        body: JSON.stringify({ rotate })
+        headers: operatorIdempotencyHeaders(attemptKey, { quoteId: quote.id, ...payload }),
+        body: JSON.stringify(payload)
       });
       setQuoteRequests((items) => items.map((item) => item.id === quote.id ? result.quoteRequest : item));
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return result;
     } catch {
       setBackendStatus("local");
@@ -1902,15 +1956,19 @@ function App() {
   };
 
   const convertQuoteRequest = async (quote: QuoteRequest) => {
+    const payload = { due: quote.due, value: quote.quotedValue || quote.budget || 0, createJob: true };
+    const attemptKey = `quote-convert:${quote.id}`;
     try {
       const result = await apiRequest<{ quoteRequest: QuoteRequest; order: Order; job?: QueueItem | null; orders: Order[]; quoteRequests: QuoteRequest[]; queue?: QueueItem[]; todos?: Todo[] }>(`/api/quoteRequests/${quote.id}/convert-order`, {
         method: "POST",
-        body: JSON.stringify({ due: quote.due, value: quote.quotedValue || quote.budget || 0, createJob: true })
+        headers: operatorIdempotencyHeaders(attemptKey, { quoteId: quote.id, ...payload }),
+        body: JSON.stringify(payload)
       });
       setQuoteRequests(result.quoteRequests);
       setOrders(result.orders);
       if (result.queue) setQueue(result.queue);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return result;
     } catch {
       const order: Order = { id: `local-${crypto.randomUUID().slice(0, 8)}`, source: "Manual", externalId: quote.id, customer: quote.company ? `${quote.customer} / ${quote.company}` : quote.customer, items: [`${quote.project} x${quote.quantity}`], status: "received", due: quote.due, value: quote.quotedValue || quote.budget || 0 };
@@ -1924,13 +1982,16 @@ function App() {
 
   const createSpool = async (draft: Omit<Spool, "id">) => {
     const fallback: Spool = { ...draft, id: crypto.randomUUID() };
+    const attemptKey = "spool-create";
     try {
       const created = await apiRequest<Spool>("/api/spools", {
         method: "POST",
+        headers: operatorIdempotencyHeaders(attemptKey, draft),
         body: JSON.stringify(draft)
       });
       setSpools((items) => [...items, created]);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return created;
     } catch {
       setSpools((items) => [...items, fallback]);
@@ -1956,14 +2017,18 @@ function App() {
   };
 
   const logSpoolUsage = async (spoolId: string, grams = 20) => {
+    const payload = { grams };
+    const attemptKey = `spool-usage:${spoolId}`;
     setSpools((items) => items.map((spool) => spool.id === spoolId ? { ...spool, remaining: Math.max(0, spool.remaining - grams) } : spool));
     try {
       const updated = await apiRequest<Spool>(`/api/spools/${spoolId}/usage`, {
         method: "PATCH",
-        body: JSON.stringify({ grams })
+        headers: operatorIdempotencyHeaders(attemptKey, { spoolId, ...payload }),
+        body: JSON.stringify(payload)
       });
       setSpools((items) => items.map((spool) => spool.id === spoolId ? updated : spool));
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return updated;
     } catch {
       setBackendStatus("local");
@@ -1972,33 +2037,44 @@ function App() {
   };
 
   const generateSpoolLabels = async (ids: string[] = []) => {
+    const payload = { ids };
+    const attemptKey = "spool-labels";
     const result = await apiRequest<SpoolLabelExport>("/api/spools/labels", {
       method: "POST",
-      body: JSON.stringify({ ids })
+      headers: operatorIdempotencyHeaders(attemptKey, payload),
+      body: JSON.stringify(payload)
     });
     setBackendStatus("connected");
+    clearOperatorIdempotency(attemptKey);
     return result;
   };
 
   const scanSpool = async (code: string, options: { grams?: number; location?: string } = {}) => {
+    const payload = { code, ...options };
+    const attemptKey = `spool-scan:${code}`;
     const result = await apiRequest<SpoolScanResult>("/api/spools/scan", {
       method: "POST",
-      body: JSON.stringify({ code, ...options })
+      headers: operatorIdempotencyHeaders(attemptKey, payload),
+      body: JSON.stringify(payload)
     });
     setSpools(result.spools || spools.map((spool) => spool.id === result.spool.id ? result.spool : spool));
     setBackendStatus("connected");
+    clearOperatorIdempotency(attemptKey);
     return result;
   };
 
   const createPurchaseRequest = async (draft: Omit<PurchaseRequest, "id">) => {
     const fallback: PurchaseRequest = { ...draft, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    const attemptKey = "purchase-request-create";
     try {
       const created = await apiRequest<PurchaseRequest>("/api/purchaseRequests", {
         method: "POST",
+        headers: operatorIdempotencyHeaders(attemptKey, draft),
         body: JSON.stringify(draft)
       });
       setPurchaseRequests((items) => [created, ...items.filter((item) => item.id !== created.id)]);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return created;
     } catch {
       setPurchaseRequests((items) => [fallback, ...items]);
@@ -2008,13 +2084,16 @@ function App() {
   };
 
   const generateReorderPlan = async (options: { thresholdGrams?: number; targetGrams?: number; quantity?: number } = {}) => {
+    const attemptKey = "purchase-reorder-plan";
     try {
       const result = await apiRequest<ReorderPlanResult>("/api/purchaseRequests/reorderPlan", {
         method: "POST",
+        headers: operatorIdempotencyHeaders(attemptKey, options),
         body: JSON.stringify(options)
       });
       setPurchaseRequests(result.purchaseRequests);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return result;
     } catch {
       const existingOpen = new Set(purchaseRequests.filter((request) => ["open", "ordered"].includes(request.status) && request.spoolId).map((request) => request.spoolId));
@@ -2044,14 +2123,17 @@ function App() {
   };
 
   const updatePurchaseRequest = async (requestId: string, patch: Partial<PurchaseRequest>) => {
+    const attemptKey = `purchase-request-update:${requestId}`;
     setPurchaseRequests((items) => items.map((request) => request.id === requestId ? { ...request, ...patch } : request));
     try {
       const updated = await apiRequest<PurchaseRequest>(`/api/purchaseRequests/${requestId}`, {
         method: "PATCH",
+        headers: operatorIdempotencyHeaders(attemptKey, { requestId, patch }),
         body: JSON.stringify(patch)
       });
       setPurchaseRequests((items) => items.map((request) => request.id === requestId ? updated : request));
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return updated;
     } catch {
       setBackendStatus("local");
@@ -2060,14 +2142,18 @@ function App() {
   };
 
   const receivePurchaseRequest = async (requestId: string, location = "Rack Receiving") => {
+    const payload = { location };
+    const attemptKey = `purchase-receive:${requestId}`;
     try {
       const result = await apiRequest<PurchaseReceiveResult>(`/api/purchaseRequests/${requestId}/receive`, {
         method: "POST",
-        body: JSON.stringify({ location })
+        headers: operatorIdempotencyHeaders(attemptKey, { requestId, ...payload }),
+        body: JSON.stringify(payload)
       });
       setPurchaseRequests(result.purchaseRequests);
       setSpools(result.inventory);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return result;
     } catch {
       const request = purchaseRequests.find((item) => item.id === requestId);
@@ -2094,13 +2180,17 @@ function App() {
 
   const actOnTodo = async (todoId: string, action: TodoAction["action"], payload: Partial<Pick<TodoAction, "owner" | "note" | "snoozeUntil">> = {}) => {
     const fallback: TodoAction = { id: crypto.randomUUID(), todoId, todoTitle: todoId, todoKind: "exception", action, owner: payload.owner || currentUser?.name || "Operator", note: payload.note || "", snoozeUntil: payload.snoozeUntil || "", createdBy: currentUser?.email || "", at: new Date().toISOString() };
+    const body = { action, ...payload };
+    const attemptKey = `todo-action:${todoId}:${action}`;
     try {
       const result = await apiRequest<{ action: TodoAction; todo: Todo | null; todos: Todo[]; todoActions: TodoAction[] }>(`/api/todos/${encodeURIComponent(todoId)}/action`, {
         method: "POST",
-        body: JSON.stringify({ action, ...payload })
+        headers: operatorIdempotencyHeaders(attemptKey, { todoId, ...body }),
+        body: JSON.stringify(body)
       });
       setTodoActions(result.todoActions);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return result;
     } catch {
       setTodoActions((items) => [fallback, ...items]);
@@ -2502,10 +2592,13 @@ function App() {
   };
 
   const generateJobsForOrder = async (order: Order, dryRun = false) => {
+    const payload = { dryRun };
+    const attemptKey = `order-generate-jobs:${order.id}:${dryRun ? "dry-run" : "commit"}`;
     try {
       const result = await apiRequest<OrderJobGenerationResult>(`/api/orders/${order.id}/generate-jobs`, {
         method: "POST",
-        body: JSON.stringify({ dryRun })
+        headers: operatorIdempotencyHeaders(attemptKey, { orderId: order.id, ...payload }),
+        body: JSON.stringify(payload)
       });
       if (!dryRun && !result.duplicateBlocked) {
         setOrders((items) => items.map((item) => item.id === order.id ? result.order : item));
@@ -2513,6 +2606,7 @@ function App() {
         if (Array.isArray(result.skus)) setSkus(result.skus);
       }
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return result;
     } catch {
       const printer = printers.find((p) => p.status === "idle") || printers.find((p) => p.status !== "offline" && p.status !== "maintenance") || printers[0];
@@ -2631,15 +2725,18 @@ function App() {
   };
 
   const createSampleFile = async (draft: { name: string; material: string; folder: string }) => {
+    const attemptKey = "file-sample";
     try {
       const result = await apiRequest<{ file: Partial<PrintFile>; folder: FileFolder; files: Partial<PrintFile>[]; folders: FileFolder[]; stlBytes: number }>("/api/files/sample", {
         method: "POST",
+        headers: operatorIdempotencyHeaders(attemptKey, draft),
         body: JSON.stringify(draft)
       });
       const normalized = normalizeFiles([result.file])[0];
       setFiles(normalizeFiles(result.files));
       setFileFolders(result.folders);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return { file: normalized, folder: result.folder, stlBytes: result.stlBytes };
     } catch {
       const fallback: PrintFile = {
@@ -2689,15 +2786,18 @@ function App() {
 
   const runHotDrop = async () => {
     const mode = hotDropMode;
+    const payload = {
+      mode,
+      name: `Hot Drop ${new Date().toISOString().slice(11, 16).replace(":", "")}`,
+      material: mode === "Upload Only" ? "PLA" : "Any Material",
+      folder: "Hot Drops / Today"
+    };
+    const attemptKey = "hot-drop";
     try {
       const result = await apiRequest<HotDropResult>("/api/hot-drop", {
         method: "POST",
-        body: JSON.stringify({
-          mode,
-          name: `Hot Drop ${new Date().toISOString().slice(11, 16).replace(":", "")}`,
-          material: mode === "Upload Only" ? "PLA" : "Any Material",
-          folder: "Hot Drops / Today"
-        })
+        headers: operatorIdempotencyHeaders(attemptKey, payload),
+        body: JSON.stringify(payload)
       });
       const normalizedFiles = normalizeFiles(result.files);
       setFiles(normalizedFiles);
@@ -2705,6 +2805,7 @@ function App() {
       setQueue(result.queue);
       setPrinters(result.printers);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       const normalizedFile = normalizeFiles([result.file])[0];
       if (result.mode === "Upload Only") {
         setView("files");
@@ -2756,12 +2857,14 @@ function App() {
   };
 
   const versionFile = async (fileId: string) => {
+    const attemptKey = `file-version:${fileId}`;
     setFiles((items) => items.map((item) => item.id === fileId ? { ...item, version: item.version + 1, status: "needs review" } : item));
     try {
-      const updated = await apiRequest<Partial<PrintFile>>(`/api/files/${fileId}/version`, { method: "PATCH" });
+      const updated = await apiRequest<Partial<PrintFile>>(`/api/files/${fileId}/version`, { method: "PATCH", headers: operatorIdempotencyHeaders(attemptKey, { fileId }) });
       const normalized = normalizeFiles([updated])[0];
       setFiles((items) => items.map((item) => item.id === fileId ? normalized : item));
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
     } catch {
       setBackendStatus("local");
     }
@@ -2792,10 +2895,12 @@ function App() {
   };
 
   const deleteFile = async (fileId: string) => {
+    const attemptKey = `file-delete:${fileId}`;
     try {
-      await apiRequest(`/api/files/${fileId}`, { method: "DELETE" });
+      await apiRequest(`/api/files/${fileId}`, { method: "DELETE", headers: operatorIdempotencyHeaders(attemptKey, { fileId }) });
       setFiles((items) => items.filter((file) => file.id !== fileId));
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return true;
     } catch {
       setBackendStatus("local");
@@ -2804,12 +2909,14 @@ function App() {
   };
 
   const sliceFile = async (fileId: string) => {
+    const attemptKey = `file-slice:${fileId}`;
     setFiles((items) => items.map((file) => file.id === fileId ? { ...file, sliced: true, status: "sliced", type: "GCODE" } : file));
     try {
-      const updated = await apiRequest<Partial<PrintFile>>(`/api/files/${fileId}/slice`, { method: "PATCH" });
+      const updated = await apiRequest<Partial<PrintFile>>(`/api/files/${fileId}/slice`, { method: "PATCH", headers: operatorIdempotencyHeaders(attemptKey, { fileId }) });
       const normalized = normalizeFiles([updated])[0];
       setFiles((items) => items.map((file) => file.id === fileId ? normalized : file));
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
     } catch {
       setBackendStatus("local");
     }
@@ -2818,15 +2925,18 @@ function App() {
   const runSlicerJob = async (settings: { fileId: string; printerId: string; material: string; layerHeight: string; infill: number; supports: boolean }) => {
     const sourceFile = files.find((file) => file.id === settings.fileId);
     const printer = printers.find((item) => item.id === settings.printerId) || printers[0];
+    const attemptKey = `slicer-job:${settings.fileId}`;
     try {
       const result = await apiRequest<{ job: SlicerJob; file: Partial<PrintFile>; slicerJobs: SlicerJob[] }>("/api/slicer/jobs", {
         method: "POST",
+        headers: operatorIdempotencyHeaders(attemptKey, settings),
         body: JSON.stringify(settings)
       });
       setSlicerJobs(result.slicerJobs);
       const normalized = normalizeFiles([result.file])[0];
       setFiles((items) => items.map((file) => file.id === normalized.id ? normalized : file));
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return { job: result.job, file: normalized };
     } catch {
       const fallbackJob: SlicerJob = {
@@ -2974,14 +3084,17 @@ function App() {
     controlPrinter: async (id: string, action: string) => {
       const current = printers.find((printer) => printer.id === id);
       if (!current) return;
+      const payload = { printerId: id, action };
+      const attemptKey = `printer-action:${id}:${action}`;
       try {
         const result = await apiRequest<{ printer: Printer; job?: QueueItem | null; action: string }>(
           "/api/actions",
-          { method: "POST", body: JSON.stringify({ printerId: id, action }) }
+          { method: "POST", headers: operatorIdempotencyHeaders(attemptKey, payload), body: JSON.stringify(payload) }
         );
         setPrinterState(result.printer);
         if (result.job) setQueue((items) => items.map((job) => job.id === result.job?.id ? result.job : job));
         setBackendStatus("connected");
+        clearOperatorIdempotency(attemptKey);
         addToast(`${result.action} accepted by printer bridge`, "info");
         return;
       } catch {

@@ -1,16 +1,25 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 45 committed and pushed
+- Phase: round 46 ready to commit
 - Started: 2026-06-24 UTC
-- Current state: Round 45 browser admin/governance idempotency is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
-- Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 125 tests passed)
+- Current state: Round 46 browser operator idempotency is implemented and verified on `codex/production-saas-completion-20260624`.
+- Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add browser helper coverage for stable idempotency headers.
-  - Wire authenticated Settings and API-key management UI writes to reuse `Idempotency-Key` values for the same attempted payload.
-  - Document browser admin/governance idempotency, run targeted tests and full QC, then commit and push.
+  - Add browser idempotency headers for daily authenticated operator production writes.
+  - Document built-in operator idempotency coverage.
+  - Run targeted browser/build checks and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 46 repo inspection started at 2026-06-25T09:19:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, and roadmap docs before editing.
+  - Selected production-readiness slice: browser-side idempotency keys for authenticated daily operator production controls so dropped browser/API responses replay backend-safe queue, scheduler, order, quote, file, slicer, printer, todo, spool, and purchasing writes instead of duplicating work.
+  - Added a scoped browser operator idempotency attempt store that reuses `Idempotency-Key` values for the same attempted payload until the request succeeds.
+  - Wired Queue, Scheduler, Order, operator quote, file sample/version/delete/slice, Hot Drop, slicer job, printer action, todo action, spool label/scan/usage/create, and filament purchasing actions to send stable idempotency headers.
+  - Documented expanded built-in operator idempotency coverage in README, operations, and production-readiness docs.
+  - Targeted browser helper test passed: `npm run test -- src/idempotency.test.ts` (2 tests).
+  - Production build passed: `npm run build`.
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 128 tests passed).
   - Round 45 repo inspection started at 2026-06-25T09:09:57Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, and roadmap docs before editing.
   - Selected production-readiness slice: browser-side idempotency keys for authenticated admin/governance UI writes so operator retries replay backend-safe actions instead of creating duplicate support, billing, settings, onboarding, or API-key effects.
