@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 42 ready to push
+- Phase: round 42 committed and pushed
 - Started: 2026-06-24 UTC
-- Current state: Round 42 purchase-request retry hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`; final status docs are being recorded before push.
+- Current state: Round 42 purchase-request retry hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 96 tests passed)
 - Current plan:
   - Add regression coverage for retry-safe direct purchase-request create and update writes.
@@ -22,6 +22,8 @@
   - Targeted API suite passed: `npm run test -- api/server.test.mjs` (108 tests).
   - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 125 tests passed).
   - Committed round 42 implementation as `172616e` (`feat: add idempotent purchase requests`).
+  - Committed round 42 status docs as `314026b` (`docs: record codex round 42 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
   - Round 41 repo inspection started at 2026-06-25T08:29:16Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, and production-readiness docs before editing.
   - Selected production-readiness slice: idempotent integration configuration writes to prevent duplicate connector records and duplicate setup/audit events after dropped operator/browser responses.

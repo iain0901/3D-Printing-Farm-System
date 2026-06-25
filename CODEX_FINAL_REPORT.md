@@ -73,6 +73,7 @@
   - `8a128a9` `feat: add idempotent integration configuration`
   - `1c417a0` `docs: record codex round 41 status`
   - `172616e` `feat: add idempotent purchase requests`
+  - `314026b` `docs: record codex round 42 status`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
