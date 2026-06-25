@@ -3270,6 +3270,72 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent quote request updates without duplicating audit events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const quote = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        payload: {
+          customer: "Retry Update Buyer",
+          email: "retry-update@example.com",
+          company: "Quote Update Studio",
+          project: "Quote update retry",
+          material: "PETG",
+          quantity: 6,
+          due: "2026-08-16",
+          budget: 640,
+          notes: "Operator quote update retry"
+        }
+      });
+      expect(quote.statusCode).toBe(201);
+      const id = quote.json().quoteRequest.id;
+      const token = await login(app);
+      const headers = { ...auth(token), "idempotency-key": "quote-update-retry-001" };
+      const payload = { status: "quoted", priority: "High", quotedValue: 625, validUntil: "2026-08-30", internalNote: "Retry-safe update" };
+
+      const updated = await app.inject({
+        method: "PATCH",
+        url: `/api/quoteRequests/${id}`,
+        headers,
+        payload
+      });
+      expect(updated.statusCode).toBe(200);
+
+      const replay = await app.inject({
+        method: "PATCH",
+        url: `/api/quoteRequests/${id}`,
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(updated.json());
+
+      const conflict = await app.inject({
+        method: "PATCH",
+        url: `/api/quoteRequests/${id}`,
+        headers,
+        payload: { ...payload, quotedValue: 650 }
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.quoteRequests.find((item) => item.id === id)).toMatchObject({
+        status: "quoted",
+        quotedValue: 625,
+        reviewedBy: "demo@layerpilot.test"
+      });
+      expect(persisted.events.filter((event) => event.type === "quote_request.updated" && event.data?.quoteRequestId === id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "quote-update-retry-001")).toMatchObject({
+        method: "PATCH",
+        path: `/api/quoteRequests/${id}`,
+        replayCount: 1,
+        statusCode: 200
+      });
+    });
+  });
+
   it("replays idempotent quote portal link rotations without invalidating the original response", async () => {
     await withApp(async ({ app, dbPath }) => {
       const quote = await app.inject({

@@ -51,6 +51,7 @@
   - `39f12ad` `feat: add idempotent quote portal links`
   - `f947022` `feat: add idempotent todo actions`
   - Current `HEAD` `feat: add idempotent scheduler writes`
+  - Current `HEAD` `feat: add idempotent quote updates`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -129,6 +130,9 @@
   - Round 28 targeted `npm run test -- api/server.test.mjs -t "idempotent scheduler"`: failed before implementation, then passed, 1 test passed.
   - Round 28 targeted `npm run test -- api/server.test.mjs`: passed, 91 tests passed.
   - Round 28 final `npm run qc`: passed, build passed, Vitest 10 files / 108 tests passed.
+  - Round 29 targeted `npm run test -- api/server.test.mjs -t "quote request updates"`: failed before implementation, then passed, 1 test passed.
+  - Round 29 targeted `npm run test -- api/server.test.mjs`: passed, 92 tests passed.
+  - Round 29 final `npm run qc`: passed, build passed, Vitest 10 files / 109 tests passed.
 
 ## Completed Features
 
@@ -223,6 +227,9 @@
 - Added idempotent replay/conflict protection for scheduler auto, optimize, and constraint write APIs.
 - Added regression coverage proving scheduler retries replay the original response without duplicate auto/optimized/constraint scheduling audit events, and conflicting retry bodies return `409`.
 - Documented scheduler automation `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for authenticated quote request updates.
+- Added regression coverage proving quote update retries replay the original response without duplicate `quote_request.updated` audit events, and conflicting retry bodies return `409`.
+- Documented quote update `Idempotency-Key` usage in README, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -252,6 +259,7 @@
 - Quote portal-link idempotency now protects generation and rotation retries; operators should still avoid sharing superseded customer links after intentional manual rotation.
 - Generated todo action idempotency now protects claim/snooze/complete/reopen retries; clients still need to provide stable per-attempt keys for retry-prone operator actions.
 - Scheduler idempotency now protects auto/optimize/constraint retries from duplicate audit events; clients still need stable per-attempt keys when operators retry scheduler automation.
+- Quote update idempotency now protects authenticated operator quote-review retries from duplicate audit events; clients still need stable per-attempt keys when operators retry quote updates.
 - Idempotency replay records are intentionally omitted from shared state and admin exports; retry clients should use fresh keys after workspace export/restore rather than expecting replay cache continuity.
 - Audit context now covers the highest-impact production scheduling/queue/bridge/file-version operator actions; remaining lower-risk direct event writes should be migrated only with route-specific delivery and notification review.
 - Ops-check authenticated verification requires valid Owner/Admin credentials or a dedicated smoke account configured in `.env`; otherwise it warns and continues with unauthenticated host checks.

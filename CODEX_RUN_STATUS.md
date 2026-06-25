@@ -1,16 +1,26 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 28 committed
+- Phase: round 29 committed
 - Started: 2026-06-24 UTC
-- Current state: Round 28 scheduler idempotency hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`.
+- Current state: Round 29 authenticated quote update idempotency hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 96 tests passed)
 - Current plan:
-  - Add persisted idempotency replay/conflict protection for scheduler auto/optimize/constraint write APIs.
-  - Cover retries so dropped operator responses do not duplicate scheduler audit events or re-run queue optimization.
-  - Document supported scheduler idempotency, run targeted tests and full QC, then commit and push.
+  - Add persisted idempotency replay/conflict protection for authenticated quote request update retries.
+  - Cover retries so dropped operator responses do not duplicate quote update audit events.
+  - Document supported quote update idempotency, run targeted tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 29 repo inspection started at 2026-06-25T06:27:04Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent authenticated quote request updates to prevent duplicate quote update events after operator/browser retries.
+  - Added failing regression coverage proving quote update retries need replay semantics to avoid duplicate `quote_request.updated` audit events.
+  - Added authenticated quote request updates to the persisted `Idempotency-Key` allowlist.
+  - Documented quote update idempotency in README, operations, and production-readiness docs.
+  - Targeted quote update idempotency test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "quote request updates"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (92 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 109 tests passed).
+  - Committed round 29 implementation (`feat: add idempotent quote updates`).
   - Round 28 repo inspection started at 2026-06-25T06:25:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: idempotent scheduler write retries for auto, optimized, and constraint scheduling operations.
