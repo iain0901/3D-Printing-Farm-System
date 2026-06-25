@@ -10,6 +10,13 @@ This runbook covers routine production operation for a 3DSTU FarmFlow VPS.
 - Review failed webhook, notification, MQTT, commerce, and bridge delivery logs.
 - Resolve generated todos for slicing, scheduling, material, maintenance, and exceptions.
 
+## Session Policy
+
+- User bearer tokens are stored only as server-side hashes in persisted data.
+- Sessions expire after `LAYERPILOT_SESSION_TTL_HOURS`, default `168` hours.
+- Active sessions also expire after `LAYERPILOT_SESSION_IDLE_TIMEOUT_HOURS` without use, default `24` hours.
+- Password changes keep only the current session; admin password resets revoke all sessions for the reset user.
+
 ## Order And Queue Handling
 
 - Use dry-run job generation before committing SKU-linked orders.

@@ -405,11 +405,18 @@ describe("3DSTU FarmFlow API", () => {
   });
 
   it("authenticates users and supports logout", async () => {
-    await withApp(async ({ app }) => {
+    await withApp(async ({ app, db }) => {
       const bad = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "demo@layerpilot.test", password: "wrong-password" } });
       expect(bad.statusCode).toBe(401);
 
       const token = await login(app, "owner@layerpilot.test", "layerpilot");
+      const session = db.data.sessions.find((item) => item.userId === "u1");
+      expect(session).toBeTruthy();
+      expect(session.token).toBeUndefined();
+      expect(session.tokenHash).toMatch(/^scrypt\$/);
+      expect(session.expiresAt).toBeTruthy();
+      expect(session.idleExpiresAt).toBeTruthy();
+
       const me = await app.inject({ method: "GET", url: "/api/auth/me", headers: auth(token) });
       expect(me.statusCode).toBe(200);
       expect(me.json().user).toMatchObject({ email: "owner@layerpilot.test", role: "Owner" });
@@ -420,6 +427,36 @@ describe("3DSTU FarmFlow API", () => {
 
       const locked = await app.inject({ method: "GET", url: "/api/state", headers: auth(token) });
       expect(locked.statusCode).toBe(401);
+    });
+  });
+
+  it("expires stale user sessions and migrates legacy plaintext session tokens on use", async () => {
+    await withApp(async ({ app, db }) => {
+      const token = await login(app, "owner@layerpilot.test", "layerpilot");
+      const session = db.data.sessions.find((item) => item.userId === "u1");
+      session.lastSeenAt = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      session.idleExpiresAt = new Date(Date.now() - 60_000).toISOString();
+
+      const expired = await app.inject({ method: "GET", url: "/api/state", headers: auth(token) });
+      expect(expired.statusCode).toBe(401);
+      expect(db.data.sessions.some((item) => item.id === session.id)).toBe(false);
+
+      const legacyToken = "legacy-session-token";
+      db.data.sessions.push({
+        id: "legacy-session",
+        token: legacyToken,
+        userId: "u1",
+        workspaceId: "ws-default",
+        createdAt: new Date().toISOString(),
+        lastSeenAt: new Date().toISOString()
+      });
+      const migrated = await app.inject({ method: "GET", url: "/api/state", headers: auth(legacyToken) });
+      expect(migrated.statusCode).toBe(200);
+      const migratedSession = db.data.sessions.find((item) => item.id === "legacy-session");
+      expect(migratedSession.token).toBeUndefined();
+      expect(migratedSession.tokenHash).toMatch(/^scrypt\$/);
+      expect(migratedSession.expiresAt).toBeTruthy();
+      expect(migratedSession.idleExpiresAt).toBeTruthy();
     });
   });
 

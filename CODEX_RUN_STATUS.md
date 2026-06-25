@@ -1,15 +1,21 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 2 pushed
+- Phase: round 3 QC passed, ready to push
 - Started: 2026-06-24 UTC
-- Current state: Round 2 QC passed and branch pushed to `origin/codex/production-saas-completion-20260624`.
+- Current state: Round 3 auth/session hardening implemented and QC passed; commit/push in progress.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 9 files / 79 tests passed)
 - Current plan:
-  - Add UI affordances for the new production order states.
-  - Update production readiness docs and linked setup/runbook docs.
-  - Commit and push `CODEX_FINAL_REPORT.md`.
+  - Commit and push round 3 auth/session hardening.
+  - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 3 repo inspection started at 2026-06-25 UTC.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Added regression coverage for hashed session storage, stale session expiry, and legacy plaintext session migration.
+  - Implemented hashed persisted user session tokens with absolute and idle expiry controls.
+  - Documented `LAYERPILOT_SESSION_TTL_HOURS` and `LAYERPILOT_SESSION_IDLE_TIMEOUT_HOURS`.
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (66 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 82 tests passed).
   - Round 2 repo inspection started at 2026-06-25T01:32:08Z.
   - Selected production-readiness slice: safer idempotency for retry-prone write APIs.
   - Targeted API suite passed: `npm run test -- api/server.test.mjs` (65 tests).

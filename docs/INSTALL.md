@@ -32,6 +32,8 @@ Set real values for:
 - `LAYERPILOT_WORKSPACE_NAME`
 - `LAYERPILOT_WORKER_TOKEN`
 - `LAYERPILOT_METRICS_TOKEN`
+- `LAYERPILOT_SESSION_TTL_HOURS`, defaults to `168`
+- `LAYERPILOT_SESSION_IDLE_TIMEOUT_HOURS`, defaults to `24`
 
 For customer production, also set:
 

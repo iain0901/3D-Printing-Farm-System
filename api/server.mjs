@@ -60,6 +60,8 @@ const DEFAULT_WORKSPACE_ID = "ws-default";
 const IDEMPOTENCY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const IDEMPOTENCY_MAX_RECORDS = 500;
 const IDEMPOTENCY_MAX_RESPONSE_BYTES = 256 * 1024;
+const DEFAULT_SESSION_TTL_HOURS = 7 * 24;
+const DEFAULT_SESSION_IDLE_TIMEOUT_HOURS = 24;
 const TENANT_COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "orders", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns", "billingSessions", "invoices"];
 const printerStatusSchema = z.enum(["idle", "printing", "paused", "offline", "error", "maintenance"]);
 const jobStatusSchema = z.enum(["queued", "printing", "paused", "complete", "failed", "cancelled"]);
@@ -759,6 +761,85 @@ function envFlagDefault(name, fallback = true) {
   return ["1", "true", "yes", "on"].includes(value.toLowerCase());
 }
 
+function envPositiveNumber(name, fallback) {
+  const value = Number(process.env[name]);
+  if (!Number.isFinite(value) || value <= 0) return fallback;
+  return value;
+}
+
+function sessionPolicy() {
+  return {
+    ttlMs: Math.round(envPositiveNumber("LAYERPILOT_SESSION_TTL_HOURS", DEFAULT_SESSION_TTL_HOURS) * 60 * 60 * 1000),
+    idleMs: Math.round(envPositiveNumber("LAYERPILOT_SESSION_IDLE_TIMEOUT_HOURS", DEFAULT_SESSION_IDLE_TIMEOUT_HOURS) * 60 * 60 * 1000)
+  };
+}
+
+function sessionExpiryFields(now = new Date()) {
+  const policy = sessionPolicy();
+  const nowMs = now.getTime();
+  return {
+    expiresAt: new Date(nowMs + policy.ttlMs).toISOString(),
+    idleExpiresAt: new Date(nowMs + policy.idleMs).toISOString()
+  };
+}
+
+function markSessionStoreDirty(data) {
+  if (!data) return;
+  Object.defineProperty(data, "__sessionStoreDirty", { value: true, writable: true, configurable: true, enumerable: false });
+}
+
+function clearSessionStoreDirty(data) {
+  if (data?.__sessionStoreDirty) data.__sessionStoreDirty = false;
+}
+
+function createSession({ token, user, workspaceId, now = new Date() }) {
+  const at = now.toISOString();
+  return {
+    id: randomUUID(),
+    tokenHash: createPasswordHash(token),
+    userId: user.id,
+    workspaceId: workspaceId || user.workspaceId || DEFAULT_WORKSPACE_ID,
+    createdAt: at,
+    lastSeenAt: at,
+    ...sessionExpiryFields(now)
+  };
+}
+
+function sessionExpired(session, nowMs = Date.now()) {
+  const expiresAt = Date.parse(session.expiresAt || "");
+  const idleExpiresAt = Date.parse(session.idleExpiresAt || "");
+  return Number.isFinite(expiresAt) && expiresAt <= nowMs || Number.isFinite(idleExpiresAt) && idleExpiresAt <= nowMs;
+}
+
+function pruneExpiredSessions(data, now = new Date()) {
+  const sessions = ensureArray(data, "sessions");
+  const retained = sessions.filter((session) => !sessionExpired(session, now.getTime()));
+  if (retained.length !== sessions.length) {
+    data.sessions = retained;
+    markSessionStoreDirty(data);
+  }
+  return data.sessions;
+}
+
+function sessionMatchesToken(session, token) {
+  if (!session || !token || sessionExpired(session)) return false;
+  if (session.tokenHash && verifyPassword(token, session.tokenHash)) return true;
+  return Boolean(session.token && session.token === token);
+}
+
+function touchSession(data, session, token, now = new Date()) {
+  if (!session) return;
+  if (session.token && !session.tokenHash && token) {
+    session.tokenHash = createPasswordHash(token);
+    delete session.token;
+    markSessionStoreDirty(data);
+  }
+  session.lastSeenAt = now.toISOString();
+  session.idleExpiresAt = new Date(now.getTime() + sessionPolicy().idleMs).toISOString();
+  session.expiresAt ||= sessionExpiryFields(new Date(Date.parse(session.createdAt || now.toISOString()) || now.getTime())).expiresAt;
+  markSessionStoreDirty(data);
+}
+
 function ensureArray(data, key) {
   if (!Array.isArray(data[key])) data[key] = [];
   return data[key];
@@ -1375,11 +1456,12 @@ function idempotencyFingerprint({ method, path: routePath, workspaceId, bodyDige
 function userFromRequest(database, request) {
   const queryToken = typeof request.query?.token === "string" ? request.query.token : "";
   const token = request.headers.authorization?.replace(/^Bearer\s+/i, "") || queryToken;
-  const session = token ? database.data.sessions.find((item) => item.token === token) : null;
+  const session = token ? pruneExpiredSessions(database.data).find((item) => sessionMatchesToken(item, token)) : null;
   const user = session ? database.data.users.find((item) => item.id === session.userId) : null;
   if (user) {
     user.workspaceId ||= session.workspaceId || DEFAULT_WORKSPACE_ID;
     session.workspaceId ||= user.workspaceId;
+    touchSession(database.data, session, token);
     return { token, session, user };
   }
   const key = token?.startsWith("lp_live_")
@@ -4923,6 +5005,10 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const now = new Date().toISOString();
     if (session) session.lastSeenAt = now;
     if (apiKey) apiKey.lastUsedAt = now;
+    if (database.data.__sessionStoreDirty || apiKey) {
+      await database.write();
+      clearSessionStoreDirty(database.data);
+    }
   });
 
   app.addHook("onSend", async (request, reply, payload) => {
@@ -4991,7 +5077,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     user.lastSeen = "Now";
     user.updatedAt = now;
     user.workspaceId ||= DEFAULT_WORKSPACE_ID;
-    database.data.sessions.push({ id: randomUUID(), token, userId: user.id, workspaceId: user.workspaceId, createdAt: now, lastSeenAt: now });
+    database.data.sessions.push(createSession({ token, user, workspaceId: user.workspaceId, now: new Date(now) }));
     database.data.events.unshift({ id: randomUUID(), type: "auth.login", message: `${user.email} signed in`, at: now });
     await database.write();
     return { token, user: sanitizeUser(user) };
@@ -5029,7 +5115,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     database.data.workspaces ||= [];
     database.data.workspaces.push(workspace);
     database.data.users.push(user);
-    database.data.sessions.push({ id: randomUUID(), token, userId: user.id, workspaceId, createdAt: now, lastSeenAt: now });
+    database.data.sessions.push(createSession({ token, user, workspaceId, now: new Date(now) }));
     database.data.events.unshift({ id: randomUUID(), workspaceId, type: "auth.signup", message: `${user.email} created ${parsed.data.workspace}`, at: now });
     await database.write();
     return reply.code(201).send({ token, user: sanitizeUser(user) });
@@ -5039,6 +5125,10 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const { session, user } = userFromRequest(database, request);
     if (!user) return reply.code(401).send({ error: "Authentication required" });
     if (session) session.lastSeenAt = new Date().toISOString();
+    if (database.data.__sessionStoreDirty) {
+      await database.write();
+      clearSessionStoreDirty(database.data);
+    }
     return { user: sanitizeUser(user) };
   });
 
@@ -5098,7 +5188,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     persistedUser.passwordHash = createPasswordHash(parsed.data.newPassword);
     persistedUser.passwordResetRequired = false;
     persistedUser.updatedAt = new Date().toISOString();
-    database.data.sessions = (database.data.sessions || []).filter((item) => item.userId !== persistedUser.id || item.token === token);
+    database.data.sessions = (database.data.sessions || []).filter((item) => item.userId !== persistedUser.id || sessionMatchesToken(item, token));
     await dispatchEvent(database, "auth.password_changed", `${persistedUser.email} changed password`, { userId: persistedUser.id });
     await database.write();
     return { ok: true, user: sanitizeUser(persistedUser) };
@@ -5107,7 +5197,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   app.post("/api/auth/logout", async (request, reply) => {
     const { token, user } = userFromRequest(database, request);
     if (!user) return reply.code(401).send({ error: "Authentication required" });
-    database.data.sessions = database.data.sessions.filter((session) => session.token !== token);
+    database.data.sessions = database.data.sessions.filter((session) => !sessionMatchesToken(session, token));
     await database.write();
     return { ok: true };
   });

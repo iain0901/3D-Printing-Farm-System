@@ -11,12 +11,15 @@
   - `11e2e36` `docs: update codex round 2 report`
   - `705032a` `docs: finalize codex round 2 status`
   - Current `HEAD` `docs: record final round 2 push`
+  - Current round 3 commit: `feat: harden persisted user sessions`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
   - Final pre-commit `npm run qc`: passed, build passed, Vitest 9 files / 80 tests passed.
   - Round 2 targeted `npm run test -- api/server.test.mjs`: passed, 65 tests passed.
   - Round 2 final `npm run qc`: passed, build passed, Vitest 9 files / 81 tests passed.
+  - Round 3 targeted `npm run test -- api/server.test.mjs`: passed, 66 tests passed.
+  - Round 3 final `npm run qc`: passed, build passed, Vitest 9 files / 82 tests passed.
 
 ## Completed Features
 
@@ -31,6 +34,10 @@
 - Idempotent retries now replay the original 2xx response for the same actor, route, key, and body.
 - Reusing an `Idempotency-Key` with a different body or route now returns `409` without creating duplicate production work.
 - Documented supported idempotency routes in the operations runbook and production-readiness checklist.
+- Added hashed persisted user session tokens so bearer tokens are no longer stored in plaintext sessions.
+- Added absolute and idle session expiry controls with defaults of 168 hours and 24 hours.
+- Legacy plaintext session rows are migrated to hashed storage on successful use, avoiding surprise deploy-time logout.
+- Documented session policy in `.env.example`, README, install, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -40,3 +47,4 @@
 - Optional production services such as Stripe, S3, MQTT, commerce feeds, and external slicer remain customer-environment dependent.
 - Frontend bundle size warning remains from the existing single-bundle app; it does not fail QC.
 - Idempotency is intentionally scoped to non-secret-bearing production workflow routes; broader write API coverage should be added only with route-specific response redaction.
+- Session expiry policy should be reviewed against the customer's shared-device operating model before go-live.
