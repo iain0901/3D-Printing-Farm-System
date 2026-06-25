@@ -1,16 +1,25 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 34 committed
+- Phase: round 35 verified
 - Started: 2026-06-24 UTC
-- Current state: Round 34 spool label export idempotency hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 35 governance audit-context hardening is implemented and verified on `codex/production-saas-completion-20260624`; commit and push are next.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 96 tests passed)
 - Current plan:
-  - Add persisted idempotency replay/conflict protection for spool label export retries.
-  - Cover retries so dropped operator responses do not duplicate `spool.labels_generated` audit events or return a newly generated label artifact.
-  - Document supported spool-label idempotency, run targeted tests and full QC, then commit and push.
+  - Add regression coverage for actor/workspace metadata on admin/go-live governance audit events.
+  - Thread authenticated actor context through settings, onboarding, support snapshot, API-key, and user-management audit events.
+  - Document governance audit traceability, run targeted tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 35 repo inspection started at 2026-06-25T07:30:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: governance audit-context hardening for admin/settings/go-live writes.
+  - Added failing regression coverage proving governance/go-live audit events need workspace and authenticated actor context.
+  - Added authenticated actor context to onboarding, support snapshot, API-key create/update, user invite/update/password-reset, workspace settings, billing plan/portal, add-on, and cost catalog audit events.
+  - Documented expanded governance audit traceability in README, operations, and production-readiness docs.
+  - Targeted governance audit-context test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "governance and go-live audit events"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (98 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 115 tests passed).
   - Round 34 repo inspection started at 2026-06-25T07:17:54Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: idempotent spool label export retries to prevent duplicate inventory label audit events after operator/browser retries.

@@ -1179,6 +1179,92 @@ describe("3DSTU FarmFlow API", () => {
     });
   });
 
+  it("records operator context for governance and go-live audit events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const actorEmail = "demo@layerpilot.test";
+
+      const settings = await app.inject({
+        method: "PATCH",
+        url: "/api/workspaceSettings",
+        headers: auth(token),
+        payload: { organizationName: "Governance Farm", auditLogRetentionDays: 120 }
+      });
+      expect(settings.statusCode).toBe(200);
+
+      const onboarding = await app.inject({
+        method: "PATCH",
+        url: "/api/onboarding/security",
+        headers: auth(token),
+        payload: { status: "complete", note: "2FA policy reviewed" }
+      });
+      expect(onboarding.statusCode).toBe(200);
+
+      const snapshot = await app.inject({ method: "POST", url: "/api/support/snapshot", headers: auth(token) });
+      expect(snapshot.statusCode).toBe(200);
+
+      const apiKey = await app.inject({
+        method: "POST",
+        url: "/api/apiKeys",
+        headers: auth(token),
+        payload: { name: "Governance automation", scopes: ["admin:export"], enabled: true }
+      });
+      expect(apiKey.statusCode).toBe(201);
+      const apiKeyUpdate = await app.inject({
+        method: "PATCH",
+        url: `/api/apiKeys/${apiKey.json().apiKey.id}`,
+        headers: auth(token),
+        payload: { enabled: false }
+      });
+      expect(apiKeyUpdate.statusCode).toBe(200);
+
+      const user = await app.inject({
+        method: "POST",
+        url: "/api/users",
+        headers: auth(token),
+        payload: { name: "Governance Viewer", email: "governance.viewer@layerpilot.test", role: "Viewer", location: "HQ" }
+      });
+      expect(user.statusCode).toBe(201);
+      const userUpdate = await app.inject({
+        method: "PATCH",
+        url: `/api/users/${user.json().user.id}`,
+        headers: auth(token),
+        payload: { role: "Operator", location: "Line 2" }
+      });
+      expect(userUpdate.statusCode).toBe(200);
+      const reset = await app.inject({
+        method: "POST",
+        url: `/api/users/${user.json().user.id}/reset-password`,
+        headers: auth(token),
+        payload: { requireChange: true }
+      });
+      expect(reset.statusCode).toBe(200);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      for (const type of [
+        "settings.updated",
+        "onboarding.updated",
+        "support.snapshot",
+        "api_key.created",
+        "api_key.updated",
+        "user.invited",
+        "user.updated",
+        "user.password_reset"
+      ]) {
+        const event = persisted.events.find((item) => item.type === type);
+        expect(event, type).toBeTruthy();
+        expect(event).toMatchObject({
+          workspaceId: "ws-default",
+          data: expect.objectContaining({
+            workspaceId: "ws-default",
+            actorEmail,
+            actorType: "user"
+          })
+        });
+      }
+    });
+  });
+
   it("redacts credential-bearing integration endpoints from state, lists, delivery logs, and exports", async () => {
     await withApp(async ({ app, db, dbPath }) => {
       const token = await login(app);

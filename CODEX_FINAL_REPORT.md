@@ -60,6 +60,7 @@
   - `6f4a844` `feat: add idempotent bridge syncs`
   - Current `HEAD` `docs: record codex round 33 status`
   - `5ed0f18` `feat: add idempotent spool label exports`
+  - Current `HEAD` `feat: add governance audit context`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -156,6 +157,9 @@
   - Round 34 targeted `npm run test -- api/server.test.mjs -t "spool label exports"`: failed before implementation, then passed, 1 test passed.
   - Round 34 targeted `npm run test -- api/server.test.mjs`: passed, 97 tests passed.
   - Round 34 final `npm run qc`: passed, build passed, Vitest 10 files / 114 tests passed.
+  - Round 35 targeted `npm run test -- api/server.test.mjs -t "governance and go-live audit events"`: failed before implementation, then passed, 1 test passed.
+  - Round 35 targeted `npm run test -- api/server.test.mjs`: passed, 98 tests passed.
+  - Round 35 final `npm run qc`: passed, build passed, Vitest 10 files / 115 tests passed.
 
 ## Completed Features
 
@@ -250,6 +254,9 @@
 - Added idempotent replay/conflict protection for quote customer portal-link generation and rotation.
 - Added regression coverage proving `rotate: true` portal-link retries replay the original URL/token without rotating again, invalidating the first operator-visible link, or duplicating portal-link audit events.
 - Documented quote portal-link `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added authenticated actor context for governance and go-live audit events covering onboarding, support snapshots, workspace settings, billing plan/portal, add-ons, cost catalog, API-key create/update, and user-management writes.
+- Added regression coverage proving representative governance audit events persist workspace and authenticated operator metadata.
+- Documented expanded governance audit traceability in README, operations, and production-readiness docs.
 - Added idempotent replay/conflict protection for generated todo actions.
 - Added regression coverage proving todo claim retries replay the original response without duplicate todo action records or duplicate todo audit events, and conflicting retry bodies return `409`.
 - Documented generated todo action `Idempotency-Key` usage in README, operations, and production-readiness docs.

@@ -5537,14 +5537,14 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const onboarding = { ...(current.onboarding || {}) };
     onboarding[request.params.id] = { ...parsed.data, updatedAt: new Date().toISOString(), updatedBy: request.user.email };
     const settings = updateWorkspaceSettings(database.data, request.user.workspaceId, { onboarding });
-    await dispatchEvent(database, "onboarding.updated", `${request.params.id} -> ${parsed.data.status}`, { workspaceId: request.user.workspaceId, stepId: request.params.id, status: parsed.data.status });
+    await dispatchEvent(database, "onboarding.updated", `${request.params.id} -> ${parsed.data.status}`, { workspaceId: request.user.workspaceId, stepId: request.params.id, status: parsed.data.status }, { actor: request.user });
     await database.write();
     return { settings, onboarding: buildOnboarding(workspaceScopeForUser(database.data, request.user)) };
   });
   app.post("/api/support/snapshot", async (request, reply) => {
     if (!hasPermission(request.user, "admin:export")) return reply.code(403).send({ error: "Missing permission: admin:export" });
     const snapshot = await buildSupportSnapshot(database.data, request.user);
-    await dispatchEvent(database, "support.snapshot", `${request.user.email} generated support snapshot`, { workspaceId: request.user.workspaceId, generatedAt: snapshot.generatedAt, onboarding: snapshot.readiness.onboarding });
+    await dispatchEvent(database, "support.snapshot", `${request.user.email} generated support snapshot`, { workspaceId: request.user.workspaceId, generatedAt: snapshot.generatedAt, onboarding: snapshot.readiness.onboarding }, { actor: request.user });
     await database.write();
     return snapshot;
   });
@@ -5993,7 +5993,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       lastUsedAt: ""
     };
     database.data.apiKeys.push(key);
-    await dispatchEvent(database, "api_key.created", `${key.name} created`, { apiKeyId: key.id, scopes: key.scopes });
+    await dispatchEvent(database, "api_key.created", `${key.name} created`, { workspaceId: request.user.workspaceId, apiKeyId: key.id, scopes: key.scopes }, { actor: request.user });
     await database.write();
     return reply.code(201).send({ apiKey: sanitizeApiKey(key), secret });
   });
@@ -6006,7 +6006,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const key = database.data.apiKeys.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!key) return reply.code(404).send({ error: "API key not found" });
     Object.assign(key, parsed.data, { updatedAt: new Date().toISOString() });
-    await dispatchEvent(database, "api_key.updated", `${key.name} updated`, { apiKeyId: key.id, enabled: key.enabled, scopes: key.scopes });
+    await dispatchEvent(database, "api_key.updated", `${key.name} updated`, { workspaceId: request.user.workspaceId, apiKeyId: key.id, enabled: key.enabled, scopes: key.scopes }, { actor: request.user });
     await database.write();
     return sanitizeApiKey(key);
   });
@@ -6033,7 +6033,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       passwordHash: createPasswordHash(password)
     };
     database.data.users.push(user);
-    await dispatchEvent(database, "user.invited", `${user.email} invited as ${user.role}`, { userId: user.id, role: user.role, location: user.location });
+    await dispatchEvent(database, "user.invited", `${user.email} invited as ${user.role}`, { workspaceId: request.user.workspaceId, userId: user.id, role: user.role, location: user.location }, { actor: request.user });
     await database.write();
     return reply.code(201).send({ user: sanitizeUser(user), temporaryPassword: parsed.data.password ? undefined : password });
   });
@@ -6049,7 +6049,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       if (ownerCount <= 1) return reply.code(409).send({ error: "At least one Owner is required" });
     }
     Object.assign(user, parsed.data, { updatedAt: new Date().toISOString() });
-    await dispatchEvent(database, "user.updated", `${user.email} updated`, { userId: user.id, role: user.role, location: user.location });
+    await dispatchEvent(database, "user.updated", `${user.email} updated`, { workspaceId: request.user.workspaceId, userId: user.id, role: user.role, location: user.location }, { actor: request.user });
     await database.write();
     return sanitizeUser(user);
   });
@@ -6065,7 +6065,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     user.passwordResetRequired = parsed.data.requireChange;
     user.updatedAt = new Date().toISOString();
     database.data.sessions = (database.data.sessions || []).filter((session) => session.userId !== user.id);
-    await dispatchEvent(database, "user.password_reset", `${user.email} password reset`, { userId: user.id, resetBy: request.user.email, requireChange: parsed.data.requireChange });
+    await dispatchEvent(database, "user.password_reset", `${user.email} password reset`, { workspaceId: request.user.workspaceId, userId: user.id, resetBy: request.user.email, requireChange: parsed.data.requireChange }, { actor: request.user });
     await database.write();
     return { user: sanitizeUser(user), temporaryPassword: parsed.data.password ? undefined : password };
   });
@@ -6075,7 +6075,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const parsed = workspaceSettingsPatchSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Invalid workspace settings", issues: parsed.error.issues });
     const settings = updateWorkspaceSettings(database.data, request.user.workspaceId, parsed.data);
-    await dispatchEvent(database, "settings.updated", `${settings.organizationName} settings updated`, { workspaceId: request.user.workspaceId, settings });
+    await dispatchEvent(database, "settings.updated", `${settings.organizationName} settings updated`, { workspaceId: request.user.workspaceId, settings }, { actor: request.user });
     await database.write();
     return settings;
   });
@@ -6104,7 +6104,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       at: new Date().toISOString()
     };
     database.data.invoices.unshift(invoice);
-    await dispatchEvent(database, "billing.plan_changed", `${previousPlan.name} -> ${plan.name}`, { workspaceId: request.user.workspaceId, previousPlan: previousPlan.id, planId: plan.id, invoiceId: invoice.id });
+    await dispatchEvent(database, "billing.plan_changed", `${previousPlan.name} -> ${plan.name}`, { workspaceId: request.user.workspaceId, previousPlan: previousPlan.id, planId: plan.id, invoiceId: invoice.id }, { actor: request.user });
     await database.write();
     return { settings, billing: await buildBillingSummary(workspaceScopeForUser(database.data, request.user), { stripeClient }), invoice };
   });
@@ -6118,7 +6118,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       workspaceId: request.user.workspaceId
     };
     database.data.billingSessions.unshift(session);
-    await dispatchEvent(database, "billing.portal_session", `${request.user.email} opened billing management`, { workspaceId: request.user.workspaceId, sessionId: session.id, mode: session.mode });
+    await dispatchEvent(database, "billing.portal_session", `${request.user.email} opened billing management`, { workspaceId: request.user.workspaceId, sessionId: session.id, mode: session.mode }, { actor: request.user });
     await database.write();
     return { session, billing: await buildBillingSummary(workspaceScopeForUser(database.data, request.user), { stripeClient }) };
   });
@@ -6144,7 +6144,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       ...parsed.data,
       materialRates: { ...database.data.costCatalog.materialRates, ...(parsed.data.materialRates || {}) }
     });
-    await dispatchEvent(database, "cost_catalog.updated", "Cost catalog updated", { costCatalog: database.data.costCatalog });
+    await dispatchEvent(database, "cost_catalog.updated", "Cost catalog updated", { workspaceId: request.user.workspaceId, costCatalog: database.data.costCatalog }, { actor: request.user });
     await database.write();
     return database.data.costCatalog;
   });
@@ -6169,7 +6169,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       previousStatus,
       status: addon.status,
       note: parsed.data.note || ""
-    });
+    }, { actor: request.user });
     await database.write();
     broadcastRealtime(database, "state", { reason: "addon.updated", state: realtimeState(database.data), addon: sanitizeAddon(addon) });
     return { addon: sanitizeAddon(addon), addons: workspaceScopeForUser(database.data, request.user).addons.map(sanitizeAddon) };
