@@ -5,6 +5,8 @@
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
 - Commits:
+  - Current `HEAD` `docs: record codex round 74 status`
+  - `057d415` `feat: restrict production cors origins`
   - `e3368f0` `docs: record codex round 73 status`
   - `cbf2b88` `feat: lock repeated auth failures`
   - Current `HEAD` `docs: record codex round 72 pushed`
@@ -154,6 +156,12 @@
   - `7e42cc7` `feat: scope audit retention by workspace`
   - Current `HEAD` `docs: record codex round 69 push`
 - QC result:
+  - Round 74 targeted `npm run test -- api/server.test.mjs -t "production CORS|CORS origins|production readiness"`: failed before implementation as expected, production readiness lacked the CORS origin gate.
+  - Round 74 targeted `npm run test -- api/server.test.mjs -t "production CORS|CORS origins|production readiness"`: passed, 7 tests passed.
+  - Round 74 deployment `npm run test -- api/deploy.test.mjs`: passed, 3 tests passed.
+  - Round 74 deploy syntax `bash -n scripts/ubuntu-deploy.sh`: passed.
+  - Round 74 full API `npm run test -- api/server.test.mjs`: passed, 132 tests passed.
+  - Round 74 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 151 tests passed.
   - Round 73 targeted `npm run test -- api/server.test.mjs -t "locks known accounts|authenticates users and supports logout|two-factor auth"`: failed before implementation as expected, repeated failures returned `401` instead of a lock response.
   - Round 73 targeted `npm run test -- api/server.test.mjs -t "locks known accounts|authenticates users and supports logout|two-factor auth|supports password changes"`: passed, 5 tests passed.
   - Round 73 full API `npm run test -- api/server.test.mjs`: passed, 130 tests passed.
