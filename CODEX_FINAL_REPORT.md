@@ -28,6 +28,7 @@
   - Current `HEAD` `feat: add actor-aware production audit events`
   - `625f290` `feat: add authenticated ops checks`
   - Current `HEAD` `docs: record codex round 13 push`
+  - Current `HEAD` `feat: redact support snapshot URLs`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -60,6 +61,9 @@
   - Round 13 syntax checks `bash -n scripts/ubuntu-ops-check.sh scripts/ubuntu-deploy.sh scripts/ubuntu-package.sh && node --check scripts/ops-auth-check.mjs && node --check scripts/package-ubuntu.mjs`: passed.
   - Round 13 local authenticated ops checker smoke: passed against a temporary API on `127.0.0.1:19097`.
   - Round 13 final `npm run qc`: passed, build passed, Vitest 9 files / 89 tests passed.
+  - Round 14 targeted `npm run test -- api/server.test.mjs -t "tracks onboarding readiness"`: passed, 1 test passed.
+  - Round 14 targeted `npm run test -- api/server.test.mjs`: passed, 73 tests passed.
+  - Round 14 final `npm run qc`: passed, build passed, Vitest 9 files / 89 tests passed.
 
 ## Completed Features
 
@@ -110,6 +114,8 @@
 - Added authenticated Ubuntu ops-check coverage for login, authenticated state, audit access, and metrics-token verification, with host Node and container fallback execution paths.
 - Added optional `LAYERPILOT_OPS_EMAIL` and `LAYERPILOT_OPS_PASSWORD` support for dedicated smoke accounts in `.env`, Compose, deployment init, README, and operations docs.
 - Added deployment packaging guards so Ubuntu release bundles must include the authenticated ops checker.
+- Hardened API support snapshots so recent event payloads preserve endpoint hosts but redact URL paths and query strings before support handoff.
+- Added regression coverage proving support snapshots omit credential-bearing webhook/bridge URL path and query secrets while keeping host hints useful for troubleshooting.
 
 ## Remaining Blockers
 
@@ -129,3 +135,4 @@
 - Commerce import idempotency now protects connector and CSV batch retries; broader write API coverage should still be added only after route-specific response and secret review.
 - Audit context now covers the highest-impact production scheduling/queue/bridge/file-version operator actions; remaining lower-risk direct event writes should be migrated only with route-specific delivery and notification review.
 - Ops-check authenticated verification requires valid Owner/Admin credentials or a dedicated smoke account configured in `.env`; otherwise it warns and continues with unauthenticated host checks.
+- Support snapshots now redact secret-like fields and URL paths/query strings, but operators should still review generated support bundles before sharing customer evidence externally.

@@ -116,4 +116,4 @@ After either operation, run readiness and smoke checks.
 scripts/ubuntu-deploy.sh support-bundle
 ```
 
-Review the generated archive before sharing it. The bundle redacts common secret names, but operators remain responsible for checking customer-sensitive data.
+Review the generated archive before sharing it. The bundle redacts common secret names, and API support snapshots redact secret-like fields plus URL paths/query strings while preserving endpoint hosts, but operators remain responsible for checking customer-sensitive data.

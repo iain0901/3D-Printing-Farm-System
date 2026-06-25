@@ -58,7 +58,7 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 - [ ] `layerpilot-ops-check.timer` is enabled or an equivalent monitor is configured.
 - [ ] `/api/metrics` is scraped with a metrics token or scoped API key.
 - [ ] Disk free space is monitored for the data volume and backup destination.
-- [ ] Support bundle generation is tested and reviewed for redaction.
+- [ ] Support bundle and API support snapshot generation are tested and reviewed for redaction; snapshots preserve endpoint hosts but remove secret-like fields and URL paths/query strings.
 
 ## Known Release Blockers
 

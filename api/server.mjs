@@ -4861,6 +4861,7 @@ function redactSupportValue(value, key = "") {
   if (/password|secret|token|authorization|stripe|hash/i.test(key) || /^apiKey$/i.test(key)) return "REDACTED";
   if (Array.isArray(value)) return value.map((item) => redactSupportValue(item, key));
   if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([entryKey, entryValue]) => [entryKey, redactSupportValue(entryValue, entryKey)]));
+  if (typeof value === "string" && /(^|[._-])(url|uri|endpoint|baseUrl|publicUrl|callbackUrl|feedUrl)$/i.test(key) && /^https?:\/\//i.test(value.trim())) return redactEndpointUrl(value);
   return value;
 }
 

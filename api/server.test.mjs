@@ -1055,7 +1055,7 @@ describe("3DSTU FarmFlow API", () => {
   });
 
   it("tracks onboarding readiness and generates redacted support snapshots", async () => {
-    await withApp(async ({ app, dbPath }) => {
+    await withApp(async ({ app, db, dbPath }) => {
       const token = await login(app);
       const apiKey = await app.inject({
         method: "POST",
@@ -1081,6 +1081,20 @@ describe("3DSTU FarmFlow API", () => {
       expect(backup.statusCode).toBe(200);
       expect(backup.json().onboarding.steps.find((step) => step.id === "backup")).toMatchObject({ status: "complete", note: "Export verified by owner" });
 
+      db.data.events.unshift({
+        id: "support-url-event",
+        workspaceId: "ws-default",
+        type: "bridge.saved",
+        message: "Bridge endpoint updated",
+        at: new Date().toISOString(),
+        data: {
+          url: "https://hooks.slack.com/services/T000/B000/SUPPORT_SECRET?token=support-query-secret",
+          baseUrl: "http://octoprint.local/api?apikey=support-bridge-secret",
+          publicUrl: "https://farm.example.test/portal"
+        }
+      });
+      await db.write();
+
       const snapshot = await app.inject({ method: "POST", url: "/api/support/snapshot", headers: auth(token) });
       expect(snapshot.statusCode).toBe(200);
       expect(snapshot.json()).toMatchObject({
@@ -1092,6 +1106,15 @@ describe("3DSTU FarmFlow API", () => {
       const snapshotText = JSON.stringify(snapshot.json());
       expect(snapshotText).not.toContain(apiKey.json().secret);
       expect(snapshotText).not.toContain("scrypt$");
+      expect(snapshotText).not.toContain("SUPPORT_SECRET");
+      expect(snapshotText).not.toContain("support-query-secret");
+      expect(snapshotText).not.toContain("support-bridge-secret");
+      const endpointEvent = snapshot.json().recentEvents.find((event) => event.type === "bridge.saved");
+      expect(endpointEvent.data).toMatchObject({
+        url: "https://hooks.slack.com (redacted)",
+        baseUrl: "http://octoprint.local (redacted)",
+        publicUrl: "https://farm.example.test (redacted)"
+      });
 
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
       expect(persisted.workspaceSettings.onboarding.backup).toMatchObject({ status: "complete", note: "Export verified by owner" });

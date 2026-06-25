@@ -1,16 +1,24 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 13 pushed
+- Phase: round 14 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 13 authenticated ops-check smoke coverage is implemented, verified, committed, and pushed to `origin/codex/production-saas-completion-20260624`.
+- Current state: Round 14 support snapshot redaction hardening is implemented and verified; commit/push is pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 9 files / 79 tests passed)
 - Current plan:
-  - Add authenticated smoke checks to the Ubuntu ops-check path when production credentials are available.
-  - Cover the deployment helper behavior with targeted tests.
+  - Harden support snapshot redaction for URL-shaped operational event fields.
+  - Cover support snapshot endpoint redaction with targeted regression tests.
   - Update operations/readiness docs, run targeted tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 14 repo inspection started at 2026-06-25T03:39:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: support snapshot URL redaction for safer operational handoff bundles.
+  - Added regression coverage proving support snapshots redact URL paths/query strings from recent event payloads.
+  - Updated support snapshot redaction to preserve endpoint hosts while removing URL paths and query strings.
+  - Targeted support snapshot regression passed: `npm run test -- api/server.test.mjs -t "tracks onboarding readiness"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (73 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 89 tests passed).
   - Round 13 repo inspection started at 2026-06-25T03:24:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: authenticated ops-check smoke coverage for production integrity, audit, and metrics verification.
