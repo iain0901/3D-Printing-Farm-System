@@ -4,8 +4,9 @@
 - Pushed remote: `origin/codex/production-saas-completion-20260624`
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
-- Latest round: Round 90 printer action audit actor-context hardening implemented, verified, and committed; push pending for final status commit.
+- Latest round: Round 90 printer action audit actor-context hardening implemented, verified, committed, and pushed.
 - Commits:
+  - `71dca69` `docs: record codex round 90 status`
   - `71ccd09` `feat: add printer action audit context`
   - `cf4796d` `docs: record codex round 89 status`
   - `2115f11` `feat: dedupe stripe webhooks`
