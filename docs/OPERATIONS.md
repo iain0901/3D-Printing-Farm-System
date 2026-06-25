@@ -79,6 +79,7 @@ scripts/ubuntu-backup.sh restore /path/to/layerpilot-data-YYYYmmdd-HHMMSS.tgz
 
 The restore command creates a pre-restore safeguard archive unless `LAYERPILOT_PRE_RESTORE_BACKUP=false` is explicitly set.
 Workspace restore previews may be run with a scoped `admin:restore` API key for automation drills, but committing a restore through `/api/admin/restore` requires a logged-in user session and `confirm: "RESTORE"`.
+Workspace exports and shared state redact customer quote portal bearer tokens. Restored or migrated quote records receive fresh portal tokens automatically; operators should use the quote customer-link action to generate or rotate customer-facing URLs after a restore.
 
 ## Updates And Rollback
 

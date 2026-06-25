@@ -1561,6 +1561,7 @@ function publicState(data) {
     notificationChannels: (data.notificationChannels || []).map(sanitizeNotificationChannel),
     commerceConnectors: (data.commerceConnectors || []).map(sanitizeCommerceConnector),
     apiKeys: (data.apiKeys || []).map(sanitizeApiKey),
+    quoteRequests: (data.quoteRequests || []).map(sanitizeQuoteRequest),
     addons: (data.addons || []).map(sanitizeAddon)
   };
 }
@@ -2037,6 +2038,15 @@ function sanitizeApiKey(key) {
   return {
     ...safeKey,
     hasSecret: Boolean(secretHash)
+  };
+}
+
+function sanitizeQuoteRequest(quote) {
+  if (!quote) return null;
+  const { customerAccessToken, ...safeQuote } = quote;
+  return {
+    ...safeQuote,
+    hasCustomerAccessToken: Boolean(customerAccessToken)
   };
 }
 
@@ -5403,9 +5413,11 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   app.get("/api/costCatalog", async () => database.data.costCatalog);
 
   for (const collection of COLLECTIONS) {
-    if (collection === "bridges" || collection === "notificationChannels" || collection === "commerceConnectors" || collection === "apiKeys" || collection === "addons") continue;
+    if (collection === "bridges" || collection === "notificationChannels" || collection === "commerceConnectors" || collection === "apiKeys" || collection === "addons" || collection === "quoteRequests") continue;
     app.get(`/api/${collection}`, async (request) => scopedWorkspaceData(database.data, request.user.workspaceId)[collection] || []);
   }
+
+  app.get("/api/quoteRequests", async (request) => (scopedWorkspaceData(database.data, request.user.workspaceId).quoteRequests || []).map(sanitizeQuoteRequest));
 
   app.get("/api/todos", async (request) => deriveTodos(scopedWorkspaceData(database.data, request.user.workspaceId)));
 

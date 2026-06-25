@@ -44,6 +44,7 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 - [ ] `scripts/ubuntu-backup.sh backup` creates a verified archive.
 - [ ] `scripts/ubuntu-backup.sh restore-drill <archive>` succeeds without touching production data.
 - [ ] `/api/admin/restore` dry-run automation is scoped with `admin:restore`, and destructive restore commits are performed only from a logged-in Owner/Admin session.
+- [ ] Customer quote portal links are regenerated or rotated after restore when needed; workspace exports redact portal bearer tokens and record only whether one exists.
 - [ ] `layerpilot-backup.timer` is enabled on Ubuntu production hosts.
 - [ ] Restore and rollback responsibility is assigned to a named operator.
 

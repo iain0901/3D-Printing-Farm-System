@@ -2269,6 +2269,27 @@ endsolid s3_store`;
       expect(quoted.statusCode).toBe(200);
       expect(quoted.json()).toMatchObject({ status: "quoted", priority: "High", quotedValue: 720, validUntil: "2026-07-15" });
 
+      const listedQuotes = await app.inject({ method: "GET", url: "/api/quoteRequests", headers: auth(token) });
+      expect(listedQuotes.statusCode).toBe(200);
+      const listedQuote = listedQuotes.json().find((item) => item.id === id);
+      expect(listedQuote).toMatchObject({ id, hasCustomerAccessToken: true });
+      expect(listedQuote.customerAccessToken).toBeUndefined();
+      expect(JSON.stringify(listedQuotes.json())).not.toContain(quote.json().quoteRequest.accessToken);
+
+      const state = await app.inject({ method: "GET", url: "/api/state", headers: auth(token) });
+      expect(state.statusCode).toBe(200);
+      const stateQuote = state.json().quoteRequests.find((item) => item.id === id);
+      expect(stateQuote).toMatchObject({ id, hasCustomerAccessToken: true });
+      expect(stateQuote.customerAccessToken).toBeUndefined();
+      expect(JSON.stringify(state.json())).not.toContain(quote.json().quoteRequest.accessToken);
+
+      const exported = await app.inject({ method: "GET", url: "/api/admin/export", headers: auth(token) });
+      expect(exported.statusCode).toBe(200);
+      const exportedQuote = exported.json().data.quoteRequests.find((item) => item.id === id);
+      expect(exportedQuote).toMatchObject({ id, hasCustomerAccessToken: true });
+      expect(exportedQuote.customerAccessToken).toBeUndefined();
+      expect(JSON.stringify(exported.json())).not.toContain(quote.json().quoteRequest.accessToken);
+
       const portalLink = await app.inject({
         method: "POST",
         url: `/api/quoteRequests/${id}/customer-link`,

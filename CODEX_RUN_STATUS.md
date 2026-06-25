@@ -1,17 +1,25 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 8 pushed
+- Phase: round 9 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 8 runtime production readiness gates implemented, targeted tests and full QC passed, and branch pushed to `origin/codex/production-saas-completion-20260624`.
+- Current state: Round 9 quote portal token redaction implemented; targeted tests and full QC passed.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 9 files / 79 tests passed)
 - Current plan:
-  - Add regression coverage for `/api/readiness` rejecting production deployments with default demo access or weak/missing ops tokens.
-  - Add runtime production readiness checks aligned with the Ubuntu deployment doctor.
-  - Document the readiness gate in operations and production readiness docs.
+  - Add regression coverage proving quote portal bearer tokens are not exposed through authenticated state/list/export backup surfaces.
+  - Sanitize quote request responses from shared state, collection list, realtime state, and admin export while keeping explicit customer-link generation usable.
+  - Document quote portal token backup/export handling in operations and production-readiness docs.
   - Run targeted API tests, full `npm run qc`, commit, and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 9 repo inspection started at 2026-06-25T02:43:55Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: backup/export safety for customer quote portal access tokens.
+  - Added quote request sanitization for authenticated state, quote list, realtime state, and workspace exports.
+  - Added regression coverage proving quote portal access tokens stay out of quote list, state, and admin export responses while the explicit customer-link endpoint remains usable.
+  - Documented quote portal token handling after backup/restore in operations and production-readiness docs.
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (69 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 85 tests passed).
   - Round 8 repo inspection started at 2026-06-25T02:32:59Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: runtime deployment gate checks in `/api/readiness`.
