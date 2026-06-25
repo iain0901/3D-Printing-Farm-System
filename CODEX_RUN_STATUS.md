@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 93 verified; commit/push pending
+- Phase: round 93 committed; push pending
 - Started: 2026-06-24 UTC
-- Current state: Round 93 realtime session-token URL hardening is implemented and verified; commit/push are still pending.
+- Current state: Round 93 realtime session-token URL hardening is implemented, verified, and committed; push is still pending.
 - Baseline QC: Round 86 passed `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed)
 - Current plan:
   - Add regression coverage requiring production protected APIs to reject session/API-key query credentials and realtime clients to use one-time tickets.
@@ -25,6 +25,7 @@
   - Adjacent auth/realtime coverage passed: `npm run test -- api/server.test.mjs -t "realtime|authenticates users and supports logout|production Owner and Admin sessions"` (4 tests).
   - Full API suite passed: `npm run test -- api/server.test.mjs` (135 tests).
   - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 154 tests passed).
+  - Committed round 93 implementation/status/docs as `9e67961` (`feat: add realtime auth tickets`).
   - Round 92 repo inspection started at 2026-06-25T20:06:39Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, auth/session routes, and existing auth tests before editing.
   - Selected production-readiness slice: 2FA enablement failure audit hardening so invalid authenticator-code attempts during TOTP enrollment leave sanitized operator/workspace evidence.
