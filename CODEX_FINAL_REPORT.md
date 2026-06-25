@@ -80,6 +80,7 @@
   - `ba282c8` `feat: add idempotent admin account writes`
   - `6bff247` `docs: record codex round 44 status`
   - Current `HEAD` `docs: record codex round 44 push`
+  - `8aac61e` `feat: add browser idempotency for admin UX`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -215,6 +216,11 @@
   - Round 44 targeted `npm run test -- api/server.test.mjs -t "password"`: passed, 1 test passed.
   - Round 44 targeted `npm run test -- api/server.test.mjs`: passed, 110 tests passed.
   - Round 44 final `npm run qc`: passed, build passed, Vitest 10 files / 127 tests passed.
+  - Round 45 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
+  - Round 45 targeted `npm run test -- api/server.test.mjs -t "admin account writes"`: passed, 1 test passed.
+  - Round 45 targeted `npm run test -- api/server.test.mjs -t "governance setup"`: passed, 1 test passed.
+  - Round 45 targeted `npm run test -- api/server.test.mjs -t "billing"`: passed, 3 tests passed.
+  - Round 45 final `npm run qc`: passed, build passed, Vitest 10 files / 128 tests passed.
 
 ## Completed Features
 
@@ -357,6 +363,9 @@
 - Added idempotent replay/conflict protection for admin account management writes covering API-key create/update, user invite/update, and password reset.
 - Added regression coverage proving admin account retries replay generated API-key and temporary-password responses without rotating secrets again or duplicating governance audit events.
 - Documented admin account management `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added browser-side idempotency header generation for authenticated Team page account actions, Integrations page API-key actions, and Settings page governance, support snapshot, and billing actions.
+- Added browser helper coverage proving repeated UI payloads reuse the same `Idempotency-Key` while changed payloads rotate to a fresh key.
+- Documented built-in browser idempotency behavior in README, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -396,6 +405,7 @@
 - Integration configuration idempotency now protects webhook, notification channel, commerce connector, add-on, and bridge setup retries from duplicate records and audit events; clients still need stable per-attempt keys when retrying integration setup writes.
 - Governance setup idempotency now protects workspace settings, onboarding checklist updates, and support snapshot generation from duplicate audit events; clients still need stable per-attempt keys when retrying go-live setup actions.
 - Admin account management idempotency now protects API-key create/update, user invite/update, and password-reset retries from duplicate generated secrets and duplicate governance audit events; clients still need stable per-attempt keys when retrying owner/admin actions.
+- The built-in Team, API-key, Settings governance, support snapshot, and billing UI now generates stable per-attempt idempotency headers for supported retry-prone writes; restore preview/commit remains outside this browser-idempotency slice because destructive restore commits intentionally invalidate the old session and need route-specific replay design.
 - Idempotency replay records are intentionally omitted from shared state and admin exports; retry clients should use fresh keys after workspace export/restore rather than expecting replay cache continuity.
 - Audit context now covers the highest-impact production scheduling/queue/bridge/file-version operator actions; remaining lower-risk direct event writes should be migrated only with route-specific delivery and notification review.
 - Ops-check authenticated verification requires valid Owner/Admin credentials or a dedicated smoke account configured in `.env`; otherwise it warns and continues with unauthenticated host checks.

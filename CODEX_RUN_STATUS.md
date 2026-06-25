@@ -1,16 +1,29 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 44 committed and pushed
+- Phase: round 45 implementation committed; status docs in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 44 admin account retry hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 45 browser admin/governance idempotency is implemented, verified, and committed on `codex/production-saas-completion-20260624`; status docs are being finalized before push.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 125 tests passed)
 - Current plan:
-  - Add regression coverage for retry-safe admin account and API-key management writes.
-  - Add API-key create/update, user invite/update, and password-reset routes to the persisted `Idempotency-Key` allowlist.
-  - Document admin account management idempotency, run targeted tests and full QC, then commit and push.
+  - Add browser helper coverage for stable idempotency headers.
+  - Wire authenticated Settings and API-key management UI writes to reuse `Idempotency-Key` values for the same attempted payload.
+  - Document browser admin/governance idempotency, run targeted tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 45 repo inspection started at 2026-06-25T09:09:57Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, and roadmap docs before editing.
+  - Selected production-readiness slice: browser-side idempotency keys for authenticated admin/governance UI writes so operator retries replay backend-safe actions instead of creating duplicate support, billing, settings, onboarding, or API-key effects.
+  - Added browser helper coverage for stable idempotency header generation across repeated payloads and changed payloads.
+  - Wired Team page user invite/update/password-reset actions to generate and reuse per-attempt `Idempotency-Key` headers until success.
+  - Wired Integrations page API-key create/update actions to generate and reuse per-attempt `Idempotency-Key` headers until success.
+  - Wired Settings page workspace settings, onboarding checklist, support snapshot, billing plan, and billing portal actions to generate and reuse per-attempt `Idempotency-Key` headers until success.
+  - Left restore preview/commit without browser idempotency headers because `/api/admin/restore` has separate session-invalidating commit semantics and requires a route-specific design.
+  - Documented built-in browser idempotency coverage in README, operations, and production-readiness docs.
+  - Targeted browser helper test passed: `npm run test -- src/idempotency.test.ts` (2 tests).
+  - Targeted API replay suites passed: `npm run test -- api/server.test.mjs -t "admin account writes"` (1 test), `npm run test -- api/server.test.mjs -t "governance setup"` (1 test), and `npm run test -- api/server.test.mjs -t "billing"` (3 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 128 tests passed).
+  - Committed round 45 implementation as `8aac61e` (`feat: add browser idempotency for admin UX`).
   - Round 44 repo inspection started at 2026-06-25T08:59:42Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, and roadmap docs before editing.
   - Selected production-readiness slice: idempotent admin account and API-key management writes to prevent duplicate generated secrets, duplicate invites, duplicate password resets, and duplicate governance audit events after dropped owner/admin responses.
