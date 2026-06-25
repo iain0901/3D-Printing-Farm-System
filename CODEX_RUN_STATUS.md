@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 18 verified
+- Phase: round 18 pushed
 - Started: 2026-06-24 UTC
-- Current state: Round 18 idempotency replay export safety is implemented, verified, and committed locally; final report/push is in progress.
+- Current state: Round 18 idempotency replay export safety is implemented, verified, committed, and pushed to `origin/codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 9 files / 92 tests passed)
 - Current plan:
   - Redact internal idempotency replay ledger records from shared state and admin export surfaces.
@@ -21,6 +21,8 @@
   - Targeted API suite passed: `npm run test -- api/server.test.mjs` (76 tests).
   - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 92 tests passed).
   - Committed round 18 implementation as `033726c` (`feat: redact idempotency replay metadata`).
+  - Committed round 18 status docs as `ae6ba58` (`docs: record codex round 18 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
   - Round 17 repo inspection started at 2026-06-25T04:10:01Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: idempotent public quote decision retries to prevent duplicate customer approval handoff errors after an accepted quote creates an order.
