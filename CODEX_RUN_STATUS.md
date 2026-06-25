@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 71 committed; push pending
+- Phase: round 71 committed and pushed
 - Started: 2026-06-24 UTC
-- Current state: Round 71 production public-signup hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`; push to origin is pending.
+- Current state: Round 71 production public-signup hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
   - Add regression coverage proving production public signup is blocked by default and allowed only with explicit opt-in.
@@ -25,6 +25,8 @@
   - Full API suite passed: `npm run test -- api/server.test.mjs` (128 tests).
   - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 147 tests passed).
   - Committed round 71 implementation/status as `63051bb` (`feat: gate production public signup`).
+  - Committed round 71 status/final report as `4457b59` (`docs: record codex round 71 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
   - Round 70 repo inspection started at 2026-06-25T15:06:58Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, idempotency matcher, production-template routes, parametric-nameplate route/UI, and existing catalog tests before editing.
   - Selected production-readiness slice: operator retry safety for built-in production-template runs and parametric nameplate generation so dropped browser responses do not duplicate queue jobs or catalog artifacts.
