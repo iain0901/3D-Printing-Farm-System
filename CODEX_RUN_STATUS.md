@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 79 verified, pending commit/push
+- Phase: round 79 committed, pending push
 - Started: 2026-06-24 UTC
-- Current state: Round 79 direct file creation audit context hardening is implemented and verified on `codex/production-saas-completion-20260624`; commit and push are pending.
+- Current state: Round 79 direct file creation audit context hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`; push is pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
   - Add regression coverage proving direct metadata file creation writes actor-aware audit evidence.
@@ -23,6 +23,7 @@
   - Broader file coverage passed: `npm run test -- api/server.test.mjs -t "creates files with validation|file artifact writes|model files|stored files|downloads stored files|builds safe file previews"` (7 tests).
   - Full API suite passed: `npm run test -- api/server.test.mjs` (132 tests).
   - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 151 tests passed).
+  - Committed round 79 implementation/status/final report as `2a01df1` (`feat: add file creation audit context`).
   - Round 78 repo inspection started at 2026-06-25T16:48:24Z.
   - Reviewed current branch, recent commits, run status, final report, README, install docs, operations, production-readiness, roadmap, package metadata, API route list, audit dispatcher, inventory/maintenance routes, and existing inventory/maintenance tests before editing.
   - Selected production-readiness slice: operator audit context for direct inventory and maintenance create/update events so physical spool and service-log changes are traceable to the authenticated workspace/operator.
