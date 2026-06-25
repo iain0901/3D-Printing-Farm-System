@@ -5,6 +5,7 @@
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
 - Commits:
+  - `9be0f6c` `feat: audit file downloads`
   - Current `HEAD` `docs: record codex round 74 push`
   - `2e3966d` `docs: record codex round 74 status`
   - `057d415` `feat: restrict production cors origins`
@@ -157,6 +158,11 @@
   - `7e42cc7` `feat: scope audit retention by workspace`
   - Current `HEAD` `docs: record codex round 69 push`
 - QC result:
+  - Round 75 targeted `npm run test -- api/server.test.mjs -t "downloads stored files"`: failed before implementation as expected, downloads did not persist `file.downloaded` audit evidence.
+  - Round 75 targeted `npm run test -- api/server.test.mjs -t "downloads stored files"`: passed, 1 test passed.
+  - Round 75 broader file/storage `npm run test -- api/server.test.mjs -t "model files|stored files|file artifact writes|storage payload coverage|downloads stored files"`: passed, 6 tests passed.
+  - Round 75 full API `npm run test -- api/server.test.mjs`: passed, 132 tests passed.
+  - Round 75 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 151 tests passed.
   - Round 74 targeted `npm run test -- api/server.test.mjs -t "production CORS|CORS origins|production readiness"`: failed before implementation as expected, production readiness lacked the CORS origin gate.
   - Round 74 targeted `npm run test -- api/server.test.mjs -t "production CORS|CORS origins|production readiness"`: passed, 7 tests passed.
   - Round 74 deployment `npm run test -- api/deploy.test.mjs`: passed, 3 tests passed.
@@ -420,6 +426,9 @@
 
 ## Completed Features
 
+- Added `file.downloaded` audit evidence for authenticated model/G-code downloads, including workspace/operator context, file ID/name/type, storage-backed versus fallback-manifest status, and byte counts.
+- Download audit metadata intentionally excludes file contents, local storage paths, and object-storage keys.
+- Added regression coverage for stored-file download audit evidence and documented access-review expectations in README, operations, and production-readiness docs.
 - Added known-account authentication lockout/backoff for repeated password and 2FA failures, with configurable `LAYERPILOT_AUTH_LOCK_THRESHOLD` and `LAYERPILOT_AUTH_LOCK_MINUTES` defaults.
 - Locked login attempts return `423`, create `auth.login_locked` evidence, and account threshold crossings create `auth.account_locked` audit events without storing submitted passwords, TOTP codes, or recovery codes.
 - Auth failure counters clear on successful authentication after lock expiry, user password change, or Owner/Admin password reset so legitimate operators have a documented recovery path.
@@ -698,3 +707,4 @@
 - Production metrics scrapers and worker notifiers must send shared ops tokens in headers; query-token URLs are intentionally rejected in `NODE_ENV=production`.
 - Production readiness now fails when worker telemetry or bridge polling is enabled and the worker heartbeat is missing or stale; operators must verify the `layerpilot-worker` service and shared database/volume on the live host.
 - Production readiness now fails when API-key IP restrictions are enabled with an empty or invalid IPv4/CIDR allowlist; operators must correct workspace settings before relying on scoped automation keys.
+- File-download audit evidence is now captured, but operators still need to include `/api/audit?type=file.downloaded` review in live access-review and incident-response drills.

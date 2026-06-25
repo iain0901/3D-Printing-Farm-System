@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 75 in progress
+- Phase: round 75 committed; final report/push in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 75 file-download audit evidence is implemented and verified; commit/push is in progress on `codex/production-saas-completion-20260624`.
+- Current state: Round 75 file-download audit evidence is implemented, verified, and committed; final report/push is in progress on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
   - Add regression coverage proving authenticated stored file/model downloads create compact audit evidence without file contents or storage locations.
@@ -23,6 +23,7 @@
   - Broader file/storage coverage passed: `npm run test -- api/server.test.mjs -t "model files|stored files|file artifact writes|storage payload coverage|downloads stored files"` (6 tests).
   - Full API suite passed: `npm run test -- api/server.test.mjs` (132 tests).
   - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 151 tests passed).
+  - Committed round 75 implementation/status as `9be0f6c` (`feat: audit file downloads`).
   - Round 74 repo inspection started at 2026-06-25T15:57:40Z.
   - Reviewed current branch, recent commits, run status, final report, README, production-readiness, operations, install, roadmap, package metadata, server CORS/readiness code, deployment doctor, and existing readiness tests before editing.
   - Selected production-readiness slice: production CORS trusted-origin hardening so the API no longer reflects arbitrary browser origins in `NODE_ENV=production`.
