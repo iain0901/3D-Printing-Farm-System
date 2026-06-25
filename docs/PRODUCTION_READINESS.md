@@ -12,6 +12,7 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 - [ ] `.env` is not committed and is readable only by the deployment user.
 - [ ] `/api/readiness` reports `ok: true`; in `NODE_ENV=production`, this also verifies required owner credentials, strong non-default worker/metrics tokens, and disabled default/demo access.
 - [ ] `npm run smoke:prod` passes against the live URL.
+- [ ] `scripts/ubuntu-deploy.sh ops-check` passes with authenticated state, audit, and metrics checks enabled through `LAYERPILOT_OPS_EMAIL`/`LAYERPILOT_OPS_PASSWORD` or the bootstrap admin credentials.
 
 ## Access Control
 

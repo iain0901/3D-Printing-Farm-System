@@ -12,6 +12,8 @@ This runbook covers routine production operation for a 3DSTU FarmFlow VPS.
 
 In `NODE_ENV=production`, `/api/readiness` is a deployment gate, not just a liveness check. It fails if required owner credentials or worker/metrics tokens are missing, if documented default secrets are still in use, if production token/password minimum lengths are not met, or if default/demo access is still enabled.
 
+`scripts/ubuntu-deploy.sh ops-check` also runs an authenticated API check when credentials are available from `.env`. It verifies login, `/api/state`, `/api/audit`, and `/api/metrics` when `LAYERPILOT_METRICS_TOKEN` is configured. Set `LAYERPILOT_OPS_EMAIL` and `LAYERPILOT_OPS_PASSWORD` to use a dedicated Owner/Admin smoke account; otherwise it falls back to the bootstrap admin credentials.
+
 ## Session Policy
 
 - User bearer tokens are stored only as server-side hashes in persisted data.

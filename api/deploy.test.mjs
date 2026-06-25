@@ -50,6 +50,8 @@ describe("3DSTU FarmFlow deployment packaging", () => {
     expect(compose).toContain("LAYERPILOT_DISABLE_DEFAULT_USERS");
     expect(compose).toContain("LAYERPILOT_DISABLE_DEMO_LOGIN");
     expect(compose).toContain("LAYERPILOT_METRICS_TOKEN");
+    expect(compose).toContain("LAYERPILOT_OPS_EMAIL");
+    expect(compose).toContain("LAYERPILOT_OPS_PASSWORD");
     expect(compose).toContain("layerpilot-worker");
     expect(compose).toContain("healthcheck:\n      disable: true");
     expect(compose).toContain("npm\", \"run\", \"worker");
@@ -64,6 +66,8 @@ describe("3DSTU FarmFlow deployment packaging", () => {
     expect(envExample).toContain("LAYERPILOT_DB_ADAPTER=json");
     expect(envExample).toContain("LAYERPILOT_DISABLE_DEFAULT_USERS=true");
     expect(envExample).toContain("LAYERPILOT_METRICS_TOKEN=change-this-metrics-token");
+    expect(envExample).toContain("LAYERPILOT_OPS_EMAIL=");
+    expect(envExample).toContain("LAYERPILOT_OPS_PASSWORD=");
     expect(envExample).toContain("LAYERPILOT_WORKER_TOKEN=change-this-worker-token");
     expect(envExample).toContain("LAYERPILOT_BACKUP_RETENTION_DAYS=30");
     expect(envExample).toContain("LAYERPILOT_PRE_RESTORE_BACKUP=true");
@@ -77,6 +81,7 @@ describe("3DSTU FarmFlow deployment packaging", () => {
     const opsCheck = await readFile(new URL("../scripts/ubuntu-ops-check.sh", import.meta.url), "utf8");
     const setup = await readFile(new URL("../scripts/ubuntu-setup.sh", import.meta.url), "utf8");
     const goLive = await readFile(new URL("../scripts/ubuntu-go-live-check.sh", import.meta.url), "utf8");
+    const opsAuthCheck = await readFile(new URL("../scripts/ops-auth-check.mjs", import.meta.url), "utf8");
     const packageScript = await readFile(new URL("../scripts/ubuntu-package.sh", import.meta.url), "utf8");
     const nodePackageScript = await readFile(new URL("../scripts/package-ubuntu.mjs", import.meta.url), "utf8");
     const supportBundle = await readFile(new URL("../scripts/ubuntu-support-bundle.sh", import.meta.url), "utf8");
@@ -125,6 +130,8 @@ describe("3DSTU FarmFlow deployment packaging", () => {
     expect(script).toContain("LAYERPILOT_WORKER_TOKEN");
     expect(script).toContain("LAYERPILOT_PUBLIC_URL");
     expect(script).toContain("write_env_line \"LAYERPILOT_ADMIN_PASSWORD\"");
+    expect(script).toContain("write_env_line \"LAYERPILOT_OPS_EMAIL\"");
+    expect(script).toContain("write_env_line \"LAYERPILOT_OPS_PASSWORD\"");
     expect(script).not.toContain("LAYERPILOT_ADMIN_PASSWORD=${LAYERPILOT_ADMIN_PASSWORD}");
     expect(script).toContain("LAYERPILOT_BIND_ADDRESS");
     expect(script).toContain("LAYERPILOT_OBJECT_STORAGE_PROVIDER must be local or s3");
@@ -200,11 +207,23 @@ describe("3DSTU FarmFlow deployment packaging", () => {
     expect(opsCheck).toContain("base_url=\"$(app_url)\"");
     expect(opsCheck).toContain("docker compose ps");
     expect(opsCheck).toContain("/api/readiness");
+    expect(opsCheck).toContain("check_authenticated_api");
+    expect(opsCheck).toContain("LAYERPILOT_OPS_EMAIL");
+    expect(opsCheck).toContain("LAYERPILOT_OPS_PASSWORD");
+    expect(opsCheck).toContain("node scripts/ops-auth-check.mjs");
+    expect(opsCheck).toContain("docker compose exec -T -e LAYERPILOT_OPS_URL");
+    expect(opsCheck).toContain("authenticated API, audit, and metrics checks passed");
     expect(opsCheck).toContain("sed -n '1{s/^[^ ]* //;p;}'");
     expect(opsCheck).toContain("layerpilot-backup.timer");
     expect(opsCheck).toContain("/etc/docker/daemon.json");
     expect(opsCheck).toContain("deploy/ubuntu/docker-daemon.json");
     expect(opsCheck).toContain("3DSTU FarmFlow ops check passed");
+    expect(opsAuthCheck).toContain("LAYERPILOT_OPS_URL");
+    expect(opsAuthCheck).toContain("/api/auth/login");
+    expect(opsAuthCheck).toContain("/api/state");
+    expect(opsAuthCheck).toContain("/api/audit?limit=5");
+    expect(opsAuthCheck).toContain("/api/metrics");
+    expect(opsAuthCheck).not.toContain("console.log(password");
     expect(setup).toContain("install-deps");
     expect(setup).toContain("install-firewall");
     expect(setup).toContain("install-log-rotation");
@@ -412,6 +431,7 @@ describe("3DSTU FarmFlow deployment packaging", () => {
     expect(packageScript).toContain("api/server.mjs");
     expect(packageScript).toContain("scripts/ubuntu-deploy.sh");
     expect(packageScript).toContain("scripts/ubuntu-backup.sh");
+    expect(packageScript).toContain("scripts/ops-auth-check.mjs");
     expect(packageScript).toContain("scripts/ubuntu-package.sh");
     expect(packageScript).toContain("scripts/package-ubuntu.mjs");
     expect(packageScript).toContain("scripts/ubuntu-support-bundle.sh");

@@ -54,6 +54,10 @@
   - Round 12 targeted `npm run test -- api/server.test.mjs -t "operator context"`: passed, 1 test passed.
   - Round 12 targeted `npm run test -- api/server.test.mjs`: passed, 73 tests passed.
   - Round 12 final `npm run qc`: passed, build passed, Vitest 9 files / 89 tests passed.
+  - Round 13 targeted `npm run test -- api/deploy.test.mjs`: passed, 3 tests passed.
+  - Round 13 syntax checks `bash -n scripts/ubuntu-ops-check.sh scripts/ubuntu-deploy.sh scripts/ubuntu-package.sh && node --check scripts/ops-auth-check.mjs && node --check scripts/package-ubuntu.mjs`: passed.
+  - Round 13 local authenticated ops checker smoke: passed against a temporary API on `127.0.0.1:19097`.
+  - Round 13 final `npm run qc`: passed, build passed, Vitest 9 files / 89 tests passed.
 
 ## Completed Features
 
@@ -101,6 +105,9 @@
 - Added actor-aware audit context for production scheduling, queue creation/matching/status/priority, bridge save/test, printer status, history annotation/reprint, and file-version operator actions.
 - Added regression coverage proving production scheduling, queue, bridge, and file-version audit events include workspace and authenticated operator metadata.
 - Documented expanded operator audit traceability in README, operations, and production-readiness docs.
+- Added authenticated Ubuntu ops-check coverage for login, authenticated state, audit access, and metrics-token verification, with host Node and container fallback execution paths.
+- Added optional `LAYERPILOT_OPS_EMAIL` and `LAYERPILOT_OPS_PASSWORD` support for dedicated smoke accounts in `.env`, Compose, deployment init, README, and operations docs.
+- Added deployment packaging guards so Ubuntu release bundles must include the authenticated ops checker.
 
 ## Remaining Blockers
 
@@ -119,3 +126,4 @@
 - API responses intentionally show only host-level metadata for webhook, notification, commerce, and bridge endpoints; operators should re-enter full provider URLs when rotating those integration credentials.
 - Commerce import idempotency now protects connector and CSV batch retries; broader write API coverage should still be added only after route-specific response and secret review.
 - Audit context now covers the highest-impact production scheduling/queue/bridge/file-version operator actions; remaining lower-risk direct event writes should be migrated only with route-specific delivery and notification review.
+- Ops-check authenticated verification requires valid Owner/Admin credentials or a dedicated smoke account configured in `.env`; otherwise it warns and continues with unauthenticated host checks.

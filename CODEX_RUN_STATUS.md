@@ -1,13 +1,27 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 12 pushed
+- Phase: round 13 verified
 - Started: 2026-06-24 UTC
-- Current state: Round 12 actor-aware audit context for production scheduling, queue, bridge, and file-version operator actions is implemented, verified, committed, and pushed to `origin/codex/production-saas-completion-20260624`.
+- Current state: Round 13 authenticated ops-check smoke coverage is implemented and verified; preparing commit and push.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 9 files / 79 tests passed)
 - Current plan:
+  - Add non-mutating authenticated smoke checks to the Ubuntu ops-check path when production credentials are available.
+  - Cover the deployment helper behavior with targeted tests.
+  - Update operations/readiness docs, run targeted tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 13 repo inspection started at 2026-06-25T03:24:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: authenticated ops-check smoke coverage for production integrity, audit, and metrics verification.
+  - Added `scripts/ops-auth-check.mjs` to verify login, authenticated state, audit access, and metrics-token access without printing credentials.
+  - Wired Ubuntu ops-check to run the authenticated checker from host Node or through the running app container as a fallback.
+  - Added optional `LAYERPILOT_OPS_EMAIL` and `LAYERPILOT_OPS_PASSWORD` env/template/Compose support for a dedicated smoke account.
+  - Updated deployment packaging guards and docs for authenticated ops-check behavior.
+  - Targeted deployment test passed: `npm run test -- api/deploy.test.mjs` (3 tests).
+  - Syntax checks passed: `bash -n scripts/ubuntu-ops-check.sh scripts/ubuntu-deploy.sh scripts/ubuntu-package.sh && node --check scripts/ops-auth-check.mjs && node --check scripts/package-ubuntu.mjs`.
+  - Local authenticated checker smoke passed against a temporary API on `127.0.0.1:19097`.
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 89 tests passed).
   - Round 12 repo inspection started at 2026-06-25T03:14:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: actor-aware audit context for production scheduling, queue, bridge, and file-version operator actions.

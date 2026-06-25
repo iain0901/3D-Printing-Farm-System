@@ -279,7 +279,7 @@ After the first deployment and after each release, run:
 scripts/ubuntu-deploy.sh ops-check
 ```
 
-The ops check verifies Docker Compose service state, `/api/health`, `/api/readiness`, frontend reachability, latest backup presence, backup filesystem free space, `layerpilot-backup.timer`, and Docker log rotation. Set `LAYERPILOT_MIN_FREE_MB` to change the minimum free-space threshold; the default is `2048` MB.
+The ops check verifies Docker Compose service state, `/api/health`, `/api/readiness`, frontend reachability, authenticated state and audit access when credentials are available, metrics-token access when configured, latest backup presence, backup filesystem free space, `layerpilot-backup.timer`, and Docker log rotation. Set `LAYERPILOT_OPS_EMAIL` and `LAYERPILOT_OPS_PASSWORD` to use a dedicated smoke account instead of the bootstrap owner. Set `LAYERPILOT_MIN_FREE_MB` to change the minimum free-space threshold; the default is `2048` MB.
 
 To run the same check every 15 minutes through systemd:
 

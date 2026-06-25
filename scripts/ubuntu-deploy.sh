@@ -357,6 +357,8 @@ write_env() {
     write_env_line "LAYERPILOT_DISABLE_DEFAULT_USERS" "true"
     write_env_line "LAYERPILOT_DISABLE_DEMO_LOGIN" "true"
     write_env_line "LAYERPILOT_METRICS_TOKEN" "$metrics_token"
+    write_env_line "LAYERPILOT_OPS_EMAIL" "${LAYERPILOT_OPS_EMAIL:-}"
+    write_env_line "LAYERPILOT_OPS_PASSWORD" "${LAYERPILOT_OPS_PASSWORD:-}"
     write_env_line "LAYERPILOT_AUTO_BACKUP_ON_MIGRATE" "true"
     write_env_line "LAYERPILOT_DB_ADAPTER" "${LAYERPILOT_DB_ADAPTER:-json}"
     write_env_line "LAYERPILOT_BACKUP_RETENTION_DAYS" "${LAYERPILOT_BACKUP_RETENTION_DAYS:-30}"

@@ -90,6 +90,38 @@ check_app() {
   check_url "${base_url%/}/" "frontend"
 }
 
+check_authenticated_api() {
+  local email="${LAYERPILOT_OPS_EMAIL:-${LAYERPILOT_SMOKE_EMAIL:-${LAYERPILOT_ADMIN_EMAIL:-}}}"
+  local password="${LAYERPILOT_OPS_PASSWORD:-${LAYERPILOT_SMOKE_PASSWORD:-${LAYERPILOT_ADMIN_PASSWORD:-}}}"
+  if [ -z "$email" ] || [ -z "$password" ]; then
+    warn "authenticated API checks skipped; set LAYERPILOT_OPS_EMAIL/LAYERPILOT_OPS_PASSWORD or admin credentials in $ENV_FILE"
+    return 0
+  fi
+  local base_url
+  base_url="$(app_url)"
+  if command -v node >/dev/null 2>&1; then
+    if LAYERPILOT_OPS_URL="$base_url" \
+      LAYERPILOT_OPS_EMAIL="$email" \
+      LAYERPILOT_OPS_PASSWORD="$password" \
+      LAYERPILOT_OPS_METRICS_TOKEN="${LAYERPILOT_OPS_METRICS_TOKEN:-${LAYERPILOT_SMOKE_METRICS_TOKEN:-${LAYERPILOT_METRICS_TOKEN:-}}}" \
+      node scripts/ops-auth-check.mjs; then
+      ok "authenticated API, audit, and metrics checks passed"
+    else
+      fail "authenticated API, audit, or metrics check failed"
+    fi
+    return 0
+  fi
+  if command -v docker >/dev/null 2>&1 && [ -f scripts/ops-auth-check.mjs ]; then
+    if docker compose exec -T -e LAYERPILOT_OPS_URL="$base_url" layerpilot node --input-type=module - < scripts/ops-auth-check.mjs; then
+      ok "authenticated API, audit, and metrics checks passed in layerpilot container"
+    else
+      fail "authenticated API, audit, or metrics check failed in layerpilot container"
+    fi
+    return 0
+  fi
+  warn "authenticated API checks skipped; node is unavailable and the layerpilot container could not run the checker"
+}
+
 check_backups() {
   mkdir -p "$BACKUP_DIR"
   check_numeric_env "LAYERPILOT_MIN_FREE_MB" "$MIN_FREE_MB" || return 0
@@ -141,6 +173,7 @@ MIN_FREE_MB="${LAYERPILOT_MIN_FREE_MB:-$MIN_FREE_MB}"
 
 check_compose
 check_app
+check_authenticated_api
 check_backups
 check_systemd_timer
 check_docker_logs
