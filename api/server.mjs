@@ -1039,6 +1039,7 @@ async function writePreMigrationBackup(file, data, migration) {
 async function buildDataIntegrityReport(data, options = {}) {
   const errors = [];
   const warnings = [];
+  let storage = { checked: false, complete: true, expected: 0, present: 0, bytes: 0, missing: [] };
   const ids = (items = []) => new Set(items.map((item) => item.id).filter(Boolean));
   const printerIds = ids(data.printers);
   const fileIds = ids(data.files);
@@ -1057,13 +1058,18 @@ async function buildDataIntegrityReport(data, options = {}) {
   for (const session of data.sessions || []) {
     if (!userIds.has(session.userId)) warnings.push({ code: "session.user_missing", message: `Session ${session.id || session.token || "unknown"} points to a missing user` });
   }
-  for (const file of data.files || []) {
-    if (options.checkStorage && file.storagePath) {
-      try {
-        await statStoredObject(file);
-      } catch {
-        warnings.push({ code: "file.storage_missing", message: `${file.name || file.id} has a missing storage object` });
-      }
+  if (options.checkStorage) {
+    const manifest = await buildBackupStorageManifest(data, Number.MAX_SAFE_INTEGER);
+    storage = {
+      checked: true,
+      complete: manifest.missing.length === 0,
+      expected: manifest.files.length + manifest.missing.length,
+      present: manifest.files.length,
+      bytes: manifest.bytes,
+      missing: manifest.missing
+    };
+    for (const file of manifest.missing) {
+      warnings.push({ code: "file.storage_missing", message: `${file.name || file.fileId} has a missing storage object`, fileId: file.fileId });
     }
   }
   for (const job of data.queue || []) {
@@ -1097,6 +1103,7 @@ async function buildDataIntegrityReport(data, options = {}) {
     checkedAt: now,
     schemaVersion: Number(data.dataMeta?.schemaVersion || 0),
     counts: Object.fromEntries([...COLLECTIONS, "users", "sessions"].map((key) => [key, Array.isArray(data[key]) ? data[key].length : 0])),
+    storage,
     auditRetention: {
       enabled: data.workspaceSettings?.auditLogRetention !== false,
       days: auditRetentionDays(data.workspaceSettings || {}),

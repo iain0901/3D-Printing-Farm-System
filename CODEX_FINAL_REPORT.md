@@ -123,6 +123,7 @@
   - `ddefc9b` `feat: block incomplete full backup exports`
   - `7eacd3d` `docs: record codex round 59 final report`
   - Current `HEAD` `docs: record codex round 59 push`
+  - Current `HEAD` `feat: report integrity storage coverage`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -507,6 +508,8 @@
 - Added regression coverage for missing restore file payload detection, and documented the restore coverage check in README, operations, and production-readiness docs.
 - Added a fail-closed missing-file guard for `/api/admin/export?includeFiles=true` so full JSON exports return `409` with a storage manifest when referenced stored model/G-code bytes cannot be read, unless an operator explicitly requests `allowMissingFiles=true`.
 - Added regression coverage for blocked and intentional partial full-backup exports, and documented the partial-export recovery requirement in README, operations, and production-readiness docs.
+- Added `/api/admin/integrity?checkStorage=true` storage coverage metadata for current stored model/G-code files so operators can see expected, present, missing, total bytes, and completeness before trusting backups or restore drills.
+- Added regression coverage for missing stored-object integrity reporting, and documented the storage-aware integrity check in README, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -519,6 +522,7 @@
 - Full API JSON file-byte exports are intentionally capped by `LAYERPILOT_FULL_BACKUP_MAX_BYTES`; large production farms should rely on verified volume/object-storage backups unless an operator deliberately raises the API export ceiling.
 - Full API JSON file-byte exports now fail closed when stored file payloads are missing; `allowMissingFiles=true` should be used only with a documented separate volume/object-storage recovery plan.
 - Restore previews now report incomplete JSON file-payload coverage, but operators must still verify any separate volume/object-storage restore path before committing a restore that intentionally omits file bytes.
+- Admin integrity checks now report current storage coverage when `checkStorage=true`, but operators must still run verified volume/object-storage backups and restore drills for the actual deployment target.
 - Idempotency coverage is route-specific; token- or secret-returning replay records are intentionally retained only in internal server metadata and omitted from shared state/admin exports.
 - Session expiry policy should be reviewed against the customer's shared-device operating model before go-live.
 - Production Owner/Admin users must enroll TOTP before protected API access when workspace `requireAdmin2fa` remains enabled; this is now enforced in `NODE_ENV=production`.

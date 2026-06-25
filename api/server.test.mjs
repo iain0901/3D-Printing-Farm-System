@@ -538,6 +538,34 @@ describe("3DSTU FarmFlow API", () => {
     });
   });
 
+  it("reports storage payload coverage during admin integrity checks", async () => {
+    await withApp(async ({ app }) => {
+      const token = await login(app);
+      const sample = await app.inject({
+        method: "POST",
+        url: "/api/files/sample",
+        headers: auth(token),
+        payload: { name: "Integrity Coverage Bracket", material: "PETG", folder: "Backups" }
+      });
+      expect(sample.statusCode).toBe(201);
+      const sampleFile = sample.json().file;
+      await access(sampleFile.storagePath);
+      await rm(sampleFile.storagePath, { force: true });
+
+      const checked = await app.inject({ method: "GET", url: "/api/admin/integrity?checkStorage=true", headers: auth(token) });
+      expect(checked.statusCode).toBe(200);
+      expect(checked.json().storage).toMatchObject({
+        checked: true,
+        complete: false,
+        expected: expect.any(Number),
+        present: expect.any(Number),
+        missing: expect.arrayContaining([expect.objectContaining({ fileId: sampleFile.id, name: sampleFile.name })])
+      });
+      expect(checked.json().storage.expected).toBeGreaterThan(checked.json().storage.present);
+      expect(checked.json().warnings.map((warning) => warning.code)).toEqual(expect.arrayContaining(["file.storage_missing"]));
+    });
+  });
+
   it("sets production security headers and rate limits sensitive auth routes", async () => {
     await withApp(async ({ app }) => {
       const health = await app.inject({ method: "GET", url: "/api/health" });

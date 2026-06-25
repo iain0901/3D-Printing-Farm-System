@@ -1,17 +1,27 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 59 committed and pushed
+- Phase: round 60 verified, ready to commit
 - Started: 2026-06-24 UTC
-- Current state: Round 59 backup/export safety slice is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 60 health/readiness/ops-check slice is implemented and verified on `codex/production-saas-completion-20260624`; commit/push pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage proving full backup exports fail closed when stored file payloads are missing.
-  - Make `/api/admin/export?includeFiles=true` return a blocked manifest by default when stored bytes cannot be read, with an explicit partial-export override.
-  - Document the missing-file guard in README, operations, and production-readiness docs.
-  - Run targeted backup/export tests and full QC, then commit and push.
+  - Add regression coverage for `/api/admin/integrity?checkStorage=true` storage payload coverage.
+  - Add storage coverage metadata to admin integrity checks so operators can see present/missing stored model bytes before backup or restore work.
+  - Document the integrity storage coverage check in README, operations, and production-readiness docs.
+  - Run targeted integrity/backup tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 60 repo inspection started at 2026-06-25T12:09:01Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, mutating API routes, idempotency allowlist, admin export/restore/integrity code, and existing integrity/backup tests before editing.
+  - Selected production-readiness slice: admin integrity storage coverage for safer backup/restore/export operations.
+  - Added regression coverage proving `/api/admin/integrity?checkStorage=true` reports stored file coverage and missing stored objects.
+  - Targeted integrity storage regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "storage payload coverage"` (missing `storage` coverage object).
+  - Added storage coverage metadata to admin integrity reports using the existing backup storage manifest logic.
+  - Documented the storage-aware integrity check in README, operations, and production-readiness docs.
+  - Targeted integrity/backup coverage passed: `npm run test -- api/server.test.mjs -t "admin integrity|storage payload coverage|full backup|file payload coverage|stored file payloads|configured byte limit"` (6 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (121 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 139 tests passed).
   - Round 59 repo inspection started at 2026-06-25T11:57:49Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API readiness/backup/restore code, backup UI, and existing backup/restore tests before editing.
   - Selected production-readiness slice: full backup export missing-file guard for safer backup/export operations.

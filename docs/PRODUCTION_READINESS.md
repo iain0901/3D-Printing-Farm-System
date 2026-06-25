@@ -45,6 +45,7 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 - [ ] Persistent data is stored in the Docker volume or configured database path.
 - [ ] Local uploaded model storage or S3-compatible storage is configured intentionally.
 - [ ] If S3 object storage is enabled, live `/api/readiness` passes with bucket, region, access key, and secret key configured.
+- [ ] `/api/admin/integrity?checkStorage=true` reports `storage.complete: true` before relying on a file-byte backup or restore drill.
 - [ ] `scripts/ubuntu-backup.sh backup` creates a verified archive.
 - [ ] `scripts/ubuntu-backup.sh restore-drill <archive>` succeeds without touching production data.
 - [ ] Full API JSON file-byte exports are below `LAYERPILOT_FULL_BACKUP_MAX_BYTES`, return no missing stored-file payloads, or are intentionally replaced by verified volume/object-storage backups for large file libraries.

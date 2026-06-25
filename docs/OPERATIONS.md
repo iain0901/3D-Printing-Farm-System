@@ -7,6 +7,7 @@ This runbook covers routine production operation for a 3DSTU FarmFlow VPS.
 - Open the dashboard and review printer state, blocked jobs, due-risk work, and low inventory.
 - Check `/api/readiness` or the ops-check timer result.
 - Confirm the latest backup exists and was verified.
+- Before trusting a file-byte backup or restore drill, run `/api/admin/integrity?checkStorage=true` and confirm `storage.complete` is true.
 - Review failed webhook, notification, MQTT, commerce, and bridge delivery logs.
 - Resolve generated todos for slicing, scheduling, material, maintenance, and exceptions.
 
@@ -176,6 +177,7 @@ The restore command creates a pre-restore safeguard archive unless `LAYERPILOT_P
 Workspace restore previews may be run with a scoped `admin:restore` API key for automation drills, but committing a restore through `/api/admin/restore` requires a logged-in user session and `confirm: "RESTORE"`.
 Confirmed restore commits accept an `Idempotency-Key`; if the success response is dropped, an exact retry can replay the original restored summary after the commit has revoked the old session. Restore previews remain authenticated dry-runs and are not replayed through the post-commit path.
 Restore preview and commit summaries include `filePayloadCoverage` for stored model/G-code bytes: expected payload count, included payload count, missing payloads, extra payloads, and a `complete` flag. Treat missing payloads as a stop condition unless the volume/object storage is being restored separately or the operator intentionally accepts re-uploading those files after restore.
+Admin integrity checks with `checkStorage=true` include a `storage` coverage block for current stored model/G-code bytes: expected payloads, present payloads, missing objects, total bytes, and whether coverage is complete. Use this before full JSON exports, volume backup verification, or restore drills so missing local/S3 file bytes are caught early.
 Workspace exports and shared state redact customer quote portal bearer tokens. Restored or migrated quote records receive fresh portal tokens automatically; operators should use the quote customer-link action to generate or rotate customer-facing URLs after a restore.
 Workspace exports and shared state also redact credential-bearing integration endpoint paths/query strings for webhooks, notifications, commerce connectors, delivery logs, and printer bridges while preserving host hints and stored-server-side operation.
 Workspace exports and shared state also omit internal idempotency replay records; retries after a restore should use fresh `Idempotency-Key` values.
