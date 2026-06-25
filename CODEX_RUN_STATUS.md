@@ -1,18 +1,30 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 63 committed and pushed
+- Phase: round 64 committed; push pending
 - Started: 2026-06-24 UTC
-- Current state: Round 63 idempotent multipart model uploads are implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 64 session audit evidence hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`; push is pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage for retry-safe `POST /api/files/upload` multipart uploads.
-  - Implement upload-specific idempotency using filename/material/folder plus file-byte digest before storage writes.
-  - Wire the built-in Files upload control to send stable idempotency headers for the same attempted upload.
-  - Document multipart upload retry safety.
+  - Add regression coverage for auth/session audit evidence on login, logout, password, and 2FA flows.
+  - Harden auth audit events with workspace/operator metadata while avoiding secrets, tokens, passwords, and recovery codes.
+  - Add logout audit events so session revocation is reviewable after operator/security incidents.
+  - Document session audit evidence expectations.
   - Run targeted API/browser tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 64 repo inspection started at 2026-06-25T12:53:44Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, mutating API routes, idempotency surface, auth/session code, and existing auth tests before editing.
+  - Selected production-readiness slice: session/auth audit evidence hardening so security-sensitive login, logout, password, and 2FA events are reviewable with workspace/operator context.
+  - Added regression coverage requiring login, logout, password-change, and 2FA setup/enable/verify/disable audit events to include workspace, user, actor, and session metadata where applicable while excluding bearer tokens, passwords, TOTP secrets, and recovery codes.
+  - Targeted auth audit regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "authenticates users and supports logout|supports password changes|two-factor auth"` (3 failing tests).
+  - Hardened auth audit events to use the actor/workspace-aware dispatcher for login, signup, 2FA verification, 2FA setup/enable/disable, and password changes.
+  - Added `auth.logout` audit events with session ID and revoked-session count so session revocation is reviewable after operator/security incidents.
+  - Documented auth/session audit evidence expectations in README, operations, and production-readiness docs.
+  - Targeted auth audit coverage passed: `npm run test -- api/server.test.mjs -t "authenticates users and supports logout|supports password changes|two-factor auth"` (3 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (122 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 140 tests passed).
+  - Committed round 64 implementation as `d3a2937` (`feat: add session audit evidence`).
   - Round 63 repo inspection started at 2026-06-25T12:45:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, API idempotency matcher, multipart upload route, upload tests, and Files UI upload flow before editing.
   - Selected production-readiness slice: idempotent multipart model uploads so dropped browser/API responses do not duplicate stored file records, stored bytes, or upload audit events.

@@ -130,6 +130,7 @@
   - `b7ba010` `docs: record codex round 62 status`
   - `4d806eb` `feat: add idempotent model uploads`
   - `31e2f68` `docs: record codex round 63 status`
+  - `d3a2937` `feat: add session audit evidence`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -341,6 +342,9 @@
   - Round 63 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
   - Round 63 targeted `npm run test -- api/server.test.mjs`: passed, 122 tests passed.
   - Round 63 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 140 tests passed.
+  - Round 64 targeted `npm run test -- api/server.test.mjs -t "authenticates users and supports logout|supports password changes|two-factor auth"`: failed before implementation, then passed, 3 tests passed.
+  - Round 64 targeted `npm run test -- api/server.test.mjs`: passed, 122 tests passed.
+  - Round 64 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 140 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs -t "spool metadata updates|maintenance job updates"`: failed before implementation, then passed, 2 tests passed.
   - Round 50 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs`: passed, 114 tests passed.
@@ -539,6 +543,9 @@
 - Added route-specific idempotent replay/conflict protection for multipart `/api/files/upload` after parsing the upload stream, using filename, material, folder, and file-byte digest before storage writes.
 - Moved upload audit events through the actor/workspace-aware audit dispatcher so successful uploads have traceable `file.uploaded` evidence.
 - Wired the built-in Files upload action to generate stable per-attempt browser `Idempotency-Key` headers for the same selected file/material/folder until success.
+- Hardened login, signup, password-change, logout, and 2FA setup/enable/verify/disable audit events with workspace, user, actor, and session metadata where applicable.
+- Added `auth.logout` audit evidence for session revocation, including the session ID and revoked-session count without storing bearer tokens.
+- Added regression coverage proving auth/session audit events omit bearer tokens, passwords, TOTP secrets, and recovery codes, and documented the audit evidence expectations in README, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -554,6 +561,7 @@
 - Admin integrity checks, authenticated production smoke, and authenticated ops-check runs now report and audit current storage coverage with `checkStorage=true`, but operators must still run verified volume/object-storage backups and restore drills for the actual deployment target.
 - Idempotency coverage is route-specific; token- or secret-returning replay records are intentionally retained only in internal server metadata and omitted from shared state/admin exports.
 - Session expiry policy should be reviewed against the customer's shared-device operating model before go-live.
+- Auth/session audit events now include workspace/operator/session evidence without secrets, but operators still need to review `/api/audit` on the live deployment during access reviews and incident-response drills.
 - Production Owner/Admin users must enroll TOTP before protected API access when workspace `requireAdmin2fa` remains enabled; this is now enforced in `NODE_ENV=production`.
 - Production Owner/Admin users cannot disable TOTP while workspace `requireAdmin2fa` remains enabled; controlled resets should temporarily disable the workspace policy, remediate the account, then re-enable the policy.
 - First-time destructive restore commits still require a logged-in Owner/Admin user session; automation should use dry-run restore validation and hand off final commit to an operator.
