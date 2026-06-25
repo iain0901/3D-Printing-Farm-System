@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 96 verified, preparing commit
+- Phase: round 96 implementation committed, preparing final report
 - Started: 2026-06-24 UTC
-- Current state: Round 96 idempotency replay secret-storage hardening is implemented and verified on `codex/production-saas-completion-20260624`; commit/push is pending.
+- Current state: Round 96 idempotency replay secret-storage hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`; final report commit/push is pending.
 - Baseline QC: Round 86 passed `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed)
 - Current plan:
   - Add regression coverage requiring persisted idempotency replay bodies for generated API keys, temporary passwords, and quote portal tokens to redact those secrets.
@@ -23,6 +23,7 @@
   - Documented idempotency replay secret redaction and recovery expectations in README, operations, and production-readiness docs.
   - Full API suite passed: `npm run test -- api/server.test.mjs` (135 tests).
   - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 154 tests passed).
+  - Committed round 96 implementation/status/docs as `51272ab` (`feat: redact idempotency replay secrets`).
   - Round 95 repo inspection started at 2026-06-25T20:39:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route list, bridge routes, and existing bridge tests before editing.
   - Selected production-readiness slice: printer bridge audit hardening so bridge setup, diagnostics, and manual syncs leave compact operator/workspace evidence without exposing endpoint paths, query tokens, or API keys.

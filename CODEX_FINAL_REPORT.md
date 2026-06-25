@@ -4,8 +4,9 @@
 - Pushed remote: `origin/codex/production-saas-completion-20260624`
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
-- Latest round: Round 95 bridge audit hardening implemented, verified, committed, and pushed.
+- Latest round: Round 96 idempotency replay secret-storage hardening implemented, verified, and committed; push is pending.
 - Commits:
+  - `51272ab` `feat: redact idempotency replay secrets`
   - `c28466f` `docs: record codex round 95 status`
   - `44d68ef` `feat: add bridge audit context`
   - `91e48b5` `docs: record codex round 94 status`
@@ -205,6 +206,11 @@
   - `7e42cc7` `feat: scope audit retention by workspace`
   - Current `HEAD` `docs: record codex round 69 push`
 - QC result:
+  - Round 96 targeted `npm run test -- api/server.test.mjs -t "public quote intake retries|admin account writes|quote portal link rotations"`: failed before implementation as expected, raw quote tokens, API keys, and temporary passwords were replayed from persisted response bodies.
+  - Round 96 targeted `npm run test -- api/server.test.mjs -t "public quote intake retries|admin account writes|quote portal link rotations"`: passed, 3 tests passed.
+  - Round 96 broader idempotency/auth/billing/quote coverage `npm run test -- api/server.test.mjs -t "public quote intake retries|admin account writes|quote portal link rotations|queries audit events|billing|replays idempotent"`: passed, 51 tests passed.
+  - Round 96 full API `npm run test -- api/server.test.mjs`: passed, 135 tests passed.
+  - Round 96 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 154 tests passed.
   - Round 95 targeted `npm run test -- api/server.test.mjs -t "replays idempotent bridge diagnostics"`: failed before implementation as expected, `bridge.saved` audit evidence lacked redacted bridge metadata.
   - Round 95 targeted `npm run test -- api/server.test.mjs -t "replays idempotent bridge diagnostics"`: passed, 1 test passed.
   - Round 95 broader bridge/printer-action coverage `npm run test -- api/server.test.mjs -t "bridge|printer actions|production scheduling"`: passed, 5 tests passed.
