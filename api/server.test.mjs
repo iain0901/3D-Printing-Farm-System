@@ -269,7 +269,9 @@ describe("3DSTU FarmFlow API", () => {
       LAYERPILOT_WORKER_TOKEN: "worker-token-32-characters-minimum",
       LAYERPILOT_METRICS_TOKEN: "metrics-token-32-characters-minimum",
       LAYERPILOT_DISABLE_DEFAULT_USERS: "true",
-      LAYERPILOT_DISABLE_DEMO_LOGIN: "true"
+      LAYERPILOT_DISABLE_DEMO_LOGIN: "true",
+      LAYERPILOT_WORKER_TELEMETRY: "false",
+      LAYERPILOT_WORKER_BRIDGE_POLLING: "false"
     }, async () => {
       await withApp(async ({ app }) => {
         const readiness = await app.inject({ method: "GET", url: "/api/readiness" });
@@ -280,6 +282,52 @@ describe("3DSTU FarmFlow API", () => {
           expect.objectContaining({ name: "production-secrets", ok: true }),
           expect.objectContaining({ name: "production-default-access", ok: true })
         ]));
+      });
+    });
+  });
+
+  it("fails production readiness when enabled worker jobs have no fresh heartbeat", async () => {
+    const productionEnv = {
+      NODE_ENV: "production",
+      LAYERPILOT_ADMIN_EMAIL: "owner@example.com",
+      LAYERPILOT_ADMIN_PASSWORD: "production-owner-password",
+      LAYERPILOT_WORKER_TOKEN: "worker-token-32-characters-minimum",
+      LAYERPILOT_METRICS_TOKEN: "metrics-token-32-characters-minimum",
+      LAYERPILOT_DISABLE_DEFAULT_USERS: "true",
+      LAYERPILOT_DISABLE_DEMO_LOGIN: "true",
+      LAYERPILOT_WORKER_TELEMETRY: "true",
+      LAYERPILOT_WORKER_BRIDGE_POLLING: "true",
+      LAYERPILOT_WORKER_TELEMETRY_INTERVAL_MS: "1000",
+      LAYERPILOT_WORKER_BRIDGE_POLL_INTERVAL_MS: "1000"
+    };
+    await withEnv(productionEnv, async () => {
+      await withApp(async ({ app, db }) => {
+        const missing = await app.inject({ method: "GET", url: "/api/readiness" });
+        expect(missing.statusCode).toBe(503);
+        expect(missing.json().checks).toEqual(expect.arrayContaining([
+          expect.objectContaining({ name: "worker", ok: false })
+        ]));
+        expect(missing.json().checks.find((check) => check.name === "worker").detail).toContain("no worker heartbeat");
+
+        db.data.dataMeta.worker = {
+          id: "stale-worker",
+          lastRunAt: new Date(Date.now() - 120_000).toISOString(),
+          telemetryEnabled: true,
+          bridgePollingEnabled: true,
+          telemetryIntervalMs: 1000,
+          bridgePollingIntervalMs: 1000
+        };
+        await db.write();
+        const stale = await app.inject({ method: "GET", url: "/api/readiness" });
+        expect(stale.statusCode).toBe(503);
+        expect(stale.json().checks.find((check) => check.name === "worker")).toMatchObject({ ok: false, id: "stale-worker" });
+        expect(stale.json().checks.find((check) => check.name === "worker").detail).toContain("stale");
+
+        db.data.dataMeta.worker.lastRunAt = new Date().toISOString();
+        await db.write();
+        const fresh = await app.inject({ method: "GET", url: "/api/readiness" });
+        expect(fresh.statusCode).toBe(200);
+        expect(fresh.json().checks.find((check) => check.name === "worker")).toMatchObject({ ok: true, id: "stale-worker" });
       });
     });
   });

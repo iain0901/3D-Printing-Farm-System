@@ -773,14 +773,20 @@ function envFlag(name, env = process.env) {
   return ["1", "true", "yes", "on"].includes(String(env[name] || "").trim().toLowerCase());
 }
 
+function envFlagWithDefault(name, fallback, env = process.env) {
+  const value = String(env[name] ?? "").trim();
+  if (!value) return fallback;
+  return ["1", "true", "yes", "on"].includes(value.toLowerCase());
+}
+
 function envFlagDefault(name, fallback = true) {
   const value = String(process.env[name] || "").trim();
   if (!value) return fallback;
   return ["1", "true", "yes", "on"].includes(value.toLowerCase());
 }
 
-function envPositiveNumber(name, fallback) {
-  const value = Number(process.env[name]);
+function envPositiveNumber(name, fallback, env = process.env) {
+  const value = Number(env[name]);
   if (!Number.isFinite(value) || value <= 0) return fallback;
   return value;
 }
@@ -3588,6 +3594,59 @@ function productionReadinessConfigChecks(data, env = process.env) {
   return checks;
 }
 
+function productionWorkerReadinessCheck(data, env = process.env, now = new Date()) {
+  if (env.NODE_ENV !== "production") return null;
+  const telemetryEnabled = envFlagWithDefault("LAYERPILOT_WORKER_TELEMETRY", false, env);
+  const bridgePollingEnabled = envFlagWithDefault("LAYERPILOT_WORKER_BRIDGE_POLLING", false, env);
+  if (!telemetryEnabled && !bridgePollingEnabled) {
+    return { name: "worker", ok: true, detail: "worker checks disabled" };
+  }
+  const telemetryIntervalMs = envPositiveNumber("LAYERPILOT_WORKER_TELEMETRY_INTERVAL_MS", 5000, env);
+  const bridgePollingIntervalMs = envPositiveNumber("LAYERPILOT_WORKER_BRIDGE_POLL_INTERVAL_MS", 10000, env);
+  const enabledIntervals = [
+    telemetryEnabled ? telemetryIntervalMs : 0,
+    bridgePollingEnabled ? bridgePollingIntervalMs : 0
+  ].filter((value) => value > 0);
+  const staleAfterMs = Math.max(60_000, Math.max(...enabledIntervals) * 3);
+  const worker = data.dataMeta?.worker || null;
+  const enabledJobs = [
+    telemetryEnabled ? "telemetry" : "",
+    bridgePollingEnabled ? "bridge polling" : ""
+  ].filter(Boolean).join(" and ");
+  if (!worker?.lastRunAt) {
+    return {
+      name: "worker",
+      ok: false,
+      detail: `no worker heartbeat for enabled ${enabledJobs}`,
+      enabled: { telemetry: telemetryEnabled, bridgePolling: bridgePollingEnabled },
+      staleAfterMs
+    };
+  }
+  const lastRunMs = Date.parse(worker.lastRunAt);
+  if (!Number.isFinite(lastRunMs)) {
+    return {
+      name: "worker",
+      ok: false,
+      id: worker.id || "worker",
+      detail: `invalid worker heartbeat timestamp: ${worker.lastRunAt}`,
+      enabled: { telemetry: telemetryEnabled, bridgePolling: bridgePollingEnabled },
+      staleAfterMs
+    };
+  }
+  const ageMs = Math.max(0, now.getTime() - lastRunMs);
+  const ok = ageMs <= staleAfterMs;
+  return {
+    name: "worker",
+    ok,
+    id: worker.id || "worker",
+    detail: ok ? `${worker.id || "worker"} last ran ${Math.round(ageMs / 1000)}s ago` : `${worker.id || "worker"} heartbeat stale by ${Math.round((ageMs - staleAfterMs) / 1000)}s`,
+    lastRunAt: worker.lastRunAt,
+    ageMs,
+    staleAfterMs,
+    enabled: { telemetry: telemetryEnabled, bridgePolling: bridgePollingEnabled }
+  };
+}
+
 async function checkReadiness(database, startedAt) {
   const checks = [];
   const checkedAt = new Date().toISOString();
@@ -3610,13 +3669,13 @@ async function checkReadiness(database, startedAt) {
     detail: integrity.ok ? `${integrity.warnings.length} warning(s)` : `${integrity.errors.length} error(s)`,
     schemaVersion: integrity.schemaVersion
   });
-  if (database.data.dataMeta?.worker?.lastRunAt) {
-    checks.push({
-      name: "worker",
-      ok: true,
-      detail: `${database.data.dataMeta.worker.id || "worker"} last ran at ${database.data.dataMeta.worker.lastRunAt}`
-    });
-  }
+  const workerCheck = productionWorkerReadinessCheck(database.data, process.env, new Date(checkedAt));
+  if (workerCheck) checks.push(workerCheck);
+  else if (database.data.dataMeta?.worker?.lastRunAt) checks.push({
+    name: "worker",
+    ok: true,
+    detail: `${database.data.dataMeta.worker.id || "worker"} last ran at ${database.data.dataMeta.worker.lastRunAt}`
+  });
   checks.push(...productionReadinessConfigChecks(database.data));
   const ok = checks.every((check) => check.ok);
   return {

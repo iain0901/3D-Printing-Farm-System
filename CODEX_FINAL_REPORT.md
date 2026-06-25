@@ -137,6 +137,7 @@
   - `1473a72` `feat: require header ops tokens in production`
   - `cb0bfbc` `docs: record codex round 66 status`
   - Current `HEAD` `docs: record codex round 66 push`
+  - Current `HEAD` `feat: gate readiness on worker freshness`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -358,6 +359,11 @@
   - Round 66 targeted `npm run test -- api/server.test.mjs -t "operational metrics|worker broadcast|ops tokens"`: failed before implementation, then passed, 4 tests passed.
   - Round 66 targeted `npm run test -- api/server.test.mjs`: passed, 124 tests passed.
   - Round 66 final `npm run qc`: passed, build passed, Vitest 10 files / 142 tests passed.
+  - Round 67 targeted `npm run test -- api/server.test.mjs -t "production readiness"`: failed before implementation, then passed, 4 tests passed.
+  - Round 67 targeted `npm run test -- api/server.test.mjs -t "production readiness|worker broadcast"`: passed, 5 tests passed.
+  - Round 67 targeted `npm run test -- api/worker.test.mjs`: passed, 2 tests passed.
+  - Round 67 targeted `npm run test -- api/server.test.mjs`: passed, 125 tests passed.
+  - Round 67 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 143 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs -t "spool metadata updates|maintenance job updates"`: failed before implementation, then passed, 2 tests passed.
   - Round 50 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs`: passed, 114 tests passed.
@@ -565,6 +571,8 @@
 - Hardened production ops token transport so `/api/metrics` accepts `LAYERPILOT_METRICS_TOKEN` only through `x-layerpilot-metrics-token`, and `/api/internal/worker-broadcast` accepts `LAYERPILOT_WORKER_TOKEN` only through `x-layerpilot-worker-token`.
 - Preserved URL query token compatibility outside production for local tooling while preventing production shared tokens from landing in proxy/access-log URLs.
 - Added regression coverage for production query-token rejection and documented header-only metrics/worker token transport in README, install, operations, and production-readiness docs.
+- Added a production `/api/readiness` worker freshness gate so enabled background telemetry or bridge polling requires a recent durable worker heartbeat.
+- Added regression coverage for missing, stale, and fresh worker heartbeat readiness outcomes, and documented the gate in README, install, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -622,3 +630,4 @@
 - Ops-check authenticated verification requires valid Owner/Admin credentials or a dedicated smoke account configured in `.env`; otherwise it warns and continues with unauthenticated host checks.
 - Support snapshots now redact secret-like fields and URL paths/query strings, but operators should still review generated support bundles before sharing customer evidence externally.
 - Production metrics scrapers and worker notifiers must send shared ops tokens in headers; query-token URLs are intentionally rejected in `NODE_ENV=production`.
+- Production readiness now fails when worker telemetry or bridge polling is enabled and the worker heartbeat is missing or stale; operators must verify the `layerpilot-worker` service and shared database/volume on the live host.

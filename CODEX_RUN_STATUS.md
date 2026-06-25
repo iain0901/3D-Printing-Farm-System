@@ -1,17 +1,29 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 66 committed and pushed
+- Phase: round 67 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 66 ops token transport hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 67 worker freshness readiness gate is implemented, verified, and ready to commit on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage proving production `/api/metrics` and `/api/internal/worker-broadcast` reject token query parameters and accept only header tokens.
-  - Harden metrics and worker token extraction so query-token compatibility remains non-production only.
-  - Document header-only production token transport for metrics scraping and worker broadcasts.
-  - Run targeted API/browser tests and full QC, then commit and push.
+  - Add regression coverage proving production `/api/readiness` fails when enabled worker jobs have no fresh heartbeat and passes when the heartbeat is current.
+  - Add a worker freshness readiness check based on configured worker intervals and enabled telemetry/bridge polling flags.
+  - Document the worker freshness deployment gate in README, operations, and production-readiness docs.
+  - Run targeted readiness/worker tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 67 repo inspection started at 2026-06-25T13:29:26Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, readiness implementation, worker heartbeat code, deployment docs, and existing readiness/worker tests before editing.
+  - Selected production-readiness slice: worker freshness readiness gate so production deployments with enabled telemetry or bridge polling fail readiness when the background worker has never reported or is stale.
+  - Added regression coverage proving production readiness fails when `LAYERPILOT_WORKER_TELEMETRY` or `LAYERPILOT_WORKER_BRIDGE_POLLING` is enabled but no fresh worker heartbeat exists.
+  - Targeted worker-readiness regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "production readiness"` (enabled worker jobs returned readiness `200` without a heartbeat).
+  - Added production worker freshness readiness checks using enabled worker flags, configured intervals, and a minimum 60-second tolerance before failing stale heartbeats.
+  - Documented the worker heartbeat readiness gate in README, install docs, operations, and production-readiness docs.
+  - Targeted readiness coverage passed: `npm run test -- api/server.test.mjs -t "production readiness"` (4 tests).
+  - Targeted readiness/worker coverage passed: `npm run test -- api/server.test.mjs -t "production readiness|worker broadcast"` (5 tests) and `npm run test -- api/worker.test.mjs` (2 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (125 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 143 tests passed).
+  - Updated final report with round 67 scope, verification, completed feature, and residual worker freshness note.
   - Round 66 repo inspection started at 2026-06-25T13:19:39Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, install docs, package metadata, health/readiness/metrics code, worker broadcast auth, worker notifier, and existing metrics/worker tests before editing.
   - Selected production-readiness slice: header-only production transport for worker and metrics ops tokens so secrets are not accepted in URL query strings that can leak through access logs.

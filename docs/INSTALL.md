@@ -37,6 +37,8 @@ Set real values for:
 
 In production, `LAYERPILOT_WORKER_TOKEN` is accepted only through the `x-layerpilot-worker-token` header and `LAYERPILOT_METRICS_TOKEN` only through the `x-layerpilot-metrics-token` header. Do not put these shared tokens in URLs.
 
+If `LAYERPILOT_WORKER_TELEMETRY` or `LAYERPILOT_WORKER_BRIDGE_POLLING` is enabled in production, `/api/readiness` expects the background worker to write a recent heartbeat to the shared data store. Keep the API and worker services on the same volume/database path and check the worker logs if readiness reports a stale or missing `worker` check.
+
 For customer production, also set:
 
 - `LAYERPILOT_DISABLE_DEFAULT_USERS=true`
