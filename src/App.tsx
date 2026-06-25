@@ -1,7 +1,7 @@
 ﻿/// <reference types="vite/client" />
 import type * as React from "react";
 import packageJson from "../package.json";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -66,6 +66,7 @@ import {
   XAxis,
   YAxis
 } from "recharts";
+import { idempotencyFingerprint, idempotencyKeyForAttempt, type IdempotencyAttempt } from "./idempotency";
 
 const APP_VERSION = packageJson.version;
 
@@ -3153,6 +3154,8 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
   const [quoteLookup, setQuoteLookup] = useState(initialQuoteLookup);
   const [quoteLookupStatus, setQuoteLookupStatus] = useState("");
   const [quoteLookupResult, setQuoteLookupResult] = useState<PublicQuoteStatus | null>(null);
+  const quoteSubmitAttempt = useRef<IdempotencyAttempt | null>(null);
+  const quoteDecisionAttempts = useRef<Record<string, IdempotencyAttempt>>({});
   const submitQuote = async () => {
     if (!quoteDraft.customer.trim() || !quoteDraft.email.trim() || !quoteDraft.project.trim()) {
       setQuoteStatus("Please add your name, email, and project.");
@@ -3161,6 +3164,11 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
     setQuoteStatus("Sending quote request...");
     try {
       const payload = { ...quoteDraft, quantity: Number(quoteDraft.quantity || 1), budget: Number(quoteDraft.budget || 0), source: "Marketing website" };
+      const fingerprint = idempotencyFingerprint({
+        ...payload,
+        file: quoteFile ? { name: quoteFile.name, size: quoteFile.size, lastModified: quoteFile.lastModified } : null
+      });
+      quoteSubmitAttempt.current = idempotencyKeyForAttempt(quoteSubmitAttempt.current, "public-quote-intake", fingerprint);
       const body = quoteFile ? new FormData() : JSON.stringify(payload);
       if (quoteFile && body instanceof FormData) {
         Object.entries(payload).forEach(([key, value]) => body.append(key, String(value ?? "")));
@@ -3168,7 +3176,10 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
       }
       const response = await fetch(`${API_BASE}/api/public/quoteRequests`, {
         method: "POST",
-        headers: quoteFile ? undefined : { "Content-Type": "application/json" },
+        headers: {
+          ...(quoteFile ? {} : { "Content-Type": "application/json" }),
+          "Idempotency-Key": quoteSubmitAttempt.current.key
+        },
         body
       });
       const result = await response.json();
@@ -3179,6 +3190,7 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
       setQuoteLookupResult(result.quoteRequest);
       setQuoteDraft({ customer: "", email: "", company: "", project: "Prototype enclosure", material: "PLA", quantity: 1, due: "Flexible", budget: 0, fileName: "", notes: "" });
       setQuoteFile(null);
+      quoteSubmitAttempt.current = null;
     } catch {
       setQuoteStatus("Quote request could not be sent. Please contact support@3dstu.com.");
     }
@@ -3207,15 +3219,23 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
     }
     setQuoteLookupStatus(decision === "accepted" ? "Approving quote..." : decision === "rejected" ? "Rejecting quote..." : "Requesting quote changes...");
     try {
+      const payload = { token: quoteLookup.token.trim(), decision, note: decision === "revision" ? "Customer requested changes from the quote portal." : "" };
+      const attemptId = `${quoteLookup.id.trim()}:${decision}`;
+      quoteDecisionAttempts.current[attemptId] = idempotencyKeyForAttempt(
+        quoteDecisionAttempts.current[attemptId] || null,
+        "public-quote-decision",
+        idempotencyFingerprint({ quoteId: quoteLookup.id.trim(), ...payload })
+      );
       const response = await fetch(`${API_BASE}/api/public/quoteRequests/${encodeURIComponent(quoteLookup.id.trim())}/decision`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: quoteLookup.token.trim(), decision, note: decision === "revision" ? "Customer requested changes from the quote portal." : "" })
+        headers: { "Content-Type": "application/json", "Idempotency-Key": quoteDecisionAttempts.current[attemptId].key },
+        body: JSON.stringify(payload)
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result?.error || "Quote decision failed");
       setQuoteLookupResult(result.quoteRequest);
       setQuoteLookupStatus(decision === "accepted" ? `${result.quoteRequest.id}: approved and converted to ${result.order?.id || "an order"}.` : decision === "revision" ? `${result.quoteRequest.id}: changes requested. The operator will review it again.` : `${result.quoteRequest.id}: rejected.`);
+      delete quoteDecisionAttempts.current[attemptId];
     } catch {
       setQuoteLookupStatus("Quote decision could not be saved. Check the ID and tracking token.");
     }

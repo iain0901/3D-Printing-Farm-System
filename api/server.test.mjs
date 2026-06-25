@@ -2732,6 +2732,71 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent public quote revision requests without duplicating audit events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const quote = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        payload: {
+          customer: "Retry Revision Buyer",
+          email: "retry-revision@example.com",
+          company: "Revision Studio",
+          project: "Quote revision retry",
+          material: "PETG",
+          quantity: 4,
+          due: "2026-08-08",
+          budget: 300,
+          notes: "Customer revision retry"
+        }
+      });
+      expect(quote.statusCode).toBe(201);
+      const { id, accessToken } = quote.json().quoteRequest;
+      const token = await login(app);
+      const quoted = await app.inject({
+        method: "PATCH",
+        url: `/api/quoteRequests/${id}`,
+        headers: auth(token),
+        payload: { status: "quoted", quotedValue: 275, validUntil: "2026-08-20" }
+      });
+      expect(quoted.statusCode).toBe(200);
+      const headers = { "idempotency-key": "public-quote-revision-001" };
+      const payload = { token: accessToken, decision: "revision", note: "Please quote ASA instead" };
+
+      const revision = await app.inject({
+        method: "POST",
+        url: `/api/public/quoteRequests/${id}/decision`,
+        headers,
+        payload
+      });
+      expect(revision.statusCode).toBe(200);
+
+      const replay = await app.inject({
+        method: "POST",
+        url: `/api/public/quoteRequests/${id}/decision`,
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(revision.json());
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.quoteRequests.find((item) => item.id === id)).toMatchObject({
+        status: "reviewing",
+        customerDecision: "revision",
+        customerDecisionNote: "Please quote ASA instead"
+      });
+      expect(persisted.events.filter((event) => event.type === "quote_request.revision_requested" && event.data?.quoteRequestId === id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "public-quote-revision-001")).toMatchObject({
+        actorId: `public:quote-decision:${id}`,
+        method: "POST",
+        path: `/api/public/quoteRequests/${id}/decision`,
+        replayCount: 1,
+        statusCode: 200
+      });
+    });
+  });
+
   it("blocks customer approval after a quote expires", async () => {
     await withApp(async ({ app }) => {
       const quote = await app.inject({

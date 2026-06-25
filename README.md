@@ -119,7 +119,7 @@ Useful production environment variables:
 
 The production API also enables security headers through `@fastify/helmet` and route-level rate limiting through `@fastify/rate-limit` for authentication, API key creation, billing sessions, and admin exports.
 
-Retry-prone order, queue, public quote intake, public quote decision, quote conversion, production-template, and commerce import writes accept an `Idempotency-Key` header. Supported routes replay the original successful response for the same actor, route, key, and body, and return `409` when a key is reused with different input. Replay records are internal server metadata only; shared state and admin exports omit the idempotency ledger so response bodies from token-returning routes are not included in handoff bundles.
+Retry-prone order, queue, public quote intake, public quote decision, quote conversion, production-template, and commerce import writes accept an `Idempotency-Key` header. Supported routes replay the original successful response for the same actor, route, key, and body, and return `409` when a key is reused with different input. The shipped public quote form and quote portal decision controls generate and reuse idempotency keys for the same attempted payload until the request succeeds. Replay records are internal server metadata only; shared state and admin exports omit the idempotency ledger so response bodies from token-returning routes are not included in handoff bundles.
 
 - `GET /api/health`
 - `GET /api/readiness`

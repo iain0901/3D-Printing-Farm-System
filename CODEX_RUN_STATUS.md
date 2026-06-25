@@ -1,16 +1,28 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 18 pushed
+- Phase: round 19 QC passed
 - Started: 2026-06-24 UTC
-- Current state: Round 18 idempotency replay export safety is implemented, verified, committed, and pushed to `origin/codex/production-saas-completion-20260624`.
+- Current state: Round 19 public quote UI idempotency-key usage is implemented and verified locally; commit and push are pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 9 files / 92 tests passed)
 - Current plan:
-  - Redact internal idempotency replay ledger records from shared state and admin export surfaces.
-  - Prove token-returning quote intake replay records remain internal while retries still work.
-  - Update operations/readiness docs, run targeted tests and full QC, then commit and push.
+  - Add a focused idempotency-key helper for retry-prone browser writes.
+  - Wire public quote intake and quote decision UI requests to reuse a key for the same attempted payload until success.
+  - Document shipped UI idempotency behavior, run targeted tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 19 repo inspection started at 2026-06-25T04:30:31Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: customer-facing public quote UI idempotency-key usage for retry-prone quote intake and portal decision writes.
+  - Added a browser idempotency helper that keeps a retry key for the same attempted payload and rotates it when the payload changes.
+  - Wired public quote intake and customer quote decision requests to send generated `Idempotency-Key` headers.
+  - Added regression coverage for the customer revision-request branch of public quote decisions so retries do not duplicate audit events.
+  - Added focused helper coverage for browser idempotency key reuse and rotation.
+  - Documented built-in public quote form and portal idempotency behavior in README, operations, and production-readiness docs.
+  - Targeted browser helper test passed: `npm run test -- src/idempotency.test.ts` (1 test).
+  - Targeted public quote revision regression passed: `npm run test -- api/server.test.mjs -t "public quote revision"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (77 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 94 tests passed).
   - Round 18 repo inspection started at 2026-06-25T04:21:51Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: idempotency replay export safety for token-returning retry routes.
