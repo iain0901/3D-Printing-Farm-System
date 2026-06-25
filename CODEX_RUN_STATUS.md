@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 47 in progress
+- Phase: round 47 implementation committed; final docs pending push
 - Started: 2026-06-24 UTC
-- Current state: Round 47 production admin 2FA enforcement hardening is in progress on `codex/production-saas-completion-20260624`.
+- Current state: Round 47 production admin 2FA enforcement hardening is implemented, verified, and committed as `0155d47`; final docs are being recorded before push.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
   - Add regression coverage for production `requireAdmin2fa` enforcement on Owner/Admin sessions.
@@ -26,6 +26,7 @@
   - Targeted i18n coverage passed after adding translations for the new 2FA gate UI: `npm run test -- api/i18n.test.mjs` (2 tests).
   - Full API suite passed: `npm run test -- api/server.test.mjs` (111 tests).
   - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 129 tests passed).
+  - Committed round 47 implementation as `0155d47` (`feat: enforce production admin 2fa`).
   - Round 46 repo inspection started at 2026-06-25T09:19:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, and roadmap docs before editing.
   - Selected production-readiness slice: browser-side idempotency keys for authenticated daily operator production controls so dropped browser/API responses replay backend-safe queue, scheduler, order, quote, file, slicer, printer, todo, spool, and purchasing writes instead of duplicating work.

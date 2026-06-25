@@ -86,6 +86,7 @@
   - `9c538d7` `feat: add operator browser idempotency`
   - `eb4b36c` `docs: record codex round 46 status`
   - `e252f00` `docs: record codex round 46 push prep`
+  - `0155d47` `feat: enforce production admin 2fa`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -229,6 +230,11 @@
   - Round 46 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
   - Round 46 targeted `npm run build`: passed.
   - Round 46 final `npm run qc`: passed, build passed, Vitest 10 files / 128 tests passed.
+  - Round 47 targeted `npm run test -- api/server.test.mjs -t "production Owner and Admin sessions"`: failed before implementation, then passed, 1 test passed.
+  - Round 47 targeted `npm run test -- api/server.test.mjs -t "TOTP two-factor"`: passed, 1 test passed.
+  - Round 47 targeted `npm run test -- api/i18n.test.mjs`: passed, 2 tests passed.
+  - Round 47 targeted `npm run test -- api/server.test.mjs`: passed, 111 tests passed.
+  - Round 47 final `npm run qc`: passed, build passed, Vitest 10 files / 129 tests passed.
 
 ## Completed Features
 
@@ -376,6 +382,10 @@
 - Documented built-in browser idempotency behavior in README, operations, and production-readiness docs.
 - Added browser-side idempotency header generation for daily authenticated operator controls covering queue scheduling/status/priority/matching, scheduler automation, order creation/lifecycle/job generation, operator quote update/link/convert actions, file sample/version/delete/slice actions, Hot Drop, slicer jobs, printer bridge actions, spool creation/usage/scan/labels, generated todo actions, and filament purchase request/reorder/receive workflows.
 - Documented expanded built-in operator browser idempotency behavior in README, operations, and production-readiness docs.
+- Enforced the production `requireAdmin2fa` gate for Owner/Admin user sessions so protected APIs and realtime state streams are unavailable until TOTP is enrolled.
+- Preserved remediation routes for unenrolled production admins: `/api/auth/me`, password change, logout, TOTP setup, and TOTP enablement remain available.
+- Updated the browser to route production 2FA enrollment blocks to Settings instead of falling back to local/demo state, with Traditional Chinese translation coverage for the new notices.
+- Documented production admin 2FA enforcement in README, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -386,6 +396,7 @@
 - Frontend bundle size warning remains from the existing single-bundle app; it does not fail QC.
 - Idempotency coverage is route-specific; token- or secret-returning replay records are intentionally retained only in internal server metadata and omitted from shared state/admin exports.
 - Session expiry policy should be reviewed against the customer's shared-device operating model before go-live.
+- Production Owner/Admin users must enroll TOTP before protected API access when workspace `requireAdmin2fa` remains enabled; this is now enforced in `NODE_ENV=production`.
 - Destructive restore commits now require a logged-in Owner/Admin user session; automation should use dry-run restore validation and hand off final commit to an operator.
 - API-key grants are intentionally limited to automation scopes; account, settings, and API-key administration should remain user-session-only unless a customer-specific security review changes that policy.
 - API-key read access is intentionally allowlisted by route and scope; integrations that need broader reads should be reviewed and granted a purpose-specific automation scope instead of falling back to user sessions.
