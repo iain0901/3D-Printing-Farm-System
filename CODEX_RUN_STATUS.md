@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 9 in progress
+- Phase: round 9 ready to push
 - Started: 2026-06-24 UTC
-- Current state: Round 9 quote portal token redaction implemented; targeted tests and full QC passed.
+- Current state: Round 9 quote portal token redaction implemented, targeted tests and full QC passed, and implementation committed as `4e982a7`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 9 files / 79 tests passed)
 - Current plan:
   - Add regression coverage proving quote portal bearer tokens are not exposed through authenticated state/list/export backup surfaces.
@@ -20,6 +20,7 @@
   - Documented quote portal token handling after backup/restore in operations and production-readiness docs.
   - Targeted API suite passed: `npm run test -- api/server.test.mjs` (69 tests).
   - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 85 tests passed).
+  - Committed round 9 implementation as `4e982a7` (`feat: redact quote portal tokens`).
   - Round 8 repo inspection started at 2026-06-25T02:32:59Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: runtime deployment gate checks in `/api/readiness`.

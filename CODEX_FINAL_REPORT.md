@@ -19,6 +19,7 @@
   - `fff9664` `feat: scope api key read access`
   - Current `HEAD` `docs: record codex round 7 push`
   - `9132a52` `feat: gate production readiness config`
+  - `4e982a7` `feat: redact quote portal tokens`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -37,6 +38,8 @@
   - Round 7 final `npm run qc`: passed, build passed, Vitest 9 files / 83 tests passed.
   - Round 8 targeted `npm run test -- api/server.test.mjs`: passed, 69 tests passed.
   - Round 8 final `npm run qc`: passed, build passed, Vitest 9 files / 85 tests passed.
+  - Round 9 targeted `npm run test -- api/server.test.mjs`: passed, 69 tests passed.
+  - Round 9 final `npm run qc`: passed, build passed, Vitest 9 files / 85 tests passed.
 
 ## Completed Features
 
@@ -72,6 +75,9 @@
 - Added runtime production readiness gates so `/api/readiness` fails in `NODE_ENV=production` when required owner credentials or worker/metrics tokens are missing, documented default secrets are still configured, token/password minimums are not met, or default/demo access remains enabled.
 - Added regression coverage for unsafe production readiness failure and hardened production readiness success.
 - Documented the runtime readiness deployment gate in operations and production-readiness docs.
+- Redacted customer quote portal bearer tokens from authenticated state, quote list, realtime state, and workspace export surfaces while preserving explicit customer-link generation and rotation.
+- Added regression coverage proving quote portal access tokens stay out of quote list, state, and admin export responses.
+- Documented quote portal link regeneration and rotation expectations after restore.
 
 ## Remaining Blockers
 
@@ -86,3 +92,4 @@
 - API-key grants are intentionally limited to automation scopes; account, settings, and API-key administration should remain user-session-only unless a customer-specific security review changes that policy.
 - API-key read access is intentionally allowlisted by route and scope; integrations that need broader reads should be reviewed and granted a purpose-specific automation scope instead of falling back to user sessions.
 - Runtime production readiness now fails hard on unsafe default/demo access or weak/missing deployment secrets; operators must fix `.env` before live smoke checks can pass.
+- Workspace exports intentionally omit customer quote portal bearer tokens; operators should regenerate or rotate portal links after restore when customers need access.
