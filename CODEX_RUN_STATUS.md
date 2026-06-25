@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 21 committed
+- Phase: round 21 pushed
 - Started: 2026-06-24 UTC
-- Current state: Round 21 inventory idempotency hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`; push pending.
+- Current state: Round 21 inventory idempotency hardening is implemented, verified, committed, and ready on `origin/codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 96 tests passed)
 - Current plan:
   - Add persisted idempotency replay/conflict protection for retry-prone spool create, spool usage, and spool scan writes.
@@ -21,7 +21,8 @@
   - Targeted inventory idempotency test passed: `npm run test -- api/server.test.mjs -t "idempotent spool"` (3 tests).
   - Targeted API suite passed: `npm run test -- api/server.test.mjs` (82 tests).
   - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 99 tests passed).
-  - Committed round 21 implementation as `feat: add idempotent inventory writes`.
+  - Committed round 21 implementation as `dabbdc2` (`feat: add idempotent inventory writes`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
   - Round 20 repo inspection started at 2026-06-25T04:39:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: idempotent filament purchasing retries for reorder-plan and receive flows.

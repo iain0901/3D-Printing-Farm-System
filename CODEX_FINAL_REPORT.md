@@ -41,7 +41,8 @@
   - `ac08c88` `feat: add public quote ui idempotency keys`
   - Current `HEAD` `docs: record codex round 19 status`
   - Current `HEAD` `feat: add idempotent filament purchasing`
-  - Current `HEAD` `feat: add idempotent inventory writes`
+  - `dabbdc2` `feat: add idempotent inventory writes`
+  - Current `HEAD` `docs: record codex round 21 push`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
