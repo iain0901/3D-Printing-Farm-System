@@ -8040,7 +8040,20 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsed.success) return reply.code(400).send({ error: "Invalid slicer job payload", issues: parsed.error.issues });
     const result = await runSlicerJob(database, { ...parsed.data, workspaceId: request.user.workspaceId });
     if (result.error) return reply.code(result.statusCode || 400).send({ error: result.error });
-    await dispatchEvent(database, result.job.status === "complete" ? "slicer.completed" : "slicer.failed", `${result.job.sourceFile} -> ${result.job.status}`, { workspaceId: request.user.workspaceId, slicerJobId: result.job.id, fileId: result.file.id, status: result.job.status });
+    await dispatchEvent(database, result.job.status === "complete" ? "slicer.completed" : "slicer.failed", `${result.job.sourceFile} -> ${result.job.status}`, {
+      workspaceId: request.user.workspaceId,
+      slicerJobId: result.job.id,
+      fileId: result.file.id,
+      printerId: result.job.printerId,
+      profileId: result.job.profileId,
+      status: result.job.status,
+      engine: result.job.engine,
+      material: parsed.data.material,
+      layerHeight: parsed.data.layerHeight,
+      infill: parsed.data.infill,
+      supports: parsed.data.supports,
+      outputSize: result.job.outputSize || ""
+    }, { actor: request.user });
     await database.write();
     const code = result.job.status === "complete" ? 201 : 502;
     return reply.code(code).send({ ...result, slicerJobs: workspaceScopeForUser(database.data, request.user).slicerJobs });
@@ -8063,7 +8076,20 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       supports: true
     });
     if (result.error) return reply.code(result.statusCode || 400).send({ error: result.error });
-    await dispatchEvent(database, result.job.status === "complete" ? "file.sliced" : "slicer.failed", `${file.name} -> ${result.job.status}`, { workspaceId: request.user.workspaceId, slicerJobId: result.job.id, fileId: file.id, status: result.job.status });
+    await dispatchEvent(database, result.job.status === "complete" ? "file.sliced" : "slicer.failed", `${file.name} -> ${result.job.status}`, {
+      workspaceId: request.user.workspaceId,
+      slicerJobId: result.job.id,
+      fileId: file.id,
+      printerId: result.job.printerId,
+      profileId: result.job.profileId,
+      status: result.job.status,
+      engine: result.job.engine,
+      material: result.job.settings?.material || file.material || "",
+      layerHeight: result.job.settings?.layerHeight || file.layerHeight || "",
+      infill: result.job.settings?.infill,
+      supports: result.job.settings?.supports,
+      outputSize: result.job.outputSize || ""
+    }, { actor: request.user });
     await database.write();
     if (result.job.status !== "complete") return reply.code(502).send(result);
     return result.file;

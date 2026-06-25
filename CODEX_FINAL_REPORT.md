@@ -4,8 +4,9 @@
 - Pushed remote: `origin/codex/production-saas-completion-20260624`
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
-- Latest round: Round 81 printer/file generation audit context hardening implemented, verified, committed, and pushed.
+- Latest round: Round 82 slicer audit context hardening implemented and verified; commit/push pending.
 - Commits:
+  - Pending `feat: add slicer audit context`
   - `d73aa26` `docs: record codex round 81 status`
   - `81603d4` `feat: add printer file generation audit context`
   - `effe6ed` `docs: record codex round 80 status`
@@ -173,6 +174,10 @@
   - `7e42cc7` `feat: scope audit retention by workspace`
   - Current `HEAD` `docs: record codex round 69 push`
 - QC result:
+  - Round 82 targeted `npm run test -- api/server.test.mjs -t "slicer job|file-slice"`: failed before implementation as expected, slicer audit events lacked actor context and compact slicer metadata.
+  - Round 82 targeted `npm run test -- api/server.test.mjs -t "slicer job|file-slice"`: passed, 3 tests passed.
+  - Round 82 full API `npm run test -- api/server.test.mjs`: passed, 132 tests passed.
+  - Round 82 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 151 tests passed.
   - Round 81 targeted `npm run test -- api/server.test.mjs -t "creates file folders|handles Hot Drop|parametric nameplate|printer capability"`: failed before implementation as expected, printer/file-generation audit events lacked actor context and compact file/printer identity metadata.
   - Round 81 targeted `npm run test -- api/server.test.mjs -t "creates file folders|handles Hot Drop|parametric nameplate|printer capability"`: passed, 6 tests passed.
   - Round 81 full API `npm run test -- api/server.test.mjs`: passed, 132 tests passed.
@@ -647,6 +652,7 @@
 - Wired the Settings restore commit action to generate and reuse a stable browser idempotency key for the same backup payload until success.
 - Added regression coverage proving restore commit retries do not duplicate `admin.restore` audit events, and documented the restore retry contract in README, operations, and production-readiness docs.
 - Prevented production Owner/Admin users from disabling TOTP while workspace `requireAdmin2fa` remains enabled, closing a path that could make an enrolled admin session non-compliant again.
+- Added actor-aware compact audit records for backend slicer jobs and quick file-slice actions through `slicer.completed`, `slicer.failed`, and `file.sliced`, including slicer job, source file, printer/profile, engine, material settings, status, and output-size metadata without generated G-code bodies, slicer command arguments, config paths, local output paths, storage paths, or object-storage keys.
 - Added regression coverage for the required-admin-2FA disable guard and documented the controlled reset path in README, operations, and production-readiness docs.
 - Added idempotent replay/conflict protection for spool metadata updates and maintenance job updates so dropped operator/browser responses do not create duplicate `spool.updated` or `maintenance.updated` audit events.
 - Wired the built-in spool metadata and maintenance job update controls to generate stable per-attempt browser `Idempotency-Key` headers until success.

@@ -1,17 +1,27 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 81 committed and pushed
+- Phase: round 82 verified, commit pending
 - Started: 2026-06-24 UTC
-- Current state: Round 81 printer/file generation audit context hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 82 slicer audit context hardening is implemented and verified on `codex/production-saas-completion-20260624`; commit/push is pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage proving printer create/update and file-generation audit events include workspace/operator context without storing generated model bodies or storage paths.
-  - Replace remaining bare printer setup and generated-file audit writes with actor-aware compact audit records.
-  - Document printer/file-generation audit evidence review in README, operations, and production-readiness docs.
-  - Run targeted audit tests, full API tests, and full QC, then commit and push.
+  - Add regression coverage proving backend slicer-job and quick file-slice audit events include workspace/operator context without storing generated G-code bodies, slicer command arguments, or local/object-storage paths.
+  - Replace remaining bare slicer audit writes with actor-aware compact audit records.
+  - Document slicer audit evidence review in README, operations, and production-readiness docs.
+  - Run targeted slicer tests, full API tests, and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 82 repo inspection started at 2026-06-25T17:31:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route list, idempotency allowlist, slicer implementation, and existing slicer tests before editing.
+  - Selected production-readiness slice: actor-aware audit context for backend slicer jobs and quick file-slice flows so production G-code generation is traceable to the authenticated workspace/operator without exposing generated G-code, slicer command arguments, or storage paths.
+  - Added regression coverage requiring backend slicer-job and quick file-slice audit events to include workspace/operator context plus compact slicer metadata, while excluding generated G-code bodies, slicer config paths, output paths, storage paths, and command arguments.
+  - Targeted slicer audit regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "slicer job|file-slice"` (2 tests failed because slicer events lacked actor and compact slicer metadata).
+  - Replaced remaining bare slicer audit writes with actor-aware compact audit records for `slicer.completed`, `slicer.failed`, and `file.sliced`.
+  - Targeted slicer coverage passed: `npm run test -- api/server.test.mjs -t "slicer job|file-slice"` (3 tests).
+  - Documented slicer audit evidence review in README, operations, and production-readiness docs.
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (132 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 151 tests passed).
   - Round 81 repo inspection started at 2026-06-25T17:18:41Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, API route list, idempotency allowlist, audit dispatcher usage, file/printer routes, and existing backup/file/printer tests before editing.
   - Selected production-readiness slice: actor-aware audit context for printer setup/update and generated-file flows so core production asset creation is traceable to the authenticated workspace/operator without exposing generated file bodies or storage locations.
