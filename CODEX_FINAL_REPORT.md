@@ -23,6 +23,7 @@
   - Current `HEAD` `docs: record codex round 9 push`
   - `903f22d` `feat: redact integration endpoints`
   - Current `HEAD` `docs: record codex round 10 push`
+  - Current `HEAD` `feat: add idempotent commerce imports`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -45,6 +46,9 @@
   - Round 9 final `npm run qc`: passed, build passed, Vitest 9 files / 85 tests passed.
   - Round 10 targeted `npm run test -- api/server.test.mjs`: passed, 70 tests passed.
   - Round 10 final `npm run qc`: passed, build passed, Vitest 9 files / 86 tests passed.
+  - Round 11 targeted `npm run test -- api/server.test.mjs -t "idempotent commerce"`: passed, 2 tests passed.
+  - Round 11 targeted `npm run test -- api/server.test.mjs`: passed, 72 tests passed.
+  - Round 11 final `npm run qc`: passed, build passed, Vitest 9 files / 88 tests passed.
 
 ## Completed Features
 
@@ -86,6 +90,9 @@
 - Redacted credential-bearing integration endpoint URL paths and query strings from authenticated state, list endpoints, webhook/notification delivery logs, bridge diagnostics, and workspace exports while preserving server-side stored URLs for deliveries, imports, and bridge commands.
 - Added regression coverage proving webhook, notification, commerce connector, and printer bridge endpoint secrets stay out of API state, lists, delivery logs, and admin exports.
 - Documented integration endpoint redaction and restore/rotation expectations.
+- Added idempotent replay/conflict protection for commerce connector import and CSV import routes.
+- Added regression coverage proving connector import retries do not refetch external commerce feeds and CSV import retries do not create duplicate import runs.
+- Documented commerce import `Idempotency-Key` usage in README, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -102,3 +109,4 @@
 - Runtime production readiness now fails hard on unsafe default/demo access or weak/missing deployment secrets; operators must fix `.env` before live smoke checks can pass.
 - Workspace exports intentionally omit customer quote portal bearer tokens; operators should regenerate or rotate portal links after restore when customers need access.
 - API responses intentionally show only host-level metadata for webhook, notification, commerce, and bridge endpoints; operators should re-enter full provider URLs when rotating those integration credentials.
+- Commerce import idempotency now protects connector and CSV batch retries; broader write API coverage should still be added only after route-specific response and secret review.

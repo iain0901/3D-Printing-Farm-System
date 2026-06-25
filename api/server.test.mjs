@@ -2802,6 +2802,58 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent commerce connector imports without refetching the feed", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const originalFetch = global.fetch;
+      let fetchCount = 0;
+      global.fetch = async () => {
+        fetchCount += 1;
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({
+            orders: [
+              {
+                id: "SP-RETRY-1",
+                customer: { name: "Retry Feed Customer" },
+                line_items: [{ sku: "RETRY-BRACKET", quantity: 1 }],
+                due_at: "Tomorrow 16:00",
+                total_price: "240"
+              }
+            ]
+          })
+        };
+      };
+      try {
+        const token = await login(app);
+        const connector = await app.inject({
+          method: "POST",
+          url: "/api/commerceConnectors",
+          headers: auth(token),
+          payload: { name: "Retry Shopify feed", source: "Shopify", url: "https://commerce.test/retry.json", enabled: true }
+        });
+        expect(connector.statusCode).toBe(201);
+        const headers = { ...auth(token), "idempotency-key": "commerce-feed-retry-001" };
+
+        const imported = await app.inject({ method: "POST", url: `/api/commerceConnectors/${connector.json().id}/import`, headers });
+        expect(imported.statusCode).toBe(200);
+        expect(imported.json().created).toHaveLength(1);
+
+        const replay = await app.inject({ method: "POST", url: `/api/commerceConnectors/${connector.json().id}/import`, headers });
+        expect(replay.statusCode).toBe(200);
+        expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+        expect(replay.json()).toEqual(imported.json());
+        expect(fetchCount).toBe(1);
+
+        const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+        expect(persisted.orders.filter((item) => item.externalId === "SP-RETRY-1")).toHaveLength(1);
+        expect(persisted.commerceImports).toHaveLength(1);
+      } finally {
+        global.fetch = originalFetch;
+      }
+    });
+  });
+
   it("imports commerce CSV rows into orders", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);
@@ -2820,6 +2872,37 @@ endsolid s3_store`;
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
       expect(persisted.orders.some((order) => order.externalId === "CSV-1001")).toBe(true);
       expect(persisted.commerceImports[0]).toMatchObject({ connectorName: "CSV import", created: 1 });
+    });
+  });
+
+  it("replays idempotent commerce CSV imports without adding duplicate import runs", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const csv = "externalId,customer,items,due,value\nCSV-RETRY-1,CSV Retry Customer,QC-RETRY x1,Today 18:00,220";
+      const headers = { ...auth(token), "idempotency-key": "commerce-csv-retry-001" };
+
+      const imported = await app.inject({
+        method: "POST",
+        url: "/api/commerce/import-csv",
+        headers,
+        payload: { source: "Generic", csv }
+      });
+      expect(imported.statusCode).toBe(200);
+      expect(imported.json().created).toHaveLength(1);
+
+      const replay = await app.inject({
+        method: "POST",
+        url: "/api/commerce/import-csv",
+        headers,
+        payload: { source: "Generic", csv }
+      });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(imported.json());
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.orders.filter((order) => order.externalId === "CSV-RETRY-1")).toHaveLength(1);
+      expect(persisted.commerceImports.filter((run) => run.connectorName === "CSV import")).toHaveLength(1);
     });
   });
 

@@ -118,6 +118,8 @@ Useful production environment variables:
 
 The production API also enables security headers through `@fastify/helmet` and route-level rate limiting through `@fastify/rate-limit` for authentication, API key creation, billing sessions, and admin exports.
 
+Retry-prone order, queue, production-template, and commerce import writes accept an `Idempotency-Key` header. Supported routes replay the original successful response for the same actor, route, key, and body, and return `409` when a key is reused with different input.
+
 - `GET /api/health`
 - `GET /api/readiness`
 - `GET /api/metrics`

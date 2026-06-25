@@ -1,13 +1,22 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 10 pushed
+- Phase: round 11 QC passed
 - Started: 2026-06-24 UTC
-- Current state: Round 10 integration endpoint redaction hardening is implemented, targeted tests and full QC passed, and branch pushed to `origin/codex/production-saas-completion-20260624`.
+- Current state: Round 11 commerce import idempotency is implemented and verified; commit/push is next.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 9 files / 79 tests passed)
 - Current plan:
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 11 repo inspection started at 2026-06-25T03:03:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent commerce import retries for connector and CSV intake routes.
+  - Added regression coverage proving commerce connector imports replay without a second external feed fetch and CSV import retries do not create duplicate import runs.
+  - Added commerce connector import and CSV import routes to the existing `Idempotency-Key` replay/conflict allowlist.
+  - Documented commerce import idempotency in README, operations, and production-readiness docs.
+  - Targeted commerce idempotency tests passed: `npm run test -- api/server.test.mjs -t "idempotent commerce"` (2 tests).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (72 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 88 tests passed).
   - Round 10 repo inspection started at 2026-06-25T02:53:49Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: backup/export safety for credential-bearing integration endpoint URLs.
