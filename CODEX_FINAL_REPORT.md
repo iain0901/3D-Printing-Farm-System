@@ -77,6 +77,7 @@
   - `1b194c6` `feat: add idempotent governance setup writes`
   - `f8d7c26` `docs: record codex round 43 status`
   - Current `HEAD` `docs: record codex round 43 push`
+  - `ba282c8` `feat: add idempotent admin account writes`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -206,6 +207,12 @@
   - Round 43 targeted `npm run test -- api/server.test.mjs -t "governance"`: passed, 3 tests passed.
   - Round 43 targeted `npm run test -- api/server.test.mjs`: passed, 109 tests passed.
   - Round 43 final `npm run qc`: passed, build passed, Vitest 10 files / 126 tests passed.
+  - Round 44 targeted `npm run test -- api/server.test.mjs -t "admin account writes"`: failed before implementation, then passed, 1 test passed.
+  - Round 44 targeted `npm run test -- api/server.test.mjs -t "API keys"`: passed, 2 tests passed.
+  - Round 44 targeted `npm run test -- api/server.test.mjs -t "team users"`: passed, 1 test passed.
+  - Round 44 targeted `npm run test -- api/server.test.mjs -t "password"`: passed, 1 test passed.
+  - Round 44 targeted `npm run test -- api/server.test.mjs`: passed, 110 tests passed.
+  - Round 44 final `npm run qc`: passed, build passed, Vitest 10 files / 127 tests passed.
 
 ## Completed Features
 
@@ -345,6 +352,9 @@
 - Added idempotent replay/conflict protection for governance setup writes covering workspace settings, onboarding checklist updates, and support snapshot generation.
 - Added regression coverage proving governance setup retries replay without duplicate settings, onboarding, or support snapshot audit events, and conflicting retry bodies return `409`.
 - Documented governance setup `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for admin account management writes covering API-key create/update, user invite/update, and password reset.
+- Added regression coverage proving admin account retries replay generated API-key and temporary-password responses without rotating secrets again or duplicating governance audit events.
+- Documented admin account management `Idempotency-Key` usage in README, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -353,7 +363,7 @@
 - Hardware bridge validation must be performed against the real printer fleet.
 - Optional production services such as Stripe, S3, MQTT, commerce feeds, and external slicer remain customer-environment dependent.
 - Frontend bundle size warning remains from the existing single-bundle app; it does not fail QC.
-- Idempotency is intentionally scoped to non-secret-bearing production workflow routes; broader write API coverage should be added only with route-specific response redaction.
+- Idempotency coverage is route-specific; token- or secret-returning replay records are intentionally retained only in internal server metadata and omitted from shared state/admin exports.
 - Session expiry policy should be reviewed against the customer's shared-device operating model before go-live.
 - Destructive restore commits now require a logged-in Owner/Admin user session; automation should use dry-run restore validation and hand off final commit to an operator.
 - API-key grants are intentionally limited to automation scopes; account, settings, and API-key administration should remain user-session-only unless a customer-specific security review changes that policy.
@@ -383,6 +393,7 @@
 - Cost catalog and material-map idempotency now protects catalog governance retries from duplicate pricing/material-normalization audit or run records; clients still need stable per-attempt keys when retrying those governance writes.
 - Integration configuration idempotency now protects webhook, notification channel, commerce connector, add-on, and bridge setup retries from duplicate records and audit events; clients still need stable per-attempt keys when retrying integration setup writes.
 - Governance setup idempotency now protects workspace settings, onboarding checklist updates, and support snapshot generation from duplicate audit events; clients still need stable per-attempt keys when retrying go-live setup actions.
+- Admin account management idempotency now protects API-key create/update, user invite/update, and password-reset retries from duplicate generated secrets and duplicate governance audit events; clients still need stable per-attempt keys when retrying owner/admin actions.
 - Idempotency replay records are intentionally omitted from shared state and admin exports; retry clients should use fresh keys after workspace export/restore rather than expecting replay cache continuity.
 - Audit context now covers the highest-impact production scheduling/queue/bridge/file-version operator actions; remaining lower-risk direct event writes should be migrated only with route-specific delivery and notification review.
 - Ops-check authenticated verification requires valid Owner/Admin credentials or a dedicated smoke account configured in `.env`; otherwise it warns and continues with unauthenticated host checks.
