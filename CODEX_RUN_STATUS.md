@@ -1,16 +1,25 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 32 committed
+- Phase: round 33 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 32 integration test-delivery idempotency hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 33 bridge diagnostic and sync idempotency hardening is in progress on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 96 tests passed)
 - Current plan:
-  - Add persisted idempotency replay/conflict protection for webhook and notification test-delivery retries.
-  - Cover retries so dropped operator responses do not create duplicate outbound test calls, test events, or delivery logs.
-  - Document supported integration test-delivery idempotency, run targeted tests and full QC, then commit and push.
+  - Add persisted idempotency replay/conflict protection for bridge diagnostic and sync retries.
+  - Cover retries so dropped operator responses do not repeat hardware status polling or duplicate bridge audit events.
+  - Document supported bridge diagnostic/sync idempotency, run targeted tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 33 repo inspection started at 2026-06-25T07:09:55Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent bridge diagnostic and sync retries to prevent repeated hardware polling and duplicate bridge audit events after operator/browser retries.
+  - Added failing regression coverage proving bridge test, all-bridge sync, and single-printer sync retries need replay semantics.
+  - Added bridge diagnostic/sync routes to the persisted `Idempotency-Key` allowlist.
+  - Documented bridge diagnostic/sync idempotency in README, operations, and production-readiness docs.
+  - Targeted bridge diagnostic/sync idempotency test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "bridge diagnostics and syncs"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (96 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 113 tests passed).
   - Round 32 repo inspection started at 2026-06-25T06:57:55Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: idempotent webhook and notification test-delivery retries to prevent duplicate external calls after operator/browser retries.

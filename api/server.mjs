@@ -1503,6 +1503,7 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "POST" && routePath === "/api/purchaseRequests/reorderPlan") return true;
   if (method === "POST" && routePath === "/api/admin/audit-retention/run") return true;
   if (method === "POST" && routePath === "/api/billing/portal") return true;
+  if (method === "POST" && routePath === "/api/bridges/sync") return true;
   if (method === "POST" && /^\/api\/schedule\/(auto|optimize|constraint)$/.test(routePath)) return true;
   if (method === "PATCH" && routePath === "/api/billing/plan") return true;
   if (method === "POST" && /^\/api\/public\/quoteRequests\/[^/]+\/decision$/.test(routePath)) return true;
@@ -1514,6 +1515,8 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "POST" && /^\/api\/history\/[^/]+\/reprint$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/webhooks\/[^/]+\/test$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/notificationChannels\/[^/]+\/test$/.test(routePath)) return true;
+  if (method === "POST" && /^\/api\/bridges\/[^/]+\/test$/.test(routePath)) return true;
+  if (method === "POST" && /^\/api\/printers\/[^/]+\/sync$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/productionTemplates\/[^/]+\/run$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/commerceConnectors\/[^/]+\/import$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/purchaseRequests\/[^/]+\/receive$/.test(routePath)) return true;

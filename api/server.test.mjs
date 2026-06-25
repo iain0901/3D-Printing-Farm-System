@@ -2503,6 +2503,91 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent bridge diagnostics and syncs without duplicate hardware polling", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const originalFetch = global.fetch;
+      const hardwareCalls = [];
+      global.fetch = async (url) => {
+        hardwareCalls.push(String(url));
+        if (String(url).endsWith("/api/printer")) return { ok: true, status: 200, text: async () => JSON.stringify({ state: { text: "Operational" }, temperature: { tool0: { actual: 27, target: 0 }, bed: { actual: 24, target: 0 } } }) };
+        if (String(url).endsWith("/api/job")) return { ok: true, status: 200, text: async () => JSON.stringify({ progress: { completion: 0 }, job: { file: { display: "" } } }) };
+        return { ok: false, status: 404, text: async () => "{}" };
+      };
+      try {
+        const token = await login(app);
+        const saved = await app.inject({
+          method: "POST",
+          url: "/api/bridges",
+          headers: auth(token),
+          payload: { printerId: "p2", kind: "octoprint", name: "Retry Safe Octo", baseUrl: "http://octopi.retry.test", apiKey: "secret", enabled: true }
+        });
+        expect(saved.statusCode).toBe(201);
+        const bridgeId = saved.json().id;
+
+        const testHeaders = { ...auth(token), "idempotency-key": "bridge-test-retry-001" };
+        const firstTest = await app.inject({ method: "POST", url: `/api/bridges/${bridgeId}/test`, headers: testHeaders, payload: { mode: "diagnostic" } });
+        expect(firstTest.statusCode).toBe(200);
+        expect(firstTest.json()).toMatchObject({ ok: true, printer: expect.objectContaining({ id: "p2", status: "idle", nozzle: 27, bed: 24 }) });
+
+        const replayTest = await app.inject({ method: "POST", url: `/api/bridges/${bridgeId}/test`, headers: testHeaders, payload: { mode: "diagnostic" } });
+        expect(replayTest.statusCode).toBe(200);
+        expect(replayTest.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+        expect(replayTest.json()).toEqual(firstTest.json());
+        expect(hardwareCalls).toHaveLength(2);
+
+        const conflictTest = await app.inject({ method: "POST", url: `/api/bridges/${bridgeId}/test`, headers: testHeaders, payload: { mode: "changed" } });
+        expect(conflictTest.statusCode).toBe(409);
+        expect(hardwareCalls).toHaveLength(2);
+
+        const syncHeaders = { ...auth(token), "idempotency-key": "bridge-sync-retry-001" };
+        const firstSync = await app.inject({ method: "POST", url: "/api/bridges/sync", headers: syncHeaders });
+        expect(firstSync.statusCode).toBe(200);
+        expect(firstSync.json().synced).toEqual(expect.arrayContaining([expect.objectContaining({ bridgeId, printerId: "p2", status: "idle" })]));
+
+        const replaySync = await app.inject({ method: "POST", url: "/api/bridges/sync", headers: syncHeaders });
+        expect(replaySync.statusCode).toBe(200);
+        expect(replaySync.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+        expect(replaySync.json()).toEqual(firstSync.json());
+        expect(hardwareCalls).toHaveLength(4);
+
+        const printerSyncHeaders = { ...auth(token), "idempotency-key": "printer-sync-retry-001" };
+        const firstPrinterSync = await app.inject({ method: "POST", url: "/api/printers/p2/sync", headers: printerSyncHeaders });
+        expect(firstPrinterSync.statusCode).toBe(200);
+        expect(firstPrinterSync.json()).toMatchObject({ printer: expect.objectContaining({ id: "p2", status: "idle" }) });
+
+        const replayPrinterSync = await app.inject({ method: "POST", url: "/api/printers/p2/sync", headers: printerSyncHeaders });
+        expect(replayPrinterSync.statusCode).toBe(200);
+        expect(replayPrinterSync.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+        expect(replayPrinterSync.json()).toEqual(firstPrinterSync.json());
+        expect(hardwareCalls).toHaveLength(6);
+
+        const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+        expect(persisted.events.filter((event) => event.type === "bridge.connected" && event.data?.bridgeId === bridgeId)).toHaveLength(1);
+        expect(persisted.events.filter((event) => event.type === "bridge.poll" && event.data?.synced?.some((item) => item.bridgeId === bridgeId))).toHaveLength(1);
+        expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "bridge-test-retry-001")).toMatchObject({
+          method: "POST",
+          path: `/api/bridges/${bridgeId}/test`,
+          replayCount: 1,
+          statusCode: 200
+        });
+        expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "bridge-sync-retry-001")).toMatchObject({
+          method: "POST",
+          path: "/api/bridges/sync",
+          replayCount: 1,
+          statusCode: 200
+        });
+        expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "printer-sync-retry-001")).toMatchObject({
+          method: "POST",
+          path: "/api/printers/p2/sync",
+          replayCount: 1,
+          statusCode: 200
+        });
+      } finally {
+        global.fetch = originalFetch;
+      }
+    });
+  });
+
   it("persists inventory, maintenance, and order operations", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);
