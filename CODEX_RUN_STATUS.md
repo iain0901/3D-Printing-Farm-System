@@ -1,17 +1,29 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 50 committed and pushed
+- Phase: round 51 implementation committed; push pending
 - Started: 2026-06-24 UTC
-- Current state: Round 50 retry-safe inventory and maintenance update hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 51 live readiness dependency-gate hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`; final report/status handoff and push are pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage proving spool metadata and maintenance job update retries replay without duplicate audit events.
-  - Add `PATCH /api/spools/:id` and `PATCH /api/maintenance/:id` to the persisted idempotency allowlist.
-  - Document retry-safe spool metadata and maintenance job updates in README, operations, and production-readiness docs.
-  - Run targeted inventory/maintenance tests and full QC, then commit and push.
+  - Add regression coverage proving `/api/readiness` fails production when optional S3, Stripe, or MQTT settings are partially or invalidly configured.
+  - Extend the live production readiness checker to mirror deploy doctor dependency configuration validation without exposing secret values.
+  - Document the live dependency readiness gate in README, operations, and production-readiness docs.
+  - Run targeted readiness tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 51 repo inspection started at 2026-06-25T10:26:05Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API readiness code, deploy doctor checks, object storage health, and existing readiness tests before editing.
+  - Selected production-readiness slice: live `/api/readiness` dependency configuration gate for production S3, Stripe, and MQTT settings.
+  - Added regression coverage for incomplete optional dependency configuration in production readiness.
+  - Targeted dependency readiness test failed before implementation as expected: `npm run test -- api/server.test.mjs -t "incomplete optional dependency configuration"` (missing `production-dependencies` check).
+  - Added production dependency validation for DB adapter, S3 object storage, Stripe billing, and MQTT event streaming configuration without exposing secret values.
+  - Targeted dependency readiness test passed: `npm run test -- api/server.test.mjs -t "incomplete optional dependency configuration"` (1 test).
+  - Targeted readiness/health/integrity tests passed: `npm run test -- api/server.test.mjs -t "readiness|health|integrity"` (7 tests).
+  - Documented live optional dependency readiness validation in README, operations, and production-readiness docs.
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (115 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 133 tests passed).
+  - Committed round 51 implementation as `4a82481` (`feat: add production dependency readiness gate`).
   - Round 50 repo inspection started at 2026-06-25T10:10:49Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, API route allowlist, inventory/maintenance routes, and existing tests before editing.
   - Selected production-readiness slice: idempotent spool metadata and maintenance job updates for retry-safe operator workflows.

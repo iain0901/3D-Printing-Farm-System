@@ -100,6 +100,7 @@
   - `a48fdb5` `feat: add idempotent inventory maintenance updates`
   - `e752bbb` `docs: record codex round 50 status`
   - Current `HEAD` `docs: record codex round 50 push`
+  - `4a82481` `feat: add production dependency readiness gate`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -258,6 +259,10 @@
   - Round 49 targeted `npm run test -- api/server.test.mjs -t "production Owner and Admin sessions"`: passed, 1 test passed.
   - Round 49 targeted `npm run test -- api/server.test.mjs`: passed, 112 tests passed.
   - Round 49 final `npm run qc`: passed, build passed, Vitest 10 files / 130 tests passed.
+  - Round 51 targeted `npm run test -- api/server.test.mjs -t "incomplete optional dependency configuration"`: failed before implementation, then passed, 1 test passed.
+  - Round 51 targeted `npm run test -- api/server.test.mjs -t "readiness|health|integrity"`: passed, 7 tests passed.
+  - Round 51 targeted `npm run test -- api/server.test.mjs`: passed, 115 tests passed.
+  - Round 51 final `npm run qc`: passed, build passed, Vitest 10 files / 133 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs -t "spool metadata updates|maintenance job updates"`: failed before implementation, then passed, 2 tests passed.
   - Round 50 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs`: passed, 114 tests passed.
@@ -422,6 +427,8 @@
 - Added idempotent replay/conflict protection for spool metadata updates and maintenance job updates so dropped operator/browser responses do not create duplicate `spool.updated` or `maintenance.updated` audit events.
 - Wired the built-in spool metadata and maintenance job update controls to generate stable per-attempt browser `Idempotency-Key` headers until success.
 - Added regression coverage proving spool metadata and maintenance job update retries replay the original response and conflicting retry bodies return `409`, and documented the retry contract in README, operations, and production-readiness docs.
+- Added a live `NODE_ENV=production` `/api/readiness` dependency gate that validates DB adapter, S3 object storage, Stripe billing, and MQTT event-stream configuration consistency without exposing secret values.
+- Added regression coverage proving incomplete optional production dependency configuration fails readiness, and documented the live gate in README, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -429,6 +436,7 @@
 - Go-live still requires completing `docs/PRODUCTION_READINESS.md` on the actual VPS/customer environment.
 - Hardware bridge validation must be performed against the real printer fleet.
 - Optional production services such as Stripe, S3, MQTT, commerce feeds, and external slicer remain customer-environment dependent.
+- Live production readiness now fails when configured S3, Stripe, or MQTT integrations are incomplete or malformed; operators must either complete those settings or leave the optional integration disabled before go-live.
 - Frontend bundle size warning remains from the existing single-bundle app; it does not fail QC.
 - Idempotency coverage is route-specific; token- or secret-returning replay records are intentionally retained only in internal server metadata and omitted from shared state/admin exports.
 - Session expiry policy should be reviewed against the customer's shared-device operating model before go-live.
