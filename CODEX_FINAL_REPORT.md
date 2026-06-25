@@ -78,6 +78,8 @@
   - `f8d7c26` `docs: record codex round 43 status`
   - Current `HEAD` `docs: record codex round 43 push`
   - `ba282c8` `feat: add idempotent admin account writes`
+  - `6bff247` `docs: record codex round 44 status`
+  - Current `HEAD` `docs: record codex round 44 push`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
