@@ -62,6 +62,7 @@
   - `5ed0f18` `feat: add idempotent spool label exports`
   - `3787b48` `feat: add governance audit context`
   - `4800365` `feat: add idempotent configuration writes`
+  - `df83599` `feat: add idempotent catalog governance writes`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -166,6 +167,11 @@
   - Round 36 targeted `npm run test -- api/server.test.mjs -t "printer capability writes"`: failed before implementation, then passed, 1 test passed.
   - Round 36 targeted `npm run test -- api/server.test.mjs`: passed, 101 tests passed.
   - Round 36 final `npm run qc`: passed, build passed, Vitest 10 files / 118 tests passed.
+  - Round 37 targeted `npm run test -- api/server.test.mjs -t "catalog governance"`: failed before implementation, then passed, 1 test passed.
+  - Round 37 targeted `npm run test -- api/server.test.mjs -t "cost catalog"`: passed, 1 test passed.
+  - Round 37 targeted `npm run test -- api/server.test.mjs -t "catalog records"`: passed, 1 test passed.
+  - Round 37 targeted `npm run test -- api/server.test.mjs`: passed, 102 tests passed.
+  - Round 37 final `npm run qc`: passed, build passed, Vitest 10 files / 119 tests passed.
 
 ## Completed Features
 
@@ -284,6 +290,9 @@
 - Added idempotent replay/conflict protection for catalog/profile/printer configuration writes covering parts, SKUs, production templates, slicer profiles/imports/defaults/policy/archive, and printer capability create/update routes.
 - Added regression coverage proving configuration retries replay the original response without duplicate setup records or duplicate setup audit events, and conflicting retry bodies return `409`.
 - Documented configuration-write `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for cost catalog updates and catalog material-map runs.
+- Scoped material mapping to the authenticated workspace and added workspace/authenticated actor context to `catalog.material_mapped` audit events.
+- Added regression coverage proving catalog governance retries replay without duplicate pricing/material-normalization audit or run records, and documented the new retry contract.
 
 ## Remaining Blockers
 
@@ -317,6 +326,7 @@
 - Queue matching idempotency now protects committed production assignment retries from duplicate audit events; clients still need stable per-attempt keys when operators retry queue matching commits.
 - History reprint idempotency now protects operator reprint retries from duplicate queue jobs, generated todos, and audit events; clients still need stable per-attempt keys when retrying history reprint actions.
 - Catalog/profile/printer configuration idempotency now protects setup retries from duplicate setup records and duplicate setup audit events; clients still need stable per-attempt keys when retrying configuration writes.
+- Cost catalog and material-map idempotency now protects catalog governance retries from duplicate pricing/material-normalization audit or run records; clients still need stable per-attempt keys when retrying those governance writes.
 - Idempotency replay records are intentionally omitted from shared state and admin exports; retry clients should use fresh keys after workspace export/restore rather than expecting replay cache continuity.
 - Audit context now covers the highest-impact production scheduling/queue/bridge/file-version operator actions; remaining lower-risk direct event writes should be migrated only with route-specific delivery and notification review.
 - Ops-check authenticated verification requires valid Owner/Admin credentials or a dedicated smoke account configured in `.env`; otherwise it warns and continues with unauthenticated host checks.

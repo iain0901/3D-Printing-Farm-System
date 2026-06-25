@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 37 verified pending commit
+- Phase: round 37 committed pending push
 - Started: 2026-06-24 UTC
-- Current state: Round 37 catalog governance retry hardening is implemented and verified on `codex/production-saas-completion-20260624`; commit/push is pending.
+- Current state: Round 37 catalog governance retry hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`; push is pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 96 tests passed)
 - Current plan:
   - Add regression coverage for retry-safe cost catalog updates and material-map runs.
@@ -23,6 +23,7 @@
   - Targeted catalog/pricing tests passed: `npm run test -- api/server.test.mjs -t "cost catalog"`, `npm run test -- api/server.test.mjs -t "catalog records"`, and `npm run test -- api/server.test.mjs -t "catalog governance"` (3 tests total).
   - Targeted API suite passed: `npm run test -- api/server.test.mjs` (102 tests).
   - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 119 tests passed).
+  - Committed round 37 implementation as `df83599` (`feat: add idempotent catalog governance writes`).
   - Round 36 repo inspection started at 2026-06-25T07:38:37Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: idempotent catalog/profile/printer configuration writes to prevent duplicate setup records and audit events after operator/browser retries.
