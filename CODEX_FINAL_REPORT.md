@@ -55,6 +55,7 @@
   - Current `HEAD` `feat: add idempotent queue matching`
   - `754a7ff` `feat: add idempotent history reprints`
   - Current `HEAD` `docs: record codex round 31 push`
+  - Current `HEAD` `feat: add idempotent integration test deliveries`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -142,6 +143,9 @@
   - Round 31 targeted `npm run test -- api/server.test.mjs -t "history reprints"`: failed before implementation, then passed, 1 test passed.
   - Round 31 targeted `npm run test -- api/server.test.mjs`: passed, 94 tests passed.
   - Round 31 final `npm run qc`: passed, build passed, Vitest 10 files / 111 tests passed.
+  - Round 32 targeted `npm run test -- api/server.test.mjs -t "integration test deliveries"`: failed before implementation, then passed, 1 test passed.
+  - Round 32 targeted `npm run test -- api/server.test.mjs`: passed, 95 tests passed.
+  - Round 32 final `npm run qc`: passed, build passed, Vitest 10 files / 112 tests passed.
 
 ## Completed Features
 
@@ -218,6 +222,9 @@
 - Added idempotent replay/conflict protection for maintenance job creation, maintenance template saves, and maintenance problem-report intake.
 - Added regression coverage proving maintenance retries replay without duplicate maintenance jobs, duplicate templates/update events, duplicate reports, or duplicate linked jobs.
 - Documented maintenance `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for webhook and notification channel test-delivery retries.
+- Added regression coverage proving test-delivery retries replay without duplicate external calls, test events, or delivery logs.
+- Documented webhook and notification test `Idempotency-Key` usage in README, operations, and production-readiness docs.
 - Added idempotent replay/conflict protection for admin audit-retention runs.
 - Added regression coverage proving audit-retention retries replay without duplicate `admin.audit_retention_run` events while still pruning stale audit entries and preserving protected restore events.
 - Documented audit-retention `Idempotency-Key` usage in README, operations, and production-readiness docs.

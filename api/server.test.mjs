@@ -4187,6 +4187,91 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent integration test deliveries without duplicate outbound calls", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const originalFetch = global.fetch;
+      const calls = [];
+      global.fetch = async (url, init) => {
+        calls.push({ url: String(url), init, body: JSON.parse(init.body) });
+        return { ok: true, status: 202, text: async () => "accepted" };
+      };
+      try {
+        const token = await login(app);
+        const hook = await app.inject({
+          method: "POST",
+          url: "/api/webhooks",
+          headers: auth(token),
+          payload: { name: "Retry webhook", url: "https://automation.test/retry-webhook", events: ["order.status"], enabled: true }
+        });
+        expect(hook.statusCode).toBe(201);
+
+        const webhookHeaders = { ...auth(token), "idempotency-key": "webhook-test-retry-001" };
+        const firstWebhookTest = await app.inject({
+          method: "POST",
+          url: `/api/webhooks/${hook.json().id}/test`,
+          headers: webhookHeaders,
+          payload: {}
+        });
+        expect(firstWebhookTest.statusCode).toBe(200);
+
+        const replayWebhookTest = await app.inject({
+          method: "POST",
+          url: `/api/webhooks/${hook.json().id}/test`,
+          headers: webhookHeaders,
+          payload: {}
+        });
+        expect(replayWebhookTest.statusCode).toBe(200);
+        expect(replayWebhookTest.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+        expect(replayWebhookTest.json()).toEqual(firstWebhookTest.json());
+
+        const channel = await app.inject({
+          method: "POST",
+          url: "/api/notificationChannels",
+          headers: auth(token),
+          payload: { name: "Retry notification", type: "slack", url: "https://hooks.slack.test/retry", token: "secret-token", events: ["order.status"], enabled: true, recipients: [] }
+        });
+        expect(channel.statusCode).toBe(201);
+
+        const notificationHeaders = { ...auth(token), "idempotency-key": "notification-test-retry-001" };
+        const firstNotificationTest = await app.inject({
+          method: "POST",
+          url: `/api/notificationChannels/${channel.json().id}/test`,
+          headers: notificationHeaders,
+          payload: {}
+        });
+        expect(firstNotificationTest.statusCode).toBe(200);
+
+        const replayNotificationTest = await app.inject({
+          method: "POST",
+          url: `/api/notificationChannels/${channel.json().id}/test`,
+          headers: notificationHeaders,
+          payload: {}
+        });
+        expect(replayNotificationTest.statusCode).toBe(200);
+        expect(replayNotificationTest.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+        expect(replayNotificationTest.json()).toEqual(firstNotificationTest.json());
+
+        const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+        expect(calls.map((call) => call.url)).toEqual(["https://automation.test/retry-webhook", "https://hooks.slack.test/retry"]);
+        expect(persisted.events.filter((event) => event.type === "webhook.test")).toHaveLength(1);
+        expect(persisted.events.filter((event) => event.type === "notification.test")).toHaveLength(1);
+        expect(persisted.webhookDeliveries.filter((delivery) => delivery.webhookId === hook.json().id && delivery.eventType === "webhook.test")).toHaveLength(1);
+        expect(persisted.notificationDeliveries.filter((delivery) => delivery.channelId === channel.json().id && delivery.eventType === "notification.test")).toHaveLength(1);
+
+        const conflict = await app.inject({
+          method: "POST",
+          url: `/api/webhooks/${hook.json().id}/test`,
+          headers: webhookHeaders,
+          payload: { note: "different payload" }
+        });
+        expect(conflict.statusCode).toBe(409);
+        expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+      } finally {
+        global.fetch = originalFetch;
+      }
+    });
+  });
+
   it("updates printer status with enum validation", async () => {
     await withApp(async ({ app }) => {
       const token = await login(app);
