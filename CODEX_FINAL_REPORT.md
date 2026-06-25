@@ -53,6 +53,7 @@
   - Current `HEAD` `feat: add idempotent scheduler writes`
   - Current `HEAD` `feat: add idempotent quote updates`
   - Current `HEAD` `feat: add idempotent queue matching`
+  - Current `HEAD` `feat: add idempotent history reprints`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -137,6 +138,9 @@
   - Round 30 targeted `npm run test -- api/server.test.mjs -t "queue matching commits"`: failed before implementation, then passed, 1 test passed.
   - Round 30 targeted `npm run test -- api/server.test.mjs`: passed, 93 tests passed.
   - Round 30 final `npm run qc`: passed, build passed, Vitest 10 files / 110 tests passed.
+  - Round 31 targeted `npm run test -- api/server.test.mjs -t "history reprints"`: failed before implementation, then passed, 1 test passed.
+  - Round 31 targeted `npm run test -- api/server.test.mjs`: passed, 94 tests passed.
+  - Round 31 final `npm run qc`: passed, build passed, Vitest 10 files / 111 tests passed.
 
 ## Completed Features
 
@@ -237,6 +241,9 @@
 - Added idempotent replay/conflict protection for committed production queue matching.
 - Added regression coverage proving queue-match retries replay the original assignment response without duplicate `queue.matched` audit events, and conflicting retry bodies return `409`.
 - Documented queue matching `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for print-history reprint retries.
+- Added regression coverage proving history reprint retries replay the original queued job response without duplicate reprint queue jobs, todos, or `queue.reprint` audit events, and conflicting retry bodies return `409`.
+- Documented history reprint `Idempotency-Key` usage in README, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -268,6 +275,7 @@
 - Scheduler idempotency now protects auto/optimize/constraint retries from duplicate audit events; clients still need stable per-attempt keys when operators retry scheduler automation.
 - Quote update idempotency now protects authenticated operator quote-review retries from duplicate audit events; clients still need stable per-attempt keys when operators retry quote updates.
 - Queue matching idempotency now protects committed production assignment retries from duplicate audit events; clients still need stable per-attempt keys when operators retry queue matching commits.
+- History reprint idempotency now protects operator reprint retries from duplicate queue jobs, generated todos, and audit events; clients still need stable per-attempt keys when retrying history reprint actions.
 - Idempotency replay records are intentionally omitted from shared state and admin exports; retry clients should use fresh keys after workspace export/restore rather than expecting replay cache continuity.
 - Audit context now covers the highest-impact production scheduling/queue/bridge/file-version operator actions; remaining lower-risk direct event writes should be migrated only with route-specific delivery and notification review.
 - Ops-check authenticated verification requires valid Owner/Admin credentials or a dedicated smoke account configured in `.env`; otherwise it warns and continues with unauthenticated host checks.

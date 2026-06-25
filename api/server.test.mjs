@@ -4436,6 +4436,53 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent history reprints without creating duplicate queue jobs", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      await app.inject({ method: "POST", url: "/api/telemetry/tick", headers: auth(token), payload: { increment: 100 } });
+
+      const headers = { ...auth(token), "idempotency-key": "history-reprint-retry-001" };
+      const payload = { due: "Tomorrow 09:00", priority: "High", printerId: "p2" };
+      const first = await app.inject({
+        method: "POST",
+        url: "/api/history/q1/reprint",
+        headers,
+        payload
+      });
+      expect(first.statusCode).toBe(201);
+      const firstJobId = first.json().job.id;
+
+      const replay = await app.inject({
+        method: "POST",
+        url: "/api/history/q1/reprint",
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(201);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json().job.id).toBe(firstJobId);
+      expect(replay.json().todos.some((todo) => todo.id === `${firstJobId}-schedule`)).toBe(true);
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/history/q1/reprint",
+        headers,
+        payload: { ...payload, printerId: "p1" }
+      });
+      expect(conflict.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.queue.filter((job) => job.sourceJobId === "q1")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "queue.reprint" && event.data.sourceJobId === "q1")).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "history-reprint-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/history/q1/reprint",
+        statusCode: 201,
+        replayCount: 1
+      });
+    });
+  });
+
   it("previews and commits sanitized workspace restores", async () => {
     await withApp(async ({ app, db, dbPath }) => {
       const token = await login(app);

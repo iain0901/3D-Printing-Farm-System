@@ -1,16 +1,26 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 30 committed
+- Phase: round 31 committed
 - Started: 2026-06-24 UTC
-- Current state: Round 30 queue matching idempotency hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`.
+- Current state: Round 31 history reprint idempotency hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`; push pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 96 tests passed)
 - Current plan:
-  - Add persisted idempotency replay/conflict protection for committed production queue matching retries.
-  - Cover retries so dropped operator responses do not duplicate queue-match assignment audit events.
-  - Document supported queue matching idempotency, run targeted tests and full QC, then commit and push.
+  - Add persisted idempotency replay/conflict protection for print-history reprint retries.
+  - Cover retries so dropped operator responses do not create duplicate reprint queue jobs, todos, or audit events.
+  - Document supported history reprint idempotency, run targeted tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 31 repo inspection started at 2026-06-25T06:51:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent print-history reprint retries to prevent duplicate queue jobs after operator/browser retries.
+  - Added failing regression coverage proving history reprint retries need replay semantics to avoid duplicate reprint queue jobs, todos, and audit events.
+  - Added `/api/history/:id/reprint` to the persisted `Idempotency-Key` allowlist.
+  - Documented history reprint idempotency in README, operations, and production-readiness docs.
+  - Targeted history reprint idempotency test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "history reprints"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (94 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 111 tests passed).
+  - Committed round 31 implementation (`feat: add idempotent history reprints`).
   - Round 30 repo inspection started at 2026-06-25T06:37:16Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: idempotent committed queue matching to prevent duplicate production assignment audit events after operator/browser retries.
