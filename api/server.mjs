@@ -3352,6 +3352,37 @@ const productionDefaultSecretValues = new Map([
   ["LAYERPILOT_METRICS_TOKEN", "change-this-metrics-token"]
 ]);
 
+function productionDependencyConfigIssues(env = process.env) {
+  const issues = [];
+  const dbAdapter = String(env.LAYERPILOT_DB_ADAPTER || "json").trim();
+  if (!["json", "sqlite"].includes(dbAdapter)) issues.push("LAYERPILOT_DB_ADAPTER must be json or sqlite");
+
+  const storageProvider = String(env.LAYERPILOT_OBJECT_STORAGE_PROVIDER || "local").trim().toLowerCase();
+  if (!["local", "s3"].includes(storageProvider)) {
+    issues.push("LAYERPILOT_OBJECT_STORAGE_PROVIDER must be local or s3");
+  } else if (storageProvider === "s3") {
+    for (const key of ["LAYERPILOT_S3_BUCKET", "LAYERPILOT_S3_REGION", "LAYERPILOT_S3_ACCESS_KEY_ID", "LAYERPILOT_S3_SECRET_ACCESS_KEY"]) {
+      if (!String(env[key] || "").trim()) issues.push(`Missing ${key}`);
+    }
+  }
+
+  if (String(env.LAYERPILOT_STRIPE_SECRET_KEY || "").trim() || String(env.LAYERPILOT_STRIPE_WEBHOOK_SECRET || "").trim()) {
+    for (const key of ["LAYERPILOT_STRIPE_SECRET_KEY", "LAYERPILOT_STRIPE_WEBHOOK_SECRET", "LAYERPILOT_STRIPE_PRICE_STUDIO", "LAYERPILOT_STRIPE_PRICE_FARM", "LAYERPILOT_STRIPE_PRICE_ENTERPRISE"]) {
+      if (!String(env[key] || "").trim()) issues.push(`Missing ${key}`);
+    }
+  }
+
+  if (String(env.LAYERPILOT_MQTT_URL || "").trim()) {
+    if (!/^mqtts?:\/\//.test(String(env.LAYERPILOT_MQTT_URL || ""))) issues.push("LAYERPILOT_MQTT_URL must start with mqtt:// or mqtts://");
+    const qos = String(env.LAYERPILOT_MQTT_QOS || "0").trim();
+    if (!["0", "1", "2"].includes(qos)) issues.push("LAYERPILOT_MQTT_QOS must be 0, 1, or 2");
+    const retain = String(env.LAYERPILOT_MQTT_RETAIN || "false").trim();
+    if (!["true", "false"].includes(retain)) issues.push("LAYERPILOT_MQTT_RETAIN must be true or false");
+  }
+
+  return issues;
+}
+
 function productionReadinessConfigChecks(data, env = process.env) {
   if (env.NODE_ENV !== "production") return [];
   const checks = [];
@@ -3392,6 +3423,13 @@ function productionReadinessConfigChecks(data, env = process.env) {
     name: "production-default-access",
     ok: defaultUserIssues.length === 0,
     detail: defaultUserIssues.length ? defaultUserIssues.join("; ") : "default and demo access disabled"
+  });
+
+  const dependencyIssues = productionDependencyConfigIssues(env);
+  checks.push({
+    name: "production-dependencies",
+    ok: dependencyIssues.length === 0,
+    detail: dependencyIssues.length ? dependencyIssues.join("; ") : "optional dependency configuration is consistent"
   });
   return checks;
 }

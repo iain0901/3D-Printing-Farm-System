@@ -10,7 +10,7 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 - [ ] `LAYERPILOT_DISABLE_DEFAULT_USERS=true` and `LAYERPILOT_DISABLE_DEMO_LOGIN=true` are set for customer production.
 - [ ] `LAYERPILOT_WORKER_TOKEN` and `LAYERPILOT_METRICS_TOKEN` are unique strong values.
 - [ ] `.env` is not committed and is readable only by the deployment user.
-- [ ] `/api/readiness` reports `ok: true`; in `NODE_ENV=production`, this also verifies required owner credentials, strong non-default worker/metrics tokens, and disabled default/demo access.
+- [ ] `/api/readiness` reports `ok: true`; in `NODE_ENV=production`, this also verifies required owner credentials, strong non-default worker/metrics tokens, disabled default/demo access, and consistent optional S3, Stripe, and MQTT dependency configuration.
 - [ ] `npm run smoke:prod` passes against the live URL.
 - [ ] `scripts/ubuntu-deploy.sh ops-check` passes with authenticated state, audit, and metrics checks enabled through `LAYERPILOT_OPS_EMAIL`/`LAYERPILOT_OPS_PASSWORD` or the bootstrap admin credentials.
 
@@ -44,6 +44,7 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 
 - [ ] Persistent data is stored in the Docker volume or configured database path.
 - [ ] Local uploaded model storage or S3-compatible storage is configured intentionally.
+- [ ] If S3 object storage is enabled, live `/api/readiness` passes with bucket, region, access key, and secret key configured.
 - [ ] `scripts/ubuntu-backup.sh backup` creates a verified archive.
 - [ ] `scripts/ubuntu-backup.sh restore-drill <archive>` succeeds without touching production data.
 - [ ] `/api/admin/restore` dry-run automation is scoped with `admin:restore`, and destructive restore commits are performed only from a logged-in Owner/Admin session.
@@ -60,6 +61,7 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 - [ ] WebSocket and SSE proxy headers are configured.
 - [ ] `layerpilot-ops-check.timer` is enabled or an equivalent monitor is configured.
 - [ ] `/api/metrics` is scraped with a metrics token or scoped API key.
+- [ ] If Stripe billing or MQTT event streaming is enabled, live `/api/readiness` passes with complete Stripe secret/webhook/price IDs and valid MQTT URL/QoS/retain settings.
 - [ ] Disk free space is monitored for the data volume and backup destination.
 - [ ] Support bundle and API support snapshot generation are tested and reviewed for redaction; snapshots preserve endpoint hosts but remove secret-like fields and URL paths/query strings.
 

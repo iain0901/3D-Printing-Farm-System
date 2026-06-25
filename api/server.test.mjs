@@ -278,6 +278,49 @@ describe("3DSTU FarmFlow API", () => {
     });
   });
 
+  it("fails production readiness for incomplete optional dependency configuration", async () => {
+    const productionEnv = {
+      NODE_ENV: "production",
+      LAYERPILOT_ADMIN_EMAIL: "owner@example.com",
+      LAYERPILOT_ADMIN_PASSWORD: "production-owner-password",
+      LAYERPILOT_WORKER_TOKEN: "worker-token-32-characters-minimum",
+      LAYERPILOT_METRICS_TOKEN: "metrics-token-32-characters-minimum",
+      LAYERPILOT_DISABLE_DEFAULT_USERS: "true",
+      LAYERPILOT_DISABLE_DEMO_LOGIN: "true",
+      LAYERPILOT_OBJECT_STORAGE_PROVIDER: "s3",
+      LAYERPILOT_S3_BUCKET: "layerpilot-production",
+      LAYERPILOT_S3_REGION: "",
+      LAYERPILOT_S3_ACCESS_KEY_ID: "s3-access-key",
+      LAYERPILOT_S3_SECRET_ACCESS_KEY: "",
+      LAYERPILOT_STRIPE_SECRET_KEY: "sk_test_configured",
+      LAYERPILOT_STRIPE_WEBHOOK_SECRET: "",
+      LAYERPILOT_STRIPE_PRICE_STUDIO: "price_studio",
+      LAYERPILOT_STRIPE_PRICE_FARM: "",
+      LAYERPILOT_STRIPE_PRICE_ENTERPRISE: "price_enterprise",
+      LAYERPILOT_MQTT_URL: "http://broker.example.com",
+      LAYERPILOT_MQTT_QOS: "9",
+      LAYERPILOT_MQTT_RETAIN: "maybe"
+    };
+    await withEnv(productionEnv, async () => {
+      await withApp(async ({ app }) => {
+        const readiness = await app.inject({ method: "GET", url: "/api/readiness" });
+        expect(readiness.statusCode).toBe(503);
+        const checks = readiness.json().checks;
+        expect(checks).toEqual(expect.arrayContaining([
+          expect.objectContaining({ name: "production-dependencies", ok: false })
+        ]));
+        const detail = checks.find((check) => check.name === "production-dependencies").detail;
+        expect(detail).toContain("Missing LAYERPILOT_S3_REGION");
+        expect(detail).toContain("Missing LAYERPILOT_S3_SECRET_ACCESS_KEY");
+        expect(detail).toContain("Missing LAYERPILOT_STRIPE_WEBHOOK_SECRET");
+        expect(detail).toContain("Missing LAYERPILOT_STRIPE_PRICE_FARM");
+        expect(detail).toContain("LAYERPILOT_MQTT_URL must start with mqtt:// or mqtts://");
+        expect(detail).toContain("LAYERPILOT_MQTT_QOS must be 0, 1, or 2");
+        expect(detail).toContain("LAYERPILOT_MQTT_RETAIN must be true or false");
+      }, { objectStorageAdapter: createFakeS3Storage() });
+    });
+  });
+
   it("replays idempotent mutating requests and rejects key reuse with a different body", async () => {
     await withApp(async ({ app, db }) => {
       const token = await login(app);

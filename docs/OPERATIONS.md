@@ -10,7 +10,7 @@ This runbook covers routine production operation for a 3DSTU FarmFlow VPS.
 - Review failed webhook, notification, MQTT, commerce, and bridge delivery logs.
 - Resolve generated todos for slicing, scheduling, material, maintenance, and exceptions.
 
-In `NODE_ENV=production`, `/api/readiness` is a deployment gate, not just a liveness check. It fails if required owner credentials or worker/metrics tokens are missing, if documented default secrets are still in use, if production token/password minimum lengths are not met, or if default/demo access is still enabled.
+In `NODE_ENV=production`, `/api/readiness` is a deployment gate, not just a liveness check. It fails if required owner credentials or worker/metrics tokens are missing, if documented default secrets are still in use, if production token/password minimum lengths are not met, or if default/demo access is still enabled. It also validates live optional dependency configuration: S3 object storage must include bucket, region, access key, and secret key when enabled; Stripe billing must include the secret, webhook secret, and all plan price IDs when Stripe is configured; MQTT must use an `mqtt://` or `mqtts://` URL with QoS `0`, `1`, or `2` and a boolean retain flag.
 
 `scripts/ubuntu-deploy.sh ops-check` also runs an authenticated API check when credentials are available from `.env`. It verifies login, `/api/state`, `/api/audit`, and `/api/metrics` when `LAYERPILOT_METRICS_TOKEN` is configured. Set `LAYERPILOT_OPS_EMAIL` and `LAYERPILOT_OPS_PASSWORD` to use a dedicated Owner/Admin smoke account; otherwise it falls back to the bootstrap admin credentials.
 
