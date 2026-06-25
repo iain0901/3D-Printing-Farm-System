@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 66 in progress
+- Phase: round 66 committed; push pending
 - Started: 2026-06-24 UTC
-- Current state: Round 66 ops token transport hardening is implemented and verified on `codex/production-saas-completion-20260624`; commit and push are pending.
+- Current state: Round 66 ops token transport hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`; push is pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
   - Add regression coverage proving production `/api/metrics` and `/api/internal/worker-broadcast` reject token query parameters and accept only header tokens.
@@ -23,6 +23,7 @@
   - Full API suite passed: `npm run test -- api/server.test.mjs` (124 tests).
   - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 142 tests passed).
   - Updated final report with round 66 scope, verification, completed feature, and residual production token transport note.
+  - Committed round 66 implementation as `1473a72` (`feat: require header ops tokens in production`).
   - Round 65 repo inspection started at 2026-06-25T13:04:30Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, idempotency matcher, mutating API routes, telemetry tick handler, and existing telemetry tests before editing.
   - Selected production-readiness slice: idempotent authenticated telemetry ticks so dropped API responses cannot double-advance production progress or completion side effects.
