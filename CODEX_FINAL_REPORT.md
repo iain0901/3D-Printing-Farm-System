@@ -140,7 +140,12 @@
   - `07c77ea` `feat: gate readiness on worker freshness`
   - `0a3226e` `docs: record codex round 67 status`
   - `e986278` `feat: validate api key ip allowlists`
+  - Current `HEAD` `feat: scope audit retention by workspace`
 - QC result:
+  - Round 69 targeted `npm run test -- api/server.test.mjs -t "audit retention"`: failed before implementation, then passed, 2 tests passed.
+  - Round 69 targeted `npm run test -- api/server.test.mjs -t "audit"`: passed, 14 tests passed.
+  - Round 69 full API `npm run test -- api/server.test.mjs`: passed, 126 tests passed.
+  - Round 69 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 144 tests passed.
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
   - Final pre-commit `npm run qc`: passed, build passed, Vitest 9 files / 80 tests passed.
@@ -582,6 +587,8 @@
 - Added regression coverage for missing, stale, and fresh worker heartbeat readiness outcomes, and documented the gate in README, install, operations, and production-readiness docs.
 - Added strict workspace API-key IP allowlist validation for IPv4 addresses and IPv4 CIDR ranges, rejecting invalid or empty enabled allowlists at settings write time.
 - Added a production `/api/readiness` gate for persisted invalid or empty API-key IP allowlists, plus regression coverage and README/install/operations/production-readiness/deploy documentation.
+- Scoped manual audit-retention runs to the authenticated workspace and that workspace's retention settings, so a tenant/operator cannot prune another workspace's non-protected audit evidence.
+- Added regression coverage for cross-workspace audit-retention preservation and documented the tenant-scoped retention contract in README, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -615,6 +622,7 @@
 - Inventory idempotency now protects spool creation, metadata updates, label export, usage logging, and scan-based usage/location retries; broader inventory write coverage should still be added only after route-specific replay and response review.
 - Maintenance idempotency now protects job creation, job updates, template saves, and problem-report intake retries; broader maintenance write coverage should still be added only after route-specific replay and response review.
 - Audit-retention run idempotency now protects retry-prone governance cleanup runs; broader admin write coverage should still be added only after route-specific replay and response review.
+- Audit-retention pruning is now workspace-scoped, but operators still need to review each workspace's retention policy against customer compliance requirements before enabling aggressive retention windows.
 - Billing idempotency now protects plan-change and portal-session retries; Stripe webhooks now verify direct `Stripe-Signature` deliveries or the trusted-proxy shared-secret fallback rather than client `Idempotency-Key` headers.
 - Printer action idempotency now protects `/api/actions` retries before bridge dispatch; real hardware validation is still required against the customer's printer fleet before go-live.
 - Direct printer status idempotency now protects manual status update retries from duplicate `printer.status` audit events; real hardware status correctness still depends on bridge validation against the customer's printer fleet.

@@ -1,17 +1,27 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 68 committed and pushed
+- Phase: round 69 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 68 workspace API allowlist validation/readiness hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 69 workspace-scoped audit retention hardening is implemented and verified; commit/push pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage proving workspace API-key IP allowlists reject invalid rules and production readiness fails when persisted allowlist configuration is empty or invalid.
-  - Implement strict IPv4/CIDR validation for `allowedApiIps` and a production readiness gate for enabled API IP restrictions.
-  - Document the API-key allowlist deployment gate in README, operations, and production-readiness docs.
-  - Run targeted readiness/settings tests and full QC, then commit and push.
+  - Add regression coverage proving audit-retention runs only prune the caller workspace's non-protected events.
+  - Implement workspace-scoped audit retention using the caller workspace settings instead of global/default settings.
+  - Document the workspace-scoped retention behavior for operators and production readiness.
+  - Run targeted audit-retention tests, full API tests, and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 69 repo inspection started at 2026-06-25T13:54:56Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route list, readiness/auth/admin/audit code, and existing audit/restore tests before editing.
+  - Selected production-readiness slice: workspace-scoped audit-retention safety so one tenant/operator cannot prune another workspace's audit evidence.
+  - Added regression coverage proving an audit-retention run from the default workspace prunes only default-workspace stale non-protected events and leaves another workspace's stale event intact.
+  - Targeted audit-retention regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "audit retention"` (retention pruned 2 events instead of 1).
+  - Implemented workspace-scoped audit retention using the authenticated workspace ID and workspace settings, with summary counts scoped to that workspace.
+  - Targeted audit-retention coverage passed: `npm run test -- api/server.test.mjs -t "audit retention"` (2 tests).
+  - Broader targeted audit coverage passed: `npm run test -- api/server.test.mjs -t "audit"` (14 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (126 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 144 tests passed).
   - Round 68 repo inspection started at 2026-06-25T13:39:37Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, readiness/auth/IP allowlist code, route list, and existing readiness/settings tests before editing.
   - Selected production-readiness slice: workspace API-key IP allowlist validation and readiness gate so production cannot silently deploy invalid or empty automation network restrictions.

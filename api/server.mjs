@@ -2528,22 +2528,27 @@ function auditRetentionDays(settings = {}) {
 
 function applyAuditRetention(data, options = {}) {
   data.events ||= [];
-  const settings = workspaceSettingsSchema.parse(data.workspaceSettings || {});
+  const workspaceId = options.workspaceId || data.workspaceSettings?.workspaceId || DEFAULT_WORKSPACE_ID;
+  const workspace = workspaceForId(data, workspaceId);
+  const settings = workspaceSettingsSchema.parse(options.settings || workspace?.settings || data.workspaceSettings || {});
   const enabled = settings.auditLogRetention !== false;
   const days = auditRetentionDays(settings);
   const nowMs = options.now ? new Date(options.now).getTime() : Date.now();
   const referenceMs = Number.isFinite(nowMs) ? nowMs : Date.now();
   const cutoffMs = referenceMs - days * 24 * 60 * 60 * 1000;
   const cutoff = new Date(cutoffMs).toISOString();
-  const before = data.events.length;
+  const belongsToWorkspace = (event) => itemInWorkspace(normalizeAuditEvent(event), workspace.id);
+  const before = data.events.filter(belongsToWorkspace).length;
   if (!enabled) return { enabled, days, cutoff, before, pruned: 0, kept: before };
   data.events = data.events.filter((event) => {
+    if (!belongsToWorkspace(event)) return true;
     if (auditRetentionProtectedTypes.has(String(event.type || ""))) return true;
     const eventMs = new Date(event.at || 0).getTime();
     if (!Number.isFinite(eventMs)) return true;
     return eventMs >= cutoffMs;
   });
-  return { enabled, days, cutoff, before, pruned: before - data.events.length, kept: data.events.length };
+  const kept = data.events.filter(belongsToWorkspace).length;
+  return { enabled, days, cutoff, before, pruned: before - kept, kept, workspaceId: workspace.id };
 }
 
 function buildAuditEvents(data, options = {}) {
@@ -6246,7 +6251,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
 
   app.post("/api/admin/audit-retention/run", { config: { rateLimit: { ...sensitiveRateLimit, groupId: "admin-audit-retention" } } }, async (request, reply) => {
     if (!hasPermission(request.user, "admin:export")) return reply.code(403).send({ error: "Missing permission: admin:export" });
-    const retention = applyAuditRetention(database.data);
+    const retention = applyAuditRetention(database.data, { workspaceId: request.user.workspaceId });
     database.data.dataMeta ||= {};
     database.data.dataMeta.auditRetentionLastRunAt = new Date().toISOString();
     await dispatchEvent(database, "admin.audit_retention_run", `${request.user.email} ran audit retention`, { retention }, { actor: request.user });

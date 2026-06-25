@@ -1988,9 +1988,19 @@ describe("3DSTU FarmFlow API", () => {
       expect(updated.statusCode).toBe(200);
       expect(updated.json()).toMatchObject({ auditLogRetention: true, auditLogRetentionDays: 30 });
 
+      db.data.workspaces.push({
+        id: "ws-retention-other",
+        name: "Other Farm",
+        slug: "other-farm",
+        ownerEmail: "other@example.com",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        settings: { ...db.data.workspaceSettings, workspaceId: "ws-retention-other", organizationName: "Other Farm", auditLogRetention: true, auditLogRetentionDays: 30 }
+      });
       db.data.events.unshift(
-        { id: "old-queue-event", type: "queue.status", message: "Old queue event", data: {}, at: "2020-01-01T00:00:00.000Z" },
-        { id: "old-admin-event", type: "admin.restore", message: "Old restore event", data: {}, at: "2020-01-01T00:00:00.000Z" }
+        { id: "old-queue-event", workspaceId: "ws-default", type: "queue.status", message: "Old queue event", data: {}, at: "2020-01-01T00:00:00.000Z" },
+        { id: "old-admin-event", workspaceId: "ws-default", type: "admin.restore", message: "Old restore event", data: {}, at: "2020-01-01T00:00:00.000Z" },
+        { id: "other-workspace-event", workspaceId: "ws-retention-other", type: "queue.status", message: "Other workspace event", data: {}, at: "2020-01-01T00:00:00.000Z" }
       );
       await db.write();
 
@@ -1999,6 +2009,7 @@ describe("3DSTU FarmFlow API", () => {
       expect(run.json().retention).toMatchObject({ enabled: true, days: 30, pruned: 1 });
       expect(db.data.events.some((event) => event.id === "old-queue-event")).toBe(false);
       expect(db.data.events.some((event) => event.id === "old-admin-event")).toBe(true);
+      expect(db.data.events.some((event) => event.id === "other-workspace-event")).toBe(true);
       expect(db.data.events.some((event) => event.type === "admin.audit_retention_run")).toBe(true);
 
       const disabled = await app.inject({
@@ -2517,8 +2528,8 @@ describe("3DSTU FarmFlow API", () => {
       db.data.workspaceSettings.auditLogRetention = true;
       db.data.workspaceSettings.auditLogRetentionDays = 7;
       db.data.events.push(
-        { id: "stale-queue-event", workspaceId: "default", type: "queue.created", message: "Old queued job", at: "2020-01-01T00:00:00.000Z", data: {} },
-        { id: "protected-restore-event", workspaceId: "default", type: "admin.restore", message: "Old restore", at: "2020-01-01T00:00:00.000Z", data: {} }
+        { id: "stale-queue-event", workspaceId: "ws-default", type: "queue.created", message: "Old queued job", at: "2020-01-01T00:00:00.000Z", data: {} },
+        { id: "protected-restore-event", workspaceId: "ws-default", type: "admin.restore", message: "Old restore", at: "2020-01-01T00:00:00.000Z", data: {} }
       );
       await db.write();
       const headers = { ...auth(token), "idempotency-key": "audit-retention-retry-001" };

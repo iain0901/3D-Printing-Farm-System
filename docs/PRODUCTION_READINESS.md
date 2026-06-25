@@ -29,6 +29,7 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 - [ ] API key IP/CIDR allowlists are enabled when automation runs from fixed networks, and every rule is an explicit IPv4 address or IPv4 CIDR range; empty or invalid allowlists are rejected by settings writes and fail production readiness.
 - [ ] `/api/audit` shows login, logout, password-change, signup, and 2FA setup/enable/verify/disable events with workspace, user, actor, and session metadata where applicable, and without bearer tokens, passwords, TOTP secrets, or recovery codes.
 - [ ] `/api/audit` shows recent production/admin events with the expected workspace and operator context, including scheduling, queue, bridge, file-version, history annotation/reprint, onboarding, support snapshot, settings, billing, add-on, cost catalog, material mapping, API-key, and user-management changes; filtered audit review and CSV exports have been checked with `type`, `search`, `limit`, and `offset` so the matched count and `hasMore` metadata line up with operator evidence.
+- [ ] Audit-retention settings have been reviewed per workspace; manual retention runs prune only the authenticated workspace's non-protected events and preserve protected admin/system evidence.
 
 ## Production Workflows
 
