@@ -1116,7 +1116,10 @@ async function buildDataIntegrityReport(data, options = {}) {
 }
 
 function metricsTokenFromRequest(request) {
-  return String(request.headers["x-layerpilot-metrics-token"] || request.query?.metricsToken || request.query?.token || "").trim();
+  const headerToken = String(request.headers["x-layerpilot-metrics-token"] || "").trim();
+  if (headerToken) return headerToken;
+  if (process.env.NODE_ENV === "production") return "";
+  return String(request.query?.metricsToken || request.query?.token || "").trim();
 }
 
 function hasValidMetricsToken(request) {
@@ -1130,7 +1133,10 @@ function hasValidMetricsToken(request) {
 }
 
 function workerTokenFromRequest(request) {
-  return String(request.headers["x-layerpilot-worker-token"] || request.query?.workerToken || request.query?.token || "").trim();
+  const headerToken = String(request.headers["x-layerpilot-worker-token"] || "").trim();
+  if (headerToken) return headerToken;
+  if (process.env.NODE_ENV === "production") return "";
+  return String(request.query?.workerToken || request.query?.token || "").trim();
 }
 
 function hasValidWorkerToken(request) {

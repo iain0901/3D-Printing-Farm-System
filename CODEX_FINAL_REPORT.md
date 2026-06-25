@@ -134,6 +134,7 @@
   - `5ee420a` `docs: record codex round 64 status`
   - `5d32570` `feat: add idempotent telemetry ticks`
   - Current `HEAD` `docs: record codex round 65 status`
+  - Current `HEAD` `feat: require header ops tokens in production`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -352,6 +353,9 @@
   - Round 65 targeted `npm run test -- api/server.test.mjs -t "advances production telemetry|telemetry ticks|history reprints|history annotations"`: passed, 4 tests passed.
   - Round 65 targeted `npm run test -- api/server.test.mjs`: passed, 123 tests passed.
   - Round 65 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 141 tests passed.
+  - Round 66 targeted `npm run test -- api/server.test.mjs -t "operational metrics|worker broadcast|ops tokens"`: failed before implementation, then passed, 4 tests passed.
+  - Round 66 targeted `npm run test -- api/server.test.mjs`: passed, 124 tests passed.
+  - Round 66 final `npm run qc`: passed, build passed, Vitest 10 files / 142 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs -t "spool metadata updates|maintenance job updates"`: failed before implementation, then passed, 2 tests passed.
   - Round 50 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs`: passed, 114 tests passed.
@@ -556,6 +560,9 @@
 - Added idempotent replay/conflict protection for authenticated `/api/telemetry/tick` writes so dropped API responses do not double-advance printer progress or prematurely complete production jobs.
 - Added regression coverage proving telemetry tick retries replay the original response, preserve printer progress, avoid duplicate completion side effects, and reject changed payloads under the same key.
 - Documented telemetry tick `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Hardened production ops token transport so `/api/metrics` accepts `LAYERPILOT_METRICS_TOKEN` only through `x-layerpilot-metrics-token`, and `/api/internal/worker-broadcast` accepts `LAYERPILOT_WORKER_TOKEN` only through `x-layerpilot-worker-token`.
+- Preserved URL query token compatibility outside production for local tooling while preventing production shared tokens from landing in proxy/access-log URLs.
+- Added regression coverage for production query-token rejection and documented header-only metrics/worker token transport in README, install, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -612,3 +619,4 @@
 - Audit context now covers the highest-impact production scheduling/queue/bridge/file-version operator actions; remaining lower-risk direct event writes should be migrated only with route-specific delivery and notification review.
 - Ops-check authenticated verification requires valid Owner/Admin credentials or a dedicated smoke account configured in `.env`; otherwise it warns and continues with unauthenticated host checks.
 - Support snapshots now redact secret-like fields and URL paths/query strings, but operators should still review generated support bundles before sharing customer evidence externally.
+- Production metrics scrapers and worker notifiers must send shared ops tokens in headers; query-token URLs are intentionally rejected in `NODE_ENV=production`.

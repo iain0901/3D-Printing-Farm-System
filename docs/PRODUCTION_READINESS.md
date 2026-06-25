@@ -9,6 +9,7 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 - [ ] `LAYERPILOT_ADMIN_EMAIL` and `LAYERPILOT_ADMIN_PASSWORD` are set to real owner credentials.
 - [ ] `LAYERPILOT_DISABLE_DEFAULT_USERS=true` and `LAYERPILOT_DISABLE_DEMO_LOGIN=true` are set for customer production.
 - [ ] `LAYERPILOT_WORKER_TOKEN` and `LAYERPILOT_METRICS_TOKEN` are unique strong values.
+- [ ] Metrics scraping uses the `x-layerpilot-metrics-token` header and worker broadcasts use the `x-layerpilot-worker-token` header; production does not accept these shared tokens in URL query parameters.
 - [ ] `.env` is not committed and is readable only by the deployment user.
 - [ ] `/api/readiness` reports `ok: true`; in `NODE_ENV=production`, this also verifies required owner credentials, strong non-default worker/metrics tokens, disabled default/demo access, and consistent optional S3, Stripe, and MQTT dependency configuration.
 - [ ] `npm run smoke:prod` passes against the live URL.

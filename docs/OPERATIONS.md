@@ -17,6 +17,8 @@ Stripe billing webhooks on `/api/billing/webhook/stripe` verify the official `St
 
 `scripts/ubuntu-deploy.sh ops-check` also runs an authenticated API check when credentials are available from `.env`. It verifies login, `/api/state`, `/api/audit`, storage-aware `/api/admin/integrity?checkStorage=true`, and `/api/metrics` when `LAYERPILOT_METRICS_TOKEN` is configured. The check fails if integrity errors exist or `storage.complete` is false, so backup/storage drift is caught by the timer before a restore drill depends on it; the corresponding audit event keeps compact storage coverage evidence for later review. Set `LAYERPILOT_OPS_EMAIL` and `LAYERPILOT_OPS_PASSWORD` to use a dedicated Owner/Admin smoke account; otherwise it falls back to the bootstrap admin credentials.
 
+In production, send operational shared tokens only in headers. Metrics scrapers must use `x-layerpilot-metrics-token`, and worker-to-API broadcasts must use `x-layerpilot-worker-token`; token query parameters are accepted only outside production for local compatibility so secrets do not land in proxy or access-log URLs.
+
 ## Session Policy
 
 - User bearer tokens are stored only as server-side hashes in persisted data.

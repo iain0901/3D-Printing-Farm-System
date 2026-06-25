@@ -35,6 +35,8 @@ Set real values for:
 - `LAYERPILOT_SESSION_TTL_HOURS`, defaults to `168`
 - `LAYERPILOT_SESSION_IDLE_TIMEOUT_HOURS`, defaults to `24`
 
+In production, `LAYERPILOT_WORKER_TOKEN` is accepted only through the `x-layerpilot-worker-token` header and `LAYERPILOT_METRICS_TOKEN` only through the `x-layerpilot-metrics-token` header. Do not put these shared tokens in URLs.
+
 For customer production, also set:
 
 - `LAYERPILOT_DISABLE_DEFAULT_USERS=true`

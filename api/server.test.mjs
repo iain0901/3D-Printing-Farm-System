@@ -204,7 +204,12 @@ describe("3DSTU FarmFlow API", () => {
         const anonymousMetrics = await app.inject({ method: "GET", url: "/api/metrics" });
         expect(anonymousMetrics.statusCode).toBe(401);
 
-        const tokenMetrics = await app.inject({ method: "GET", url: "/api/metrics?metricsToken=metrics-secret" });
+        const queryTokenMetrics = await app.inject({ method: "GET", url: "/api/metrics?metricsToken=metrics-secret" });
+        expect(queryTokenMetrics.statusCode).toBe(200);
+        expect(queryTokenMetrics.headers["content-type"]).toContain("text/plain");
+        expect(queryTokenMetrics.body).toContain("layerpilot_up 1");
+
+        const tokenMetrics = await app.inject({ method: "GET", url: "/api/metrics", headers: { "x-layerpilot-metrics-token": "metrics-secret" } });
         expect(tokenMetrics.statusCode).toBe(200);
         expect(tokenMetrics.headers["content-type"]).toContain("text/plain");
         expect(tokenMetrics.body).toContain("layerpilot_up 1");
@@ -447,6 +452,46 @@ describe("3DSTU FarmFlow API", () => {
 
         const readiness = await app.inject({ method: "GET", url: "/api/readiness" });
         expect(readiness.json().checks).toEqual(expect.arrayContaining([expect.objectContaining({ name: "worker", ok: true })]));
+      });
+    });
+  });
+
+  it("requires ops tokens in headers in production", async () => {
+    await withEnv({
+      NODE_ENV: "production",
+      LAYERPILOT_METRICS_TOKEN: "metrics-token-32-characters-minimum",
+      LAYERPILOT_WORKER_TOKEN: "worker-token-32-characters-minimum"
+    }, async () => {
+      await withApp(async ({ app, db }) => {
+        db.data.dataMeta.worker = { id: "qc-worker", lastRunAt: new Date().toISOString() };
+        await db.write();
+
+        const queryMetrics = await app.inject({ method: "GET", url: "/api/metrics?metricsToken=metrics-token-32-characters-minimum" });
+        expect(queryMetrics.statusCode).toBe(401);
+
+        const headerMetrics = await app.inject({
+          method: "GET",
+          url: "/api/metrics",
+          headers: { "x-layerpilot-metrics-token": "metrics-token-32-characters-minimum" }
+        });
+        expect(headerMetrics.statusCode).toBe(200);
+        expect(headerMetrics.body).toContain("layerpilot_up 1");
+
+        const queryWorker = await app.inject({
+          method: "POST",
+          url: "/api/internal/worker-broadcast?workerToken=worker-token-32-characters-minimum",
+          payload: { reason: "worker.test" }
+        });
+        expect(queryWorker.statusCode).toBe(401);
+
+        const headerWorker = await app.inject({
+          method: "POST",
+          url: "/api/internal/worker-broadcast",
+          headers: { "x-layerpilot-worker-token": "worker-token-32-characters-minimum" },
+          payload: { reason: "worker.test" }
+        });
+        expect(headerWorker.statusCode).toBe(200);
+        expect(headerWorker.json()).toMatchObject({ ok: true, worker: { id: "qc-worker" } });
       });
     });
   });

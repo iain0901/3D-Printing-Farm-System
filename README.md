@@ -98,12 +98,12 @@ Useful production environment variables:
 - `LAYERPILOT_DISABLE_DEMO_LOGIN`, set to `true` to prevent auto-creating the demo login
 - `LAYERPILOT_SESSION_TTL_HOURS`, user session lifetime, default `168` hours
 - `LAYERPILOT_SESSION_IDLE_TIMEOUT_HOURS`, idle user session timeout, default `24` hours
-- `LAYERPILOT_METRICS_TOKEN`, optional token for Prometheus-style `/api/metrics` scraping without a user session
+- `LAYERPILOT_METRICS_TOKEN`, optional token for Prometheus-style `/api/metrics` scraping without a user session; production scrapers must send it with the `x-layerpilot-metrics-token` header, not a URL query parameter
 - `LAYERPILOT_OPS_EMAIL` and `LAYERPILOT_OPS_PASSWORD`, optional dedicated smoke account for `scripts/ubuntu-deploy.sh ops-check`; blank values fall back to the bootstrap admin credentials
 - `LAYERPILOT_AUTO_BACKUP_ON_MIGRATE`, defaults to `true`; writes a sibling `*.pre-migration-*.bak.json` before schema migrations when an existing DB file is upgraded
 - `LAYERPILOT_PRE_RESTORE_BACKUP`, defaults to `true`; writes a safeguard volume archive before restore or rollback replaces production data
 - `LAYERPILOT_FULL_BACKUP_MAX_BYTES`, default `536870912` (512 MiB); caps `/api/admin/export?includeFiles=true` before stored model/G-code bytes are read into the JSON response, and full exports fail closed when referenced stored files are missing unless `allowMissingFiles=true` is supplied intentionally
-- `LAYERPILOT_WORKER_TOKEN`, required for Docker worker-to-API state broadcasts; change the example value before real deployment
+- `LAYERPILOT_WORKER_TOKEN`, required for Docker worker-to-API state broadcasts; change the example value before real deployment. In production, worker broadcasts must send it with the `x-layerpilot-worker-token` header, not a URL query parameter.
 - `LAYERPILOT_WORKER_TELEMETRY` and `LAYERPILOT_WORKER_BRIDGE_POLLING`, enable or disable background worker jobs
 - `LAYERPILOT_WORKER_TELEMETRY_INTERVAL_MS` and `LAYERPILOT_WORKER_BRIDGE_POLL_INTERVAL_MS`, background worker intervals
 - `LAYERPILOT_BILLING_PORTAL_URL`, optional external billing portal destination

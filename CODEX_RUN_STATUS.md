@@ -1,17 +1,28 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 65 committed and pushed
+- Phase: round 66 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 65 telemetry tick idempotency hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 66 ops token transport hardening is implemented and verified on `codex/production-saas-completion-20260624`; commit and push are pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage proving repeated authenticated telemetry ticks replay the first response instead of double-advancing production progress.
-  - Add `/api/telemetry/tick` to the persisted idempotency route matcher.
-  - Document telemetry tick retry safety for API/worker clients.
+  - Add regression coverage proving production `/api/metrics` and `/api/internal/worker-broadcast` reject token query parameters and accept only header tokens.
+  - Harden metrics and worker token extraction so query-token compatibility remains non-production only.
+  - Document header-only production token transport for metrics scraping and worker broadcasts.
   - Run targeted API/browser tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 66 repo inspection started at 2026-06-25T13:19:39Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, install docs, package metadata, health/readiness/metrics code, worker broadcast auth, worker notifier, and existing metrics/worker tests before editing.
+  - Selected production-readiness slice: header-only production transport for worker and metrics ops tokens so secrets are not accepted in URL query strings that can leak through access logs.
+  - Added regression coverage proving production rejects `/api/metrics?metricsToken=...` and `/api/internal/worker-broadcast?workerToken=...` while accepting the documented `x-layerpilot-metrics-token` and `x-layerpilot-worker-token` headers.
+  - Targeted ops-token regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "operational metrics|worker broadcast|ops tokens"` (query metrics token returned `200` in production).
+  - Hardened metrics and worker token extraction so query-token compatibility remains available outside production only.
+  - Targeted ops-token coverage passed: `npm run test -- api/server.test.mjs -t "operational metrics|worker broadcast|ops tokens"` (4 tests).
+  - Documented production header-only metrics and worker token transport in README, install docs, operations, and production-readiness docs.
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (124 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 142 tests passed).
+  - Updated final report with round 66 scope, verification, completed feature, and residual production token transport note.
   - Round 65 repo inspection started at 2026-06-25T13:04:30Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, idempotency matcher, mutating API routes, telemetry tick handler, and existing telemetry tests before editing.
   - Selected production-readiness slice: idempotent authenticated telemetry ticks so dropped API responses cannot double-advance production progress or completion side effects.
