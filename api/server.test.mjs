@@ -6119,6 +6119,45 @@ endsolid s3_store`;
     });
   });
 
+  it("blocks full backup exports when stored file payloads are missing", async () => {
+    await withApp(async ({ app }) => {
+      const token = await login(app);
+      const sample = await app.inject({
+        method: "POST",
+        url: "/api/files/sample",
+        headers: auth(token),
+        payload: { name: "Missing Payload Bracket", material: "PETG", folder: "Backups" }
+      });
+      expect(sample.statusCode).toBe(201);
+      await rm(sample.json().file.storagePath, { force: true });
+
+      const blocked = await app.inject({ method: "GET", url: "/api/admin/export?includeFiles=true", headers: auth(token) });
+      expect(blocked.statusCode).toBe(409);
+      expect(blocked.json()).toMatchObject({
+        error: "Full backup export is missing stored file payloads",
+        storage: {
+          included: false,
+          missing: expect.arrayContaining([expect.objectContaining({ fileId: sample.json().file.id, name: sample.json().file.name })])
+        }
+      });
+      expect(blocked.json().storage.missing[0].reason).toBeTruthy();
+
+      const partial = await app.inject({ method: "GET", url: "/api/admin/export?includeFiles=true&allowMissingFiles=true", headers: auth(token) });
+      expect(partial.statusCode).toBe(200);
+      expect(partial.json().storage).toMatchObject({
+        included: true,
+        missing: expect.arrayContaining([expect.objectContaining({ fileId: sample.json().file.id })])
+      });
+      expect(partial.json().filePayloads.some((payload) => payload.fileId === sample.json().file.id)).toBe(false);
+
+      const audit = await app.inject({ method: "GET", url: "/api/audit?type=admin.export", headers: auth(token) });
+      expect(audit.statusCode).toBe(200);
+      expect(audit.json().events.find((event) => event.data?.blocked === true && event.data?.missingFiles === 1)).toMatchObject({
+        data: expect.objectContaining({ blocked: true, includeFiles: true })
+      });
+    });
+  });
+
   it("rejects full backup exports that exceed the configured byte limit", async () => {
     await withApp(async ({ app }) => {
       const token = await login(app);

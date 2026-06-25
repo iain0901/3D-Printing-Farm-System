@@ -102,7 +102,7 @@ Useful production environment variables:
 - `LAYERPILOT_OPS_EMAIL` and `LAYERPILOT_OPS_PASSWORD`, optional dedicated smoke account for `scripts/ubuntu-deploy.sh ops-check`; blank values fall back to the bootstrap admin credentials
 - `LAYERPILOT_AUTO_BACKUP_ON_MIGRATE`, defaults to `true`; writes a sibling `*.pre-migration-*.bak.json` before schema migrations when an existing DB file is upgraded
 - `LAYERPILOT_PRE_RESTORE_BACKUP`, defaults to `true`; writes a safeguard volume archive before restore or rollback replaces production data
-- `LAYERPILOT_FULL_BACKUP_MAX_BYTES`, default `536870912` (512 MiB); caps `/api/admin/export?includeFiles=true` before stored model/G-code bytes are read into the JSON response
+- `LAYERPILOT_FULL_BACKUP_MAX_BYTES`, default `536870912` (512 MiB); caps `/api/admin/export?includeFiles=true` before stored model/G-code bytes are read into the JSON response, and full exports fail closed when referenced stored files are missing unless `allowMissingFiles=true` is supplied intentionally
 - `LAYERPILOT_WORKER_TOKEN`, required for Docker worker-to-API state broadcasts; change the example value before real deployment
 - `LAYERPILOT_WORKER_TELEMETRY` and `LAYERPILOT_WORKER_BRIDGE_POLLING`, enable or disable background worker jobs
 - `LAYERPILOT_WORKER_TELEMETRY_INTERVAL_MS` and `LAYERPILOT_WORKER_BRIDGE_POLL_INTERVAL_MS`, background worker intervals
@@ -243,7 +243,7 @@ Restore preview and commit summaries include `filePayloadCoverage` metadata for 
 - `POST /api/admin/audit-retention/run`
 - `PATCH /api/history/:id`
 - `POST /api/history/:id/reprint`
-- `GET /api/admin/export` with optional `?includeFiles=true` for a full backup containing stored model/G-code bytes; full byte exports are capped by `LAYERPILOT_FULL_BACKUP_MAX_BYTES` and return `413` with a storage manifest when the export is too large for an API JSON response
+- `GET /api/admin/export` with optional `?includeFiles=true` for a full backup containing stored model/G-code bytes; full byte exports are capped by `LAYERPILOT_FULL_BACKUP_MAX_BYTES` and return `413` with a storage manifest when the export is too large for an API JSON response, or `409` when referenced stored file payloads are missing. Use `allowMissingFiles=true` only when a partial JSON backup is intentional and file bytes are covered by separate volume/object-storage recovery.
 - `POST /api/admin/restore`
 - `POST /api/orders/:id/generate-jobs` with optional `{ "dryRun": true }` for SKU/part/stock preflight and duplicate-generation protection
 - `POST /api/queue`

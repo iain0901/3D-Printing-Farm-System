@@ -6185,11 +6185,21 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!hasPermission(request.user, "admin:export")) return reply.code(403).send({ error: "Missing permission: admin:export" });
     const exportedAt = new Date().toISOString();
     const includeFiles = request.query?.includeFiles === "true";
+    const allowMissingFiles = request.query?.allowMissingFiles === "true";
     const scoped = workspaceScopeForUser(database.data, request.user);
     let filePayloads = { storage: { included: false, count: 0, bytes: 0, missing: [] } };
     if (includeFiles) {
       const limitBytes = fullBackupMaxBytes(request.query || {});
       const manifest = await buildBackupStorageManifest(scoped, limitBytes);
+      if (manifest.missing.length && !allowMissingFiles) {
+        await dispatchEvent(database, "admin.export", `${request.user.email} export blocked by missing stored file payloads`, { exportedAt, userId: request.user.id, includeFiles, blocked: true, missingFiles: manifest.missing.length, files: manifest.count, bytes: manifest.bytes }, { actor: request.user });
+        await database.write();
+        return reply.code(409).send({
+          error: "Full backup export is missing stored file payloads",
+          storage: manifest,
+          remediation: "Restore or re-upload the missing stored files before exporting, restore the production volume/object store separately, or retry with allowMissingFiles=true when a partial JSON backup is intentional."
+        });
+      }
       if (manifest.oversized) {
         await dispatchEvent(database, "admin.export", `${request.user.email} export blocked by full backup size limit`, { exportedAt, userId: request.user.id, includeFiles, blocked: true, limitBytes, bytes: manifest.bytes, files: manifest.count }, { actor: request.user });
         await database.write();
@@ -6201,7 +6211,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       }
       filePayloads = await buildBackupFilePayloads(scoped, manifest);
     }
-    await dispatchEvent(database, "admin.export", `${request.user.email} exported workspace data`, { exportedAt, userId: request.user.id, includeFiles, limitBytes: filePayloads.storage.limitBytes || undefined, bytes: filePayloads.storage.bytes, files: filePayloads.storage.count }, { actor: request.user });
+    await dispatchEvent(database, "admin.export", `${request.user.email} exported workspace data`, { exportedAt, userId: request.user.id, includeFiles, allowMissingFiles, limitBytes: filePayloads.storage.limitBytes || undefined, bytes: filePayloads.storage.bytes, files: filePayloads.storage.count, missingFiles: filePayloads.storage.missing?.length || 0 }, { actor: request.user });
     await database.write();
     reply.header("content-disposition", `attachment; filename="layerpilot-export-${exportedAt.slice(0, 10)}.json"`);
     return {

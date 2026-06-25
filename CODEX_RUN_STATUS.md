@@ -1,18 +1,27 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 58 committed and pushed
+- Phase: round 59 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 58 retry-safe commerce connector test slice is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 59 backup/export safety slice is in progress on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage for commerce connector test retries so dropped responses do not refetch external feeds.
-  - Add `/api/commerceConnectors/:id/test` to persisted idempotency replay handling.
-  - Wire the built-in commerce connector Test button to generate and reuse `Idempotency-Key` headers.
-  - Document retry-safe commerce connector tests in README, operations, and production-readiness docs.
-  - Run targeted commerce/idempotency tests and full QC, then commit and push.
+  - Add regression coverage proving full backup exports fail closed when stored file payloads are missing.
+  - Make `/api/admin/export?includeFiles=true` return a blocked manifest by default when stored bytes cannot be read, with an explicit partial-export override.
+  - Document the missing-file guard in README, operations, and production-readiness docs.
+  - Run targeted backup/export tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 59 repo inspection started at 2026-06-25T11:57:49Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API readiness/backup/restore code, backup UI, and existing backup/restore tests before editing.
+  - Selected production-readiness slice: full backup export missing-file guard for safer backup/export operations.
+  - Added regression coverage proving `/api/admin/export?includeFiles=true` blocks missing stored file payloads by default while allowing an explicit `allowMissingFiles=true` partial export.
+  - Targeted full-backup missing-file regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "stored file payloads are missing"` (received `200` instead of `409`).
+  - Implemented a fail-closed full-backup preflight for missing stored file payloads, including blocked audit metadata and an explicit partial-export override.
+  - Documented the missing-file guard and `allowMissingFiles=true` override in README, operations, and production-readiness docs.
+  - Targeted backup/export coverage passed: `npm run test -- api/server.test.mjs -t "stored file payloads are missing|stored model bytes|missing file payload coverage|configured byte limit"` (4 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (120 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 138 tests passed).
   - Round 58 repo inspection started at 2026-06-25T12:00:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, mutating API routes, idempotency allowlist, commerce connector routes/UI, and existing commerce/idempotency tests before editing.
   - Selected production-readiness slice: idempotent commerce connector test calls for retry-safe external feed checks.
