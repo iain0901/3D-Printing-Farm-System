@@ -1,16 +1,25 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 16 pushed
+- Phase: round 17 verified
 - Started: 2026-06-24 UTC
-- Current state: Round 16 public quote-intake idempotency hardening is implemented, verified, committed, and pushed to `origin/codex/production-saas-completion-20260624`.
-- Baseline QC: passed `npm run qc` (build passed; Vitest 9 files / 79 tests passed)
+- Current state: Round 17 public quote-decision idempotency hardening is implemented and verified locally; commit/push pending.
+- Baseline QC: passed `npm run qc` (build passed; Vitest 9 files / 92 tests passed)
 - Current plan:
-  - Add retry-safe idempotency coverage for public quote intake.
-  - Extend the persisted idempotency ledger to the public quote intake route before auth.
+  - Add retry-safe idempotency coverage for public customer quote decisions.
+  - Extend the persisted `Idempotency-Key` ledger to token-verified public quote decision routes.
   - Update operations/readiness docs, run targeted tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 17 repo inspection started at 2026-06-25T04:10:01Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent public quote decision retries to prevent duplicate customer approval handoff errors after an accepted quote creates an order.
+  - Added regression coverage proving public quote approval retries replay the original response without creating duplicate orders or customer-accepted/converted audit events.
+  - Added token-verified public quote decision routes to the persisted `Idempotency-Key` allowlist with quote-scoped public actor context.
+  - Documented public quote decision idempotency in README, operations, and production-readiness docs.
+  - Targeted public quote decision idempotency test passed: `npm run test -- api/server.test.mjs -t "idempotent public quote approvals"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (76 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 92 tests passed).
   - Round 16 repo inspection started at 2026-06-25T04:00:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: idempotent public quote intake retries to prevent duplicate customer quote requests from browser/form gateway retries.

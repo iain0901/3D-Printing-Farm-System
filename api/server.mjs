@@ -1488,6 +1488,7 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "POST" && routePath === "/api/queue") return true;
   if (method === "POST" && routePath === "/api/public/quoteRequests") return true;
   if (method === "POST" && routePath === "/api/commerce/import-csv") return true;
+  if (method === "POST" && /^\/api\/public\/quoteRequests\/[^/]+\/decision$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/orders\/[^/]+\/generate-jobs$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/quoteRequests\/[^/]+\/convert-order$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/productionTemplates\/[^/]+\/run$/.test(routePath)) return true;
@@ -1545,6 +1546,10 @@ function idempotencyFingerprint({ method, path: routePath, workspaceId, bodyDige
 function publicIdempotencyContext(method, routePath) {
   if (method === "POST" && routePath === "/api/public/quoteRequests") {
     return { workspaceId: DEFAULT_WORKSPACE_ID, actorId: "public:quote-intake" };
+  }
+  const publicQuoteDecision = method === "POST" ? routePath.match(/^\/api\/public\/quoteRequests\/([^/]+)\/decision$/) : null;
+  if (publicQuoteDecision) {
+    return { workspaceId: DEFAULT_WORKSPACE_ID, actorId: `public:quote-decision:${publicQuoteDecision[1]}` };
   }
   return null;
 }
@@ -5611,6 +5616,8 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsed.success) return reply.code(400).send({ error: "Invalid quote decision payload", issues: parsed.error.issues });
     const quote = database.data.quoteRequests.find((item) => item.id === request.params.id && itemInWorkspace(item, DEFAULT_WORKSPACE_ID));
     if (!quote || !quoteTokenMatches(quote, parsed.data.token)) return reply.code(404).send({ error: "Quote request not found" });
+    const publicIdempotency = publicIdempotencyContext("POST", `/api/public/quoteRequests/${request.params.id}/decision`);
+    if (publicIdempotency && await prepareIdempotentRequest(database, request, reply, { ...publicIdempotency, bodyDigest: requestBodyDigest(parsed.data) })) return;
     if (quote.orderId) return reply.code(409).send({ error: "Quote request already converted", orderId: quote.orderId });
     if (!["quoted", "accepted"].includes(quote.status)) return reply.code(409).send({ error: "Quote request is not ready for a customer decision", status: quote.status });
     if (parsed.data.decision === "accepted" && quoteExpired(quote)) return reply.code(409).send({ error: "Quote request has expired", status: quote.status, validUntil: quote.validUntil });
