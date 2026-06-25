@@ -7164,9 +7164,24 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const file = database.data.files.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!file) return reply.code(404).send({ error: "File not found" });
     const filename = path.basename(file.name || file.storageKey || file.storagePath || `${file.id}.json`);
+    const auditDownload = async ({ bytes = 0, fallbackManifest = false } = {}) => {
+      await dispatchEvent(database, "file.downloaded", `${request.user.email} downloaded ${file.name || file.id}`, {
+        workspaceId: request.user.workspaceId,
+        fileId: file.id,
+        fileName: file.name || filename,
+        fileType: file.type || "",
+        material: file.material || "",
+        folder: file.folder || "",
+        storageBacked: Boolean(file.storagePath || file.storageKey),
+        fallbackManifest,
+        bytes
+      }, { actor: request.user });
+      await database.write();
+    };
     if (file.storagePath) {
       try {
         const bytes = await readStoredObject(file);
+        await auditDownload({ bytes: bytes.length, fallbackManifest: false });
         reply.header("content-disposition", `attachment; filename="${filename.replace(/"/g, "")}"`);
         reply.type(file.type === "GCODE" ? "text/x-gcode" : "application/octet-stream");
         return bytes;
@@ -7174,9 +7189,11 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
         // Fall back to a metadata manifest below when stored bytes are not available.
       }
     }
+    const manifest = JSON.stringify({ exportedAt: new Date().toISOString(), file }, null, 2);
+    await auditDownload({ bytes: Buffer.byteLength(manifest), fallbackManifest: true });
     reply.header("content-disposition", `attachment; filename="${path.basename(file.name, path.extname(file.name)) || file.id}.layerpilot.json"`);
     reply.type("application/json");
-    return JSON.stringify({ exportedAt: new Date().toISOString(), file }, null, 2);
+    return manifest;
   });
 
   app.get("/api/files/:id/preview", async (request, reply) => {

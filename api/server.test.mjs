@@ -3130,6 +3130,20 @@ endsolid delete_me`;
       expect(downloaded.headers["content-disposition"]).toContain("delete-me.stl");
       expect(downloaded.body).toContain("solid delete_me");
 
+      const persistedAfterDownload = JSON.parse(await readFile(dbPath, "utf8"));
+      const downloadEvents = persistedAfterDownload.events.filter((event) => event.type === "file.downloaded" && event.data?.fileId === uploaded.json().id);
+      expect(downloadEvents).toHaveLength(1);
+      expect(downloadEvents[0].data).toMatchObject({
+        workspaceId: "ws-default",
+        fileId: uploaded.json().id,
+        fileName: "delete-me.stl",
+        fileType: "STL",
+        storageBacked: true,
+        fallbackManifest: false
+      });
+      expect(JSON.stringify(downloadEvents[0])).not.toContain("solid delete_me");
+      expect(JSON.stringify(downloadEvents[0])).not.toContain(storagePath);
+
       const blocked = await app.inject({ method: "DELETE", url: "/api/files/f1", headers: auth(token) });
       expect(blocked.statusCode).toBe(409);
       expect(blocked.json().references.parts.length).toBeGreaterThan(0);

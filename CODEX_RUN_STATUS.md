@@ -1,18 +1,28 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 74 committed and pushed
+- Phase: round 75 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 74 production CORS origin hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 75 file-download audit evidence is implemented and verified; commit/push is in progress on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage proving production CORS reflects only configured trusted origins and omits arbitrary origins.
-  - Implement production CORS origin resolution from `LAYERPILOT_PUBLIC_URL` and explicit `LAYERPILOT_CORS_ORIGINS`, while preserving permissive local development behavior.
-  - Add a production readiness/deployment doctor gate for invalid CORS origin configuration.
-  - Document trusted-origin configuration for public quote portals and same-origin app deployments.
-  - Run targeted CORS/readiness/deploy tests, full API tests, and full QC, then commit and push.
+  - Add regression coverage proving authenticated stored file/model downloads create compact audit evidence without file contents or storage locations.
+  - Implement `file.downloaded` audit events for stored-byte and fallback-manifest downloads.
+  - Document file-download audit review in production readiness and operations docs.
+  - Run targeted file/storage tests, full API tests, and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 75 repo inspection started at 2026-06-25T16:12:57Z.
+  - Reviewed current branch, recent commits, run status, final report, README, production-readiness, operations, package metadata, API route/idempotency/auth/readiness code, and file download tests before editing.
+  - Selected production-readiness slice: audit trail evidence for stored file/model downloads so production model/G-code exports are reviewable without storing file contents in audit metadata.
+  - Added regression coverage requiring authenticated stored file downloads to write one `file.downloaded` audit event with file ID/name/type, storage-backed status, fallback-manifest flag, and no model body or storage path.
+  - Targeted download-audit regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "downloads stored files"` (no `file.downloaded` event was persisted).
+  - Implemented compact `file.downloaded` audit events for stored-byte downloads and fallback manifest downloads, including byte count while excluding file contents, local storage paths, and object-storage keys.
+  - Documented model/G-code download audit evidence in README, operations, and production-readiness docs.
+  - Targeted download coverage passed: `npm run test -- api/server.test.mjs -t "downloads stored files"` (1 test).
+  - Broader file/storage coverage passed: `npm run test -- api/server.test.mjs -t "model files|stored files|file artifact writes|storage payload coverage|downloads stored files"` (6 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (132 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 151 tests passed).
   - Round 74 repo inspection started at 2026-06-25T15:57:40Z.
   - Reviewed current branch, recent commits, run status, final report, README, production-readiness, operations, install, roadmap, package metadata, server CORS/readiness code, deployment doctor, and existing readiness tests before editing.
   - Selected production-readiness slice: production CORS trusted-origin hardening so the API no longer reflects arbitrary browser origins in `NODE_ENV=production`.
