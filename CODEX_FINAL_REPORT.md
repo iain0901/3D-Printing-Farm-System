@@ -61,6 +61,7 @@
   - Current `HEAD` `docs: record codex round 33 status`
   - `5ed0f18` `feat: add idempotent spool label exports`
   - `3787b48` `feat: add governance audit context`
+  - `4800365` `feat: add idempotent configuration writes`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.

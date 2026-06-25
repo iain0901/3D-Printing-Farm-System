@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 36 verified, pending commit
+- Phase: round 36 committed
 - Started: 2026-06-24 UTC
-- Current state: Round 36 catalog/profile/printer configuration idempotency hardening is implemented and verified on `codex/production-saas-completion-20260624`; commit and push are pending.
+- Current state: Round 36 catalog/profile/printer configuration idempotency hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 96 tests passed)
 - Current plan:
   - Add regression coverage for retry-safe catalog, slicer profile, production template, and printer capability configuration writes.
@@ -20,6 +20,7 @@
   - Targeted configuration idempotency tests initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "catalog configuration"`, `npm run test -- api/server.test.mjs -t "profile configuration"`, and `npm run test -- api/server.test.mjs -t "printer capability writes"` (3 tests total).
   - Targeted API suite passed: `npm run test -- api/server.test.mjs` (101 tests).
   - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 118 tests passed).
+  - Committed and pushed round 36 implementation as `4800365` (`feat: add idempotent configuration writes`).
   - Round 35 repo inspection started at 2026-06-25T07:30:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: governance audit-context hardening for admin/settings/go-live writes.
