@@ -109,7 +109,8 @@ const passwordResetSchema = z.object({
 const twoFactorCodeSchema = z.string().trim().min(6).max(32);
 const twoFactorEnableSchema = z.object({
   secret: z.string().min(16),
-  code: twoFactorCodeSchema
+  code: twoFactorCodeSchema,
+  password: z.string().min(8)
 });
 const twoFactorDisableSchema = z.object({
   password: z.string().min(8),
@@ -6100,6 +6101,14 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!session || !user) return reply.code(401).send({ error: "User session required" });
     const parsed = twoFactorEnableSchema.safeParse(request.body || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid 2FA enable payload", issues: parsed.error.issues });
+    if (!verifyPassword(parsed.data.password, user.passwordHash)) {
+      await dispatchEvent(database, "auth.2fa_enable_failed", `${user.email} failed 2FA enable password check`, {
+        userId: user.id,
+        reason: "invalid_password"
+      }, { actor: user });
+      await database.write();
+      return reply.code(401).send({ error: "Current password is incorrect" });
+    }
     if (!verifyTotpCode(parsed.data.secret, parsed.data.code)) return reply.code(401).send({ error: "Invalid two-factor code" });
     const recoveryCodes = generateRecoveryCodes();
     user.twoFactorSecret = parsed.data.secret.toUpperCase().replace(/[^A-Z2-7]/g, "");

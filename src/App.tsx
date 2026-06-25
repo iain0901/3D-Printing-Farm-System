@@ -774,6 +774,7 @@ const zhTwTranslations: Record<string, string> = {
   "Two-factor code": "雙因素代碼",
   "Two-factor code could not be verified": "無法驗證雙因素代碼",
   "Two-factor disable failed. Check password and code.": "停用雙因素驗證失敗，請檢查密碼與代碼。",
+  "Two-factor setup could not be verified. Check password and code.": "無法驗證雙因素設定，請檢查密碼與驗證碼。",
   "Two-factor setup requires a live signed-in session": "雙因素設定需要有效登入工作階段。",
   "Two-factor setup started": "雙因素設定已開始",
   "Units": "單位",
@@ -2393,10 +2394,10 @@ function App() {
 
   const setupTwoFactor = async () => apiRequest<TwoFactorSetup>("/api/auth/2fa/setup", { method: "POST" });
 
-  const enableTwoFactor = async (secret: string, code: string) => {
+  const enableTwoFactor = async (secret: string, code: string, password: string) => {
     const result = await apiRequest<{ user: User; recoveryCodes: string[] }>("/api/auth/2fa/enable", {
       method: "POST",
-      body: JSON.stringify({ secret, code })
+      body: JSON.stringify({ secret, code, password })
     });
     setCurrentUser(result.user);
     setTwoFactorEnrollmentRequired(false);
@@ -5553,12 +5554,13 @@ function NotificationsPage({ notifications, setNotifications, channels, setChann
   );
 }
 
-function SettingsPage({ settings, setSettings, addToast, setBackendStatus, currentUser, changeOwnPassword, setupTwoFactor, enableTwoFactor, disableTwoFactor }: { settings: WorkspaceSettings; setSettings: React.Dispatch<React.SetStateAction<WorkspaceSettings>>; addToast: (message: string, type?: Toast["type"]) => void; setBackendStatus: React.Dispatch<React.SetStateAction<"local" | "connected">>; currentUser: User | null; changeOwnPassword: (currentPassword: string, newPassword: string) => Promise<User>; setupTwoFactor: () => Promise<TwoFactorSetup>; enableTwoFactor: (secret: string, code: string) => Promise<{ user: User; recoveryCodes: string[] }>; disableTwoFactor: (password: string, code: string) => Promise<User> }) {
+function SettingsPage({ settings, setSettings, addToast, setBackendStatus, currentUser, changeOwnPassword, setupTwoFactor, enableTwoFactor, disableTwoFactor }: { settings: WorkspaceSettings; setSettings: React.Dispatch<React.SetStateAction<WorkspaceSettings>>; addToast: (message: string, type?: Toast["type"]) => void; setBackendStatus: React.Dispatch<React.SetStateAction<"local" | "connected">>; currentUser: User | null; changeOwnPassword: (currentPassword: string, newPassword: string) => Promise<User>; setupTwoFactor: () => Promise<TwoFactorSetup>; enableTwoFactor: (secret: string, code: string, password: string) => Promise<{ user: User; recoveryCodes: string[] }>; disableTwoFactor: (password: string, code: string) => Promise<User> }) {
   const [billing, setBilling] = useState<BillingSummary | null>(null);
   const [allowedApiIpsText, setAllowedApiIpsText] = useState(settings.allowedApiIps.join(", "));
   const [passwordDraft, setPasswordDraft] = useState({ current: "", next: "", confirm: "" });
   const [twoFactorSetup, setTwoFactorSetup] = useState<TwoFactorSetup | null>(null);
   const [twoFactorCode, setTwoFactorCode] = useState("");
+  const [twoFactorEnablePassword, setTwoFactorEnablePassword] = useState("");
   const [twoFactorDisableDraft, setTwoFactorDisableDraft] = useState({ password: "", code: "" });
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
   const [restoreBackup, setRestoreBackup] = useState<Record<string, unknown> | null>(null);
@@ -5699,15 +5701,16 @@ function SettingsPage({ settings, setSettings, addToast, setBackendStatus, curre
   const confirmTwoFactor = async () => {
     if (!twoFactorSetup) return;
     try {
-      const result = await enableTwoFactor(twoFactorSetup.secret, twoFactorCode);
+      const result = await enableTwoFactor(twoFactorSetup.secret, twoFactorCode, twoFactorEnablePassword);
       setRecoveryCodes(result.recoveryCodes);
       setTwoFactorSetup(null);
       setTwoFactorCode("");
+      setTwoFactorEnablePassword("");
       setBackendStatus("connected");
       addToast("Two-factor authentication enabled", "success");
     } catch {
       setBackendStatus("local");
-      addToast("Two-factor code could not be verified", "warning");
+      addToast("Two-factor setup could not be verified. Check password and code.", "warning");
     }
   };
   const turnOffTwoFactor = async () => {
@@ -5855,6 +5858,7 @@ function SettingsPage({ settings, setSettings, addToast, setBackendStatus, curre
             <div><StatusDot status="queued" /><span>Authenticator secret</span><em><code>{twoFactorSetup.secret}</code></em></div>
             <div><StatusDot status="queued" /><span>otpauth URI</span><em><code>{twoFactorSetup.otpauthUrl}</code></em></div>
           </div>}
+          {twoFactorSetup && <label>Current password<input type="password" value={twoFactorEnablePassword} onChange={(event) => setTwoFactorEnablePassword(event.target.value)} /></label>}
           {twoFactorSetup && <label>Authenticator code<input inputMode="numeric" value={twoFactorCode} onChange={(event) => setTwoFactorCode(event.target.value)} placeholder="123456" /></label>}
           {twoFactorSetup && <button onClick={confirmTwoFactor}><Shield size={16} />Enable 2FA</button>}
           {currentUser?.twoFactor?.enabled && <label>Current password<input type="password" value={twoFactorDisableDraft.password} onChange={(event) => setTwoFactorDisableDraft({ ...twoFactorDisableDraft, password: event.target.value })} /></label>}

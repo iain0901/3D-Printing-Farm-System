@@ -1,17 +1,29 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 87 committed and pushed
+- Phase: round 88 verified, ready to commit
 - Started: 2026-06-24 UTC
-- Current state: Round 87 workspace-scoped cost catalog isolation is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 88 production 2FA enrollment password-proof hardening is implemented and verified on `codex/production-saas-completion-20260624`.
 - Baseline QC: Round 86 passed `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed)
 - Current plan:
-  - Add regression coverage proving signup-created tenant cost catalog changes do not leak into the default workspace, scoped state does not expose the raw `costCatalogs` map, and quote/file estimates use the authenticated workspace catalog.
-  - Implement workspace-scoped cost catalog reads, updates, quote calculation, generated-file estimates, and slicer estimates while preserving the legacy default workspace `costCatalog` shape.
-  - Document tenant pricing isolation in README, operations, and production-readiness docs.
-  - Run targeted cost/tenant coverage, full API tests, and full QC, then commit and push.
+  - Add regression coverage requiring TOTP enablement to prove the current account password before storing the TOTP secret or issuing recovery codes.
+  - Require the current password in `/api/auth/2fa/enable`, audit failed password-proof attempts without storing submitted passwords, and preserve production admin enrollment flow.
+  - Update the Settings UI and production docs/runbooks for the password-proof enrollment workflow.
+  - Run targeted auth coverage, full API tests, and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 88 repo inspection started at 2026-06-25T18:45:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, API write-route/idempotency surface, auth/2FA routes, auth tests, and Settings 2FA UI before editing.
+  - Selected production-readiness slice: TOTP enrollment password-proof hardening so a stolen signed-in browser session cannot enable 2FA without knowing the account password.
+  - Added regression coverage requiring `/api/auth/2fa/enable` to reject a valid TOTP setup code when the current account password is wrong, preserve the disabled 2FA state, and write sanitized `auth.2fa_enable_failed` evidence.
+  - Targeted 2FA regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "two-factor|2FA"` (wrong-password enable returned `200`).
+  - Implemented current-password verification for TOTP enablement and wired the Settings UI to collect/send the password proof.
+  - Targeted 2FA coverage passed: `npm run test -- api/server.test.mjs -t "two-factor|2FA"` (4 tests).
+  - Broader auth coverage passed: `npm run test -- api/server.test.mjs -t "authenticates users and supports logout|two-factor auth|2FA|password changes|production Owner and Admin"` (6 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (134 tests).
+  - First final QC run found one missing Traditional Chinese translation for the new 2FA setup failure toast.
+  - Targeted i18n coverage passed after adding the translation: `npm run test -- api/i18n.test.mjs` (2 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed).
   - Round 87 repo inspection started at 2026-06-25T18:33:08Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, install docs, roadmap, package metadata, API route list, workspace scoping helpers, cost catalog routes, quote/file estimate call sites, and existing tenant/cost catalog tests before editing.
   - Selected production-readiness slice: workspace-scoped cost catalog isolation for tenant pricing, quote calculation, and file/slicer estimates.

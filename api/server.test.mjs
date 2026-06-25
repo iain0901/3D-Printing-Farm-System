@@ -1080,15 +1080,38 @@ describe("3DSTU FarmFlow API", () => {
         method: "POST",
         url: "/api/auth/2fa/enable",
         headers: auth(token),
-        payload: { secret: setup.json().secret, code: "000000" }
+        payload: { secret: setup.json().secret, code: "000000", password: "layerpilot" }
       });
       expect(wrongEnable.statusCode).toBe(401);
+
+      const wrongPassword = await app.inject({
+        method: "POST",
+        url: "/api/auth/2fa/enable",
+        headers: auth(token),
+        payload: { secret: setup.json().secret, code: generateTotpCode(setup.json().secret), password: "wrong-password" }
+      });
+      expect(wrongPassword.statusCode).toBe(401);
+      expect(db.data.users.find((user) => user.id === "u0").twoFactorEnabled).not.toBe(true);
+      const enableFailedEvent = db.data.events.find((event) => event.type === "auth.2fa_enable_failed" && event.data?.userId === "u0");
+      expect(enableFailedEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          userId: "u0",
+          actorId: "u0",
+          actorEmail: "demo@layerpilot.test",
+          actorRole: "Admin",
+          actorType: "user",
+          reason: "invalid_password"
+        }
+      });
+      expect(JSON.stringify(enableFailedEvent)).not.toContain("wrong-password");
 
       const enable = await app.inject({
         method: "POST",
         url: "/api/auth/2fa/enable",
         headers: auth(token),
-        payload: { secret: setup.json().secret, code: generateTotpCode(setup.json().secret) }
+        payload: { secret: setup.json().secret, code: generateTotpCode(setup.json().secret), password: "layerpilot" }
       });
       expect(enable.statusCode).toBe(200);
       expect(enable.json().user).toMatchObject({ email: "demo@layerpilot.test", twoFactorEnabled: true });
@@ -1175,7 +1198,7 @@ describe("3DSTU FarmFlow API", () => {
           method: "POST",
           url: "/api/auth/2fa/enable",
           headers: auth(token),
-          payload: { secret: setup.json().secret, code: generateTotpCode(setup.json().secret) }
+          payload: { secret: setup.json().secret, code: generateTotpCode(setup.json().secret), password: "layerpilot" }
         });
         expect(enable.statusCode).toBe(200);
 
@@ -1245,7 +1268,7 @@ describe("3DSTU FarmFlow API", () => {
           method: "POST",
           url: "/api/auth/2fa/enable",
           headers: auth(token),
-          payload: { secret: setup.json().secret, code: generateTotpCode(setup.json().secret) }
+          payload: { secret: setup.json().secret, code: generateTotpCode(setup.json().secret), password: "production-owner-password" }
         });
         expect(enable.statusCode).toBe(200);
 
@@ -1276,7 +1299,7 @@ describe("3DSTU FarmFlow API", () => {
           method: "POST",
           url: "/api/auth/2fa/enable",
           headers: auth(token),
-          payload: { secret: setup.json().secret, code: generateTotpCode(setup.json().secret) }
+          payload: { secret: setup.json().secret, code: generateTotpCode(setup.json().secret), password: "production-owner-password" }
         });
         expect(enable.statusCode).toBe(200);
 
