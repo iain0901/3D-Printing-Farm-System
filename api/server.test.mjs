@@ -4051,6 +4051,55 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent todo actions without duplicating operator records", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const listed = await app.inject({ method: "GET", url: "/api/todos", headers: auth(token) });
+      expect(listed.statusCode).toBe(200);
+      expect(listed.json().length).toBeGreaterThan(0);
+      const todo = listed.json()[0];
+      const headers = { ...auth(token), "idempotency-key": "todo-action-retry-001" };
+      const payload = { action: "claim", owner: "QC Lead", note: "Taking this before lunch" };
+
+      const first = await app.inject({
+        method: "POST",
+        url: `/api/todos/${todo.id}/action`,
+        headers,
+        payload
+      });
+      expect(first.statusCode).toBe(200);
+      expect(first.json().todo).toMatchObject({ id: todo.id, status: "claimed", owner: "QC Lead" });
+
+      const replay = await app.inject({
+        method: "POST",
+        url: `/api/todos/${todo.id}/action`,
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(first.json());
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: `/api/todos/${todo.id}/action`,
+        headers,
+        payload: { ...payload, note: "Different operator note" }
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.todoActions.filter((action) => action.todoId === todo.id && action.action === "claim")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "todo.claim" && event.data?.todoId === todo.id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "todo-action-retry-001")).toMatchObject({
+        method: "POST",
+        path: `/api/todos/${todo.id}/action`,
+        replayCount: 1
+      });
+    });
+  });
+
   it("creates and updates printer capability records", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);
