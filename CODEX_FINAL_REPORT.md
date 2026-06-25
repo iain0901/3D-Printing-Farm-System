@@ -124,6 +124,7 @@
   - `7eacd3d` `docs: record codex round 59 final report`
   - Current `HEAD` `docs: record codex round 59 push`
   - `a1015d8` `feat: report integrity storage coverage`
+  - `27f41f0` `feat: enforce storage integrity ops checks`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -319,6 +320,14 @@
   - Round 59 targeted `npm run test -- api/server.test.mjs -t "stored file payloads are missing|stored model bytes|missing file payload coverage|configured byte limit"`: passed, 4 tests passed.
   - Round 59 targeted `npm run test -- api/server.test.mjs`: passed, 120 tests passed.
   - Round 59 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 138 tests passed.
+  - Round 60 targeted `npm run test -- api/server.test.mjs -t "admin integrity|storage payload coverage|full backup|file payload coverage|stored file payloads|configured byte limit"`: passed, 6 tests passed.
+  - Round 60 targeted `npm run test -- api/server.test.mjs`: passed, 121 tests passed.
+  - Round 60 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 139 tests passed.
+  - Round 61 targeted `npm run test -- api/deploy.test.mjs`: failed before implementation, then passed, 3 tests passed.
+  - Round 61 script checks `node --check scripts/ops-auth-check.mjs && node --check scripts/prod-smoke.mjs && bash -n scripts/ubuntu-ops-check.sh`: passed.
+  - Round 61 local authenticated ops checker passed against temporary APIs on `127.0.0.1:19099` and `127.0.0.1:19100`, reporting `storage.complete: true`.
+  - Round 61 local authenticated `scripts/prod-smoke.mjs` passed against a temporary static-serving API on `127.0.0.1:19100`, reporting `storage.complete: true`.
+  - Round 61 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 139 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs -t "spool metadata updates|maintenance job updates"`: failed before implementation, then passed, 2 tests passed.
   - Round 50 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs`: passed, 114 tests passed.
@@ -510,6 +519,8 @@
 - Added regression coverage for blocked and intentional partial full-backup exports, and documented the partial-export recovery requirement in README, operations, and production-readiness docs.
 - Added `/api/admin/integrity?checkStorage=true` storage coverage metadata for current stored model/G-code files so operators can see expected, present, missing, total bytes, and completeness before trusting backups or restore drills.
 - Added regression coverage for missing stored-object integrity reporting, and documented the storage-aware integrity check in README, operations, and production-readiness docs.
+- Updated authenticated production smoke and ops-check scripts to call `/api/admin/integrity?checkStorage=true`, fail when `storage.complete` is false, and report storage coverage in their JSON output.
+- Added deployment/script regression coverage and documentation so timer-backed ops checks enforce the same storage integrity gate operators use before backup and restore drills.
 
 ## Remaining Blockers
 
@@ -522,7 +533,7 @@
 - Full API JSON file-byte exports are intentionally capped by `LAYERPILOT_FULL_BACKUP_MAX_BYTES`; large production farms should rely on verified volume/object-storage backups unless an operator deliberately raises the API export ceiling.
 - Full API JSON file-byte exports now fail closed when stored file payloads are missing; `allowMissingFiles=true` should be used only with a documented separate volume/object-storage recovery plan.
 - Restore previews now report incomplete JSON file-payload coverage, but operators must still verify any separate volume/object-storage restore path before committing a restore that intentionally omits file bytes.
-- Admin integrity checks now report current storage coverage when `checkStorage=true`, but operators must still run verified volume/object-storage backups and restore drills for the actual deployment target.
+- Admin integrity checks, authenticated production smoke, and authenticated ops-check runs now report current storage coverage with `checkStorage=true`, but operators must still run verified volume/object-storage backups and restore drills for the actual deployment target.
 - Idempotency coverage is route-specific; token- or secret-returning replay records are intentionally retained only in internal server metadata and omitted from shared state/admin exports.
 - Session expiry policy should be reviewed against the customer's shared-device operating model before go-live.
 - Production Owner/Admin users must enroll TOTP before protected API access when workspace `requireAdmin2fa` remains enabled; this is now enforced in `NODE_ENV=production`.

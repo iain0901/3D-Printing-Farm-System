@@ -26,6 +26,8 @@
   - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 139 tests passed).
   - Local authenticated production smoke passed against a temporary static-serving API on `127.0.0.1:19100`, reporting `storage.complete: true`.
   - Local authenticated ops checker passed against the same static-serving API on `127.0.0.1:19100`, reporting `storage.complete: true`.
+  - Committed round 61 implementation as `27f41f0` (`feat: enforce storage integrity ops checks`).
+  - Updated final report with round 61 commit, verification, completed feature, and residual blocker notes.
   - Round 60 repo inspection started at 2026-06-25T12:09:01Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, mutating API routes, idempotency allowlist, admin export/restore/integrity code, and existing integrity/backup tests before editing.
   - Selected production-readiness slice: admin integrity storage coverage for safer backup/restore/export operations.
