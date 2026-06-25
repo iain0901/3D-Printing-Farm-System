@@ -1,16 +1,26 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 39 committed and pushed
+- Phase: round 40 implementation committed; status docs pending push
 - Started: 2026-06-24 UTC
-- Current state: Round 39 history annotation retry hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 40 file/model artifact retry hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`; final status/report commit and push are pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 96 tests passed)
 - Current plan:
-  - Add regression coverage for retry-safe print-history annotations with waste inventory deduction.
-  - Add history annotation updates to the persisted `Idempotency-Key` allowlist.
-  - Document history annotation retry idempotency, run targeted tests and full QC, then commit and push.
+  - Add regression coverage for retry-safe sample model generation, Hot Drop handling, and file version bumps.
+  - Add file/model artifact write routes to the persisted `Idempotency-Key` allowlist.
+  - Document file/model artifact retry idempotency, run targeted tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 40 repo inspection started at 2026-06-25T08:18:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, and production-readiness docs before editing.
+  - Selected production-readiness slice: idempotent file/model artifact writes to prevent duplicate generated model files, Hot Drop queue jobs, and file-version audit events after dropped operator/browser responses.
+  - Added failing regression coverage proving sample model generation, Hot Drop handling, and file version bump retries need replay semantics.
+  - Added JSON file/model artifact routes to the persisted `Idempotency-Key` allowlist while leaving multipart upload out because its stream body is not available for safe pre-handler digesting.
+  - Documented file/model artifact retry idempotency in README, operations, and production-readiness docs.
+  - Targeted file artifact idempotency test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "file artifact writes"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (106 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 123 tests passed).
+  - Committed round 40 implementation as `9e163b2` (`feat: add idempotent file artifact writes`).
   - Round 39 repo inspection started at 2026-06-25T08:10:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, and production-readiness docs before editing.
   - Selected production-readiness slice: idempotent print-history annotation retries to prevent duplicate waste inventory deductions and duplicate history audit events after dropped operator/browser responses.

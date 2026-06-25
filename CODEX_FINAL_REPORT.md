@@ -68,6 +68,7 @@
   - `57b071e` `docs: record codex round 38 status`
   - `57942fd` `feat: add idempotent history annotations`
   - `823e1e7` `docs: record codex round 39 status`
+  - `9e163b2` `feat: add idempotent file artifact writes`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -183,6 +184,9 @@
   - Round 39 targeted `npm run test -- api/server.test.mjs -t "history annotations"`: failed before implementation, then passed, 1 test passed.
   - Round 39 targeted `npm run test -- api/server.test.mjs`: passed, 105 tests passed.
   - Round 39 final `npm run qc`: passed, build passed, Vitest 10 files / 122 tests passed.
+  - Round 40 targeted `npm run test -- api/server.test.mjs -t "file artifact writes"`: failed before implementation, then passed, 1 test passed.
+  - Round 40 targeted `npm run test -- api/server.test.mjs`: passed, 106 tests passed.
+  - Round 40 final `npm run qc`: passed, build passed, Vitest 10 files / 123 tests passed.
 
 ## Completed Features
 
@@ -274,6 +278,9 @@
 - Added idempotent replay/conflict protection for print-history annotations.
 - Added regression coverage proving history annotation retries replay issue/waste updates without double-deducting spool inventory or duplicating `history.annotated` audit events.
 - Documented history annotation `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for JSON file/model artifact writes covering metadata file creation, sample STL generation, Hot Drop handling, parametric nameplate generation, manual file-version bumps, and file deletion.
+- Added regression coverage proving file artifact retries replay without duplicate generated model records, duplicate Hot Drop queue jobs, duplicate file-version audit events, or same-key different-body acceptance.
+- Documented file/model artifact `Idempotency-Key` usage in README, operations, and production-readiness docs.
 - Added idempotent replay/conflict protection for billing plan changes and billing portal session creation.
 - Added regression coverage proving billing retries replay without duplicate invoices, billing sessions, billing audit events, or duplicate external Stripe checkout session calls.
 - Documented billing `Idempotency-Key` usage in README, operations, and production-readiness docs.
@@ -343,6 +350,7 @@
 - Queue matching idempotency now protects committed production assignment retries from duplicate audit events; clients still need stable per-attempt keys when operators retry queue matching commits.
 - History reprint idempotency now protects operator reprint retries from duplicate queue jobs, generated todos, and audit events; clients still need stable per-attempt keys when retrying history reprint actions.
 - History annotation idempotency now protects operator issue/waste updates from duplicate audit events and double inventory deduction; clients still need stable per-attempt keys when retrying history annotations.
+- File/model artifact idempotency now protects JSON file creation, sample generation, Hot Drop, parametric nameplate, file version, and file deletion retries; multipart file upload remains intentionally outside the generic replay allowlist until stream-body digesting is route-specific.
 - Catalog/profile/printer configuration idempotency now protects setup retries from duplicate setup records and duplicate setup audit events; clients still need stable per-attempt keys when retrying configuration writes.
 - Cost catalog and material-map idempotency now protects catalog governance retries from duplicate pricing/material-normalization audit or run records; clients still need stable per-attempt keys when retrying those governance writes.
 - Idempotency replay records are intentionally omitted from shared state and admin exports; retry clients should use fresh keys after workspace export/restore rather than expecting replay cache continuity.
