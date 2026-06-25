@@ -319,6 +319,52 @@ describe("3DSTU FarmFlow API", () => {
     });
   });
 
+  it("replays public quote intake retries without creating duplicate requests", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const payload = {
+        customer: "Retry Intake Buyer",
+        email: "retry-intake@example.com",
+        company: "Retry Intake Studio",
+        project: "PETG bracket run",
+        material: "PETG",
+        quantity: 8,
+        due: "2026-08-04",
+        budget: 480,
+        notes: "Browser submit retry",
+        fileName: "petg-bracket.3mf"
+      };
+      const headers = { "idempotency-key": "public-quote-intake-001" };
+
+      const first = await app.inject({ method: "POST", url: "/api/public/quoteRequests", headers, payload });
+      expect(first.statusCode).toBe(201);
+
+      const replay = await app.inject({ method: "POST", url: "/api/public/quoteRequests", headers, payload });
+      expect(replay.statusCode).toBe(201);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(first.json());
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        headers,
+        payload: { ...payload, quantity: 9 }
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.quoteRequests.filter((quote) => quote.email === payload.email)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "quote_request.created" && event.data?.quoteRequestId === first.json().quoteRequest.id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "public-quote-intake-001")).toMatchObject({
+        actorId: "public:quote-intake",
+        method: "POST",
+        path: "/api/public/quoteRequests",
+        replayCount: 1,
+        statusCode: 201
+      });
+    });
+  });
+
   it("protects internal worker broadcast with a shared worker token", async () => {
     await withEnv({ LAYERPILOT_WORKER_TOKEN: "worker-secret" }, async () => {
       await withApp(async ({ app, db }) => {

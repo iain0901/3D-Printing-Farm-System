@@ -1486,6 +1486,7 @@ function isMutatingApiRequest(request) {
 function idempotencyEligibleRoute(method, routePath) {
   if (method === "POST" && routePath === "/api/orders") return true;
   if (method === "POST" && routePath === "/api/queue") return true;
+  if (method === "POST" && routePath === "/api/public/quoteRequests") return true;
   if (method === "POST" && routePath === "/api/commerce/import-csv") return true;
   if (method === "POST" && /^\/api\/orders\/[^/]+\/generate-jobs$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/quoteRequests\/[^/]+\/convert-order$/.test(routePath)) return true;
@@ -1539,6 +1540,45 @@ function pruneIdempotencyLedger(data, now = new Date()) {
 
 function idempotencyFingerprint({ method, path: routePath, workspaceId, bodyDigest }) {
   return sha256([method, routePath, workspaceId || DEFAULT_WORKSPACE_ID, bodyDigest].join("\n"));
+}
+
+function publicIdempotencyContext(method, routePath) {
+  if (method === "POST" && routePath === "/api/public/quoteRequests") {
+    return { workspaceId: DEFAULT_WORKSPACE_ID, actorId: "public:quote-intake" };
+  }
+  return null;
+}
+
+async function prepareIdempotentRequest(database, request, reply, { workspaceId, actorId, bodyDigest: bodyDigestOverride }) {
+  if (!isMutatingApiRequest(request)) return false;
+  const key = idempotencyKeyFromRequest(request);
+  if (!key) return false;
+  if (!/^[A-Za-z0-9._:-]{8,160}$/.test(key)) {
+    reply.code(400).send({ error: "Invalid Idempotency-Key" });
+    return true;
+  }
+  const method = String(request.method || "").toUpperCase();
+  const routePath = request.url.split("?")[0];
+  if (!idempotencyEligibleRoute(method, routePath)) return false;
+  const bodyDigest = bodyDigestOverride || requestBodyDigest(request.body);
+  const fingerprint = idempotencyFingerprint({ method, path: routePath, workspaceId, bodyDigest });
+  const ledger = pruneIdempotencyLedger(database.data);
+  const existing = ledger.find((record) => record.workspaceId === workspaceId && record.actorId === actorId && record.key === key);
+  if (existing) {
+    if (existing.fingerprint !== fingerprint || existing.method !== method || existing.path !== routePath) {
+      reply.code(409).send({ error: "Idempotency key already used with a different request", key, firstUsedAt: existing.createdAt });
+      return true;
+    }
+    existing.replayCount = Number(existing.replayCount || 0) + 1;
+    existing.updatedAt = new Date().toISOString();
+    await database.write();
+    reply.header("x-layerpilot-idempotent-replay", "true");
+    if (existing.contentType) reply.header("content-type", existing.contentType);
+    reply.code(existing.statusCode || 200).send(existing.responseBody || "");
+    return true;
+  }
+  request.idempotency = { key, method, path: routePath, workspaceId, actorId, bodyDigest, fingerprint, createdAt: new Date().toISOString() };
+  return false;
 }
 
 function userFromRequest(database, request) {
@@ -4999,6 +5039,17 @@ async function parsePublicQuoteRequestPayload(request) {
   };
 }
 
+function publicQuoteIntakeDigest(incoming = {}) {
+  const upload = incoming.upload
+    ? {
+      filename: incoming.upload.filename || "",
+      bytes: Buffer.byteLength(incoming.upload.buffer || Buffer.alloc(0)),
+      sha256: createHash("sha256").update(incoming.upload.buffer || Buffer.alloc(0)).digest("hex")
+    }
+    : null;
+  return sha256(stableSerialize({ payload: incoming.payload || {}, upload }));
+}
+
 export async function openDatabase(file = process.env.LAYERPILOT_DB_PATH || path.join(process.cwd(), "api", "data", "layerpilot.db.json"), options = {}) {
   await mkdir(path.dirname(file), { recursive: true });
   const adapter = createPersistenceAdapter(file, options);
@@ -5185,33 +5236,9 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (apiKey && !apiKeyCanReadRoute(user, request.method, routePath)) {
       return reply.code(403).send({ error: "API key scope does not allow reading this resource" });
     }
-    if (isMutatingApiRequest(request)) {
-      const key = idempotencyKeyFromRequest(request);
-      if (key) {
-        if (!/^[A-Za-z0-9._:-]{8,160}$/.test(key)) return reply.code(400).send({ error: "Invalid Idempotency-Key" });
-        const method = String(request.method || "").toUpperCase();
-        const routePath = request.url.split("?")[0];
-        if (!idempotencyEligibleRoute(method, routePath)) return;
-        const workspaceId = user.workspaceId || DEFAULT_WORKSPACE_ID;
-        const actorId = apiKey ? `api-key:${apiKey.id}` : `user:${user.id}`;
-        const bodyDigest = requestBodyDigest(request.body);
-        const fingerprint = idempotencyFingerprint({ method, path: routePath, workspaceId, bodyDigest });
-        const ledger = pruneIdempotencyLedger(database.data);
-        const existing = ledger.find((record) => record.workspaceId === workspaceId && record.actorId === actorId && record.key === key);
-        if (existing) {
-          if (existing.fingerprint !== fingerprint || existing.method !== method || existing.path !== routePath) {
-            return reply.code(409).send({ error: "Idempotency key already used with a different request", key, firstUsedAt: existing.createdAt });
-          }
-          existing.replayCount = Number(existing.replayCount || 0) + 1;
-          existing.updatedAt = new Date().toISOString();
-          await database.write();
-          reply.header("x-layerpilot-idempotent-replay", "true");
-          if (existing.contentType) reply.header("content-type", existing.contentType);
-          return reply.code(existing.statusCode || 200).send(existing.responseBody || "");
-        }
-        request.idempotency = { key, method, path: routePath, workspaceId, actorId, bodyDigest, fingerprint, createdAt: new Date().toISOString() };
-      }
-    }
+    const workspaceId = user.workspaceId || DEFAULT_WORKSPACE_ID;
+    const actorId = apiKey ? `api-key:${apiKey.id}` : `user:${user.id}`;
+    if (await prepareIdempotentRequest(database, request, reply, { workspaceId, actorId })) return;
     const now = new Date().toISOString();
     if (session) session.lastSeenAt = now;
     if (apiKey) apiKey.lastUsedAt = now;
@@ -5530,6 +5557,8 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
 
   app.post("/api/public/quoteRequests", { config: { rateLimit: { max: 20, timeWindow: "1 minute", groupId: "quote-intake" } } }, async (request, reply) => {
     const incoming = await parsePublicQuoteRequestPayload(request);
+    const publicIdempotency = publicIdempotencyContext("POST", "/api/public/quoteRequests");
+    if (publicIdempotency && await prepareIdempotentRequest(database, request, reply, { ...publicIdempotency, bodyDigest: publicQuoteIntakeDigest(incoming) })) return;
     const parsed = publicQuoteRequestSchema.safeParse(incoming.payload || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid quote request payload", issues: parsed.error.issues });
     const workspace = workspaceForId(database.data, DEFAULT_WORKSPACE_ID);

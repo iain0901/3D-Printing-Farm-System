@@ -33,7 +33,7 @@ In `NODE_ENV=production`, `/api/readiness` is a deployment gate, not just a live
 ## Order And Queue Handling
 
 - Use dry-run job generation before committing SKU-linked orders.
-- API clients that create orders, convert quotes, queue work, or import commerce batches should send a unique `Idempotency-Key` on retry-prone requests. Supported routes replay the original 2xx response for the same actor, key, route, and body, and return `409` if the same key is reused with different input.
+- API clients and public quote forms that submit customer quote requests, create orders, convert quotes, queue work, or import commerce batches should send a unique `Idempotency-Key` on retry-prone requests. Supported routes replay the original 2xx response for the same actor, key, route, and body, and return `409` if the same key is reused with different input.
 - Review `/api/audit` after core production changes; order, catalog, scheduling, queue, bridge, file-version, history/reprint, admin export, integrity, restore, and job-generation events include the workspace and authenticated operator context for traceability.
 - Use Hold when an order should stop progressing but remain recoverable.
 - Use Cancel when the customer or operator stops the order. Cancelled orders cascade to linked non-terminal generated jobs and release reserved filament.
@@ -43,6 +43,7 @@ In `NODE_ENV=production`, `/api/readiness` is a deployment gate, not just a live
 Idempotency is supported for:
 
 - `POST /api/orders`
+- `POST /api/public/quoteRequests`
 - `POST /api/orders/:id/generate-jobs`
 - `POST /api/quoteRequests/:id/convert-order`
 - `POST /api/queue`
