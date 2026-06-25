@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 90 verified, pending commit/push
+- Phase: round 90 committed, pending push
 - Started: 2026-06-24 UTC
-- Current state: Round 90 printer action audit actor-context hardening is implemented and verified on `codex/production-saas-completion-20260624`; commit/push is pending.
+- Current state: Round 90 printer action audit actor-context hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`; push is pending.
 - Baseline QC: Round 86 passed `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed)
 - Current plan:
   - Add regression coverage requiring real printer action audit events to include authenticated workspace/operator context.
@@ -23,6 +23,7 @@
   - Broader printer/bridge/action coverage passed: `npm run test -- api/server.test.mjs -t "printer actions|bridge diagnostics|production scheduling, bridge, and file-version|direct printer status|printer capability"` (7 tests).
   - Full API suite passed: `npm run test -- api/server.test.mjs` (134 tests).
   - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed).
+  - Committed round 90 implementation/status/docs as `71ccd09` (`feat: add printer action audit context`).
   - Round 89 repo inspection started at 2026-06-25T19:00:45Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, API mutating route/idempotency allowlist, billing webhook code, and existing billing tests before editing.
   - Selected production-readiness slice: Stripe webhook duplicate-delivery hardening so provider retries do not duplicate billing audit evidence.

@@ -4,8 +4,9 @@
 - Pushed remote: `origin/codex/production-saas-completion-20260624`
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
-- Latest round: Round 89 Stripe webhook duplicate-delivery hardening implemented, verified, committed, and pushed.
+- Latest round: Round 90 printer action audit actor-context hardening implemented, verified, and committed; push pending for final status commit.
 - Commits:
+  - `71ccd09` `feat: add printer action audit context`
   - `cf4796d` `docs: record codex round 89 status`
   - `2115f11` `feat: dedupe stripe webhooks`
   - `d92b164` `feat: require password for 2fa enablement`
@@ -191,6 +192,11 @@
   - `7e42cc7` `feat: scope audit retention by workspace`
   - Current `HEAD` `docs: record codex round 69 push`
 - QC result:
+  - Round 90 targeted `npm run test -- api/server.test.mjs -t "idempotent printer actions"`: failed before implementation as expected, `printer.action` audit events lacked actor metadata.
+  - Round 90 targeted `npm run test -- api/server.test.mjs -t "idempotent printer actions"`: passed, 1 test passed.
+  - Round 90 broader printer/bridge `npm run test -- api/server.test.mjs -t "printer actions|bridge diagnostics|production scheduling, bridge, and file-version|direct printer status|printer capability"`: passed, 7 tests passed.
+  - Round 90 full API `npm run test -- api/server.test.mjs`: passed, 134 tests passed.
+  - Round 90 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 153 tests passed.
   - Round 89 targeted `npm run test -- api/server.test.mjs -t "Stripe billing"`: failed before implementation as expected, duplicate Stripe webhook delivery lacked the replay header and would create duplicate audit evidence.
   - Round 89 targeted `npm run test -- api/server.test.mjs -t "Stripe billing"`: passed, 1 test passed.
   - Round 89 full API `npm run test -- api/server.test.mjs`: passed, 134 tests passed.
