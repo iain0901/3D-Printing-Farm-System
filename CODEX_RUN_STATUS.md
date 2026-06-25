@@ -1,17 +1,31 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 60 committed and pushed
+- Phase: round 61 verified, ready to commit
 - Started: 2026-06-24 UTC
-- Current state: Round 60 health/readiness/ops-check slice is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 61 ops-check storage integrity slice is implemented and verified on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage for `/api/admin/integrity?checkStorage=true` storage payload coverage.
-  - Add storage coverage metadata to admin integrity checks so operators can see present/missing stored model bytes before backup or restore work.
-  - Document the integrity storage coverage check in README, operations, and production-readiness docs.
-  - Run targeted integrity/backup tests and full QC, then commit and push.
+  - Add regression coverage that production smoke and authenticated ops checks call `/api/admin/integrity?checkStorage=true`.
+  - Wire live smoke and ops scripts to fail when storage-aware integrity reports missing stored model/G-code bytes.
+  - Document that ops-check/smoke now include storage-aware integrity coverage.
+  - Run targeted deployment/script tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 61 repo inspection started at 2026-06-25T12:22:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, ops/smoke scripts, deployment packaging tests, and admin integrity code before editing.
+  - Selected production-readiness slice: live ops/smoke storage-aware integrity verification before backup/restore trust.
+  - Added deployment regression coverage requiring `scripts/ops-auth-check.mjs` and `scripts/prod-smoke.mjs` to call `/api/admin/integrity?checkStorage=true` and assert `storage.complete`.
+  - Targeted deployment regression failed before implementation as expected: `npm run test -- api/deploy.test.mjs` (missing storage-aware integrity call in ops auth check).
+  - Wired authenticated ops and production smoke scripts to fail closed when storage-aware integrity reports errors or incomplete stored file coverage, and to include storage coverage in their JSON output.
+  - Documented smoke/ops storage integrity enforcement in README, operations, and production-readiness docs.
+  - Targeted deployment test passed: `npm run test -- api/deploy.test.mjs` (3 tests).
+  - Script syntax checks passed: `node --check scripts/ops-auth-check.mjs && node --check scripts/prod-smoke.mjs && bash -n scripts/ubuntu-ops-check.sh`.
+  - Local authenticated ops checker passed against a temporary API on `127.0.0.1:19099`, reporting `storage.complete: true`.
+  - Local production smoke against the same temporary API reached the frontend check and failed with `Frontend failed with 401` because the temporary API was not serving built static assets.
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 139 tests passed).
+  - Local authenticated production smoke passed against a temporary static-serving API on `127.0.0.1:19100`, reporting `storage.complete: true`.
+  - Local authenticated ops checker passed against the same static-serving API on `127.0.0.1:19100`, reporting `storage.complete: true`.
   - Round 60 repo inspection started at 2026-06-25T12:09:01Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, mutating API routes, idempotency allowlist, admin export/restore/integrity code, and existing integrity/backup tests before editing.
   - Selected production-readiness slice: admin integrity storage coverage for safer backup/restore/export operations.

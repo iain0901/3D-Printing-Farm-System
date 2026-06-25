@@ -47,11 +47,29 @@ const audit = await request("/api/audit?limit=5", { headers });
 assert(audit.response.ok, `Audit check failed with ${audit.response.status}: ${JSON.stringify(audit.body)}`);
 assert(Array.isArray(audit.body?.events), "Audit response did not include events");
 
+const integrity = await request("/api/admin/integrity?checkStorage=true", { headers });
+assert(integrity.response.ok, `Storage-aware integrity check failed with ${integrity.response.status}: ${JSON.stringify(integrity.body)}`);
+assert(integrity.body?.ok === true, `Integrity check reported errors: ${JSON.stringify(integrity.body?.errors || [])}`);
+assert(integrity.body?.storage?.checked === true, "Integrity response did not include storage coverage");
+assert(integrity.body?.storage?.complete === true, `Integrity storage.complete is false: ${JSON.stringify(integrity.body?.storage?.missing || [])}`);
+
 const result = {
   baseUrl,
   auth: { email, role: login.body.user?.role || "unknown" },
   state: { printers: state.body.printers.length, queue: state.body.queue.length },
   audit: { total: audit.body.total, returned: audit.body.returned },
+  integrity: {
+    ok: integrity.body.ok,
+    schemaVersion: integrity.body.schemaVersion,
+    warnings: integrity.body.warnings?.length || 0,
+    storage: {
+      complete: integrity.body.storage.complete,
+      expected: integrity.body.storage.expected,
+      present: integrity.body.storage.present,
+      missing: integrity.body.storage.missing?.length || 0,
+      bytes: integrity.body.storage.bytes
+    }
+  },
   metrics: "skipped"
 };
 

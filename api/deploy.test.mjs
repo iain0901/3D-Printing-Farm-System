@@ -82,6 +82,7 @@ describe("3DSTU FarmFlow deployment packaging", () => {
     const setup = await readFile(new URL("../scripts/ubuntu-setup.sh", import.meta.url), "utf8");
     const goLive = await readFile(new URL("../scripts/ubuntu-go-live-check.sh", import.meta.url), "utf8");
     const opsAuthCheck = await readFile(new URL("../scripts/ops-auth-check.mjs", import.meta.url), "utf8");
+    const prodSmoke = await readFile(new URL("../scripts/prod-smoke.mjs", import.meta.url), "utf8");
     const packageScript = await readFile(new URL("../scripts/ubuntu-package.sh", import.meta.url), "utf8");
     const nodePackageScript = await readFile(new URL("../scripts/package-ubuntu.mjs", import.meta.url), "utf8");
     const supportBundle = await readFile(new URL("../scripts/ubuntu-support-bundle.sh", import.meta.url), "utf8");
@@ -222,8 +223,12 @@ describe("3DSTU FarmFlow deployment packaging", () => {
     expect(opsAuthCheck).toContain("/api/auth/login");
     expect(opsAuthCheck).toContain("/api/state");
     expect(opsAuthCheck).toContain("/api/audit?limit=5");
+    expect(opsAuthCheck).toContain("/api/admin/integrity?checkStorage=true");
+    expect(opsAuthCheck).toContain("storage.complete");
     expect(opsAuthCheck).toContain("/api/metrics");
     expect(opsAuthCheck).not.toContain("console.log(password");
+    expect(prodSmoke).toContain("/api/admin/integrity?checkStorage=true");
+    expect(prodSmoke).toContain("storage.complete");
     expect(setup).toContain("install-deps");
     expect(setup).toContain("install-firewall");
     expect(setup).toContain("install-log-rotation");

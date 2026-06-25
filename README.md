@@ -120,7 +120,7 @@ Useful production environment variables:
 
 The production API also enables security headers through `@fastify/helmet` and route-level rate limiting through `@fastify/rate-limit` for authentication, API key creation, billing sessions, and admin exports.
 
-Authenticated admins can run `/api/admin/integrity?checkStorage=true` before backup or restore drills to verify stored model/G-code object coverage. The report includes expected stored payloads, present payloads, total bytes, missing objects, and a `complete` flag so missing local or S3 file bytes are visible before an export or restore is trusted.
+Authenticated admins can run `/api/admin/integrity?checkStorage=true` before backup or restore drills to verify stored model/G-code object coverage. The report includes expected stored payloads, present payloads, total bytes, missing objects, and a `complete` flag so missing local or S3 file bytes are visible before an export or restore is trusted. `npm run smoke:prod` and `scripts/ubuntu-deploy.sh ops-check` run the same storage-aware integrity check whenever authenticated smoke credentials are configured, and they fail if `storage.complete` is false.
 
 When `NODE_ENV=production` and workspace `requireAdmin2fa` is enabled, logged-in Owner and Admin users must enroll TOTP two-factor authentication before protected production APIs are available. Unenrolled admin sessions can still call `/api/auth/me`, `/api/auth/change-password`, `/api/auth/2fa/setup`, `/api/auth/2fa/enable`, and `/api/auth/logout` so they can remediate without exposing workspace state or admin actions. Production Owner/Admin users cannot disable TOTP while `requireAdmin2fa` remains enabled; disable the workspace policy first if an account needs a controlled 2FA reset.
 
