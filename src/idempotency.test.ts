@@ -45,4 +45,38 @@ describe("browser idempotency helpers", () => {
     expect(changed.headers["Idempotency-Key"]).not.toBe(first.headers["Idempotency-Key"]);
     expect(first.headers["Idempotency-Key"]).toMatch(/^settings-/);
   });
+
+  it("keeps parametric nameplate attempts stable across equivalent browser payloads", () => {
+    vi.setSystemTime(new Date("2026-06-25T15:10:00Z"));
+    let fill = 18;
+    const randomSource = {
+      getRandomValues(buffer: Uint8Array) {
+        buffer.fill(fill);
+        fill += 1;
+        return buffer;
+      }
+    };
+    const first = idempotencyHeadersForAttempt(
+      null,
+      "parametric:nameplate",
+      { text: "Retry Badge", width: 96, height: 36, thickness: 3, material: "PETG", feature: "magnet pockets", createPart: true },
+      randomSource
+    );
+    const retry = idempotencyHeadersForAttempt(
+      first.attempt,
+      "parametric:nameplate",
+      { feature: "magnet pockets", createPart: true, material: "PETG", thickness: 3, height: 36, width: 96, text: "Retry Badge" },
+      randomSource
+    );
+    const changed = idempotencyHeadersForAttempt(
+      first.attempt,
+      "parametric:nameplate",
+      { text: "Retry Badge", width: 96, height: 36, thickness: 4, material: "PETG", feature: "magnet pockets", createPart: true },
+      randomSource
+    );
+
+    expect(retry.headers["Idempotency-Key"]).toBe(first.headers["Idempotency-Key"]);
+    expect(changed.headers["Idempotency-Key"]).not.toBe(first.headers["Idempotency-Key"]);
+    expect(first.headers["Idempotency-Key"]).toMatch(/^parametric:nameplate-/);
+  });
 });

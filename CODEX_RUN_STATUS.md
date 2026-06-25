@@ -1,17 +1,26 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 69 committed and pushed
+- Phase: round 70 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 69 workspace-scoped audit retention hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 70 operator retry-safety hardening is implemented and verified; commit/push pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage proving audit-retention runs only prune the caller workspace's non-protected events.
-  - Implement workspace-scoped audit retention using the caller workspace settings instead of global/default settings.
-  - Document the workspace-scoped retention behavior for operators and production readiness.
-  - Run targeted audit-retention tests, full API tests, and full QC, then commit and push.
+  - Add regression coverage proving parametric nameplate retries replay without duplicate stored files, linked parts, or audit events.
+  - Wire built-in production-template and parametric-nameplate operator actions to send stable `Idempotency-Key` headers.
+  - Document built-in retry safety for production-template runs and parametric nameplates.
+  - Run targeted API/browser tests, full API tests, and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 70 repo inspection started at 2026-06-25T15:06:58Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, idempotency matcher, production-template routes, parametric-nameplate route/UI, and existing catalog tests before editing.
+  - Selected production-readiness slice: operator retry safety for built-in production-template runs and parametric nameplate generation so dropped browser responses do not duplicate queue jobs or catalog artifacts.
+  - Added regression coverage proving repeated `POST /api/parametric/nameplate` requests replay the original stored file/part response, avoid duplicate stored files/linked parts/audit events, and reject changed payloads under the same key.
+  - Wired built-in production-template create/run controls and the parametric nameplate generator to send stable browser `Idempotency-Key` headers for the same attempted payload until success.
+  - Documented production-template run and parametric-nameplate retry safety in README, operations, and production-readiness docs.
+  - Targeted retry-safety coverage passed: `npm run test -- api/server.test.mjs -t "parametric nameplate|production templates"` (3 tests) and `npm run test -- src/idempotency.test.ts` (3 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (127 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 146 tests passed).
   - Round 69 repo inspection started at 2026-06-25T13:54:56Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route list, readiness/auth/admin/audit code, and existing audit/restore tests before editing.
   - Selected production-readiness slice: workspace-scoped audit-retention safety so one tenant/operator cannot prune another workspace's audit evidence.

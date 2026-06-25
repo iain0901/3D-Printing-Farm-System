@@ -5232,6 +5232,51 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent parametric nameplates without duplicate files or parts", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const headers = { ...auth(token), "idempotency-key": "parametric-nameplate-retry-001" };
+      const payload = { text: "Retry Badge", width: 96, height: 36, thickness: 3, material: "PETG", feature: "magnet pockets", createPart: true };
+
+      const generated = await app.inject({
+        method: "POST",
+        url: "/api/parametric/nameplate",
+        headers,
+        payload
+      });
+      expect(generated.statusCode).toBe(201);
+      const replay = await app.inject({
+        method: "POST",
+        url: "/api/parametric/nameplate",
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(201);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(generated.json());
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/parametric/nameplate",
+        headers,
+        payload: { ...payload, text: "Changed Badge" }
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.files.filter((item) => item.parametric?.generator === "nameplate-box-stl" && item.thumbnail === "Retry Badge")).toHaveLength(1);
+      expect(persisted.parts.filter((item) => item.name === "Parametric nameplate - Retry Badge")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "parametric.generated" && event.data?.fileId === generated.json().file.id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "parametric-nameplate-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/parametric/nameplate",
+        replayCount: 1,
+        statusCode: 201
+      });
+    });
+  });
+
   it("imports and manages slicer profiles through the API", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);

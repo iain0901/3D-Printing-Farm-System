@@ -5,6 +5,7 @@
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
 - Commits:
+  - Pending round 70 commit: operator retry safety for production-template and parametric-nameplate workflows
   - `2191e6f` `feat: harden production farm operations`
   - Current `HEAD` `docs: add codex final report`
   - `b5620df` `feat: add idempotent production write APIs`
@@ -143,6 +144,10 @@
   - `7e42cc7` `feat: scope audit retention by workspace`
   - Current `HEAD` `docs: record codex round 69 push`
 - QC result:
+  - Round 70 targeted `npm run test -- api/server.test.mjs -t "parametric nameplate|production templates"`: passed, 3 tests passed.
+  - Round 70 targeted `npm run test -- src/idempotency.test.ts`: passed, 3 tests passed.
+  - Round 70 full API `npm run test -- api/server.test.mjs`: passed, 127 tests passed.
+  - Round 70 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 146 tests passed.
   - Round 69 targeted `npm run test -- api/server.test.mjs -t "audit retention"`: failed before implementation, then passed, 2 tests passed.
   - Round 69 targeted `npm run test -- api/server.test.mjs -t "audit"`: passed, 14 tests passed.
   - Round 69 full API `npm run test -- api/server.test.mjs`: passed, 126 tests passed.
@@ -384,6 +389,7 @@
 
 ## Completed Features
 
+- Added regression coverage and UI idempotency headers for retry-safe production-template create/run and parametric nameplate generation, preventing duplicate queue jobs, stored nameplate files, linked catalog parts, and audit events after dropped operator responses.
 - Preserved and validated inherited handoff work for v0.1.21 production features.
 - Added v0.1.22 order lifecycle states: `on_hold`, `completed`, and `cancelled`.
 - Cancelled orders now stop linked non-terminal generated queue jobs, move them to blocked, release reserved spool material, and block future job generation for terminal orders.
@@ -593,6 +599,7 @@
 
 ## Remaining Blockers
 
+- Production-template and parametric nameplate retry safety is verified in API/UI helper coverage; real browser smoke on the deployed VPS should still be included in the go-live checklist.
 - No destructive deployment was performed because production env, domain, TLS, and customer deployment target were not confirmed.
 - Go-live still requires completing `docs/PRODUCTION_READINESS.md` on the actual VPS/customer environment.
 - Hardware bridge validation must be performed against the real printer fleet.

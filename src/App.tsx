@@ -2453,13 +2453,16 @@ function App() {
 
   const createProductionTemplate = async (draft: Omit<ProductionTemplate, "id">) => {
     const fallback: ProductionTemplate = { ...draft, id: crypto.randomUUID(), runCount: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    const attemptKey = "production-template:create";
     try {
       const created = await apiRequest<ProductionTemplate>("/api/productionTemplates", {
         method: "POST",
+        headers: operatorIdempotencyHeaders(attemptKey, draft),
         body: JSON.stringify(draft)
       });
       setProductionTemplates((items) => [created, ...items.filter((item) => item.id !== created.id)]);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return created;
     } catch {
       setProductionTemplates((items) => [fallback, ...items]);
@@ -2469,14 +2472,18 @@ function App() {
   };
 
   const runProductionTemplate = async (template: ProductionTemplate, options: { quantity?: number; dryRun?: boolean } = {}) => {
+    const attemptKey = `production-template:${options.dryRun ? "dry-run" : "run"}:${template.id}`;
+    const attemptPayload = { templateId: template.id, ...options };
     try {
       const result = await apiRequest<ProductionTemplateRunResult>(`/api/productionTemplates/${template.id}/run`, {
         method: "POST",
+        headers: operatorIdempotencyHeaders(attemptKey, attemptPayload),
         body: JSON.stringify(options)
       });
       if (Array.isArray(result.queue)) setQueue(result.queue);
       setProductionTemplates((items) => items.map((item) => item.id === result.template.id ? result.template : item));
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return result;
     } catch {
       const jobs: QueueItem[] = Array.from({ length: options.quantity || template.quantity || 1 }, (_, index) => {
@@ -2509,9 +2516,11 @@ function App() {
   };
 
   const generateNameplate = async (draft: ParametricNameplateDraft) => {
+    const attemptKey = "parametric:nameplate";
     try {
       const result = await apiRequest<ParametricNameplateResult>("/api/parametric/nameplate", {
         method: "POST",
+        headers: operatorIdempotencyHeaders(attemptKey, draft),
         body: JSON.stringify(draft)
       });
       if (Array.isArray(result.files)) setFiles(result.files);
@@ -2519,6 +2528,7 @@ function App() {
       if (Array.isArray(result.parts)) setParts(result.parts);
       else if (result.part) setParts((items) => [result.part!, ...items.filter((item) => item.id !== result.part?.id)]);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return result;
     } catch {
       const fallbackFile: PrintFile = {
