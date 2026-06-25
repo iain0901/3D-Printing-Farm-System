@@ -785,6 +785,17 @@ describe("3DSTU FarmFlow API", () => {
     await withApp(async ({ app, db }) => {
       const bad = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "demo@layerpilot.test", password: "wrong-password" } });
       expect(bad.statusCode).toBe(401);
+      const failedLoginEvent = db.data.events.find((event) => event.type === "auth.login_failed" && event.data?.email === "demo@layerpilot.test");
+      expect(failedLoginEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          userId: "u0",
+          email: "demo@layerpilot.test",
+          reason: "invalid_password"
+        }
+      });
+      expect(JSON.stringify(failedLoginEvent)).not.toContain("wrong-password");
 
       const token = await login(app, "owner@layerpilot.test", "layerpilot");
       const session = db.data.sessions.find((item) => item.userId === "u1");
@@ -936,7 +947,7 @@ describe("3DSTU FarmFlow API", () => {
   });
 
   it("enables TOTP two-factor auth, challenges login, and consumes recovery codes", async () => {
-    await withApp(async ({ app, dbPath }) => {
+    await withApp(async ({ app, db, dbPath }) => {
       const token = await login(app);
       const setup = await app.inject({ method: "POST", url: "/api/auth/2fa/setup", headers: auth(token) });
       expect(setup.statusCode).toBe(200);
@@ -968,6 +979,17 @@ describe("3DSTU FarmFlow API", () => {
 
       const badCode = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "demo@layerpilot.test", password: "layerpilot", twoFactorCode: "123123" } });
       expect(badCode.statusCode).toBe(401);
+      const failedTwoFactorEvent = db.data.events.find((event) => event.type === "auth.2fa_failed" && event.data?.userId === "u0");
+      expect(failedTwoFactorEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          userId: "u0",
+          email: "demo@layerpilot.test",
+          reason: "invalid_two_factor"
+        }
+      });
+      expect(JSON.stringify(failedTwoFactorEvent)).not.toContain("123123");
 
       const totpLogin = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "demo@layerpilot.test", password: "layerpilot", twoFactorCode: generateTotpCode(setup.json().secret) } });
       expect(totpLogin.statusCode).toBe(200);

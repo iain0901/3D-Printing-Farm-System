@@ -2379,6 +2379,24 @@ async function dispatchEvent(database, type, message, data = {}, options = {}) {
   return { event, deliveries, notificationDeliveries, mqttDeliveries };
 }
 
+async function dispatchAuthFailureEvent(database, type, request, options = {}) {
+  const email = String(options.email || "").trim().toLowerCase();
+  const user = options.user || null;
+  const workspaceId = user?.workspaceId || options.workspaceId || DEFAULT_WORKSPACE_ID;
+  const requestMeta = {
+    ip: normalizeClientIp(request.ip),
+    userAgent: String(request.headers?.["user-agent"] || "").slice(0, 200)
+  };
+  const data = {
+    workspaceId,
+    userId: user?.id || "",
+    email,
+    reason: options.reason || "authentication_failed",
+    ...requestMeta
+  };
+  await dispatchEvent(database, type, `${email || "Unknown user"} failed authentication`, data, { workspaceId });
+}
+
 function sanitizeBridge(bridge) {
   if (!bridge) return null;
   const { apiKey, ...safeBridge } = bridge;
@@ -5799,12 +5817,21 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   app.post("/api/auth/login", { config: { rateLimit: authRateLimit } }, async (request, reply) => {
     const parsed = authSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Invalid login payload", issues: parsed.error.issues });
-    const user = database.data.users.find((item) => item.email.toLowerCase() === parsed.data.email.toLowerCase());
-    if (!user || !verifyPassword(parsed.data.password, user.passwordHash)) return reply.code(401).send({ error: "Invalid email or password" });
+    const email = parsed.data.email.trim().toLowerCase();
+    const user = database.data.users.find((item) => item.email.toLowerCase() === email);
+    if (!user || !verifyPassword(parsed.data.password, user.passwordHash)) {
+      await dispatchAuthFailureEvent(database, "auth.login_failed", request, { email, user, reason: user ? "invalid_password" : "unknown_user" });
+      await database.write();
+      return reply.code(401).send({ error: "Invalid email or password" });
+    }
     if (twoFactorStatus(user).enabled) {
       if (!parsed.data.twoFactorCode) return reply.code(409).send({ error: "Two-factor code required", requiresTwoFactor: true });
       const verification = verifyAndConsumeTwoFactorCode(user, parsed.data.twoFactorCode);
-      if (!verification.ok) return reply.code(401).send({ error: "Invalid two-factor code", requiresTwoFactor: true });
+      if (!verification.ok) {
+        await dispatchAuthFailureEvent(database, "auth.2fa_failed", request, { email, user, reason: "invalid_two_factor" });
+        await database.write();
+        return reply.code(401).send({ error: "Invalid two-factor code", requiresTwoFactor: true });
+      }
       await dispatchEvent(database, "auth.2fa_verified", `${user.email} completed 2FA`, { userId: user.id, method: verification.method }, { actor: user });
     }
     const token = randomBytes(32).toString("hex");
