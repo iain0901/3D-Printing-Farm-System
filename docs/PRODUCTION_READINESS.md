@@ -17,7 +17,7 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 ## Access Control
 
 - [ ] At least one Owner account exists and can log in.
-- [ ] Admin and Owner users enroll TOTP when `requireAdmin2fa` is enabled; in `NODE_ENV=production`, unenrolled Owner/Admin sessions are blocked from protected APIs until enrollment.
+- [ ] Admin and Owner users enroll TOTP when `requireAdmin2fa` is enabled; in `NODE_ENV=production`, unenrolled Owner/Admin sessions are blocked from protected APIs until enrollment, and enrolled Owner/Admin users cannot disable TOTP while the workspace policy remains enabled.
 - [ ] Session lifetime and idle timeout are set intentionally for the farm's device-sharing model.
 - [ ] Operator accounts have only the permissions needed for daily production.
 - [ ] API keys have the minimum required scopes.

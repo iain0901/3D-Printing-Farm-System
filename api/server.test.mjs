@@ -736,6 +736,50 @@ describe("3DSTU FarmFlow API", () => {
     });
   });
 
+  it("prevents production Owner and Admin users from disabling required 2FA", async () => {
+    await withEnv({
+      NODE_ENV: "production",
+      LAYERPILOT_ADMIN_EMAIL: "owner@example.com",
+      LAYERPILOT_ADMIN_PASSWORD: "production-owner-password",
+      LAYERPILOT_WORKER_TOKEN: "worker-token-32-characters-minimum",
+      LAYERPILOT_METRICS_TOKEN: "metrics-token-32-characters-minimum",
+      LAYERPILOT_DISABLE_DEFAULT_USERS: "true",
+      LAYERPILOT_DISABLE_DEMO_LOGIN: "true"
+    }, async () => {
+      await withApp(async ({ app }) => {
+        const loginResponse = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "owner@example.com", password: "production-owner-password" } });
+        expect(loginResponse.statusCode).toBe(200);
+        const token = loginResponse.json().token;
+
+        const setup = await app.inject({ method: "POST", url: "/api/auth/2fa/setup", headers: auth(token) });
+        expect(setup.statusCode).toBe(200);
+        const enable = await app.inject({
+          method: "POST",
+          url: "/api/auth/2fa/enable",
+          headers: auth(token),
+          payload: { secret: setup.json().secret, code: generateTotpCode(setup.json().secret) }
+        });
+        expect(enable.statusCode).toBe(200);
+
+        const denied = await app.inject({
+          method: "POST",
+          url: "/api/auth/2fa/disable",
+          headers: auth(token),
+          payload: { password: "production-owner-password", code: generateTotpCode(setup.json().secret) }
+        });
+        expect(denied.statusCode).toBe(409);
+        expect(denied.json()).toMatchObject({
+          error: "Two-factor authentication is required for production Owner/Admin accounts",
+          requiresTwoFactorEnrollment: true
+        });
+
+        const me = await app.inject({ method: "GET", url: "/api/auth/me", headers: auth(token) });
+        expect(me.statusCode).toBe(200);
+        expect(me.json().user).toMatchObject({ email: "owner@example.com", twoFactorEnabled: true });
+      });
+    });
+  });
+
   it("bootstraps a production owner from environment and can disable default users", async () => {
     await withEnv({
       LAYERPILOT_ADMIN_EMAIL: "owner@example.com",

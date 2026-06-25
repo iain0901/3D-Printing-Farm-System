@@ -1464,6 +1464,13 @@ function requiresProductionAdminTwoFactor(data, user, method, routePath) {
   return !isTwoFactorEnrollmentRoute(method, routePath);
 }
 
+function productionRequiresAdminTwoFactor(data, user) {
+  if (process.env.NODE_ENV !== "production") return false;
+  if (!isAdminRole(user)) return false;
+  const settings = workspaceScopeForUser(data, user).workspaceSettings || {};
+  return settings.requireAdmin2fa === true;
+}
+
 const apiKeyReadScopeRules = [
   { pattern: /^\/api\/metrics$/, scopes: ["metrics:read"] },
   { pattern: /^\/api\/audit(?:\/export)?$/, scopes: ["admin:export"] },
@@ -5569,6 +5576,13 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   app.post("/api/auth/2fa/disable", { config: { rateLimit: sensitiveRateLimit } }, async (request, reply) => {
     const { session, user } = userFromRequest(database, request);
     if (!session || !user) return reply.code(401).send({ error: "User session required" });
+    if (productionRequiresAdminTwoFactor(database.data, user)) {
+      return reply.code(409).send({
+        error: "Two-factor authentication is required for production Owner/Admin accounts",
+        requiresTwoFactorEnrollment: true,
+        remediation: "Disable the workspace requireAdmin2fa policy before disabling TOTP for Owner/Admin accounts."
+      });
+    }
     const parsed = twoFactorDisableSchema.safeParse(request.body || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid 2FA disable payload", issues: parsed.error.issues });
     if (!verifyPassword(parsed.data.password, user.passwordHash)) return reply.code(401).send({ error: "Invalid password" });

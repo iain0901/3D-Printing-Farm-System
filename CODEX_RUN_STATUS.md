@@ -1,18 +1,27 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 48 committed and pushed
+- Phase: round 49 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 48 retry-safe admin restore commits are implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 49 production admin 2FA disable hardening is in progress on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage for idempotent `/api/admin/restore` commits after the successful restore revokes the original session.
-  - Implement route-specific restore commit replay without making dry-run restore previews public.
-  - Wire the Settings restore commit action to send a stable browser idempotency key.
-  - Document restore commit retry behavior.
-  - Run targeted restore tests and full QC, then commit and push.
+  - Add regression coverage proving production Owner/Admin users cannot disable 2FA while workspace `requireAdmin2fa` remains enabled.
+  - Enforce the production-required admin 2FA policy in `/api/auth/2fa/disable` without affecting non-production or non-required workspaces.
+  - Document the disable guard in README, operations, and production-readiness docs.
+  - Run targeted auth tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 49 repo inspection started at 2026-06-25T10:06:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, auth/session/TOTP code, idempotency code, and auth/readiness tests before editing.
+  - Selected production-readiness slice: prevent production Owner/Admin users from disabling TOTP while workspace `requireAdmin2fa` is enabled.
+  - Added regression coverage proving production Owner/Admin users cannot disable TOTP while the workspace `requireAdmin2fa` policy remains enabled.
+  - Targeted 2FA-disable test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "prevents production Owner and Admin users"` (1 test).
+  - Related auth regressions passed: `npm run test -- api/server.test.mjs -t "TOTP two-factor"` and `npm run test -- api/server.test.mjs -t "production Owner and Admin sessions"` (2 tests total).
+  - Added production policy enforcement to `/api/auth/2fa/disable` for Owner/Admin users when `NODE_ENV=production` and `requireAdmin2fa` is enabled.
+  - Documented production 2FA disable behavior in README, operations, and production-readiness docs.
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (112 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 130 tests passed).
   - Round 48 repo inspection started at 2026-06-25T09:50:47Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, restore/idempotency server code, restore UI code, and restore tests before editing.
   - Selected production-readiness slice: idempotent admin restore commits that can replay the successful restore response after the commit invalidates the original user session.
