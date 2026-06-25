@@ -59,6 +59,7 @@
   - Current `HEAD` `docs: record codex round 32 status`
   - `6f4a844` `feat: add idempotent bridge syncs`
   - Current `HEAD` `docs: record codex round 33 status`
+  - `5ed0f18` `feat: add idempotent spool label exports`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -152,6 +153,9 @@
   - Round 33 targeted `npm run test -- api/server.test.mjs -t "bridge diagnostics and syncs"`: failed before implementation, then passed, 1 test passed.
   - Round 33 targeted `npm run test -- api/server.test.mjs`: passed, 96 tests passed.
   - Round 33 final `npm run qc`: passed, build passed, Vitest 10 files / 113 tests passed.
+  - Round 34 targeted `npm run test -- api/server.test.mjs -t "spool label exports"`: failed before implementation, then passed, 1 test passed.
+  - Round 34 targeted `npm run test -- api/server.test.mjs`: passed, 97 tests passed.
+  - Round 34 final `npm run qc`: passed, build passed, Vitest 10 files / 114 tests passed.
 
 ## Completed Features
 
@@ -261,6 +265,9 @@
 - Added idempotent replay/conflict protection for print-history reprint retries.
 - Added regression coverage proving history reprint retries replay the original queued job response without duplicate reprint queue jobs, todos, or `queue.reprint` audit events, and conflicting retry bodies return `409`.
 - Documented history reprint `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for spool label exports.
+- Added regression coverage proving spool label export retries return the original CSV/HTML artifact without duplicate `spool.labels_generated` audit events, and conflicting retry bodies return `409`.
+- Documented spool label export `Idempotency-Key` usage in README, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -282,7 +289,7 @@
 - Public quote intake and token-verified customer quote decision idempotency now protect customer form submissions and portal approval retries; any broader public portal write coverage should still be added only with route-specific replay and token review.
 - The built-in public quote UI now sends idempotency headers for quote intake and customer accept/reject/revision decisions; embedded third-party forms still need their own per-attempt key generation.
 - Filament purchasing idempotency now protects reorder-plan and receive retries; broader inventory write coverage should still be added only after route-specific replay and response review.
-- Inventory idempotency now protects spool creation, usage logging, and scan-based usage retries; broader inventory write coverage should still be added only after route-specific replay and response review.
+- Inventory idempotency now protects spool creation, label export, usage logging, and scan-based usage retries; broader inventory write coverage should still be added only after route-specific replay and response review.
 - Maintenance idempotency now protects job creation, template saves, and problem-report intake retries; broader maintenance update coverage should still be added only after route-specific replay and response review.
 - Audit-retention run idempotency now protects retry-prone governance cleanup runs; broader admin write coverage should still be added only after route-specific replay and response review.
 - Billing idempotency now protects plan-change and portal-session retries; Stripe webhooks still depend on provider event IDs and webhook-secret validation rather than client `Idempotency-Key` headers.
