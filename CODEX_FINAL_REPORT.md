@@ -72,6 +72,7 @@
   - `39286ce` `docs: record codex round 40 status`
   - `8a128a9` `feat: add idempotent integration configuration`
   - `1c417a0` `docs: record codex round 41 status`
+  - `172616e` `feat: add idempotent purchase requests`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -193,6 +194,10 @@
   - Round 41 targeted `npm run test -- api/server.test.mjs -t "integration configuration"`: failed before implementation, then passed, 1 test passed.
   - Round 41 targeted `npm run test -- api/server.test.mjs`: passed, 107 tests passed.
   - Round 41 final `npm run qc`: passed, build passed, Vitest 10 files / 124 tests passed.
+  - Round 42 targeted `npm run test -- api/server.test.mjs -t "purchase request writes"`: failed before implementation, then passed, 1 test passed.
+  - Round 42 targeted `npm run test -- api/server.test.mjs -t "purchase"`: passed, 3 tests passed.
+  - Round 42 targeted `npm run test -- api/server.test.mjs`: passed, 108 tests passed.
+  - Round 42 final `npm run qc`: passed, build passed, Vitest 10 files / 125 tests passed.
 
 ## Completed Features
 
@@ -326,6 +331,9 @@
 - Added idempotent replay/conflict protection for integration configuration writes covering webhook create/update, notification channel create/update, commerce connector create/update, add-on updates, and bridge saves.
 - Added regression coverage proving integration configuration retries replay without duplicate connector records, duplicate add-on/bridge writes, or duplicate setup audit events.
 - Documented integration configuration `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for direct purchase-request create/update writes.
+- Added regression coverage proving purchase-request retries replay without duplicate reorder records or duplicate purchasing audit events, and conflicting retry bodies return `409`.
+- Documented purchase-request write `Idempotency-Key` usage in README, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -346,7 +354,7 @@
 - Quote conversion idempotency now protects authenticated operator retries; public customer quote decisions remain intentionally token-gated and should be reviewed separately before adding public idempotency semantics.
 - Public quote intake and token-verified customer quote decision idempotency now protect customer form submissions and portal approval retries; any broader public portal write coverage should still be added only with route-specific replay and token review.
 - The built-in public quote UI now sends idempotency headers for quote intake and customer accept/reject/revision decisions; embedded third-party forms still need their own per-attempt key generation.
-- Filament purchasing idempotency now protects reorder-plan and receive retries; broader inventory write coverage should still be added only after route-specific replay and response review.
+- Filament purchasing idempotency now protects direct purchase-request create/update, reorder-plan, and receive retries; broader inventory write coverage should still be added only after route-specific replay and response review.
 - Inventory idempotency now protects spool creation, label export, usage logging, and scan-based usage retries; broader inventory write coverage should still be added only after route-specific replay and response review.
 - Maintenance idempotency now protects job creation, template saves, and problem-report intake retries; broader maintenance update coverage should still be added only after route-specific replay and response review.
 - Audit-retention run idempotency now protects retry-prone governance cleanup runs; broader admin write coverage should still be added only after route-specific replay and response review.
