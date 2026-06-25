@@ -71,6 +71,7 @@
   - `9e163b2` `feat: add idempotent file artifact writes`
   - `39286ce` `docs: record codex round 40 status`
   - `8a128a9` `feat: add idempotent integration configuration`
+  - `1c417a0` `docs: record codex round 41 status`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
