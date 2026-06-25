@@ -4102,7 +4102,21 @@ endsolid s3_store`;
         expect(commandCalls).toHaveLength(1);
 
         const persisted = JSON.parse(await readFile(dbPath, "utf8"));
-        expect(persisted.events.filter((event) => event.type === "printer.action" && event.data?.action === "pause" && event.data?.bridgeId === "bridge-action-retry")).toHaveLength(1);
+        const actionEvents = persisted.events.filter((event) => event.type === "printer.action" && event.data?.action === "pause" && event.data?.bridgeId === "bridge-action-retry");
+        expect(actionEvents).toHaveLength(1);
+        expect(actionEvents[0]).toMatchObject({
+          workspaceId: "ws-default",
+          data: {
+            workspaceId: "ws-default",
+            actorEmail: "demo@layerpilot.test",
+            actorType: "user",
+            printerId: printer.id,
+            bridgeId: "bridge-action-retry",
+            action: "pause"
+          }
+        });
+        expect(JSON.stringify(actionEvents[0].data)).not.toContain("secret");
+        expect(JSON.stringify(actionEvents[0].data)).not.toContain("octopi.action.test");
         expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "printer-action-retry-001")).toMatchObject({
           method: "POST",
           path: "/api/actions",

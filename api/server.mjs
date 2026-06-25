@@ -8392,7 +8392,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       jobId: result.job?.id || "",
       previous: result.previous,
       bridgeId: bridge?.id || ""
-    });
+    }, { actor: request.user });
     await database.write();
     return { ok: true, accepted: true, action: result.action, printer: result.printer, job: result.job || null, bridge: sanitizeBridge(bridge), event, todos: deriveTodos(workspaceScopeForUser(database.data, request.user)) };
   });

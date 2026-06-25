@@ -1,17 +1,28 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 89 committed and pushed
+- Phase: round 90 verified, pending commit/push
 - Started: 2026-06-24 UTC
-- Current state: Round 89 Stripe webhook duplicate-delivery hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 90 printer action audit actor-context hardening is implemented and verified on `codex/production-saas-completion-20260624`; commit/push is pending.
 - Baseline QC: Round 86 passed `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed)
 - Current plan:
-  - Add regression coverage for duplicate signed Stripe webhook delivery.
-  - Deduplicate Stripe billing webhook events by provider `event.id` before mutating billing state or writing audit evidence.
-  - Update production docs/runbooks for the webhook replay behavior.
-  - Run targeted billing coverage, full API tests, and full QC, then commit and push.
+  - Add regression coverage requiring real printer action audit events to include authenticated workspace/operator context.
+  - Wire `/api/actions` `printer.action` audit events through the actor-aware audit path without exposing bridge credentials.
+  - Update production docs/runbooks for printer-action audit evidence.
+  - Run targeted printer-action coverage, full API tests, and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 90 repo inspection started at 2026-06-25T19:10:45Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, API route/idempotency surface, `/api/actions` implementation, and existing printer-action tests before editing.
+  - Selected production-readiness slice: actor-aware audit context for real printer action commands so pause/resume/cancel evidence is traceable to the authenticated workspace/operator without exposing bridge credentials.
+  - Added regression coverage requiring idempotent real printer action audit evidence to include workspace/operator context and exclude bridge secrets or endpoint hosts.
+  - Targeted printer-action regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "idempotent printer actions"` (the `printer.action` event lacked actor metadata).
+  - Wired `/api/actions` `printer.action` audit dispatch through the actor-aware path with the authenticated user.
+  - Targeted printer-action coverage passed after implementation: `npm run test -- api/server.test.mjs -t "idempotent printer actions"` (1 test).
+  - Documented `printer.action` audit evidence and bridge credential redaction expectations in README, operations, and production-readiness docs.
+  - Broader printer/bridge/action coverage passed: `npm run test -- api/server.test.mjs -t "printer actions|bridge diagnostics|production scheduling, bridge, and file-version|direct printer status|printer capability"` (7 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (134 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed).
   - Round 89 repo inspection started at 2026-06-25T19:00:45Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, API mutating route/idempotency allowlist, billing webhook code, and existing billing tests before editing.
   - Selected production-readiness slice: Stripe webhook duplicate-delivery hardening so provider retries do not duplicate billing audit evidence.

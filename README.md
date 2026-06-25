@@ -136,6 +136,8 @@ Slicer profile creation, import, update, default selection, matching-policy upda
 
 Generated sample files, Hot Drop handling, parametric nameplate generation, file-folder creation/reuse, and printer capability create/update actions also write workspace/operator audit events. These records include compact file, folder, job, part, printer, material, build-volume, and byte-count metadata for production traceability without storing generated STL bodies, local storage paths, object-storage keys, or printer credentials.
 
+Real printer actions such as pause, resume, cancel, home, preheat, and cooldown write `printer.action` audit events with workspace/operator, printer, job, action, previous-state, and bridge identity metadata. These records do not include bridge API keys or endpoint URLs.
+
 Authenticated catalog CSV exports are scoped to the requesting workspace and write `catalog.exported` audit events with row and catalog object counts, without storing the exported CSV body. Audit CSV exports write `admin.audit_exported` events with export filters, matched counts, and exported event counts, also without storing exported evidence rows.
 
 Operator quote reviews, customer portal-link generation/rotation, quote conversion, manual order creation, order status changes, SKU-linked job generation, and part/SKU setup writes create workspace/operator audit events. These records include compact quote, order, job, part, SKU, status, value, stock, and generated-job counts without storing quote customer notes, internal notes, portal bearer tokens, or full generated job response bodies.
