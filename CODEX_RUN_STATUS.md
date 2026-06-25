@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 62 verified, commit pending
+- Phase: round 62 committed, push pending
 - Started: 2026-06-24 UTC
-- Current state: Round 62 audit evidence for storage-aware integrity checks is implemented and verified on `codex/production-saas-completion-20260624`; commit and push are pending.
+- Current state: Round 62 audit evidence for storage-aware integrity checks is implemented, verified, and committed on `codex/production-saas-completion-20260624`; push is pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
   - Add regression coverage that `/api/admin/integrity?checkStorage=true` audit events include storage coverage evidence.
@@ -22,6 +22,7 @@
   - Documented storage-aware integrity audit evidence in README, operations, and production-readiness docs.
   - Full API suite passed: `npm run test -- api/server.test.mjs` (121 tests).
   - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 139 tests passed).
+  - Committed round 62 implementation as `5f20670` (`feat: audit storage integrity checks`).
   - Round 61 repo inspection started at 2026-06-25T12:22:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, ops/smoke scripts, deployment packaging tests, and admin integrity code before editing.
   - Selected production-readiness slice: live ops/smoke storage-aware integrity verification before backup/restore trust.
