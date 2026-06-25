@@ -132,6 +132,8 @@
   - `31e2f68` `docs: record codex round 63 status`
   - `d3a2937` `feat: add session audit evidence`
   - `5ee420a` `docs: record codex round 64 status`
+  - `5d32570` `feat: add idempotent telemetry ticks`
+  - Current `HEAD` `docs: record codex round 65 status`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -346,6 +348,10 @@
   - Round 64 targeted `npm run test -- api/server.test.mjs -t "authenticates users and supports logout|supports password changes|two-factor auth"`: failed before implementation, then passed, 3 tests passed.
   - Round 64 targeted `npm run test -- api/server.test.mjs`: passed, 122 tests passed.
   - Round 64 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 140 tests passed.
+  - Round 65 targeted `npm run test -- api/server.test.mjs -t "telemetry ticks"`: failed before implementation, then passed, 1 test passed.
+  - Round 65 targeted `npm run test -- api/server.test.mjs -t "advances production telemetry|telemetry ticks|history reprints|history annotations"`: passed, 4 tests passed.
+  - Round 65 targeted `npm run test -- api/server.test.mjs`: passed, 123 tests passed.
+  - Round 65 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 141 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs -t "spool metadata updates|maintenance job updates"`: failed before implementation, then passed, 2 tests passed.
   - Round 50 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs`: passed, 114 tests passed.
@@ -547,6 +553,9 @@
 - Hardened login, signup, password-change, logout, and 2FA setup/enable/verify/disable audit events with workspace, user, actor, and session metadata where applicable.
 - Added `auth.logout` audit evidence for session revocation, including the session ID and revoked-session count without storing bearer tokens.
 - Added regression coverage proving auth/session audit events omit bearer tokens, passwords, TOTP secrets, and recovery codes, and documented the audit evidence expectations in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for authenticated `/api/telemetry/tick` writes so dropped API responses do not double-advance printer progress or prematurely complete production jobs.
+- Added regression coverage proving telemetry tick retries replay the original response, preserve printer progress, avoid duplicate completion side effects, and reject changed payloads under the same key.
+- Documented telemetry tick `Idempotency-Key` usage in README, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -586,6 +595,7 @@
 - Quote portal-link idempotency now protects generation and rotation retries; operators should still avoid sharing superseded customer links after intentional manual rotation.
 - Generated todo action idempotency now protects claim/snooze/complete/reopen retries; clients still need to provide stable per-attempt keys for retry-prone operator actions.
 - Scheduler idempotency now protects auto/optimize/constraint retries from duplicate audit events; clients still need stable per-attempt keys when operators retry scheduler automation.
+- Telemetry tick idempotency now protects authenticated progress ticks from double-advancing jobs after dropped API responses; clients still need stable per-attempt keys when retrying manual or integration-triggered ticks.
 - Quote update idempotency now protects authenticated operator quote-review retries from duplicate audit events; clients still need stable per-attempt keys when operators retry quote updates.
 - Queue matching idempotency now protects committed production assignment retries from duplicate audit events; clients still need stable per-attempt keys when operators retry queue matching commits.
 - History reprint idempotency now protects operator reprint retries from duplicate queue jobs, generated todos, and audit events; clients still need stable per-attempt keys when retrying history reprint actions.

@@ -1,18 +1,29 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 64 committed and pushed
+- Phase: round 65 committed and pushed
 - Started: 2026-06-24 UTC
-- Current state: Round 64 session audit evidence hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 65 telemetry tick idempotency hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage for auth/session audit evidence on login, logout, password, and 2FA flows.
-  - Harden auth audit events with workspace/operator metadata while avoiding secrets, tokens, passwords, and recovery codes.
-  - Add logout audit events so session revocation is reviewable after operator/security incidents.
-  - Document session audit evidence expectations.
+  - Add regression coverage proving repeated authenticated telemetry ticks replay the first response instead of double-advancing production progress.
+  - Add `/api/telemetry/tick` to the persisted idempotency route matcher.
+  - Document telemetry tick retry safety for API/worker clients.
   - Run targeted API/browser tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 65 repo inspection started at 2026-06-25T13:04:30Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, idempotency matcher, mutating API routes, telemetry tick handler, and existing telemetry tests before editing.
+  - Selected production-readiness slice: idempotent authenticated telemetry ticks so dropped API responses cannot double-advance production progress or completion side effects.
+  - Added regression coverage proving repeated `POST /api/telemetry/tick` requests replay the first response, preserve printer progress, avoid premature completion side effects, and reject changed payloads under the same key.
+  - Targeted telemetry regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "telemetry ticks"` (missing idempotent replay header).
+  - Added `/api/telemetry/tick` to the persisted idempotency route matcher.
+  - Documented telemetry tick retry safety in README, operations, and production-readiness docs.
+  - Targeted telemetry coverage passed: `npm run test -- api/server.test.mjs -t "advances production telemetry|telemetry ticks|history reprints|history annotations"` (4 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (123 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 141 tests passed).
+  - Committed round 65 implementation as `5d32570` (`feat: add idempotent telemetry ticks`).
+  - Updated final report with round 65 commit, verification, completed feature, and residual blocker notes.
   - Round 64 repo inspection started at 2026-06-25T12:53:44Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, mutating API routes, idempotency surface, auth/session code, and existing auth tests before editing.
   - Selected production-readiness slice: session/auth audit evidence hardening so security-sensitive login, logout, password, and 2FA events are reviewable with workspace/operator context.
