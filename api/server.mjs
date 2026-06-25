@@ -2396,9 +2396,11 @@ function sanitizeAddon(addon) {
 function parseAuditQuery(query = {}) {
   const rawLimit = Number(query.limit);
   const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.trunc(rawLimit), 1), 1000) : 100;
+  const rawOffset = Number(query.offset);
+  const offset = Number.isFinite(rawOffset) ? Math.min(Math.max(Math.trunc(rawOffset), 0), 100000) : 0;
   const type = typeof query.type === "string" ? query.type.trim() : "";
   const search = typeof query.search === "string" ? query.search.trim().toLowerCase() : "";
-  return { limit, type, search };
+  return { limit, offset, type, search };
 }
 
 function auditTypeMatches(eventType = "", filter = "") {
@@ -2457,7 +2459,7 @@ function applyAuditRetention(data, options = {}) {
 }
 
 function buildAuditEvents(data, options = {}) {
-  const { limit, type, search } = { ...parseAuditQuery({}), ...options };
+  const { limit, offset, type, search } = { ...parseAuditQuery({}), ...options };
   return (data.events || [])
     .map(normalizeAuditEvent)
     .filter((event) => auditTypeMatches(event.type, type))
@@ -2466,7 +2468,29 @@ function buildAuditEvents(data, options = {}) {
       return [event.type, event.message, JSON.stringify(event.data)].join(" ").toLowerCase().includes(search);
     })
     .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
-    .slice(0, limit);
+    .slice(offset, offset + limit);
+}
+
+function buildAuditEventPage(data, options = {}) {
+  const { limit, offset, type, search } = { ...parseAuditQuery({}), ...options };
+  const matchedEvents = (data.events || [])
+    .map(normalizeAuditEvent)
+    .filter((event) => auditTypeMatches(event.type, type))
+    .filter((event) => {
+      if (!search) return true;
+      return [event.type, event.message, JSON.stringify(event.data)].join(" ").toLowerCase().includes(search);
+    })
+    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+  const events = matchedEvents.slice(offset, offset + limit);
+  return {
+    total: (data.events || []).length,
+    matched: matchedEvents.length,
+    returned: events.length,
+    limit,
+    offset,
+    hasMore: offset + events.length < matchedEvents.length,
+    events
+  };
 }
 
 function escapeCsvCell(value) {
@@ -6003,12 +6027,10 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   app.get("/api/audit", async (request) => {
     const options = parseAuditQuery(request.query || {});
     const scoped = workspaceScopeForUser(database.data, request.user);
-    const events = buildAuditEvents(scoped, options);
+    const page = buildAuditEventPage(scoped, options);
     return {
       generatedAt: new Date().toISOString(),
-      total: (scoped.events || []).length,
-      returned: events.length,
-      events
+      ...page
     };
   });
 

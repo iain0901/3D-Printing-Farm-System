@@ -261,6 +261,7 @@ type AnalyticsSummary = { jobs: number; active: number; queued: number; complete
 type HistoryRecord = { id: string; fileId?: string; file: string; printerId?: string; printer: string; status: JobStatus; duration: string; material: string; cost: number; date: string; note: string; issueTag?: string; issueSeverity?: string; flaggedAt?: string; failureReason?: string; failureCategory?: string; rootCause?: string; correctiveAction?: string; wasteGrams?: number; wasteCost?: number; wasteSpoolId?: string; wasteInventoryDeductedAt?: string; sourceOrderId?: string };
 type SlicerJob = { id: string; fileId: string; sourceFile: string; printerId: string; printer: string; profileId?: string; profile?: string; status: "running" | "complete" | "failed"; engine: "internal" | "external"; settings: { material: string; layerHeight: string; infill: number; supports: boolean }; outputName?: string; outputSize?: string; outputPath?: string; warning?: string; error?: string; createdAt: string; completedAt?: string };
 type AuditEvent = { id: string; type: string; message: string; at: string; data?: Record<string, unknown> };
+type AuditResponse = { total: number; matched: number; returned: number; limit: number; offset: number; hasMore: boolean; events: AuditEvent[] };
 type AutoScheduleResult = {
   strategy?: "material-color" | "load-balance" | "due-priority" | "constraint-balanced-cost" | "constraint-due-risk" | "constraint-changeover-min";
   dryRun?: boolean;
@@ -292,6 +293,7 @@ const zhTwTranslations: Record<string, string> = {
   "Profile": "個人資料",
   "Workspace": "工作區",
   "Mock printer": "模擬打印機",
+  "No audit events match the current filters": "沒有符合目前篩選條件的稽核事件",
   "Done": "完成",
   "Language": "語言",
   "Logout": "登出",
@@ -4906,9 +4908,13 @@ function AddonsPage({ addons, updateAddon, addToast, costCatalog, saveCostCatalo
   const [mqttDraft, setMqttDraft] = useState({ brokerUrl: "", topicPrefix: "layerpilot", events: "*", qos: 0, retain: false, username: "", password: "" });
   const fallbackAuditEvents = useMemo<AuditEvent[]>(() => auditSeed.map((message, index) => ({ id: `seed-audit-${index}`, type: "demo.audit", message, at: new Date(Date.now() - (index + 2) * 60_000).toISOString(), data: {} })), []);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>(fallbackAuditEvents);
-  const [auditTotal, setAuditTotal] = useState(1284);
+  const [auditTotal, setAuditTotal] = useState(fallbackAuditEvents.length);
+  const [auditMatched, setAuditMatched] = useState(fallbackAuditEvents.length);
+  const [auditHasMore, setAuditHasMore] = useState(false);
+  const [auditLoading, setAuditLoading] = useState(false);
   const [auditFilter, setAuditFilter] = useState("all");
   const [auditSearch, setAuditSearch] = useState("");
+  const auditPageSize = 8;
   const enabledCount = addons.filter((addon) => addon.status === "enabled" || addon.enabled).length;
   useEffect(() => setDraft(costCatalog), [costCatalog]);
   useEffect(() => {
@@ -4925,14 +4931,37 @@ function AddonsPage({ addons, updateAddon, addToast, costCatalog, saveCostCatalo
     });
   }, [mqttAddon?.config, mqttAddon?.id]);
   useEffect(() => {
-    const query = new URLSearchParams({ limit: "8" });
+    const query = new URLSearchParams({ limit: String(auditPageSize) });
     if (auditFilter !== "all") query.set("type", auditFilter);
     if (auditSearch.trim()) query.set("search", auditSearch.trim());
-    apiRequest<{ total: number; events: AuditEvent[] }>(`/api/audit?${query.toString()}`).then((result) => {
+    setAuditLoading(true);
+    apiRequest<AuditResponse>(`/api/audit?${query.toString()}`).then((result) => {
       setAuditTotal(result.total);
-      setAuditEvents(result.events.length ? result.events : fallbackAuditEvents);
-    }).catch(() => undefined);
+      setAuditMatched(result.matched ?? result.events.length);
+      setAuditHasMore(Boolean(result.hasMore));
+      setAuditEvents(result.events);
+    }).catch(() => {
+      setAuditTotal(fallbackAuditEvents.length);
+      setAuditMatched(fallbackAuditEvents.length);
+      setAuditHasMore(false);
+      setAuditEvents(fallbackAuditEvents);
+    }).finally(() => setAuditLoading(false));
   }, [auditFilter, auditSearch, fallbackAuditEvents]);
+  const loadMoreAudit = async () => {
+    const query = new URLSearchParams({ limit: String(auditPageSize), offset: String(auditEvents.length) });
+    if (auditFilter !== "all") query.set("type", auditFilter);
+    if (auditSearch.trim()) query.set("search", auditSearch.trim());
+    setAuditLoading(true);
+    try {
+      const result = await apiRequest<AuditResponse>(`/api/audit?${query.toString()}`);
+      setAuditTotal(result.total);
+      setAuditMatched(result.matched ?? auditMatched);
+      setAuditHasMore(Boolean(result.hasMore));
+      setAuditEvents((current) => [...current, ...result.events]);
+    } finally {
+      setAuditLoading(false);
+    }
+  };
   const toggle = async (addon: Addon) => {
     const isEnabled = addon.status === "enabled" || addon.enabled;
     setBusyAddon(addon.id);
@@ -5055,9 +5084,12 @@ function AddonsPage({ addons, updateAddon, addToast, costCatalog, saveCostCatalo
             </select>
             <label className="search-box"><Search size={15} /><input value={auditSearch} onChange={(event) => setAuditSearch(event.target.value)} placeholder="Search audit" /></label>
           </div>
+          <p className="muted">{auditMatched.toLocaleString()} matching event{auditMatched === 1 ? "" : "s"}{auditMatched !== auditTotal ? ` of ${auditTotal.toLocaleString()} total` : ""}</p>
           <div className="event-feed">
             {auditEvents.map((event, index) => <div key={event.id}><StatusDot status={index === 0 ? "queued" : "complete"} /><span><b>{event.type}</b> - {event.message}</span><em>{auditAge(event.at)}</em></div>)}
+            {!auditEvents.length && <div><StatusDot status="queued" /><span>No audit events match the current filters</span><em>0 records</em></div>}
           </div>
+          {auditHasMore && <button className="wide-action" onClick={loadMoreAudit} disabled={auditLoading}>{auditLoading ? "Loading" : "Load more audit events"}</button>}
         </section>
       </div>
     </Page>

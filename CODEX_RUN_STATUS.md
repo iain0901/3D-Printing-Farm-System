@@ -1,17 +1,31 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 54 committed and pushed
+- Phase: round 55 verified; implementation commit pending
 - Started: 2026-06-24 UTC
-- Current state: Round 54 full backup export size guard is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 55 audit trail pagination and filtered-count usability slice is implemented and verified; commit/push is in progress on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage proving full file-byte exports fail with a clear `413` before reading oversized stored objects.
-  - Add a configurable full backup byte ceiling for `/api/admin/export?includeFiles=true`.
-  - Document the full backup export guard and the recommended volume/object-storage backup path for large production farms.
-  - Run targeted backup/export tests and full QC, then commit and push.
+  - Add regression coverage for `/api/audit` filtered totals, returned counts, offset pagination, and CSV export offsets.
+  - Implement matched audit counts and offset/has-more pagination in the API without changing permission boundaries.
+  - Wire the Add-ons audit timeline to show filtered totals and load more real audit events.
+  - Document audit pagination/export behavior in README, operations, and production-readiness docs.
+  - Run targeted audit tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 55 repo inspection started at 2026-06-25T11:22:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, audit API/UI, audit retention tests, and existing audit query/export coverage before editing.
+  - Selected production-readiness slice: audit trail/operator event log usability with filtered counts and pagination.
+  - Added regression coverage for filtered audit matched counts, returned counts, offset pagination, and offset-aware CSV export.
+  - Targeted audit regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "queries audit events"` (missing `matched`, `offset`, `limit`, and `hasMore` metadata).
+  - Implemented `/api/audit` matched totals, offset pagination, returned count, and `hasMore` metadata, and made `/api/audit/export` honor `offset` with existing filters.
+  - Wired the Add-ons audit timeline to show live matched totals, show an empty live result state, and load additional audit pages.
+  - Added Traditional/Simplified Chinese coverage for the new audit empty-state string.
+  - Documented audit query pagination and filtered CSV export behavior in README, operations, and production-readiness docs.
+  - Targeted audit regression passed: `npm run test -- api/server.test.mjs -t "queries audit events"` (1 test).
+  - Targeted i18n coverage passed after adding the new audit empty-state translation: `npm run test -- api/i18n.test.mjs` (2 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (117 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 135 tests passed).
   - Round 54 repo inspection started at 2026-06-25T11:08:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, admin export/restore code, full backup UI, and existing backup/restore tests before editing.
   - Selected production-readiness slice: full backup export size guard for safer backup/export operations.

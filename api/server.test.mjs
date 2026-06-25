@@ -2194,23 +2194,37 @@ describe("3DSTU FarmFlow API", () => {
         headers: auth(token),
         payload: { machineHourlyRate: 42 }
       });
+      await app.inject({
+        method: "PATCH",
+        url: "/api/costCatalog",
+        headers: auth(token),
+        payload: { laborPerOrder: 18 }
+      });
 
-      const audit = await app.inject({ method: "GET", url: "/api/audit?type=cost_catalog.updated&limit=5", headers: auth(token) });
+      const audit = await app.inject({ method: "GET", url: "/api/audit?type=cost_catalog.updated&limit=1", headers: auth(token) });
       expect(audit.statusCode).toBe(200);
-      expect(audit.json()).toMatchObject({ total: expect.any(Number), returned: 1 });
+      expect(audit.json()).toMatchObject({ total: expect.any(Number), matched: 2, returned: 1, offset: 0, limit: 1, hasMore: true });
       expect(audit.json().events[0]).toMatchObject({ type: "cost_catalog.updated", message: "Cost catalog updated" });
-      expect(audit.json().events[0].data.costCatalog.machineHourlyRate).toBe(42);
+      expect(audit.json().events[0].data.costCatalog.laborPerOrder).toBe(18);
+
+      const secondPage = await app.inject({ method: "GET", url: "/api/audit?type=cost_catalog.updated&limit=1&offset=1", headers: auth(token) });
+      expect(secondPage.statusCode).toBe(200);
+      expect(secondPage.json()).toMatchObject({ matched: 2, returned: 1, offset: 1, limit: 1, hasMore: false });
+      expect(secondPage.json().events[0].data.costCatalog.machineHourlyRate).toBe(42);
 
       const searched = await app.inject({ method: "GET", url: "/api/audit?search=Cost%20catalog", headers: auth(token) });
       expect(searched.statusCode).toBe(200);
       expect(searched.json().events.some((event) => event.type === "cost_catalog.updated")).toBe(true);
+      expect(searched.json().matched).toBeGreaterThanOrEqual(2);
 
-      const csv = await app.inject({ method: "GET", url: "/api/audit/export?type=cost_catalog.updated&limit=5", headers: auth(token) });
+      const csv = await app.inject({ method: "GET", url: "/api/audit/export?type=cost_catalog.updated&limit=1&offset=1", headers: auth(token) });
       expect(csv.statusCode).toBe(200);
       expect(csv.headers["content-type"]).toContain("text/csv");
       expect(csv.headers["content-disposition"]).toContain("layerpilot-audit");
       expect(csv.body).toContain("id,type,message,at,data");
       expect(csv.body).toContain("cost_catalog.updated");
+      expect(csv.body).toContain("machineHourlyRate");
+      expect(csv.body).not.toContain("\"\"laborPerOrder\"\":18");
 
       const apiKey = await app.inject({
         method: "POST",
