@@ -1,15 +1,21 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: final report
+- Phase: round 2 report and push
 - Started: 2026-06-24 UTC
-- Current state: inherited handoff changes are dirty and substantial; preserving them while adding focused production slices.
+- Current state: full QC passed; updating final report before commit and push.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 9 files / 79 tests passed)
 - Current plan:
   - Add UI affordances for the new production order states.
   - Update production readiness docs and linked setup/runbook docs.
   - Commit and push `CODEX_FINAL_REPORT.md`.
 - Completed:
+  - Round 2 repo inspection started at 2026-06-25T01:32:08Z.
+  - Selected production-readiness slice: safer idempotency for retry-prone write APIs.
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (65 tests).
+  - Implemented persisted idempotency replay/conflict protection for supported order and queue write APIs.
+  - Documented `Idempotency-Key` usage in operations and production readiness docs.
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 81 tests passed).
   - Baseline QC passed.
   - Added API test for cancelling generated order work and releasing reserved material.
   - Implemented terminal order safeguards and cascading cancellation.

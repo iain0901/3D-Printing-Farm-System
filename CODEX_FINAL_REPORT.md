@@ -7,10 +7,13 @@
 - Commits:
   - `2191e6f` `feat: harden production farm operations`
   - Current `HEAD` `docs: add codex final report`
+  - Round 2 pending commit: `feat: add idempotent production write APIs`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
   - Final pre-commit `npm run qc`: passed, build passed, Vitest 9 files / 80 tests passed.
+  - Round 2 targeted `npm run test -- api/server.test.mjs`: passed, 65 tests passed.
+  - Round 2 final `npm run qc`: passed, build passed, Vitest 9 files / 81 tests passed.
 
 ## Completed Features
 
@@ -21,6 +24,10 @@
 - Added regression coverage for cancellation, terminal-order generation protection, and material reservation release.
 - Added production docs: install guide, operations runbook, release runbook, and production-readiness checklist.
 - Updated roadmap, README, and package metadata to v0.1.22.
+- Added persisted idempotency protection for supported authenticated order and queue write APIs.
+- Idempotent retries now replay the original 2xx response for the same actor, route, key, and body.
+- Reusing an `Idempotency-Key` with a different body or route now returns `409` without creating duplicate production work.
+- Documented supported idempotency routes in the operations runbook and production-readiness checklist.
 
 ## Remaining Blockers
 
@@ -29,3 +36,4 @@
 - Hardware bridge validation must be performed against the real printer fleet.
 - Optional production services such as Stripe, S3, MQTT, commerce feeds, and external slicer remain customer-environment dependent.
 - Frontend bundle size warning remains from the existing single-bundle app; it does not fail QC.
+- Idempotency is intentionally scoped to non-secret-bearing production workflow routes; broader write API coverage should be added only with route-specific response redaction.

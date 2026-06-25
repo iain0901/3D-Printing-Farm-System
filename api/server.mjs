@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import { execFile } from "node:child_process";
 import { mkdir, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
 import net from "node:net";
@@ -57,6 +57,9 @@ const defaultAuthRateLimit = { max: 8, timeWindow: "1 minute", groupId: "auth" }
 const defaultSensitiveRateLimit = { max: 30, timeWindow: "1 minute" };
 const CURRENT_SCHEMA_VERSION = 4;
 const DEFAULT_WORKSPACE_ID = "ws-default";
+const IDEMPOTENCY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+const IDEMPOTENCY_MAX_RECORDS = 500;
+const IDEMPOTENCY_MAX_RESPONSE_BYTES = 256 * 1024;
 const TENANT_COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "orders", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns", "billingSessions", "invoices"];
 const printerStatusSchema = z.enum(["idle", "printing", "paused", "offline", "error", "maintenance"]);
 const jobStatusSchema = z.enum(["queued", "printing", "paused", "complete", "failed", "cancelled"]);
@@ -1128,6 +1131,8 @@ async function ensureAuthData(database, options = {}) {
   database.data.workspaces ||= [];
   database.data.materialMappings ||= [];
   database.data.materialMapRuns ||= [];
+  database.data.dataMeta ||= {};
+  database.data.dataMeta.idempotencyKeys ||= [];
   database.data.addons = ensureAddonCatalog(database.data.addons || []);
   database.data.workspaceSettings = workspaceSettingsSchema.parse(database.data.workspaceSettings || {});
   database.data.costCatalog = costCatalogSchema.parse({ ...defaultCostCatalog, ...(database.data.costCatalog || {}) });
@@ -1306,6 +1311,65 @@ function hasPermission(user, permission) {
   if (Array.isArray(user?.apiScopes)) return user.apiScopes.includes("*") || user.apiScopes.includes(permission);
   const permissions = rolePermissions[user?.role] || rolePermissions.Viewer;
   return permissions.has("*") || permissions.has(permission);
+}
+
+function isMutatingApiRequest(request) {
+  return ["POST", "PATCH", "PUT", "DELETE"].includes(String(request.method || "").toUpperCase()) && String(request.url || "").startsWith("/api/");
+}
+
+function idempotencyEligibleRoute(method, routePath) {
+  if (method === "POST" && routePath === "/api/orders") return true;
+  if (method === "POST" && routePath === "/api/queue") return true;
+  if (method === "POST" && /^\/api\/orders\/[^/]+\/generate-jobs$/.test(routePath)) return true;
+  if (method === "POST" && /^\/api\/productionTemplates\/[^/]+\/run$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/orders\/[^/]+\/status$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/queue\/[^/]+\/(schedule|status|priority)$/.test(routePath)) return true;
+  return false;
+}
+
+function idempotencyKeyFromRequest(request) {
+  const raw = request.headers["idempotency-key"] || request.headers["x-idempotency-key"];
+  const key = Array.isArray(raw) ? raw[0] : raw;
+  return String(key || "").trim();
+}
+
+function stableSerialize(value) {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Buffer.isBuffer(value)) return JSON.stringify(value.toString("base64"));
+  if (Array.isArray(value)) return `[${value.map((item) => stableSerialize(item)).join(",")}]`;
+  return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableSerialize(value[key])}`).join(",")}}`;
+}
+
+function sha256(value) {
+  return createHash("sha256").update(String(value || "")).digest("hex");
+}
+
+function requestBodyDigest(body) {
+  if (body === undefined) return sha256("");
+  return sha256(stableSerialize(body));
+}
+
+function ensureIdempotencyLedger(data) {
+  data.dataMeta ||= {};
+  if (!Array.isArray(data.dataMeta.idempotencyKeys)) data.dataMeta.idempotencyKeys = [];
+  return data.dataMeta.idempotencyKeys;
+}
+
+function pruneIdempotencyLedger(data, now = new Date()) {
+  const cutoff = now.getTime() - IDEMPOTENCY_RETENTION_MS;
+  const retained = ensureIdempotencyLedger(data)
+    .filter((record) => {
+      const createdAt = Date.parse(record.createdAt || "");
+      return Number.isFinite(createdAt) && createdAt >= cutoff;
+    })
+    .sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")))
+    .slice(0, IDEMPOTENCY_MAX_RECORDS);
+  data.dataMeta.idempotencyKeys = retained;
+  return retained;
+}
+
+function idempotencyFingerprint({ method, path: routePath, workspaceId, bodyDigest }) {
+  return sha256([method, routePath, workspaceId || DEFAULT_WORKSPACE_ID, bodyDigest].join("\n"));
 }
 
 function userFromRequest(database, request) {
@@ -4829,9 +4893,66 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       return reply.code(403).send({ error: "API key is not allowed from this IP", ip: normalizeClientIp(request.ip) });
     }
     request.user = user;
+    if (isMutatingApiRequest(request)) {
+      const key = idempotencyKeyFromRequest(request);
+      if (key) {
+        if (!/^[A-Za-z0-9._:-]{8,160}$/.test(key)) return reply.code(400).send({ error: "Invalid Idempotency-Key" });
+        const method = String(request.method || "").toUpperCase();
+        const routePath = request.url.split("?")[0];
+        if (!idempotencyEligibleRoute(method, routePath)) return;
+        const workspaceId = user.workspaceId || DEFAULT_WORKSPACE_ID;
+        const actorId = apiKey ? `api-key:${apiKey.id}` : `user:${user.id}`;
+        const bodyDigest = requestBodyDigest(request.body);
+        const fingerprint = idempotencyFingerprint({ method, path: routePath, workspaceId, bodyDigest });
+        const ledger = pruneIdempotencyLedger(database.data);
+        const existing = ledger.find((record) => record.workspaceId === workspaceId && record.actorId === actorId && record.key === key);
+        if (existing) {
+          if (existing.fingerprint !== fingerprint || existing.method !== method || existing.path !== routePath) {
+            return reply.code(409).send({ error: "Idempotency key already used with a different request", key, firstUsedAt: existing.createdAt });
+          }
+          existing.replayCount = Number(existing.replayCount || 0) + 1;
+          existing.updatedAt = new Date().toISOString();
+          await database.write();
+          reply.header("x-layerpilot-idempotent-replay", "true");
+          if (existing.contentType) reply.header("content-type", existing.contentType);
+          return reply.code(existing.statusCode || 200).send(existing.responseBody || "");
+        }
+        request.idempotency = { key, method, path: routePath, workspaceId, actorId, bodyDigest, fingerprint, createdAt: new Date().toISOString() };
+      }
+    }
     const now = new Date().toISOString();
     if (session) session.lastSeenAt = now;
     if (apiKey) apiKey.lastUsedAt = now;
+  });
+
+  app.addHook("onSend", async (request, reply, payload) => {
+    const context = request.idempotency;
+    if (!context || reply.statusCode < 200 || reply.statusCode >= 400) return payload;
+    const responseBody = Buffer.isBuffer(payload) ? payload.toString("utf8") : String(payload || "");
+    if (Buffer.byteLength(responseBody) > IDEMPOTENCY_MAX_RESPONSE_BYTES) return payload;
+    const ledger = pruneIdempotencyLedger(database.data);
+    if (ledger.some((record) => record.workspaceId === context.workspaceId && record.actorId === context.actorId && record.key === context.key)) return payload;
+    const now = new Date().toISOString();
+    ledger.unshift({
+      id: randomUUID(),
+      key: context.key,
+      method: context.method,
+      path: context.path,
+      workspaceId: context.workspaceId,
+      actorId: context.actorId,
+      bodyDigest: context.bodyDigest,
+      fingerprint: context.fingerprint,
+      statusCode: reply.statusCode,
+      contentType: String(reply.getHeader("content-type") || "application/json; charset=utf-8"),
+      responseBody,
+      responseBytes: Buffer.byteLength(responseBody),
+      replayCount: 0,
+      createdAt: context.createdAt || now,
+      updatedAt: now
+    });
+    pruneIdempotencyLedger(database.data);
+    await database.write();
+    return payload;
   });
 
   app.get("/api/health", async () => ({ ok: true, service: "layerpilot-api", persistence: database.persistenceLabel || "lowdb-json" }));

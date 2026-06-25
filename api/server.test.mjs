@@ -225,6 +225,47 @@ describe("3DSTU FarmFlow API", () => {
     });
   });
 
+  it("replays idempotent mutating requests and rejects key reuse with a different body", async () => {
+    await withApp(async ({ app, db }) => {
+      const token = await login(app);
+      const payload = {
+        source: "Manual",
+        customer: "Retry Safe Customer",
+        items: ["PLA spacer"],
+        due: "Friday 12:00",
+        value: 42
+      };
+      const headers = { ...auth(token), "idempotency-key": "order-create-retry-001" };
+
+      const first = await app.inject({ method: "POST", url: "/api/orders", headers, payload });
+      expect(first.statusCode).toBe(201);
+      const firstOrder = first.json();
+
+      const replay = await app.inject({ method: "POST", url: "/api/orders", headers, payload });
+      expect(replay.statusCode).toBe(201);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(firstOrder);
+      expect(db.data.orders.filter((order) => order.customer === payload.customer)).toHaveLength(1);
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/orders",
+        headers,
+        payload: { ...payload, value: 99 }
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+      expect(db.data.dataMeta.idempotencyKeys).toHaveLength(1);
+      expect(db.data.dataMeta.idempotencyKeys[0]).toMatchObject({
+        key: "order-create-retry-001",
+        method: "POST",
+        path: "/api/orders",
+        statusCode: 201,
+        replayCount: 1
+      });
+    });
+  });
+
   it("protects internal worker broadcast with a shared worker token", async () => {
     await withEnv({ LAYERPILOT_WORKER_TOKEN: "worker-secret" }, async () => {
       await withApp(async ({ app, db }) => {
