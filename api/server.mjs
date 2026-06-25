@@ -7077,7 +7077,17 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       quoteBreakdown: quote
     };
     database.data.files.push(file);
-    database.data.events.unshift({ id: randomUUID(), type: "file.created", message: file.name, at: new Date().toISOString() });
+    await dispatchEvent(database, "file.created", `${file.name} created`, {
+      workspaceId: request.user.workspaceId,
+      fileId: file.id,
+      name: file.name,
+      type: file.type,
+      material: file.material,
+      folder: file.folder,
+      status: file.status,
+      version: file.version,
+      storageBacked: Boolean(file.storagePath)
+    }, { actor: request.user });
     await database.write();
     return reply.code(201).send(file);
   });

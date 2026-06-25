@@ -1,17 +1,28 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 78 committed and pushed
+- Phase: round 79 verified, pending commit/push
 - Started: 2026-06-24 UTC
-- Current state: Round 78 inventory and maintenance audit context hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 79 direct file creation audit context hardening is implemented and verified on `codex/production-saas-completion-20260624`; commit and push are pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage proving direct spool create/update and maintenance create/update audit events include workspace/operator context.
-  - Replace remaining bare inventory/maintenance event writes with the standard actor-aware audit dispatcher.
-  - Document inventory and maintenance audit evidence review in README, operations, and production-readiness docs.
-  - Run targeted inventory/maintenance tests, full API tests, and full QC, then commit and push.
+  - Add regression coverage proving direct metadata file creation writes actor-aware audit evidence.
+  - Replace the remaining bare `file.created` write with the standard workspace/operator audit dispatcher.
+  - Document direct file-creation audit evidence review in README, operations, and production-readiness docs.
+  - Run targeted file tests, full API tests, and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 79 repo inspection started at 2026-06-25T17:05:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route list, idempotency surface, admin export coverage, direct file creation route, audit dispatcher, and existing file tests before editing.
+  - Selected production-readiness slice: direct file creation audit context hardening so metadata-created model/G-code records are traceable to the authenticated workspace/operator like upload, generated, preview, and download paths.
+  - Added regression coverage requiring direct `POST /api/files` metadata creation to persist `file.created` audit evidence with workspace/operator/file context and without storage paths.
+  - Targeted file creation audit regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "creates files with validation"` (no structured `file.created` event was found).
+  - Replaced the remaining bare `file.created` write with the standard actor-aware audit dispatcher and compact file metadata.
+  - Documented direct file-creation audit evidence review in README, operations, and production-readiness docs.
+  - Targeted file creation coverage passed: `npm run test -- api/server.test.mjs -t "creates files with validation"` (1 test).
+  - Broader file coverage passed: `npm run test -- api/server.test.mjs -t "creates files with validation|file artifact writes|model files|stored files|downloads stored files|builds safe file previews"` (7 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (132 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 151 tests passed).
   - Round 78 repo inspection started at 2026-06-25T16:48:24Z.
   - Reviewed current branch, recent commits, run status, final report, README, install docs, operations, production-readiness, roadmap, package metadata, API route list, audit dispatcher, inventory/maintenance routes, and existing inventory/maintenance tests before editing.
   - Selected production-readiness slice: operator audit context for direct inventory and maintenance create/update events so physical spool and service-log changes are traceable to the authenticated workspace/operator.

@@ -2850,6 +2850,23 @@ describe("3DSTU FarmFlow API", () => {
 
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
       expect(persisted.files.some((file) => file.name === "Production fixture.stl")).toBe(true);
+      const event = persisted.events.find((item) => item.type === "file.created" && item.data?.fileId === created.json().id);
+      expect(event).toMatchObject({
+        workspaceId: "ws-default",
+        data: expect.objectContaining({
+          workspaceId: "ws-default",
+          actorEmail: "demo@layerpilot.test",
+          actorId: expect.any(String),
+          actorRole: expect.any(String),
+          actorType: "user",
+          fileId: created.json().id,
+          name: "Production fixture.stl",
+          type: "STL",
+          material: "PETG",
+          storageBacked: false
+        })
+      });
+      expect(JSON.stringify(event)).not.toContain("storagePath");
     });
   });
 
