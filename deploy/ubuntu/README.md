@@ -310,6 +310,7 @@ Keep `.env` out of git. The production containers use `.env`, Docker named volum
 
 - Use `LAYERPILOT_DISABLE_DEFAULT_USERS=true`, `LAYERPILOT_DISABLE_DEMO_LOGIN=true`, and `LAYERPILOT_ENABLE_PUBLIC_SIGNUP=false` for normal customer VPS deployments.
 - Use a strong `LAYERPILOT_ADMIN_PASSWORD`.
+- Keep account lockout/backoff enabled with `LAYERPILOT_AUTH_LOCK_THRESHOLD` and `LAYERPILOT_AUTH_LOCK_MINUTES`; defaults are 5 failed known-account auth attempts and a 15-minute lock.
 - Keep `LAYERPILOT_BIND_ADDRESS=127.0.0.1` behind Nginx unless you intentionally expose port `8797`.
 - Configure Stripe only after you have real price IDs and webhook routing.
 - The current app supports workspace isolation on the JSON/SQLite document store. For larger public multi-tenant SaaS scale, migrate to Postgres with row-level security.

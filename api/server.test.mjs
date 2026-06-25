@@ -847,6 +847,63 @@ describe("3DSTU FarmFlow API", () => {
     });
   });
 
+  it("locks known accounts after repeated password failures and clears lock on password reset", async () => {
+    await withEnv({ LAYERPILOT_AUTH_LOCK_THRESHOLD: "3", LAYERPILOT_AUTH_LOCK_MINUTES: "10" }, async () => {
+      await withApp(async ({ app, db }) => {
+        const payload = { email: "owner@layerpilot.test", password: "wrong-password" };
+        const first = await app.inject({ method: "POST", url: "/api/auth/login", payload });
+        const second = await app.inject({ method: "POST", url: "/api/auth/login", payload });
+        const locked = await app.inject({ method: "POST", url: "/api/auth/login", payload });
+        expect(first.statusCode).toBe(401);
+        expect(second.statusCode).toBe(401);
+        expect(locked.statusCode).toBe(423);
+        expect(locked.json()).toMatchObject({ error: "Account temporarily locked", reason: "invalid_password", retryAfterSeconds: expect.any(Number) });
+
+        const correctDuringLock = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "owner@layerpilot.test", password: "layerpilot" } });
+        expect(correctDuringLock.statusCode).toBe(423);
+
+        const user = db.data.users.find((item) => item.email === "owner@layerpilot.test");
+        expect(user).toMatchObject({ authFailedAttempts: 3, authLockedReason: "invalid_password" });
+        expect(Date.parse(user.authLockedUntil)).toBeGreaterThan(Date.now());
+
+        const lockEvent = db.data.events.find((event) => event.type === "auth.account_locked" && event.data?.userId === "u1");
+        expect(lockEvent).toMatchObject({
+          workspaceId: "ws-default",
+          data: {
+            workspaceId: "ws-default",
+            userId: "u1",
+            email: "owner@layerpilot.test",
+            reason: "invalid_password",
+            failedAttempts: 3,
+            lockMinutes: 10
+          }
+        });
+        const lockedAttemptEvent = db.data.events.find((event) => event.type === "auth.login_locked" && event.data?.userId === "u1");
+        expect(lockedAttemptEvent).toMatchObject({
+          data: {
+            email: "owner@layerpilot.test",
+            reason: "account_locked",
+            lockedReason: "invalid_password"
+          }
+        });
+        expect(JSON.stringify([lockEvent, lockedAttemptEvent])).not.toContain("wrong-password");
+
+        const demoToken = await login(app);
+        const reset = await app.inject({
+          method: "POST",
+          url: "/api/users/u1/reset-password",
+          headers: auth(demoToken),
+          payload: { password: "reset-owner-password", requireChange: false }
+        });
+        expect(reset.statusCode).toBe(200);
+        expect(db.data.users.find((item) => item.id === "u1")).toMatchObject({ authFailedAttempts: 0, authLockedUntil: "" });
+
+        const afterReset = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "owner@layerpilot.test", password: "reset-owner-password" } });
+        expect(afterReset.statusCode).toBe(200);
+      });
+    });
+  });
+
   it("expires stale user sessions and migrates legacy plaintext session tokens on use", async () => {
     await withApp(async ({ app, db }) => {
       const token = await login(app, "owner@layerpilot.test", "layerpilot");
@@ -1040,6 +1097,53 @@ describe("3DSTU FarmFlow API", () => {
       const serializedEvents = JSON.stringify([setupEvent, enabledEvent, verifiedEvent, disabledEvent]);
       expect(serializedEvents).not.toContain(setup.json().secret);
       expect(serializedEvents).not.toContain(recoveryCode);
+    });
+  });
+
+  it("locks known accounts after repeated two-factor failures and clears lock on successful 2FA", async () => {
+    await withEnv({ LAYERPILOT_AUTH_LOCK_THRESHOLD: "2", LAYERPILOT_AUTH_LOCK_MINUTES: "10" }, async () => {
+      await withApp(async ({ app, db }) => {
+        const token = await login(app);
+        const setup = await app.inject({ method: "POST", url: "/api/auth/2fa/setup", headers: auth(token) });
+        expect(setup.statusCode).toBe(200);
+        const enable = await app.inject({
+          method: "POST",
+          url: "/api/auth/2fa/enable",
+          headers: auth(token),
+          payload: { secret: setup.json().secret, code: generateTotpCode(setup.json().secret) }
+        });
+        expect(enable.statusCode).toBe(200);
+
+        const badPayload = { email: "demo@layerpilot.test", password: "layerpilot", twoFactorCode: "111111" };
+        const first = await app.inject({ method: "POST", url: "/api/auth/login", payload: badPayload });
+        const locked = await app.inject({ method: "POST", url: "/api/auth/login", payload: badPayload });
+        expect(first.statusCode).toBe(401);
+        expect(locked.statusCode).toBe(423);
+        expect(locked.json()).toMatchObject({ error: "Account temporarily locked", reason: "invalid_two_factor" });
+
+        const correctDuringLock = await app.inject({
+          method: "POST",
+          url: "/api/auth/login",
+          payload: { email: "demo@layerpilot.test", password: "layerpilot", twoFactorCode: generateTotpCode(setup.json().secret) }
+        });
+        expect(correctDuringLock.statusCode).toBe(423);
+
+        const user = db.data.users.find((item) => item.email === "demo@layerpilot.test");
+        expect(user).toMatchObject({ authFailedAttempts: 2, authLockedReason: "invalid_two_factor" });
+        const lockEvent = db.data.events.find((event) => event.type === "auth.account_locked" && event.data?.userId === "u0");
+        expect(lockEvent).toMatchObject({ data: { reason: "invalid_two_factor", failedAttempts: 2 } });
+        expect(JSON.stringify(lockEvent)).not.toContain("111111");
+
+        user.authLockedUntil = new Date(Date.now() - 60_000).toISOString();
+        await db.write();
+        const success = await app.inject({
+          method: "POST",
+          url: "/api/auth/login",
+          payload: { email: "demo@layerpilot.test", password: "layerpilot", twoFactorCode: generateTotpCode(setup.json().secret) }
+        });
+        expect(success.statusCode).toBe(200);
+        expect(db.data.users.find((item) => item.id === "u0")).toMatchObject({ authFailedAttempts: 0, authLockedUntil: "" });
+      });
     });
   });
 

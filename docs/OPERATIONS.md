@@ -26,11 +26,14 @@ Public signup is closed by default in `NODE_ENV=production` so an exposed custom
 - User bearer tokens are stored only as server-side hashes in persisted data.
 - Sessions expire after `LAYERPILOT_SESSION_TTL_HOURS`, default `168` hours.
 - Active sessions also expire after `LAYERPILOT_SESSION_IDLE_TIMEOUT_HOURS` without use, default `24` hours.
+- Known accounts are temporarily locked after repeated password or 2FA failures. Defaults are `LAYERPILOT_AUTH_LOCK_THRESHOLD=5` and `LAYERPILOT_AUTH_LOCK_MINUTES=15`; locked login attempts return `423` with a retry window.
 - Password changes keep only the current session; admin password resets revoke all sessions for the reset user.
+- Use an Owner/Admin password reset to clear a legitimate user's lock immediately after verifying the account owner out-of-band.
 - In `NODE_ENV=production`, Owner/Admin sessions are limited to identity, password, logout, and TOTP setup/enable endpoints while workspace `requireAdmin2fa` is enabled and the account has not enrolled two-factor authentication.
 - In `NODE_ENV=production`, Owner/Admin users cannot disable TOTP while workspace `requireAdmin2fa` remains enabled. Disable that workspace policy first for a planned 2FA reset, then re-enable the policy after the account is remediated.
 - Review `/api/audit` for successful login, logout, password-change, signup, and 2FA setup/enable/verify/disable events during access reviews or incident response. These events include workspace, user, actor, and session metadata where applicable, but do not store bearer tokens, passwords, TOTP secrets, or recovery codes.
 - Review `auth.login_failed` and `auth.2fa_failed` events during lockout, brute-force, or suspected account-takeover investigations. Known-account failures include workspace/user context plus compact IP/user-agent hints; submitted passwords, TOTP codes, and recovery codes are never stored in the audit event.
+- Review `auth.account_locked` and `auth.login_locked` events to distinguish accounts that crossed the lock threshold from attempts that were rejected during the lock window.
 
 ## API Key Policy
 

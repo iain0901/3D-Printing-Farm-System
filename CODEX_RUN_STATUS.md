@@ -1,17 +1,27 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 72 committed and pushed
+- Phase: round 73 verified; commit/push pending
 - Started: 2026-06-24 UTC
-- Current state: Round 72 auth failure audit hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 73 auth abuse lockout/backoff hardening is implemented and verified on `codex/production-saas-completion-20260624`; commit/push pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage proving failed password and failed 2FA login attempts create durable audit evidence without storing submitted secrets.
-  - Implement auth failure audit events with workspace/user context for known users and compact request metadata for incident review.
-  - Document failed-auth audit evidence in operator docs.
+  - Add regression coverage proving repeated password and 2FA failures lock known accounts temporarily, audit the lock, and do not store submitted secrets.
+  - Implement per-user auth failure counters, lock windows, and reset-on-success/password-reset behavior.
+  - Document account lockout/backoff behavior in operator docs.
   - Run targeted auth tests, full API tests, and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 73 repo inspection started at 2026-06-25T15:57:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, auth/session code, audit helpers, and existing auth tests before editing.
+  - Selected production-readiness slice: account lockout/backoff for repeated password and 2FA failures so audited brute-force evidence also slows online credential attacks against known accounts.
+  - Added regression coverage proving repeated password failures and repeated 2FA failures lock known accounts temporarily, audit the lock, avoid storing submitted credentials/codes, and clear locks on password reset or successful login after expiry.
+  - Targeted auth lockout regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "locks known accounts|authenticates users and supports logout|two-factor auth"` (missing lock response; repeated failures returned `401`).
+  - Implemented per-user auth failure counters, configurable `LAYERPILOT_AUTH_LOCK_THRESHOLD`/`LAYERPILOT_AUTH_LOCK_MINUTES`, active-lock `423` responses, `auth.account_locked` and `auth.login_locked` audit evidence, and reset-on-success/password-change/password-reset behavior.
+  - Documented account lockout/backoff env vars and operator recovery workflow in README, install docs, Ubuntu docs, operations, production-readiness, and `.env.example`.
+  - Targeted auth coverage passed: `npm run test -- api/server.test.mjs -t "locks known accounts|authenticates users and supports logout|two-factor auth|supports password changes"` (5 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (130 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 149 tests passed).
   - Round 72 repo inspection started at 2026-06-25T15:44:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, auth/session code, audit helpers, and existing auth tests before editing.
   - Selected production-readiness slice: failed authentication audit evidence for password and 2FA failures so production access-review evidence includes rejected attempts without storing submitted secrets.

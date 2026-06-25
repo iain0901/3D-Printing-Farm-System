@@ -22,6 +22,7 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 - [ ] At least one Owner account exists and can log in.
 - [ ] Admin and Owner users enroll TOTP when `requireAdmin2fa` is enabled; in `NODE_ENV=production`, unenrolled Owner/Admin sessions are blocked from protected APIs until enrollment, and enrolled Owner/Admin users cannot disable TOTP while the workspace policy remains enabled.
 - [ ] Session lifetime and idle timeout are set intentionally for the farm's device-sharing model.
+- [ ] Account lockout/backoff settings are intentional for the deployment; defaults lock known accounts after 5 failed password or 2FA attempts for 15 minutes.
 - [ ] Operator accounts have only the permissions needed for daily production.
 - [ ] API keys have the minimum required scopes.
 - [ ] API keys use only grantable automation scopes and no wildcard, user-management, settings, or API-key-management scope.
@@ -30,6 +31,7 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 - [ ] API key IP/CIDR allowlists are enabled when automation runs from fixed networks, and every rule is an explicit IPv4 address or IPv4 CIDR range; empty or invalid allowlists are rejected by settings writes and fail production readiness.
 - [ ] `/api/audit` shows successful login, logout, password-change, signup, and 2FA setup/enable/verify/disable events with workspace, user, actor, and session metadata where applicable, and without bearer tokens, passwords, TOTP secrets, or recovery codes.
 - [ ] Failed password and failed TOTP/recovery-code login attempts create `auth.login_failed` and `auth.2fa_failed` audit events with known workspace/user context and compact request metadata, but without submitted passwords, TOTP codes, or recovery codes.
+- [ ] Repeated known-account authentication failures create `auth.account_locked` and `auth.login_locked` audit evidence, and Owner/Admin password reset has been verified as the immediate recovery path for legitimate locked users.
 - [ ] `/api/audit` shows recent production/admin events with the expected workspace and operator context, including scheduling, queue, bridge, file-version, history annotation/reprint, onboarding, support snapshot, settings, billing, add-on, cost catalog, material mapping, API-key, and user-management changes; filtered audit review and CSV exports have been checked with `type`, `search`, `limit`, and `offset` so the matched count and `hasMore` metadata line up with operator evidence.
 - [ ] Audit-retention settings have been reviewed per workspace; manual retention runs prune only the authenticated workspace's non-protected events and preserve protected admin/system evidence.
 

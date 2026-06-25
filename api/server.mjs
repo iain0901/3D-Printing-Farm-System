@@ -63,6 +63,8 @@ const IDEMPOTENCY_MAX_RESPONSE_BYTES = 256 * 1024;
 const DEFAULT_FULL_BACKUP_MAX_BYTES = 512 * 1024 * 1024;
 const DEFAULT_SESSION_TTL_HOURS = 7 * 24;
 const DEFAULT_SESSION_IDLE_TIMEOUT_HOURS = 24;
+const DEFAULT_AUTH_LOCK_THRESHOLD = 5;
+const DEFAULT_AUTH_LOCK_MINUTES = 15;
 const API_KEY_GRANTABLE_SCOPES = [
   "actions:write",
   "admin:export",
@@ -817,6 +819,49 @@ function envPositiveNumber(name, fallback, env = process.env) {
   const value = Number(env[name]);
   if (!Number.isFinite(value) || value <= 0) return fallback;
   return value;
+}
+
+function authLockoutPolicy(env = process.env) {
+  return {
+    threshold: Math.max(1, Math.trunc(envPositiveNumber("LAYERPILOT_AUTH_LOCK_THRESHOLD", DEFAULT_AUTH_LOCK_THRESHOLD, env))),
+    lockMinutes: envPositiveNumber("LAYERPILOT_AUTH_LOCK_MINUTES", DEFAULT_AUTH_LOCK_MINUTES, env)
+  };
+}
+
+function activeAuthLock(user, now = new Date()) {
+  const lockedUntilMs = Date.parse(user?.authLockedUntil || "");
+  if (!Number.isFinite(lockedUntilMs) || lockedUntilMs <= now.getTime()) return null;
+  return {
+    lockedUntil: new Date(lockedUntilMs).toISOString(),
+    retryAfterSeconds: Math.max(1, Math.ceil((lockedUntilMs - now.getTime()) / 1000)),
+    reason: user.authLockedReason || "authentication_failed",
+    failedAttempts: Number(user.authFailedAttempts || 0)
+  };
+}
+
+function clearAuthFailureState(user) {
+  if (!user) return;
+  user.authFailedAttempts = 0;
+  user.authFailedAt = "";
+  user.authLockedUntil = "";
+  user.authLockedReason = "";
+}
+
+function recordAuthFailureState(user, reason, now = new Date()) {
+  if (!user) return null;
+  const policy = authLockoutPolicy();
+  const attempts = Number(user.authFailedAttempts || 0) + 1;
+  user.authFailedAttempts = attempts;
+  user.authFailedAt = now.toISOString();
+  if (attempts < policy.threshold) {
+    user.authLockedUntil ||= "";
+    user.authLockedReason ||= "";
+    return { failedAttempts: attempts, locked: false, policy };
+  }
+  const lockedUntil = new Date(now.getTime() + policy.lockMinutes * 60 * 1000).toISOString();
+  user.authLockedUntil = lockedUntil;
+  user.authLockedReason = reason;
+  return { failedAttempts: attempts, locked: true, lockedUntil, policy };
 }
 
 function sessionPolicy() {
@@ -2394,6 +2439,9 @@ async function dispatchAuthFailureEvent(database, type, request, options = {}) {
     reason: options.reason || "authentication_failed",
     ...requestMeta
   };
+  if (Number.isFinite(Number(options.failedAttempts))) data.failedAttempts = Number(options.failedAttempts);
+  if (options.lockedUntil) data.lockedUntil = options.lockedUntil;
+  if (options.lockedReason) data.lockedReason = options.lockedReason;
   await dispatchEvent(database, type, `${email || "Unknown user"} failed authentication`, data, { workspaceId });
 }
 
@@ -5819,17 +5867,47 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsed.success) return reply.code(400).send({ error: "Invalid login payload", issues: parsed.error.issues });
     const email = parsed.data.email.trim().toLowerCase();
     const user = database.data.users.find((item) => item.email.toLowerCase() === email);
-    if (!user || !verifyPassword(parsed.data.password, user.passwordHash)) {
-      await dispatchAuthFailureEvent(database, "auth.login_failed", request, { email, user, reason: user ? "invalid_password" : "unknown_user" });
+    const lock = activeAuthLock(user);
+    if (lock) {
+      await dispatchAuthFailureEvent(database, "auth.login_locked", request, { email, user, reason: "account_locked", failedAttempts: lock.failedAttempts, lockedUntil: lock.lockedUntil, lockedReason: lock.reason });
       await database.write();
+      return reply.code(423).send({ error: "Account temporarily locked", reason: lock.reason, lockedUntil: lock.lockedUntil, retryAfterSeconds: lock.retryAfterSeconds });
+    }
+    if (!user || !verifyPassword(parsed.data.password, user.passwordHash)) {
+      const failure = recordAuthFailureState(user, user ? "invalid_password" : "unknown_user");
+      await dispatchAuthFailureEvent(database, "auth.login_failed", request, { email, user, reason: user ? "invalid_password" : "unknown_user", failedAttempts: failure?.failedAttempts, lockedUntil: failure?.lockedUntil });
+      if (failure?.locked) {
+        await dispatchEvent(database, "auth.account_locked", `${user.email} temporarily locked after authentication failures`, {
+          userId: user.id,
+          email,
+          reason: "invalid_password",
+          failedAttempts: failure.failedAttempts,
+          lockedUntil: failure.lockedUntil,
+          lockMinutes: failure.policy.lockMinutes
+        }, { workspaceId: user.workspaceId || DEFAULT_WORKSPACE_ID });
+      }
+      await database.write();
+      if (failure?.locked) return reply.code(423).send({ error: "Account temporarily locked", reason: "invalid_password", lockedUntil: failure.lockedUntil, retryAfterSeconds: Math.max(1, Math.ceil((Date.parse(failure.lockedUntil) - Date.now()) / 1000)) });
       return reply.code(401).send({ error: "Invalid email or password" });
     }
     if (twoFactorStatus(user).enabled) {
       if (!parsed.data.twoFactorCode) return reply.code(409).send({ error: "Two-factor code required", requiresTwoFactor: true });
       const verification = verifyAndConsumeTwoFactorCode(user, parsed.data.twoFactorCode);
       if (!verification.ok) {
-        await dispatchAuthFailureEvent(database, "auth.2fa_failed", request, { email, user, reason: "invalid_two_factor" });
+        const failure = recordAuthFailureState(user, "invalid_two_factor");
+        await dispatchAuthFailureEvent(database, "auth.2fa_failed", request, { email, user, reason: "invalid_two_factor", failedAttempts: failure?.failedAttempts, lockedUntil: failure?.lockedUntil });
+        if (failure?.locked) {
+          await dispatchEvent(database, "auth.account_locked", `${user.email} temporarily locked after two-factor failures`, {
+            userId: user.id,
+            email,
+            reason: "invalid_two_factor",
+            failedAttempts: failure.failedAttempts,
+            lockedUntil: failure.lockedUntil,
+            lockMinutes: failure.policy.lockMinutes
+          }, { workspaceId: user.workspaceId || DEFAULT_WORKSPACE_ID });
+        }
         await database.write();
+        if (failure?.locked) return reply.code(423).send({ error: "Account temporarily locked", reason: "invalid_two_factor", lockedUntil: failure.lockedUntil, retryAfterSeconds: Math.max(1, Math.ceil((Date.parse(failure.lockedUntil) - Date.now()) / 1000)) });
         return reply.code(401).send({ error: "Invalid two-factor code", requiresTwoFactor: true });
       }
       await dispatchEvent(database, "auth.2fa_verified", `${user.email} completed 2FA`, { userId: user.id, method: verification.method }, { actor: user });
@@ -5839,6 +5917,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     user.lastSeen = "Now";
     user.updatedAt = now;
     user.workspaceId ||= DEFAULT_WORKSPACE_ID;
+    clearAuthFailureState(user);
     const session = createSession({ token, user, workspaceId: user.workspaceId, now: new Date(now) });
     database.data.sessions.push(session);
     await dispatchEvent(database, "auth.login", `${user.email} signed in`, { userId: user.id, sessionId: session.id }, { actor: user, at: now });
@@ -5964,6 +6043,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const sessionsBeforeChange = (database.data.sessions || []).filter((item) => item.userId === persistedUser.id).length;
     persistedUser.passwordHash = createPasswordHash(parsed.data.newPassword);
     persistedUser.passwordResetRequired = false;
+    clearAuthFailureState(persistedUser);
     persistedUser.updatedAt = new Date().toISOString();
     database.data.sessions = (database.data.sessions || []).filter((item) => item.userId !== persistedUser.id || sessionMatchesToken(item, token));
     const sessionsAfterChange = (database.data.sessions || []).filter((item) => item.userId === persistedUser.id).length;
@@ -6615,6 +6695,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const password = parsed.data.password || randomBytes(10).toString("base64url");
     user.passwordHash = createPasswordHash(password);
     user.passwordResetRequired = parsed.data.requireChange;
+    clearAuthFailureState(user);
     user.updatedAt = new Date().toISOString();
     database.data.sessions = (database.data.sessions || []).filter((session) => session.userId !== user.id);
     await dispatchEvent(database, "user.password_reset", `${user.email} password reset`, { workspaceId: request.user.workspaceId, userId: user.id, resetBy: request.user.email, requireChange: parsed.data.requireChange }, { actor: request.user });

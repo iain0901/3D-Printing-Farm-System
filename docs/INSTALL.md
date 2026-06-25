@@ -35,6 +35,8 @@ Set real values for:
 - `LAYERPILOT_ENABLE_PUBLIC_SIGNUP=false` unless self-service tenant registration is intentional
 - `LAYERPILOT_SESSION_TTL_HOURS`, defaults to `168`
 - `LAYERPILOT_SESSION_IDLE_TIMEOUT_HOURS`, defaults to `24`
+- `LAYERPILOT_AUTH_LOCK_THRESHOLD`, defaults to `5`
+- `LAYERPILOT_AUTH_LOCK_MINUTES`, defaults to `15`
 
 In production, `LAYERPILOT_WORKER_TOKEN` is accepted only through the `x-layerpilot-worker-token` header and `LAYERPILOT_METRICS_TOKEN` only through the `x-layerpilot-metrics-token` header. Do not put these shared tokens in URLs.
 
