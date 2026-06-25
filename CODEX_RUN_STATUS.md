@@ -3,7 +3,7 @@
 - Branch: `codex/production-saas-completion-20260624`
 - Phase: round 31 committed
 - Started: 2026-06-24 UTC
-- Current state: Round 31 history reprint idempotency hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`; push pending.
+- Current state: Round 31 history reprint idempotency hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 96 tests passed)
 - Current plan:
   - Add persisted idempotency replay/conflict protection for print-history reprint retries.
@@ -21,6 +21,7 @@
   - Targeted API suite passed: `npm run test -- api/server.test.mjs` (94 tests).
   - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 111 tests passed).
   - Committed round 31 implementation (`feat: add idempotent history reprints`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
   - Round 30 repo inspection started at 2026-06-25T06:37:16Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: idempotent committed queue matching to prevent duplicate production assignment audit events after operator/browser retries.
