@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 92 verified, commit pending
+- Phase: round 92 implementation committed, final report pending
 - Started: 2026-06-24 UTC
-- Current state: Round 92 2FA enablement failure audit hardening is implemented and verified on `codex/production-saas-completion-20260624`; commit/push is pending.
+- Current state: Round 92 2FA enablement failure audit hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`; final report/push is pending.
 - Baseline QC: Round 86 passed `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed)
 - Current plan:
   - Add regression coverage requiring invalid-code TOTP enablement attempts to create sanitized `auth.2fa_enable_failed` audit evidence.
@@ -23,6 +23,7 @@
   - Targeted 2FA coverage passed after docs/status updates: `npm run test -- api/server.test.mjs -t "two-factor|2FA"` (4 tests).
   - Full API suite passed: `npm run test -- api/server.test.mjs` (134 tests).
   - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed).
+  - Committed round 92 implementation/status/docs as `a6c28eb` (`feat: audit 2fa enable code failures`).
   - Round 91 repo inspection started at 2026-06-25T19:20:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, API route list, restore implementation, and restore tests before editing.
   - Selected production-readiness slice: restore-prepared audit evidence hardening so destructive restore commits leave compact operator/workspace evidence without restored backup contents.
