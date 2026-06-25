@@ -1493,6 +1493,12 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "POST" && routePath === "/api/queue") return true;
   if (method === "POST" && routePath === "/api/queue/match") return true;
   if (method === "POST" && routePath === "/api/actions") return true;
+  if (method === "POST" && routePath === "/api/printers") return true;
+  if (method === "POST" && routePath === "/api/parts") return true;
+  if (method === "POST" && routePath === "/api/skus") return true;
+  if (method === "POST" && routePath === "/api/productionTemplates") return true;
+  if (method === "POST" && routePath === "/api/profiles") return true;
+  if (method === "POST" && routePath === "/api/profiles/import") return true;
   if (method === "POST" && routePath === "/api/spools") return true;
   if (method === "POST" && routePath === "/api/spools/labels") return true;
   if (method === "POST" && routePath === "/api/spools/scan") return true;
@@ -1507,6 +1513,7 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "POST" && routePath === "/api/bridges/sync") return true;
   if (method === "POST" && /^\/api\/schedule\/(auto|optimize|constraint)$/.test(routePath)) return true;
   if (method === "PATCH" && routePath === "/api/billing/plan") return true;
+  if (method === "PATCH" && routePath === "/api/profile-policy") return true;
   if (method === "POST" && /^\/api\/public\/quoteRequests\/[^/]+\/decision$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/orders\/[^/]+\/generate-jobs$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/quoteRequests\/[^/]+\/customer-link$/.test(routePath)) return true;
@@ -1521,6 +1528,13 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "POST" && /^\/api\/productionTemplates\/[^/]+\/run$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/commerceConnectors\/[^/]+\/import$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/purchaseRequests\/[^/]+\/receive$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/printers\/[^/]+$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/parts\/[^/]+$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/skus\/[^/]+$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/productionTemplates\/[^/]+$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/profiles\/[^/]+$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/profiles\/[^/]+\/default$/.test(routePath)) return true;
+  if (method === "DELETE" && /^\/api\/profiles\/[^/]+$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/orders\/[^/]+\/status$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/spools\/[^/]+\/usage$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/queue\/[^/]+\/(schedule|status|priority)$/.test(routePath)) return true;

@@ -1,16 +1,25 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 35 committed
+- Phase: round 36 verified, pending commit
 - Started: 2026-06-24 UTC
-- Current state: Round 35 governance audit-context hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 36 catalog/profile/printer configuration idempotency hardening is implemented and verified on `codex/production-saas-completion-20260624`; commit and push are pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 96 tests passed)
 - Current plan:
-  - Add regression coverage for actor/workspace metadata on admin/go-live governance audit events.
-  - Thread authenticated actor context through settings, onboarding, support snapshot, API-key, and user-management audit events.
-  - Document governance audit traceability, run targeted tests and full QC, then commit and push.
+  - Add regression coverage for retry-safe catalog, slicer profile, production template, and printer capability configuration writes.
+  - Add those configuration routes to the persisted `Idempotency-Key` allowlist.
+  - Document configuration-write idempotency, run targeted tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 36 repo inspection started at 2026-06-25T07:38:37Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent catalog/profile/printer configuration writes to prevent duplicate setup records and audit events after operator/browser retries.
+  - Added failing regression coverage proving catalog part/SKU/template, profile/import/default/policy/archive, and printer capability retries need replay semantics.
+  - Added catalog, production template, slicer profile, profile policy, printer capability, and profile archive routes to the persisted `Idempotency-Key` allowlist.
+  - Documented configuration-write idempotency in README, operations, and production-readiness docs.
+  - Targeted configuration idempotency tests initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "catalog configuration"`, `npm run test -- api/server.test.mjs -t "profile configuration"`, and `npm run test -- api/server.test.mjs -t "printer capability writes"` (3 tests total).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (101 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 118 tests passed).
   - Round 35 repo inspection started at 2026-06-25T07:30:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: governance audit-context hardening for admin/settings/go-live writes.

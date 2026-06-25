@@ -160,6 +160,11 @@
   - Round 35 targeted `npm run test -- api/server.test.mjs -t "governance and go-live audit events"`: failed before implementation, then passed, 1 test passed.
   - Round 35 targeted `npm run test -- api/server.test.mjs`: passed, 98 tests passed.
   - Round 35 final `npm run qc`: passed, build passed, Vitest 10 files / 115 tests passed.
+  - Round 36 targeted `npm run test -- api/server.test.mjs -t "catalog configuration"`: failed before implementation, then passed, 1 test passed.
+  - Round 36 targeted `npm run test -- api/server.test.mjs -t "profile configuration"`: failed before implementation, then passed, 1 test passed.
+  - Round 36 targeted `npm run test -- api/server.test.mjs -t "printer capability writes"`: failed before implementation, then passed, 1 test passed.
+  - Round 36 targeted `npm run test -- api/server.test.mjs`: passed, 101 tests passed.
+  - Round 36 final `npm run qc`: passed, build passed, Vitest 10 files / 118 tests passed.
 
 ## Completed Features
 
@@ -275,6 +280,9 @@
 - Added idempotent replay/conflict protection for spool label exports.
 - Added regression coverage proving spool label export retries return the original CSV/HTML artifact without duplicate `spool.labels_generated` audit events, and conflicting retry bodies return `409`.
 - Documented spool label export `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for catalog/profile/printer configuration writes covering parts, SKUs, production templates, slicer profiles/imports/defaults/policy/archive, and printer capability create/update routes.
+- Added regression coverage proving configuration retries replay the original response without duplicate setup records or duplicate setup audit events, and conflicting retry bodies return `409`.
+- Documented configuration-write `Idempotency-Key` usage in README, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -307,6 +315,7 @@
 - Quote update idempotency now protects authenticated operator quote-review retries from duplicate audit events; clients still need stable per-attempt keys when operators retry quote updates.
 - Queue matching idempotency now protects committed production assignment retries from duplicate audit events; clients still need stable per-attempt keys when operators retry queue matching commits.
 - History reprint idempotency now protects operator reprint retries from duplicate queue jobs, generated todos, and audit events; clients still need stable per-attempt keys when retrying history reprint actions.
+- Catalog/profile/printer configuration idempotency now protects setup retries from duplicate setup records and duplicate setup audit events; clients still need stable per-attempt keys when retrying configuration writes.
 - Idempotency replay records are intentionally omitted from shared state and admin exports; retry clients should use fresh keys after workspace export/restore rather than expecting replay cache continuity.
 - Audit context now covers the highest-impact production scheduling/queue/bridge/file-version operator actions; remaining lower-risk direct event writes should be migrated only with route-specific delivery and notification review.
 - Ops-check authenticated verification requires valid Owner/Admin credentials or a dedicated smoke account configured in `.env`; otherwise it warns and continues with unauthenticated host checks.

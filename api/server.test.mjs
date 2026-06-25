@@ -3319,6 +3319,63 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent catalog configuration writes without duplicate setup records", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const partHeaders = { ...auth(token), "idempotency-key": "catalog-part-retry-001" };
+      const partPayload = { name: "Retry setup bracket", fileId: "f2", material: "PETG", process: "0.20mm Production", plates: 1, variants: ["Black"], status: "ready" };
+
+      const part = await app.inject({ method: "POST", url: "/api/parts", headers: partHeaders, payload: partPayload });
+      expect(part.statusCode).toBe(201);
+      const partReplay = await app.inject({ method: "POST", url: "/api/parts", headers: partHeaders, payload: partPayload });
+      expect(partReplay.statusCode).toBe(201);
+      expect(partReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(partReplay.json()).toEqual(part.json());
+
+      const skuHeaders = { ...auth(token), "idempotency-key": "catalog-sku-retry-001" };
+      const skuPayload = { sku: "RETRY-BRACKET", title: "Retry Bracket", parts: ["Retry setup bracket"], variants: ["Black"], price: 42, stock: 8, channel: "Manual" };
+      const sku = await app.inject({ method: "POST", url: "/api/skus", headers: skuHeaders, payload: skuPayload });
+      expect(sku.statusCode).toBe(201);
+      const skuReplay = await app.inject({ method: "POST", url: "/api/skus", headers: skuHeaders, payload: skuPayload });
+      expect(skuReplay.statusCode).toBe(201);
+      expect(skuReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(skuReplay.json()).toEqual(sku.json());
+
+      const templateHeaders = { ...auth(token), "idempotency-key": "production-template-create-retry-001" };
+      const templatePayload = { name: "Retry replenishment recipe", sku: "RETRY-BRACKET", fileId: "f1", material: "PETG", color: "Black", priority: "High", printerId: "p1", dueOffsetDays: 2, quantity: 2, time: "1h 45m", cost: 24, notes: "Retry safe setup" };
+      const template = await app.inject({ method: "POST", url: "/api/productionTemplates", headers: templateHeaders, payload: templatePayload });
+      expect(template.statusCode).toBe(201);
+      const templateReplay = await app.inject({ method: "POST", url: "/api/productionTemplates", headers: templateHeaders, payload: templatePayload });
+      expect(templateReplay.statusCode).toBe(201);
+      expect(templateReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(templateReplay.json()).toEqual(template.json());
+
+      const templatePatchHeaders = { ...auth(token), "idempotency-key": "production-template-update-retry-001" };
+      const templatePatchPayload = { priority: "Rush", quantity: 4, notes: "Retry safe update" };
+      const templateUpdated = await app.inject({ method: "PATCH", url: `/api/productionTemplates/${template.json().id}`, headers: templatePatchHeaders, payload: templatePatchPayload });
+      expect(templateUpdated.statusCode).toBe(200);
+      const templateUpdatedReplay = await app.inject({ method: "PATCH", url: `/api/productionTemplates/${template.json().id}`, headers: templatePatchHeaders, payload: templatePatchPayload });
+      expect(templateUpdatedReplay.statusCode).toBe(200);
+      expect(templateUpdatedReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(templateUpdatedReplay.json()).toEqual(templateUpdated.json());
+
+      const conflict = await app.inject({ method: "POST", url: "/api/skus", headers: skuHeaders, payload: { ...skuPayload, price: 45 } });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.parts.filter((item) => item.name === "Retry setup bracket")).toHaveLength(1);
+      expect(persisted.skus.filter((item) => item.sku === "RETRY-BRACKET")).toHaveLength(1);
+      expect(persisted.productionTemplates.filter((item) => item.name === "Retry replenishment recipe")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "part.created" && event.data?.partId === part.json().id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "sku.created" && event.data?.skuId === sku.json().id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "production_template.created" && event.data?.templateId === template.json().id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "production_template.updated" && event.data?.templateId === template.json().id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "catalog-part-retry-001")).toMatchObject({ method: "POST", path: "/api/parts", replayCount: 1, statusCode: 201 });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "production-template-update-retry-001")).toMatchObject({ method: "PATCH", path: `/api/productionTemplates/${template.json().id}`, replayCount: 1, statusCode: 200 });
+    });
+  });
+
   it("cancels generated order work and releases reserved material", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);
@@ -4141,6 +4198,78 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent profile configuration writes without duplicate profile events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const createHeaders = { ...auth(token), "idempotency-key": "profile-create-retry-001" };
+      const createPayload = { name: "Retry 0.20 Process", kind: "Process", target: "FDM fleet", source: "Manual", settings: { layer_height: 0.2, infill: 20 } };
+      const created = await app.inject({ method: "POST", url: "/api/profiles", headers: createHeaders, payload: createPayload });
+      expect(created.statusCode).toBe(201);
+      const createdReplay = await app.inject({ method: "POST", url: "/api/profiles", headers: createHeaders, payload: createPayload });
+      expect(createdReplay.statusCode).toBe(201);
+      expect(createdReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(createdReplay.json()).toEqual(created.json());
+
+      const importHeaders = { ...auth(token), "idempotency-key": "profile-import-retry-001" };
+      const importPayload = {
+        source: "Orca import",
+        content: ["[printer]", "name = Retry Voron 300", "printer_model = Voron", "", "[filament]", "name = Retry PETG Black", "filament_type = PETG"].join("\n")
+      };
+      const imported = await app.inject({ method: "POST", url: "/api/profiles/import", headers: importHeaders, payload: importPayload });
+      expect(imported.statusCode).toBe(200);
+      const importedReplay = await app.inject({ method: "POST", url: "/api/profiles/import", headers: importHeaders, payload: importPayload });
+      expect(importedReplay.statusCode).toBe(200);
+      expect(importedReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(importedReplay.json()).toEqual(imported.json());
+
+      const updateHeaders = { ...auth(token), "idempotency-key": "profile-update-retry-001" };
+      const updatePayload = { target: "Production farm", settings: { layer_height: 0.2, infill: 24 } };
+      const updated = await app.inject({ method: "PATCH", url: `/api/profiles/${created.json().id}`, headers: updateHeaders, payload: updatePayload });
+      expect(updated.statusCode).toBe(200);
+      const updatedReplay = await app.inject({ method: "PATCH", url: `/api/profiles/${created.json().id}`, headers: updateHeaders, payload: updatePayload });
+      expect(updatedReplay.statusCode).toBe(200);
+      expect(updatedReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(updatedReplay.json()).toEqual(updated.json());
+
+      const defaultHeaders = { ...auth(token), "idempotency-key": "profile-default-retry-001" };
+      const defaulted = await app.inject({ method: "PATCH", url: `/api/profiles/${created.json().id}/default`, headers: defaultHeaders });
+      expect(defaulted.statusCode).toBe(200);
+      const defaultedReplay = await app.inject({ method: "PATCH", url: `/api/profiles/${created.json().id}/default`, headers: defaultHeaders });
+      expect(defaultedReplay.statusCode).toBe(200);
+      expect(defaultedReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(defaultedReplay.json()).toEqual(defaulted.json());
+
+      const policyHeaders = { ...auth(token), "idempotency-key": "profile-policy-retry-001" };
+      const policyPayload = { dueWindowHours: 8, warnBeforeFallback: false };
+      const policy = await app.inject({ method: "PATCH", url: "/api/profile-policy", headers: policyHeaders, payload: policyPayload });
+      expect(policy.statusCode).toBe(200);
+      const policyReplay = await app.inject({ method: "PATCH", url: "/api/profile-policy", headers: policyHeaders, payload: policyPayload });
+      expect(policyReplay.statusCode).toBe(200);
+      expect(policyReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(policyReplay.json()).toEqual(policy.json());
+
+      const archiveHeaders = { ...auth(token), "idempotency-key": "profile-archive-retry-001" };
+      const archived = await app.inject({ method: "DELETE", url: `/api/profiles/${created.json().id}`, headers: archiveHeaders });
+      expect(archived.statusCode).toBe(200);
+      const archivedReplay = await app.inject({ method: "DELETE", url: `/api/profiles/${created.json().id}`, headers: archiveHeaders });
+      expect(archivedReplay.statusCode).toBe(200);
+      expect(archivedReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(archivedReplay.json()).toEqual(archived.json());
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.profiles.filter((profile) => profile.name === "Retry Voron 300" && profile.kind === "Machine")).toHaveLength(1);
+      expect(persisted.profiles.filter((profile) => profile.name === "Retry PETG Black" && profile.kind === "Filament")).toHaveLength(1);
+      expect(persisted.profiles.some((profile) => profile.id === created.json().id)).toBe(false);
+      expect(persisted.events.filter((event) => event.type === "profile.created" && event.data?.profileId === created.json().id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "profile.imported" && event.data?.source === "Orca import")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "profile.updated" && event.data?.profileId === created.json().id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "profile.default_set" && event.data?.profileId === created.json().id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "profile.policy_updated")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "profile.archived" && event.data?.profileId === created.json().id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "profile-archive-retry-001")).toMatchObject({ method: "DELETE", path: `/api/profiles/${created.json().id}`, replayCount: 1, statusCode: 200 });
+    });
+  });
+
   it("imports commerce connector JSON feeds and skips duplicate external orders", async () => {
     await withApp(async ({ app, dbPath }) => {
       const originalFetch = global.fetch;
@@ -4627,6 +4756,46 @@ endsolid s3_store`;
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
       expect(persisted.printers.find((printer) => printer.id === created.json().id)).toMatchObject({ name: "QC CoreXY", buildVolume: [350, 350, 420], filament: "PETG Black" });
       expect(persisted.events.some((event) => event.type === "printer.created" && event.data.printerId === created.json().id)).toBe(true);
+    });
+  });
+
+  it("replays idempotent printer capability writes without duplicate printer events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const createHeaders = { ...auth(token), "idempotency-key": "printer-create-retry-001" };
+      const createPayload = {
+        name: "Retry CoreXY",
+        model: "CoreXY 400",
+        location: "Retry Farm",
+        status: "idle",
+        connection: "Klipper / Moonraker",
+        filament: "PETG Black",
+        compatibleMaterials: ["PLA", "PETG"],
+        buildVolume: [400, 400, 400],
+        camera: "Setup pending"
+      };
+      const created = await app.inject({ method: "POST", url: "/api/printers", headers: createHeaders, payload: createPayload });
+      expect(created.statusCode).toBe(201);
+      const createdReplay = await app.inject({ method: "POST", url: "/api/printers", headers: createHeaders, payload: createPayload });
+      expect(createdReplay.statusCode).toBe(201);
+      expect(createdReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(createdReplay.json()).toEqual(created.json());
+
+      const updateHeaders = { ...auth(token), "idempotency-key": "printer-update-retry-001" };
+      const updatePayload = { compatibleMaterials: ["PLA", "PETG", "ASA"], buildVolume: [420, 420, 440], filament: "ASA Black" };
+      const updated = await app.inject({ method: "PATCH", url: `/api/printers/${created.json().id}`, headers: updateHeaders, payload: updatePayload });
+      expect(updated.statusCode).toBe(200);
+      const updatedReplay = await app.inject({ method: "PATCH", url: `/api/printers/${created.json().id}`, headers: updateHeaders, payload: updatePayload });
+      expect(updatedReplay.statusCode).toBe(200);
+      expect(updatedReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(updatedReplay.json()).toEqual(updated.json());
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.printers.filter((printer) => printer.name === "Retry CoreXY")).toHaveLength(1);
+      expect(persisted.printers.find((printer) => printer.id === created.json().id)).toMatchObject({ filament: "ASA Black", buildVolume: [420, 420, 440] });
+      expect(persisted.events.filter((event) => event.type === "printer.created" && event.data?.printerId === created.json().id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "printer.updated" && event.data?.printerId === created.json().id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "printer-update-retry-001")).toMatchObject({ method: "PATCH", path: `/api/printers/${created.json().id}`, replayCount: 1, statusCode: 200 });
     });
   });
 
