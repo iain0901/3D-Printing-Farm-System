@@ -14,6 +14,7 @@
   - `0f03c57` `feat: harden persisted user sessions`
   - `438b340` `feat: add tenant-safe audit context`
   - `6a7f6b4` `feat: require user session for restore commits`
+  - Current `HEAD` `feat: harden api key scope grants`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -26,6 +27,8 @@
   - Round 4 final `npm run qc`: passed, build passed, Vitest 9 files / 82 tests passed.
   - Round 5 targeted `npm run test -- api/server.test.mjs`: passed, 66 tests passed.
   - Round 5 final `npm run qc`: passed, build passed, Vitest 9 files / 82 tests passed.
+  - Round 6 targeted `npm run test -- api/server.test.mjs`: passed, 67 tests passed.
+  - Round 6 final `npm run qc`: passed, build passed, Vitest 9 files / 83 tests passed.
 
 ## Completed Features
 
@@ -50,6 +53,11 @@
 - Hardened destructive workspace restore commits so scoped `admin:restore` API keys can run dry-run restore previews but cannot replace workspace data.
 - Added regression coverage for restore preview automation versus user-session-only restore commits.
 - Documented the restore commit gate in the operations runbook and production-readiness checklist.
+- Hardened API-key grants so automation keys can use only known non-wildcard automation scopes.
+- API keys can no longer create or update other API keys; key management requires a logged-in Owner/Admin user session.
+- Added conservative legacy scope normalization that disables restored keys containing only invalid automation scopes.
+- Added regression coverage for wildcard, unknown, and credential-management API-key scope rejection.
+- Documented API-key scope minimization and session-only key management in operations and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -61,3 +69,4 @@
 - Idempotency is intentionally scoped to non-secret-bearing production workflow routes; broader write API coverage should be added only with route-specific response redaction.
 - Session expiry policy should be reviewed against the customer's shared-device operating model before go-live.
 - Destructive restore commits now require a logged-in Owner/Admin user session; automation should use dry-run restore validation and hand off final commit to an operator.
+- API-key grants are intentionally limited to automation scopes; account, settings, and API-key administration should remain user-session-only unless a customer-specific security review changes that policy.

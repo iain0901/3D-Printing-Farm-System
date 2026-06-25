@@ -62,6 +62,23 @@ const IDEMPOTENCY_MAX_RECORDS = 500;
 const IDEMPOTENCY_MAX_RESPONSE_BYTES = 256 * 1024;
 const DEFAULT_SESSION_TTL_HOURS = 7 * 24;
 const DEFAULT_SESSION_IDLE_TIMEOUT_HOURS = 24;
+const API_KEY_GRANTABLE_SCOPES = [
+  "actions:write",
+  "admin:export",
+  "admin:restore",
+  "catalog:write",
+  "commerce:write",
+  "files:write",
+  "inventory:write",
+  "maintenance:write",
+  "metrics:read",
+  "notifications:write",
+  "orders:write",
+  "printers:control",
+  "queue:write",
+  "webhooks:write"
+];
+const apiKeyGrantableScopeSet = new Set(API_KEY_GRANTABLE_SCOPES);
 const TENANT_COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "orders", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns", "billingSessions", "invoices"];
 const printerStatusSchema = z.enum(["idle", "printing", "paused", "offline", "error", "maintenance"]);
 const jobStatusSchema = z.enum(["queued", "printing", "paused", "complete", "failed", "cancelled"]);
@@ -519,7 +536,7 @@ const printerActionSchema = bridgeActionSchema.extend({
 });
 const apiKeySchema = z.object({
   name: z.string().min(1),
-  scopes: z.array(z.string().min(1)).min(1).default(["queue:write"]),
+  scopes: z.array(z.enum(API_KEY_GRANTABLE_SCOPES)).min(1).default(["queue:write"]).transform((scopes) => [...new Set(scopes)]),
   enabled: z.boolean().default(true),
   expiresAt: z.string().optional().default("")
 });
@@ -1379,7 +1396,16 @@ async function ensureAuthData(database, options = {}) {
   for (const key of database.data.apiKeys || []) {
     key.name ||= "Automation key";
     key.prefix ||= "lp_live_legacy";
-    key.scopes = Array.isArray(key.scopes) && key.scopes.length ? key.scopes : ["queue:write"];
+    const restoredScopes = normalizeApiKeyScopes(key.scopes);
+    if (restoredScopes.length) {
+      key.scopes = restoredScopes;
+    } else if (Array.isArray(key.scopes) && key.scopes.length) {
+      key.scopes = ["queue:write"];
+      key.enabled = false;
+      key.scopeMigrationWarning = "Disabled because restored scopes were not grantable automation scopes";
+    } else {
+      key.scopes = ["queue:write"];
+    }
     key.enabled = key.enabled !== false;
     key.createdAt ||= now;
     key.lastUsedAt ||= "";
@@ -1392,6 +1418,16 @@ function hasPermission(user, permission) {
   if (Array.isArray(user?.apiScopes)) return user.apiScopes.includes("*") || user.apiScopes.includes(permission);
   const permissions = rolePermissions[user?.role] || rolePermissions.Viewer;
   return permissions.has("*") || permissions.has(permission);
+}
+
+function normalizeApiKeyScopes(scopes) {
+  const normalized = [];
+  for (const scope of Array.isArray(scopes) ? scopes : []) {
+    const value = String(scope || "").trim();
+    if (!apiKeyGrantableScopeSet.has(value) || normalized.includes(value)) continue;
+    normalized.push(value);
+  }
+  return normalized;
 }
 
 function isMutatingApiRequest(request) {
@@ -4978,6 +5014,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       return reply.code(403).send({ error: "API key is not allowed from this IP", ip: normalizeClientIp(request.ip) });
     }
     request.user = user;
+    request.apiKey = apiKey || null;
     if (isMutatingApiRequest(request)) {
       const key = idempotencyKeyFromRequest(request);
       if (key) {
@@ -5694,6 +5731,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   });
 
   app.post("/api/apiKeys", { config: { rateLimit: { ...sensitiveRateLimit, groupId: "api-keys-create" } } }, async (request, reply) => {
+    if (request.apiKey) return reply.code(403).send({ error: "API key management requires a user session" });
     if (!hasPermission(request.user, "apiKeys:write")) return reply.code(403).send({ error: "Missing permission: apiKeys:write" });
     const parsed = apiKeySchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Invalid API key payload", issues: parsed.error.issues });
@@ -5719,6 +5757,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   });
 
   app.patch("/api/apiKeys/:id", async (request, reply) => {
+    if (request.apiKey) return reply.code(403).send({ error: "API key management requires a user session" });
     if (!hasPermission(request.user, "apiKeys:write")) return reply.code(403).send({ error: "Missing permission: apiKeys:write" });
     const parsed = apiKeyPatchSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Invalid API key update", issues: parsed.error.issues });

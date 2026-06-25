@@ -815,6 +815,43 @@ describe("3DSTU FarmFlow API", () => {
     });
   });
 
+  it("rejects over-scoped API keys and blocks API-key credential chaining", async () => {
+    await withApp(async ({ app, db }) => {
+      const token = await login(app);
+      for (const scopes of [["*"], ["queue:write", "unknown:write"], ["apiKeys:write"]]) {
+        const rejected = await app.inject({
+          method: "POST",
+          url: "/api/apiKeys",
+          headers: auth(token),
+          payload: { name: `Rejected ${scopes.join(",")}`, scopes, enabled: true }
+        });
+        expect(rejected.statusCode).toBe(400);
+        expect(rejected.json()).toMatchObject({ error: "Invalid API key payload" });
+      }
+
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/apiKeys",
+        headers: auth(token),
+        payload: { name: "Legacy chained key", scopes: ["queue:write"], enabled: true }
+      });
+      expect(created.statusCode).toBe(201);
+      const secret = created.json().secret;
+      const key = db.data.apiKeys.find((item) => item.id === created.json().apiKey.id);
+      key.scopes = ["apiKeys:write"];
+      await db.write();
+
+      const chained = await app.inject({
+        method: "POST",
+        url: "/api/apiKeys",
+        headers: auth(secret),
+        payload: { name: "Chained key", scopes: ["queue:write"], enabled: true }
+      });
+      expect(chained.statusCode).toBe(403);
+      expect(chained.json()).toMatchObject({ error: "API key management requires a user session" });
+    });
+  });
+
   it("manages team users with invites, role updates, and owner protection", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);

@@ -20,6 +20,8 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 - [ ] Session lifetime and idle timeout are set intentionally for the farm's device-sharing model.
 - [ ] Operator accounts have only the permissions needed for daily production.
 - [ ] API keys have the minimum required scopes.
+- [ ] API keys use only grantable automation scopes and no wildcard, user-management, settings, or API-key-management scope.
+- [ ] API-key creation and rotation are performed from a logged-in Owner/Admin user session, not from another API key.
 - [ ] API key IP/CIDR allowlists are enabled when automation runs from fixed networks.
 - [ ] `/api/audit` shows recent production/admin events with the expected workspace and operator context.
 

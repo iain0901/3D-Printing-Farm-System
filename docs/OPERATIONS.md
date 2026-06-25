@@ -17,6 +17,14 @@ This runbook covers routine production operation for a 3DSTU FarmFlow VPS.
 - Active sessions also expire after `LAYERPILOT_SESSION_IDLE_TIMEOUT_HOURS` without use, default `24` hours.
 - Password changes keep only the current session; admin password resets revoke all sessions for the reset user.
 
+## API Key Policy
+
+- Create and update API keys only from a logged-in Owner/Admin user session.
+- API keys cannot create, update, or rotate other API keys.
+- API keys cannot be granted wildcard or account-management scopes.
+- Grant only the automation scopes needed for the integration: `actions:write`, `admin:export`, `admin:restore`, `catalog:write`, `commerce:write`, `files:write`, `inventory:write`, `maintenance:write`, `metrics:read`, `notifications:write`, `orders:write`, `printers:control`, `queue:write`, or `webhooks:write`.
+- Use `admin:restore` keys only for restore dry-runs; destructive restore commits still require a user session.
+
 ## Order And Queue Handling
 
 - Use dry-run job generation before committing SKU-linked orders.

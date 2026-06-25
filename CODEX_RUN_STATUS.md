@@ -1,16 +1,26 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 5 pushed
+- Phase: round 6 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 5 restore-commit hardening implemented, QC passed, and branch pushed to `origin/codex/production-saas-completion-20260624`.
+- Current state: Round 6 API-key scope hardening implemented, targeted tests and full QC passed, commit created, push pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 9 files / 79 tests passed)
 - Current plan:
-  - Add regression coverage proving `admin:restore` API keys can dry-run restore validation but cannot commit destructive restores.
-  - Require a persisted user session for `dryRun: false` restore commits before replacing workspace data.
+  - Add regression coverage proving API keys cannot be created with wildcard, unknown, or credential-management scopes.
+  - Restrict API-key grants to known automation scopes and require a user session for API-key management.
   - Run targeted API tests, full `npm run qc`, commit, and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 6 repo inspection started at 2026-06-25T02:11:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Added regression coverage for over-scoped API-key creation and API-key credential chaining.
+  - Implemented a grantable automation-scope allowlist for API keys.
+  - Added conservative legacy API-key scope normalization and disabled restored keys that only contain invalid scopes.
+  - Required a user session for API-key create/update operations.
+  - Documented API-key scope minimization and session-only key management in operations/readiness docs.
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (67 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 83 tests passed).
+  - Committed round 6 as current `HEAD` (`feat: harden api key scope grants`).
   - Round 5 repo inspection started at 2026-06-25T02:02:53Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Added regression coverage proving an `admin:restore` API key can preview restore data but cannot commit a destructive restore.
