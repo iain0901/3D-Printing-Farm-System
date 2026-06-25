@@ -1339,6 +1339,136 @@ describe("3DSTU FarmFlow API", () => {
     });
   });
 
+  it("replays idempotent integration configuration writes without duplicate records or audit events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+
+      const webhookHeaders = { ...auth(token), "idempotency-key": "webhook-config-retry-001" };
+      const webhookPayload = { name: "Retry webhook config", url: "https://hooks.example.test/config", events: ["queue.created"], enabled: true };
+      const webhook = await app.inject({ method: "POST", url: "/api/webhooks", headers: webhookHeaders, payload: webhookPayload });
+      expect(webhook.statusCode).toBe(201);
+      const webhookReplay = await app.inject({ method: "POST", url: "/api/webhooks", headers: webhookHeaders, payload: webhookPayload });
+      expect(webhookReplay.statusCode).toBe(201);
+      expect(webhookReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(webhookReplay.json()).toEqual(webhook.json());
+
+      const webhookPatchHeaders = { ...auth(token), "idempotency-key": "webhook-update-retry-001" };
+      const webhookPatch = await app.inject({
+        method: "PATCH",
+        url: `/api/webhooks/${webhook.json().id}`,
+        headers: webhookPatchHeaders,
+        payload: { enabled: false, events: ["order.status"] }
+      });
+      expect(webhookPatch.statusCode).toBe(200);
+      const webhookPatchReplay = await app.inject({
+        method: "PATCH",
+        url: `/api/webhooks/${webhook.json().id}`,
+        headers: webhookPatchHeaders,
+        payload: { enabled: false, events: ["order.status"] }
+      });
+      expect(webhookPatchReplay.statusCode).toBe(200);
+      expect(webhookPatchReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(webhookPatchReplay.json()).toEqual(webhookPatch.json());
+
+      const channelHeaders = { ...auth(token), "idempotency-key": "notification-config-retry-001" };
+      const channelPayload = { name: "Retry notification config", type: "slack", url: "https://hooks.slack.test/config", token: "secret-token", events: ["queue.created"], enabled: true, recipients: [] };
+      const channel = await app.inject({ method: "POST", url: "/api/notificationChannels", headers: channelHeaders, payload: channelPayload });
+      expect(channel.statusCode).toBe(201);
+      const channelReplay = await app.inject({ method: "POST", url: "/api/notificationChannels", headers: channelHeaders, payload: channelPayload });
+      expect(channelReplay.statusCode).toBe(201);
+      expect(channelReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(channelReplay.json()).toEqual(channel.json());
+
+      const channelPatchHeaders = { ...auth(token), "idempotency-key": "notification-update-retry-001" };
+      const channelPatch = await app.inject({
+        method: "PATCH",
+        url: `/api/notificationChannels/${channel.json().id}`,
+        headers: channelPatchHeaders,
+        payload: { enabled: false, events: ["order.status"] }
+      });
+      expect(channelPatch.statusCode).toBe(200);
+      const channelPatchReplay = await app.inject({
+        method: "PATCH",
+        url: `/api/notificationChannels/${channel.json().id}`,
+        headers: channelPatchHeaders,
+        payload: { enabled: false, events: ["order.status"] }
+      });
+      expect(channelPatchReplay.statusCode).toBe(200);
+      expect(channelPatchReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(channelPatchReplay.json()).toEqual(channelPatch.json());
+
+      const connectorHeaders = { ...auth(token), "idempotency-key": "commerce-config-retry-001" };
+      const connectorPayload = { name: "Retry commerce config", source: "Generic", url: "https://commerce.example.test/feed.json", token: "commerce-secret", enabled: true, mapping: {} };
+      const connector = await app.inject({ method: "POST", url: "/api/commerceConnectors", headers: connectorHeaders, payload: connectorPayload });
+      expect(connector.statusCode).toBe(201);
+      const connectorReplay = await app.inject({ method: "POST", url: "/api/commerceConnectors", headers: connectorHeaders, payload: connectorPayload });
+      expect(connectorReplay.statusCode).toBe(201);
+      expect(connectorReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(connectorReplay.json()).toEqual(connector.json());
+
+      const connectorPatchHeaders = { ...auth(token), "idempotency-key": "commerce-update-retry-001" };
+      const connectorPatch = await app.inject({
+        method: "PATCH",
+        url: `/api/commerceConnectors/${connector.json().id}`,
+        headers: connectorPatchHeaders,
+        payload: { enabled: false, mapping: { externalOrderId: "id" } }
+      });
+      expect(connectorPatch.statusCode).toBe(200);
+      const connectorPatchReplay = await app.inject({
+        method: "PATCH",
+        url: `/api/commerceConnectors/${connector.json().id}`,
+        headers: connectorPatchHeaders,
+        payload: { enabled: false, mapping: { externalOrderId: "id" } }
+      });
+      expect(connectorPatchReplay.statusCode).toBe(200);
+      expect(connectorPatchReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(connectorPatchReplay.json()).toEqual(connectorPatch.json());
+
+      const addonHeaders = { ...auth(token), "idempotency-key": "addon-config-retry-001" };
+      const addonPayload = { enabled: true, config: { topicPrefix: "layerpilot/retry", password: "mqtt-secret" }, note: "Retry-safe add-on config" };
+      const addon = await app.inject({ method: "PATCH", url: "/api/addons/mqtt", headers: addonHeaders, payload: addonPayload });
+      expect(addon.statusCode).toBe(200);
+      const addonReplay = await app.inject({ method: "PATCH", url: "/api/addons/mqtt", headers: addonHeaders, payload: addonPayload });
+      expect(addonReplay.statusCode).toBe(200);
+      expect(addonReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(addonReplay.json()).toEqual(addon.json());
+
+      const bridgeHeaders = { ...auth(token), "idempotency-key": "bridge-config-retry-001" };
+      const bridgePayload = { printerId: "p1", kind: "manual", name: "Retry bridge config", baseUrl: "manual://retry", enabled: true };
+      const bridge = await app.inject({ method: "POST", url: "/api/bridges", headers: bridgeHeaders, payload: bridgePayload });
+      expect(bridge.statusCode).toBe(200);
+      const bridgeReplay = await app.inject({ method: "POST", url: "/api/bridges", headers: bridgeHeaders, payload: bridgePayload });
+      expect(bridgeReplay.statusCode).toBe(200);
+      expect(bridgeReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(bridgeReplay.json()).toEqual(bridge.json());
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/webhooks",
+        headers: webhookHeaders,
+        payload: { ...webhookPayload, name: "Different webhook config" }
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.webhooks.filter((item) => item.name === "Retry webhook config")).toHaveLength(1);
+      expect(persisted.notificationChannels.filter((item) => item.name === "Retry notification config")).toHaveLength(1);
+      expect(persisted.commerceConnectors.filter((item) => item.name === "Retry commerce config")).toHaveLength(1);
+      expect(persisted.bridges.filter((item) => item.name === "Retry bridge config")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "webhook.created" && event.data?.webhookId === webhook.json().id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "webhook.updated" && event.data?.webhookId === webhook.json().id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "notification.channel_created" && event.data?.channelId === channel.json().id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "notification.channel_updated" && event.data?.channelId === channel.json().id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "commerce.connector_created" && event.data?.connectorId === connector.json().id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "commerce.connector_updated" && event.data?.connectorId === connector.json().id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "addon.updated" && event.data?.addonId === "mqtt")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "bridge.saved" && event.data?.bridgeId === bridge.json().id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "webhook-config-retry-001")).toMatchObject({ method: "POST", path: "/api/webhooks", replayCount: 1, statusCode: 201 });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "bridge-config-retry-001")).toMatchObject({ method: "POST", path: "/api/bridges", replayCount: 1, statusCode: 200 });
+    });
+  });
+
   it("enforces audit retention policy and preserves protected admin events", async () => {
     await withApp(async ({ app, db, dbPath }) => {
       const token = await login(app);

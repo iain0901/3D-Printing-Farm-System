@@ -1,16 +1,25 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 40 committed and pushed
+- Phase: round 41 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 40 file/model artifact retry hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 41 integration configuration retry hardening is in progress on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 96 tests passed)
 - Current plan:
-  - Add regression coverage for retry-safe sample model generation, Hot Drop handling, and file version bumps.
-  - Add file/model artifact write routes to the persisted `Idempotency-Key` allowlist.
-  - Document file/model artifact retry idempotency, run targeted tests and full QC, then commit and push.
+  - Add regression coverage for retry-safe webhook, notification channel, commerce connector, add-on, and bridge configuration writes.
+  - Add integration configuration routes to the persisted `Idempotency-Key` allowlist.
+  - Document integration configuration retry idempotency, run targeted tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 41 repo inspection started at 2026-06-25T08:29:16Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, and production-readiness docs before editing.
+  - Selected production-readiness slice: idempotent integration configuration writes to prevent duplicate connector records and duplicate setup/audit events after dropped operator/browser responses.
+  - Added failing regression coverage proving webhook, notification channel, commerce connector, add-on, and bridge configuration retries need replay semantics.
+  - Added integration configuration routes to the persisted `Idempotency-Key` allowlist.
+  - Documented integration configuration retry idempotency in README, operations, and production-readiness docs.
+  - Targeted integration configuration idempotency test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "integration configuration"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (107 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 124 tests passed).
   - Round 40 repo inspection started at 2026-06-25T08:18:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, and production-readiness docs before editing.
   - Selected production-readiness slice: idempotent file/model artifact writes to prevent duplicate generated model files, Hot Drop queue jobs, and file-version audit events after dropped operator/browser responses.

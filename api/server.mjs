@@ -1509,6 +1509,10 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "POST" && routePath === "/api/maintenance") return true;
   if (method === "POST" && routePath === "/api/maintenance/templates") return true;
   if (method === "POST" && routePath === "/api/maintenance/reports") return true;
+  if (method === "POST" && routePath === "/api/webhooks") return true;
+  if (method === "POST" && routePath === "/api/notificationChannels") return true;
+  if (method === "POST" && routePath === "/api/commerceConnectors") return true;
+  if (method === "POST" && routePath === "/api/bridges") return true;
   if (method === "POST" && routePath === "/api/public/quoteRequests") return true;
   if (method === "POST" && routePath === "/api/catalog/material-map") return true;
   if (method === "POST" && routePath === "/api/commerce/import-csv") return true;
@@ -1521,6 +1525,10 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "PATCH" && routePath === "/api/billing/plan") return true;
   if (method === "PATCH" && routePath === "/api/costCatalog") return true;
   if (method === "PATCH" && routePath === "/api/profile-policy") return true;
+  if (method === "PATCH" && /^\/api\/addons\/[^/]+$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/webhooks\/[^/]+$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/notificationChannels\/[^/]+$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/commerceConnectors\/[^/]+$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/public\/quoteRequests\/[^/]+\/decision$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/orders\/[^/]+\/generate-jobs$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/quoteRequests\/[^/]+\/customer-link$/.test(routePath)) return true;
