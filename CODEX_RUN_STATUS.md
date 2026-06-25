@@ -1,16 +1,27 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 20 pushed
+- Phase: round 21 committed
 - Started: 2026-06-24 UTC
-- Current state: Round 20 filament purchasing idempotency is implemented, verified, committed, and ready on `origin/codex/production-saas-completion-20260624`.
+- Current state: Round 21 inventory idempotency hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`; push pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 96 tests passed)
 - Current plan:
-  - Add persisted idempotency replay/conflict protection for retry-prone filament purchasing writes.
-  - Cover reorder-plan and purchase-receive retries so retries do not duplicate purchase requests, spools, or audit events.
-  - Document supported filament purchasing idempotency routes, run targeted tests and full QC, then commit and push.
+  - Add persisted idempotency replay/conflict protection for retry-prone spool create, spool usage, and spool scan writes.
+  - Cover retries so they do not duplicate spools, double-consume filament, or duplicate inventory audit events.
+  - Document supported inventory idempotency routes, run targeted tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 21 repo inspection started at 2026-06-25T04:50:27Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent inventory write retries for spool creation, usage logging, and scan-based usage/location updates.
+  - Added failing regression coverage proving spool creation, explicit usage logging, and scan-based usage retries need replay semantics.
+  - Added spool create, spool scan, and spool usage routes to the persisted `Idempotency-Key` allowlist.
+  - Added regression coverage proving retries replay without creating duplicate spools, double-consuming filament, or duplicating inventory audit events, and conflicting payloads return `409`.
+  - Documented inventory idempotency in README, operations, and production-readiness docs.
+  - Targeted inventory idempotency test passed: `npm run test -- api/server.test.mjs -t "idempotent spool"` (3 tests).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (82 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 99 tests passed).
+  - Committed round 21 implementation as `feat: add idempotent inventory writes`.
   - Round 20 repo inspection started at 2026-06-25T04:39:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: idempotent filament purchasing retries for reorder-plan and receive flows.

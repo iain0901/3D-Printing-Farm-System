@@ -1491,6 +1491,8 @@ function isMutatingApiRequest(request) {
 function idempotencyEligibleRoute(method, routePath) {
   if (method === "POST" && routePath === "/api/orders") return true;
   if (method === "POST" && routePath === "/api/queue") return true;
+  if (method === "POST" && routePath === "/api/spools") return true;
+  if (method === "POST" && routePath === "/api/spools/scan") return true;
   if (method === "POST" && routePath === "/api/public/quoteRequests") return true;
   if (method === "POST" && routePath === "/api/commerce/import-csv") return true;
   if (method === "POST" && routePath === "/api/purchaseRequests/reorderPlan") return true;
@@ -1501,6 +1503,7 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "POST" && /^\/api\/commerceConnectors\/[^/]+\/import$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/purchaseRequests\/[^/]+\/receive$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/orders\/[^/]+\/status$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/spools\/[^/]+\/usage$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/queue\/[^/]+\/(schedule|status|priority)$/.test(routePath)) return true;
   return false;
 }

@@ -2349,6 +2349,154 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent spool creation without adding duplicate inventory", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const headers = { ...auth(token), "idempotency-key": "spool-create-retry-001" };
+      const payload = { material: "PLA", color: "#22c55e", brand: "Retry", remaining: 750, weight: 1000, location: "Rack Retry", dry: true, nfc: "LP-SPOOL-RETRY" };
+
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/spools",
+        headers,
+        payload
+      });
+      expect(created.statusCode).toBe(201);
+
+      const replay = await app.inject({
+        method: "POST",
+        url: "/api/spools",
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(201);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(created.json());
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/spools",
+        headers,
+        payload: { ...payload, nfc: "LP-SPOOL-RETRY-CHANGED" }
+      });
+      expect(conflict.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.spools.filter((spool) => spool.nfc === "LP-SPOOL-RETRY")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "spool.created" && event.message.includes("Retry"))).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "spool-create-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/spools",
+        replayCount: 1,
+        statusCode: 201
+      });
+    });
+  });
+
+  it("replays idempotent spool usage writes without double-consuming filament", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const spool = await app.inject({
+        method: "POST",
+        url: "/api/spools",
+        headers: auth(token),
+        payload: { material: "PETG", color: "#0ea5e9", brand: "Retry", remaining: 600, weight: 1000, location: "Rack Usage", dry: true, nfc: "LP-USAGE-RETRY" }
+      });
+      expect(spool.statusCode).toBe(201);
+      const headers = { ...auth(token), "idempotency-key": "spool-usage-retry-001" };
+      const payload = { grams: 80 };
+
+      const usage = await app.inject({
+        method: "PATCH",
+        url: `/api/spools/${spool.json().id}/usage`,
+        headers,
+        payload
+      });
+      expect(usage.statusCode).toBe(200);
+      expect(usage.json()).toMatchObject({ remaining: 520 });
+
+      const replay = await app.inject({
+        method: "PATCH",
+        url: `/api/spools/${spool.json().id}/usage`,
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(usage.json());
+
+      const conflict = await app.inject({
+        method: "PATCH",
+        url: `/api/spools/${spool.json().id}/usage`,
+        headers,
+        payload: { grams: 120 }
+      });
+      expect(conflict.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.spools.find((item) => item.id === spool.json().id)).toMatchObject({ remaining: 520 });
+      expect(persisted.events.filter((event) => event.type === "spool.usage" && event.data?.spoolId === spool.json().id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "spool-usage-retry-001")).toMatchObject({
+        method: "PATCH",
+        path: `/api/spools/${spool.json().id}/usage`,
+        replayCount: 1,
+        statusCode: 200
+      });
+    });
+  });
+
+  it("replays idempotent spool scan usage without double-consuming filament", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const spool = await app.inject({
+        method: "POST",
+        url: "/api/spools",
+        headers: auth(token),
+        payload: { material: "ASA", color: "Black", brand: "Retry", remaining: 900, weight: 1000, location: "Rack Scan", dry: true, nfc: "LP-SCAN-RETRY" }
+      });
+      expect(spool.statusCode).toBe(201);
+      const headers = { ...auth(token), "idempotency-key": "spool-scan-retry-001" };
+      const payload = { code: "LP-SCAN-RETRY", grams: 150, location: "Printer Bay Retry" };
+
+      const scanned = await app.inject({
+        method: "POST",
+        url: "/api/spools/scan",
+        headers,
+        payload
+      });
+      expect(scanned.statusCode).toBe(200);
+      expect(scanned.json()).toMatchObject({ usageLogged: 150, spool: { id: spool.json().id, remaining: 750, location: "Printer Bay Retry" } });
+
+      const replay = await app.inject({
+        method: "POST",
+        url: "/api/spools/scan",
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(scanned.json());
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/spools/scan",
+        headers,
+        payload: { ...payload, grams: 50 }
+      });
+      expect(conflict.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.spools.find((item) => item.id === spool.json().id)).toMatchObject({ remaining: 750, location: "Printer Bay Retry" });
+      expect(persisted.events.filter((event) => event.type === "spool.scanned_usage" && event.data?.spoolId === spool.json().id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "spool-scan-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/spools/scan",
+        replayCount: 1,
+        statusCode: 200
+      });
+    });
+  });
+
   it("replays idempotent purchase receives without creating duplicate spools", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);
