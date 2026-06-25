@@ -1442,6 +1442,28 @@ function hasPermission(user, permission) {
   return permissions.has("*") || permissions.has(permission);
 }
 
+function isAdminRole(user) {
+  return user?.role === "Owner" || user?.role === "Admin";
+}
+
+function isTwoFactorEnrollmentRoute(method, routePath) {
+  if (method === "GET" && routePath === "/api/auth/me") return true;
+  if (method === "POST" && routePath === "/api/auth/logout") return true;
+  if (method === "POST" && routePath === "/api/auth/change-password") return true;
+  if (method === "POST" && routePath === "/api/auth/2fa/setup") return true;
+  if (method === "POST" && routePath === "/api/auth/2fa/enable") return true;
+  return false;
+}
+
+function requiresProductionAdminTwoFactor(data, user, method, routePath) {
+  if (process.env.NODE_ENV !== "production") return false;
+  if (!isAdminRole(user)) return false;
+  if (twoFactorStatus(user).enabled) return false;
+  const settings = workspaceScopeForUser(data, user).workspaceSettings || {};
+  if (settings.requireAdmin2fa !== true) return false;
+  return !isTwoFactorEnrollmentRoute(method, routePath);
+}
+
 const apiKeyReadScopeRules = [
   { pattern: /^\/api\/metrics$/, scopes: ["metrics:read"] },
   { pattern: /^\/api\/audit(?:\/export)?$/, scopes: ["admin:export"] },
@@ -1929,6 +1951,11 @@ function realtimeStateForUser(data, user) {
 function broadcastRealtime(database, event, data) {
   for (const client of database.realtimeClients || []) {
     try {
+      const clientUser = database.data.users.find((user) => user.id === client.userId && itemInWorkspace(user, client.workspaceId));
+      if (!clientUser || requiresProductionAdminTwoFactor(database.data, clientUser, "GET", "/api/events/stream")) {
+        closeRealtimeClient(database, client);
+        continue;
+      }
       const payload = data?.state && client.workspaceId
         ? { ...data, state: realtimeState(scopedWorkspaceData(database.data, client.workspaceId)) }
         : data;
@@ -5311,6 +5338,13 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     }
     request.user = user;
     request.apiKey = apiKey || null;
+    if (!apiKey && requiresProductionAdminTwoFactor(database.data, user, request.method, routePath)) {
+      return reply.code(403).send({
+        error: "Two-factor enrollment required",
+        requiresTwoFactorEnrollment: true,
+        remediation: "Enroll TOTP two-factor authentication before accessing production admin APIs."
+      });
+    }
     if (apiKey && !apiKeyCanReadRoute(user, request.method, routePath)) {
       return reply.code(403).send({ error: "API key scope does not allow reading this resource" });
     }
@@ -5530,6 +5564,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     });
     const client = {
       id: randomUUID(),
+      userId: user.id,
       workspaceId: user.workspaceId || DEFAULT_WORKSPACE_ID,
       raw: reply.raw,
       send: (event, payload) => sendSse(reply.raw, event, payload),
@@ -5551,6 +5586,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     }
     const client = {
       id: randomUUID(),
+      userId: user.id,
       workspaceId: user.workspaceId || DEFAULT_WORKSPACE_ID,
       socket,
       send: (event, payload) => socket.send(JSON.stringify({ event, data: payload })),

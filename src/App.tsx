@@ -300,6 +300,7 @@ const zhTwTranslations: Record<string, string> = {
   "Run a smarter print lab from one cockpit.": "用一個控制台管理更聰明的 3D 打印工作室。",
   "Original cloud management for printers, jobs, materials, teams, and automations.": "原創的打印機、任務、材料、團隊與自動化雲端管理系統。",
   "Professional setup and technical support:": "專業安裝設定與技術支援：",
+  "Production admin access requires two-factor authentication. Set up 2FA to unlock protected workspace APIs.": "正式環境管理員存取需要雙因素驗證。請設定 2FA 以解鎖受保護的工作區 API。",
   "Dashboard": "儀表板",
   "Production cockpit": "生產控制台",
   "Printers": "打印機",
@@ -318,6 +319,7 @@ const zhTwTranslations: Record<string, string> = {
   "Add-ons": "擴充功能",
   "Notifications": "通知",
   "Settings": "設定",
+  "Set up two-factor authentication to unlock production admin access.": "請設定雙因素驗證以解鎖正式環境管理員存取。",
   "Hot Drop": "快速投放",
   "Go-live readiness": "上線準備度",
   "Drop demo files here": "投放 Demo 檔案",
@@ -1348,6 +1350,17 @@ const materialData = [
 const roles: Role[] = ["Owner", "Admin", "Operator", "Viewer", "Student"];
 const API_BASE = import.meta.env.VITE_LAYERPILOT_API_URL ?? (import.meta.env.PROD ? "" : "http://127.0.0.1:8797");
 
+class ApiError extends Error {
+  status: number;
+  body: Record<string, unknown>;
+
+  constructor(status: number, body: Record<string, unknown>) {
+    super(`API ${status}`);
+    this.status = status;
+    this.body = body;
+  }
+}
+
 function realtimeUrl(path: string, token: string) {
   const base = API_BASE || window.location.origin;
   const url = new URL(path, base);
@@ -1369,7 +1382,16 @@ async function apiRequest<T>(path: string, init: RequestInit = {}) {
       ...(init.headers || {})
     }
   });
-  if (!response.ok) throw new Error(`API ${response.status}`);
+  if (!response.ok) {
+    let body: Record<string, unknown> = {};
+    try {
+      const parsed = await response.json();
+      if (parsed && typeof parsed === "object") body = parsed as Record<string, unknown>;
+    } catch {
+      body = {};
+    }
+    throw new ApiError(response.status, body);
+  }
   return response.json() as Promise<T>;
 }
 
@@ -1487,6 +1509,7 @@ function App() {
   const [authToken, setAuthToken] = useState(() => window.localStorage.getItem("layerpilot-token") || "");
   const [authed, setAuthed] = useState(() => Boolean(window.localStorage.getItem("layerpilot-token")));
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [twoFactorEnrollmentRequired, setTwoFactorEnrollmentRequired] = useState(false);
   const [view, setView] = useState<View>("dashboard");
   const [mobileNav, setMobileNav] = useState(false);
   const [printers, setPrinters] = useState(initialPrinters);
@@ -1560,6 +1583,7 @@ function App() {
       window.localStorage.setItem("layerpilot-token", auth.token);
       setAuthToken(auth.token);
       setCurrentUser(auth.user);
+      setTwoFactorEnrollmentRequired(false);
       setAuthed(true);
       setBackendStatus("connected");
       return "";
@@ -1569,6 +1593,7 @@ function App() {
       window.localStorage.setItem("layerpilot-token", "local-demo");
       setAuthToken("local-demo");
       setCurrentUser({ id: "local", name: "Local Demo", email: payload.email, role: "Owner", location: "Local", lastSeen: "Now" });
+      setTwoFactorEnrollmentRequired(false);
       setAuthed(true);
       setBackendStatus("local");
       return "";
@@ -1580,6 +1605,7 @@ function App() {
     window.localStorage.removeItem("layerpilot-token");
     setAuthToken("");
     setCurrentUser(null);
+    setTwoFactorEnrollmentRequired(false);
     setAuthed(false);
     setBackendStatus("local");
   };
@@ -2361,6 +2387,7 @@ function App() {
       body: JSON.stringify({ secret, code })
     });
     setCurrentUser(result.user);
+    setTwoFactorEnrollmentRequired(false);
     setUsers((items) => items.map((user) => user.id === result.user.id ? result.user : user));
     setBackendStatus("connected");
     return result;
@@ -2372,6 +2399,7 @@ function App() {
       body: JSON.stringify({ password, code })
     });
     setCurrentUser(result.user);
+    setTwoFactorEnrollmentRequired(workspaceSettings.requireAdmin2fa && (result.user.role === "Owner" || result.user.role === "Admin") && !result.user.twoFactor?.enabled);
     setUsers((items) => items.map((user) => user.id === result.user.id ? result.user : user));
     setBackendStatus("connected");
     return result.user;
@@ -3198,12 +3226,22 @@ function App() {
       .then((data) => {
         applyIncomingState(data);
         setBackendStatus("connected");
+        setTwoFactorEnrollmentRequired(false);
       })
-      .catch(() => setBackendStatus("local"));
+      .catch((error) => {
+        if (error instanceof ApiError && error.body.requiresTwoFactorEnrollment === true) {
+          setTwoFactorEnrollmentRequired(true);
+          setBackendStatus("connected");
+          setView("settings");
+          addToast("Set up two-factor authentication to unlock production admin access.", "warning");
+          return;
+        }
+        setBackendStatus("local");
+      });
   }, [authed, authToken]);
 
   useEffect(() => {
-    if (!authed || !authToken || authToken === "local-demo") return;
+    if (!authed || !authToken || authToken === "local-demo" || twoFactorEnrollmentRequired) return;
     const handleRealtimePayload = (kind: string, payload: Record<string, unknown>) => {
       if (kind === "state" && payload.state) applyIncomingState(payload.state as Record<string, unknown>);
       if (kind === "event") {
@@ -3229,7 +3267,7 @@ function App() {
     source.addEventListener("event", (event) => handleRealtimePayload("event", JSON.parse((event as MessageEvent).data || "{}")));
     source.onerror = () => setBackendStatus("local");
     return () => source.close();
-  }, [authed, authToken]);
+  }, [authed, authToken, twoFactorEnrollmentRequired]);
 
   if (!authed && showMarketing) return <MarketingSite onOpenApp={() => { window.location.hash = "app"; setShowMarketing(false); }} />;
 
@@ -5685,8 +5723,10 @@ function SettingsPage({ settings, setSettings, addToast, setBackendStatus, curre
   };
   const storage = billing?.storage || { used: "0 B", usedGb: 0, limitGb: settings.storageLimitGb, percent: 0, files: 0, storedFiles: 0, usedBytes: 0 };
   const currentPlanId = billing?.plan.id || "";
+  const adminTwoFactorRequired = settings.requireAdmin2fa && (currentUser?.role === "Owner" || currentUser?.role === "Admin") && !currentUser?.twoFactor?.enabled;
   return (
     <Page title="Settings" kicker="Organization, billing, storage, units and security">
+      {adminTwoFactorRequired && <div className="notice warning"><Shield size={18} /><span>Production admin access requires two-factor authentication. Set up 2FA to unlock protected workspace APIs.</span></div>}
       <div className="settings-grid">
         <section className="panel"><PanelTitle title="Organization" /><label>Name<input value={settings.organizationName} onChange={(event) => setSettings({ ...settings, organizationName: event.target.value })} /></label><label>Default location<input value={settings.defaultLocation} onChange={(event) => setSettings({ ...settings, defaultLocation: event.target.value })} /></label><button onClick={() => saveSettings({ organizationName: settings.organizationName, defaultLocation: settings.defaultLocation }, "Organization settings")}>Save</button></section>
         <section className="panel">

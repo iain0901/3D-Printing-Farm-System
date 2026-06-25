@@ -20,6 +20,7 @@ In `NODE_ENV=production`, `/api/readiness` is a deployment gate, not just a live
 - Sessions expire after `LAYERPILOT_SESSION_TTL_HOURS`, default `168` hours.
 - Active sessions also expire after `LAYERPILOT_SESSION_IDLE_TIMEOUT_HOURS` without use, default `24` hours.
 - Password changes keep only the current session; admin password resets revoke all sessions for the reset user.
+- In `NODE_ENV=production`, Owner/Admin sessions are limited to identity, password, logout, and TOTP setup/enable endpoints while workspace `requireAdmin2fa` is enabled and the account has not enrolled two-factor authentication.
 
 ## API Key Policy
 

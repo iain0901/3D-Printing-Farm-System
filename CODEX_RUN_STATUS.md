@@ -1,16 +1,31 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 46 committed and pushed
+- Phase: round 47 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 46 browser operator idempotency is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 47 production admin 2FA enforcement hardening is in progress on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add browser idempotency headers for daily authenticated operator production writes.
-  - Document built-in operator idempotency coverage.
-  - Run targeted browser/build checks and full QC, then commit and push.
+  - Add regression coverage for production `requireAdmin2fa` enforcement on Owner/Admin sessions.
+  - Gate production Owner/Admin API access until 2FA is enrolled while preserving remediation endpoints.
+  - Document the production 2FA enforcement behavior.
+  - Run targeted auth tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 47 repo inspection started at 2026-06-25T09:30:45Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, and auth/session/readiness code before editing.
+  - Selected production-readiness slice: enforce the documented admin 2FA deployment gate in production so Owner/Admin sessions without enrolled TOTP cannot access protected production APIs until they enroll.
+  - Added regression coverage proving production Owner/Admin sessions are blocked from protected APIs until TOTP enrollment while `/api/auth/me`, 2FA setup, and 2FA enablement remain available.
+  - Added production pre-handler enforcement for workspace `requireAdmin2fa` on unenrolled Owner/Admin user sessions.
+  - Updated the browser API error path so the production 2FA enrollment gate routes the user to Settings instead of falling back to local/demo state.
+  - Documented production admin 2FA enforcement in README, operations, and production-readiness docs.
+  - Targeted auth test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "production Owner and Admin sessions"` (1 test).
+  - Targeted TOTP regression passed: `npm run test -- api/server.test.mjs -t "TOTP two-factor"` (1 test).
+  - Production build passed: `npm run build`.
+  - Expanded realtime gating so production admin streams close rather than continuing after the account becomes non-compliant with required 2FA enrollment.
+  - Targeted i18n coverage passed after adding translations for the new 2FA gate UI: `npm run test -- api/i18n.test.mjs` (2 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (111 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 129 tests passed).
   - Round 46 repo inspection started at 2026-06-25T09:19:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, and roadmap docs before editing.
   - Selected production-readiness slice: browser-side idempotency keys for authenticated daily operator production controls so dropped browser/API responses replay backend-safe queue, scheduler, order, quote, file, slicer, printer, todo, spool, and purchasing writes instead of duplicating work.
