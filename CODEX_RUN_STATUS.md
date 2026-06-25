@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 54 in progress
+- Phase: round 54 committed; final report update in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 54 full backup export size guard is in progress on `codex/production-saas-completion-20260624`.
+- Current state: Round 54 full backup export size guard is implemented, verified, and committed on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
   - Add regression coverage proving full file-byte exports fail with a clear `413` before reading oversized stored objects.
@@ -23,6 +23,8 @@
   - S3/full-backup targeted coverage passed: `npm run test -- api/server.test.mjs -t "S3-compatible object store|configured byte limit|exports and restores stored model bytes"` (3 tests).
   - Documented the full-backup export ceiling in `.env.example`, README, operations, and production-readiness docs.
   - Full API suite passed: `npm run test -- api/server.test.mjs` (117 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 135 tests passed).
+  - Committed round 54 implementation as `bb37bd0` (`feat: cap full backup exports`).
   - Round 53 repo inspection started at 2026-06-25T10:48:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, mutating API routes, idempotency allowlist, direct printer status route/UI, and existing printer tests before editing.
   - Selected production-readiness slice: idempotent direct printer status updates for retry-safe operator controls.

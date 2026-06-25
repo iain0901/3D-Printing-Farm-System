@@ -106,6 +106,7 @@
   - `0282a0a` `docs: record codex round 52 status`
   - `4b15a23` `feat: add idempotent printer status updates`
   - `45462c7` `docs: record codex round 53 status`
+  - `bb37bd0` `feat: cap full backup exports`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -276,6 +277,11 @@
   - Round 53 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
   - Round 53 targeted `npm run test -- api/server.test.mjs`: passed, 116 tests passed.
   - Round 53 final `npm run qc`: passed, build passed, Vitest 10 files / 134 tests passed.
+  - Round 54 targeted `npm run test -- api/server.test.mjs -t "configured byte limit"`: failed before implementation, then passed, 1 test passed.
+  - Round 54 targeted `npm run test -- api/server.test.mjs -t "exports and restores stored model bytes|previews and commits sanitized workspace restores|builds analytics, print history, reprints completed jobs, and exports backups"`: passed, 3 tests passed.
+  - Round 54 targeted `npm run test -- api/server.test.mjs -t "S3-compatible object store|configured byte limit|exports and restores stored model bytes"`: passed, 3 tests passed.
+  - Round 54 targeted `npm run test -- api/server.test.mjs`: passed, 117 tests passed.
+  - Round 54 final `npm run qc`: passed, build passed, Vitest 10 files / 135 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs -t "spool metadata updates|maintenance job updates"`: failed before implementation, then passed, 2 tests passed.
   - Round 50 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs`: passed, 114 tests passed.
@@ -448,6 +454,8 @@
 - Added idempotent replay/conflict protection for direct printer status updates so dropped operator/browser responses replay the original status response without duplicate `printer.status` audit events.
 - Wired the built-in printer status controls to generate stable per-attempt browser `Idempotency-Key` headers until success.
 - Added regression coverage proving direct printer status retries replay the original response, and documented the retry contract in README, operations, and production-readiness docs.
+- Added a configurable `LAYERPILOT_FULL_BACKUP_MAX_BYTES` guard for `/api/admin/export?includeFiles=true` so oversized full file-byte exports return `413` with a storage manifest before stored model/G-code bytes are embedded in JSON.
+- Added regression coverage for local and S3 full-backup export paths, including the oversized-export guard, and documented the recommended verified volume/object-storage backup path for larger production file libraries.
 
 ## Remaining Blockers
 
@@ -457,6 +465,7 @@
 - Optional production services such as Stripe, S3, MQTT, commerce feeds, and external slicer remain customer-environment dependent.
 - Live production readiness now fails when configured S3, Stripe, or MQTT integrations are incomplete or malformed; operators must either complete those settings or leave the optional integration disabled before go-live.
 - Frontend bundle size warning remains from the existing single-bundle app; it does not fail QC.
+- Full API JSON file-byte exports are intentionally capped by `LAYERPILOT_FULL_BACKUP_MAX_BYTES`; large production farms should rely on verified volume/object-storage backups unless an operator deliberately raises the API export ceiling.
 - Idempotency coverage is route-specific; token- or secret-returning replay records are intentionally retained only in internal server metadata and omitted from shared state/admin exports.
 - Session expiry policy should be reviewed against the customer's shared-device operating model before go-live.
 - Production Owner/Admin users must enroll TOTP before protected API access when workspace `requireAdmin2fa` remains enabled; this is now enforced in `NODE_ENV=production`.
