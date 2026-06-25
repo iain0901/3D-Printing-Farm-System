@@ -1336,6 +1336,69 @@ describe("3DSTU FarmFlow API", () => {
     });
   });
 
+  it("replays idempotent billing plan changes and portal sessions without duplicate billing records", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const planHeaders = { ...auth(token), "idempotency-key": "billing-plan-retry-001" };
+
+      const firstPlan = await app.inject({
+        method: "PATCH",
+        url: "/api/billing/plan",
+        headers: planHeaders,
+        payload: { planId: "farm" }
+      });
+      expect(firstPlan.statusCode).toBe(200);
+      const firstPlanBody = firstPlan.json();
+      expect(firstPlanBody.invoice).toMatchObject({ planId: "farm", amount: 149, status: "open" });
+
+      const replayPlan = await app.inject({
+        method: "PATCH",
+        url: "/api/billing/plan",
+        headers: planHeaders,
+        payload: { planId: "farm" }
+      });
+      expect(replayPlan.statusCode).toBe(200);
+      expect(replayPlan.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replayPlan.json().invoice.id).toBe(firstPlanBody.invoice.id);
+
+      const portalHeaders = { ...auth(token), "idempotency-key": "billing-portal-retry-001" };
+      const firstPortal = await app.inject({
+        method: "POST",
+        url: "/api/billing/portal",
+        headers: portalHeaders,
+        payload: { returnUrl: "http://127.0.0.1:8797/settings", planId: "studio" }
+      });
+      expect(firstPortal.statusCode).toBe(200);
+      const firstPortalBody = firstPortal.json();
+      expect(firstPortalBody.session).toMatchObject({ mode: "internal", status: "created", planId: "studio" });
+
+      const replayPortal = await app.inject({
+        method: "POST",
+        url: "/api/billing/portal",
+        headers: portalHeaders,
+        payload: { returnUrl: "http://127.0.0.1:8797/settings", planId: "studio" }
+      });
+      expect(replayPortal.statusCode).toBe(200);
+      expect(replayPortal.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replayPortal.json().session.id).toBe(firstPortalBody.session.id);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.invoices.filter((invoice) => invoice.planId === "farm")).toHaveLength(1);
+      expect(persisted.billingSessions.filter((session) => session.planId === "studio")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "billing.plan_changed")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "billing.portal_session")).toHaveLength(1);
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/billing/portal",
+        headers: portalHeaders,
+        payload: { returnUrl: "http://127.0.0.1:8797/settings?changed=1", planId: "studio" }
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+    });
+  });
+
   it("creates Stripe billing sessions and applies Stripe webhook updates", async () => {
     const calls = [];
     const fakeStripe = {
@@ -1370,13 +1433,24 @@ describe("3DSTU FarmFlow API", () => {
         const portal = await app.inject({
           method: "POST",
           url: "/api/billing/portal",
-          headers: auth(token),
+          headers: { ...auth(token), "idempotency-key": "stripe-billing-portal-retry-001" },
           payload: { returnUrl: "http://127.0.0.1:8797/settings", planId: "farm" }
         });
         expect(portal.statusCode).toBe(200);
         expect(portal.json().session).toMatchObject({ mode: "stripe", provider: "stripe", id: "cs_test_layerpilot", stripePriceId: "price_farm_test" });
         expect(portal.json().session.url).toBe("https://checkout.stripe.test/session");
         expect(calls[0].params).toMatchObject({ mode: "subscription", line_items: [{ price: "price_farm_test", quantity: 1 }] });
+
+        const replayPortal = await app.inject({
+          method: "POST",
+          url: "/api/billing/portal",
+          headers: { ...auth(token), "idempotency-key": "stripe-billing-portal-retry-001" },
+          payload: { returnUrl: "http://127.0.0.1:8797/settings", planId: "farm" }
+        });
+        expect(replayPortal.statusCode).toBe(200);
+        expect(replayPortal.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+        expect(replayPortal.json().session.id).toBe("cs_test_layerpilot");
+        expect(calls.filter((call) => call.kind === "checkout")).toHaveLength(1);
 
         const denied = await app.inject({
           method: "POST",

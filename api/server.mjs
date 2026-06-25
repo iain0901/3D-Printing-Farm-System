@@ -1500,6 +1500,8 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "POST" && routePath === "/api/commerce/import-csv") return true;
   if (method === "POST" && routePath === "/api/purchaseRequests/reorderPlan") return true;
   if (method === "POST" && routePath === "/api/admin/audit-retention/run") return true;
+  if (method === "POST" && routePath === "/api/billing/portal") return true;
+  if (method === "PATCH" && routePath === "/api/billing/plan") return true;
   if (method === "POST" && /^\/api\/public\/quoteRequests\/[^/]+\/decision$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/orders\/[^/]+\/generate-jobs$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/quoteRequests\/[^/]+\/convert-order$/.test(routePath)) return true;
