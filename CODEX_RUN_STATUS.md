@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 40 implementation committed; status docs pending push
+- Phase: round 40 committed and pushed
 - Started: 2026-06-24 UTC
-- Current state: Round 40 file/model artifact retry hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`; final status/report commit and push are pending.
+- Current state: Round 40 file/model artifact retry hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 96 tests passed)
 - Current plan:
   - Add regression coverage for retry-safe sample model generation, Hot Drop handling, and file version bumps.
@@ -21,6 +21,8 @@
   - Targeted API suite passed: `npm run test -- api/server.test.mjs` (106 tests).
   - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 123 tests passed).
   - Committed round 40 implementation as `9e163b2` (`feat: add idempotent file artifact writes`).
+  - Committed round 40 status docs as `39286ce` (`docs: record codex round 40 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
   - Round 39 repo inspection started at 2026-06-25T08:10:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, and production-readiness docs before editing.
   - Selected production-readiness slice: idempotent print-history annotation retries to prevent duplicate waste inventory deductions and duplicate history audit events after dropped operator/browser responses.
