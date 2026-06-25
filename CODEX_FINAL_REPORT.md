@@ -4,7 +4,7 @@
 - Pushed remote: `origin/codex/production-saas-completion-20260624`
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
-- Latest round: Round 96 idempotency replay secret-storage hardening implemented, verified, committed, and pushed.
+- Latest round: Round 96 idempotency replay secret-storage hardening implemented, verified, committed, and pushed through `4a03133`; local push-status documentation is blocked by missing GitHub HTTPS credentials.
 - Commits:
   - `4a03133` `docs: record codex round 96 status`
   - `51272ab` `feat: redact idempotency replay secrets`

@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 96 committed and pushed
+- Phase: round 96 blocked on final push-status commit
 - Started: 2026-06-24 UTC
-- Current state: Round 96 idempotency replay secret-storage hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 96 idempotency replay secret-storage hardening is implemented, verified, committed, and pushed through `4a03133` on `origin/codex/production-saas-completion-20260624`; local final push-status documentation is blocked by missing GitHub HTTPS credentials.
 - Baseline QC: Round 86 passed `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed)
 - Current plan:
   - Add regression coverage requiring persisted idempotency replay bodies for generated API keys, temporary passwords, and quote portal tokens to redact those secrets.
@@ -25,7 +25,9 @@
   - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 154 tests passed).
   - Committed round 96 implementation/status/docs as `51272ab` (`feat: redact idempotency replay secrets`).
   - Committed round 96 final report/status as `4a03133` (`docs: record codex round 96 status`).
-  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Pushed branch through `4a03133`: `origin/codex/production-saas-completion-20260624`.
+  - Created local push-status commit `8e08a56` (`docs: record codex round 96 push`), but pushing it failed because GitHub HTTPS credentials are unavailable (`could not read Username for 'https://github.com': No such device or address`).
+  - Created `CODEX_NEEDS_USER.md` with the exact GitHub credential unblocker.
   - Round 95 repo inspection started at 2026-06-25T20:39:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route list, bridge routes, and existing bridge tests before editing.
   - Selected production-readiness slice: printer bridge audit hardening so bridge setup, diagnostics, and manual syncs leave compact operator/workspace evidence without exposing endpoint paths, query tokens, or API keys.
