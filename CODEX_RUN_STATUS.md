@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 39 committed; push pending
+- Phase: round 39 committed and pushed
 - Started: 2026-06-24 UTC
-- Current state: Round 39 history annotation retry hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`; push pending.
+- Current state: Round 39 history annotation retry hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 96 tests passed)
 - Current plan:
   - Add regression coverage for retry-safe print-history annotations with waste inventory deduction.
@@ -21,6 +21,8 @@
   - Targeted API suite passed: `npm run test -- api/server.test.mjs` (105 tests).
   - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 122 tests passed).
   - Committed round 39 implementation as `57942fd` (`feat: add idempotent history annotations`).
+  - Committed round 39 status docs as `823e1e7` (`docs: record codex round 39 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
   - Round 38 repo inspection started at 2026-06-25T07:58:56Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: idempotent slicer retries to prevent duplicate slicer job records, file-version increments, G-code artifacts, and slicer audit events after dropped operator/browser responses.
