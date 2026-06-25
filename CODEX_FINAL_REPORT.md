@@ -5,6 +5,8 @@
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
 - Commits:
+  - Current `HEAD` `docs: record codex round 71 status`
+  - `63051bb` `feat: gate production public signup`
   - `17b8499` `docs: record codex round 70 status`
   - `f5201f4` `feat: add operator catalog retry safety`
   - `2191e6f` `feat: harden production farm operations`
@@ -145,6 +147,11 @@
   - `7e42cc7` `feat: scope audit retention by workspace`
   - Current `HEAD` `docs: record codex round 69 push`
 - QC result:
+  - Round 71 targeted `npm run test -- api/server.test.mjs -t "public signup|production readiness"`: passed, 6 tests passed.
+  - Round 71 deployment `npm run test -- api/deploy.test.mjs`: passed, 3 tests passed.
+  - Round 71 deploy syntax `bash -n scripts/ubuntu-deploy.sh`: passed.
+  - Round 71 full API `npm run test -- api/server.test.mjs`: passed, 128 tests passed.
+  - Round 71 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 147 tests passed.
   - Round 70 targeted `npm run test -- api/server.test.mjs -t "parametric nameplate|production templates"`: passed, 3 tests passed.
   - Round 70 targeted `npm run test -- src/idempotency.test.ts`: passed, 3 tests passed.
   - Round 70 full API `npm run test -- api/server.test.mjs`: passed, 127 tests passed.
@@ -390,6 +397,9 @@
 
 ## Completed Features
 
+- Added a production public-signup gate so `/api/auth/signup` is blocked in `NODE_ENV=production` unless `LAYERPILOT_ENABLE_PUBLIC_SIGNUP=true` is explicitly set.
+- Added a `production-public-signup` readiness check, Ubuntu deploy env/default validation, `.env.example` coverage, and operator documentation for the signup posture.
+- Added regression coverage proving blocked production signup does not create a user and explicit production opt-in still creates an Owner workspace.
 - Added regression coverage and UI idempotency headers for retry-safe production-template create/run and parametric nameplate generation, preventing duplicate queue jobs, stored nameplate files, linked catalog parts, and audit events after dropped operator responses.
 - Preserved and validated inherited handoff work for v0.1.21 production features.
 - Added v0.1.22 order lifecycle states: `on_hold`, `completed`, and `cancelled`.
@@ -600,6 +610,7 @@
 
 ## Remaining Blockers
 
+- Public signup is now closed by default on production VPS deployments; enabling self-service tenant registration remains an explicit business/security decision for the live SaaS environment.
 - Production-template and parametric nameplate retry safety is verified in API/UI helper coverage; real browser smoke on the deployed VPS should still be included in the go-live checklist.
 - No destructive deployment was performed because production env, domain, TLS, and customer deployment target were not confirmed.
 - Go-live still requires completing `docs/PRODUCTION_READINESS.md` on the actual VPS/customer environment.
