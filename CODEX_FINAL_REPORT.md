@@ -65,6 +65,7 @@
   - `df83599` `feat: add idempotent catalog governance writes`
   - `f03111a` `docs: record codex round 37 status`
   - `56b86c8` `feat: add idempotent slicer retries`
+  - `57b071e` `docs: record codex round 38 status`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
