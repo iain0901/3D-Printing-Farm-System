@@ -4,8 +4,9 @@
 - Pushed remote: `origin/codex/production-saas-completion-20260624`
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
-- Latest round: Round 86 order lifecycle retry-safety evidence implemented, verified, committed, and ready to push.
+- Latest round: Round 86 order lifecycle retry-safety evidence implemented, verified, committed, and pushed.
 - Commits:
+  - `c9d4b41` `docs: record codex round 86 push`
   - `5d60b0c` `docs: record codex round 86 status`
   - `cdacddd` `test: cover order lifecycle retries`
   - `9e4f9eb` `docs: record codex round 85 push`

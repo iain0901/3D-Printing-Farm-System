@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 86 committed and ready to push
+- Phase: round 86 committed and pushed
 - Started: 2026-06-24 UTC
-- Current state: Round 86 order lifecycle retry-safety evidence is implemented, verified, committed, and ready to push on `codex/production-saas-completion-20260624`.
+- Current state: Round 86 order lifecycle retry-safety evidence is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
   - Add regression coverage proving order status retries replay without duplicate order lifecycle audit events or double material release for generated cancelled order work.
@@ -22,6 +22,8 @@
   - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed).
   - Committed round 86 implementation/status/docs as `cdacddd` (`test: cover order lifecycle retries`).
   - Committed round 86 status/final report as `5d60b0c` (`docs: record codex round 86 status`).
+  - Committed round 86 push status as `c9d4b41` (`docs: record codex round 86 push`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
   - Round 85 repo inspection started at 2026-06-25T18:00:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, route list, idempotency allowlist, queue lifecycle routes, UI idempotency headers, and existing queue/material reservation tests before editing.
   - Selected production-readiness slice: queue lifecycle retry-safety regression coverage for schedule, priority, complete, and cancel operations that mutate material reservations and operator audit evidence.
