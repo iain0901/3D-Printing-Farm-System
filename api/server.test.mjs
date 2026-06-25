@@ -1072,6 +1072,83 @@ describe("3DSTU FarmFlow API", () => {
     });
   });
 
+  it("replays idempotent admin account writes without rotating generated secrets", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+
+      const apiKeyHeaders = { ...auth(token), "idempotency-key": "admin-api-key-create-retry-001" };
+      const apiKeyPayload = { name: "Retry admin automation", scopes: ["queue:write"], enabled: true };
+      const apiKey = await app.inject({ method: "POST", url: "/api/apiKeys", headers: apiKeyHeaders, payload: apiKeyPayload });
+      expect(apiKey.statusCode).toBe(201);
+      const apiKeyReplay = await app.inject({ method: "POST", url: "/api/apiKeys", headers: apiKeyHeaders, payload: apiKeyPayload });
+      expect(apiKeyReplay.statusCode).toBe(201);
+      expect(apiKeyReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(apiKeyReplay.json()).toEqual(apiKey.json());
+
+      const apiKeyUpdateHeaders = { ...auth(token), "idempotency-key": "admin-api-key-update-retry-001" };
+      const apiKeyUpdatePayload = { enabled: false, scopes: ["orders:write"] };
+      const apiKeyUpdated = await app.inject({ method: "PATCH", url: `/api/apiKeys/${apiKey.json().apiKey.id}`, headers: apiKeyUpdateHeaders, payload: apiKeyUpdatePayload });
+      expect(apiKeyUpdated.statusCode).toBe(200);
+      const apiKeyUpdatedReplay = await app.inject({ method: "PATCH", url: `/api/apiKeys/${apiKey.json().apiKey.id}`, headers: apiKeyUpdateHeaders, payload: apiKeyUpdatePayload });
+      expect(apiKeyUpdatedReplay.statusCode).toBe(200);
+      expect(apiKeyUpdatedReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(apiKeyUpdatedReplay.json()).toEqual(apiKeyUpdated.json());
+
+      const inviteHeaders = { ...auth(token), "idempotency-key": "admin-user-invite-retry-001" };
+      const invitePayload = { name: "Retry Invite", email: "retry.invite@layerpilot.test", role: "Operator", location: "QC Lab" };
+      const invited = await app.inject({ method: "POST", url: "/api/users", headers: inviteHeaders, payload: invitePayload });
+      expect(invited.statusCode).toBe(201);
+      expect(invited.json().temporaryPassword).toBeTruthy();
+      const invitedReplay = await app.inject({ method: "POST", url: "/api/users", headers: inviteHeaders, payload: invitePayload });
+      expect(invitedReplay.statusCode).toBe(201);
+      expect(invitedReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(invitedReplay.json()).toEqual(invited.json());
+
+      const userUpdateHeaders = { ...auth(token), "idempotency-key": "admin-user-update-retry-001" };
+      const userUpdatePayload = { role: "Admin", location: "Studio South" };
+      const userUpdated = await app.inject({ method: "PATCH", url: `/api/users/${invited.json().user.id}`, headers: userUpdateHeaders, payload: userUpdatePayload });
+      expect(userUpdated.statusCode).toBe(200);
+      const userUpdatedReplay = await app.inject({ method: "PATCH", url: `/api/users/${invited.json().user.id}`, headers: userUpdateHeaders, payload: userUpdatePayload });
+      expect(userUpdatedReplay.statusCode).toBe(200);
+      expect(userUpdatedReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(userUpdatedReplay.json()).toEqual(userUpdated.json());
+
+      const resetHeaders = { ...auth(token), "idempotency-key": "admin-user-reset-retry-001" };
+      const resetPayload = { requireChange: true };
+      const reset = await app.inject({ method: "POST", url: `/api/users/${invited.json().user.id}/reset-password`, headers: resetHeaders, payload: resetPayload });
+      expect(reset.statusCode).toBe(200);
+      expect(reset.json().temporaryPassword).toBeTruthy();
+      const resetReplay = await app.inject({ method: "POST", url: `/api/users/${invited.json().user.id}/reset-password`, headers: resetHeaders, payload: resetPayload });
+      expect(resetReplay.statusCode).toBe(200);
+      expect(resetReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(resetReplay.json()).toEqual(reset.json());
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: `/api/users/${invited.json().user.id}/reset-password`,
+        headers: resetHeaders,
+        payload: { requireChange: false }
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.apiKeys.filter((key) => key.name === "Retry admin automation")).toHaveLength(1);
+      expect(persisted.users.filter((user) => user.email === "retry.invite@layerpilot.test")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "api_key.created" && event.data?.apiKeyId === apiKey.json().apiKey.id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "api_key.updated" && event.data?.apiKeyId === apiKey.json().apiKey.id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "user.invited" && event.data?.userId === invited.json().user.id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "user.updated" && event.data?.userId === invited.json().user.id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "user.password_reset" && event.data?.userId === invited.json().user.id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "admin-user-reset-retry-001")).toMatchObject({
+        method: "POST",
+        path: `/api/users/${invited.json().user.id}/reset-password`,
+        replayCount: 1,
+        statusCode: 200
+      });
+    });
+  });
+
   it("persists workspace settings with role protection", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);

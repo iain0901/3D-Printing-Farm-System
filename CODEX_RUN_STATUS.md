@@ -1,16 +1,26 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 43 committed and pushed
+- Phase: round 44 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 43 governance setup retry hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 44 admin account retry hardening is implemented and verified on `codex/production-saas-completion-20260624`; commit/push pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 125 tests passed)
 - Current plan:
-  - Add regression coverage for retry-safe governance setup writes.
-  - Add workspace settings, onboarding checklist, and support snapshot routes to the persisted `Idempotency-Key` allowlist.
-  - Document governance setup write idempotency, run targeted tests and full QC, then commit and push.
+  - Add regression coverage for retry-safe admin account and API-key management writes.
+  - Add API-key create/update, user invite/update, and password-reset routes to the persisted `Idempotency-Key` allowlist.
+  - Document admin account management idempotency, run targeted tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 44 repo inspection started at 2026-06-25T08:59:42Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, and roadmap docs before editing.
+  - Selected production-readiness slice: idempotent admin account and API-key management writes to prevent duplicate generated secrets, duplicate invites, duplicate password resets, and duplicate governance audit events after dropped owner/admin responses.
+  - Added failing regression coverage proving API-key create/update, user invite/update, and password-reset retries need replay semantics.
+  - Added admin account management routes to the persisted `Idempotency-Key` allowlist.
+  - Documented admin account management idempotency in README, operations, and production-readiness docs.
+  - Targeted admin account idempotency test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "admin account writes"` (1 test).
+  - Targeted account-management tests passed: `npm run test -- api/server.test.mjs -t "API keys"` (2 tests), `npm run test -- api/server.test.mjs -t "team users"` (1 test), and `npm run test -- api/server.test.mjs -t "password"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (110 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 127 tests passed).
   - Round 43 repo inspection started at 2026-06-25T08:51:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, and roadmap docs before editing.
   - Selected production-readiness slice: idempotent governance setup writes for workspace settings, onboarding checklist updates, and support snapshots to prevent duplicate audit events after dropped operator/browser responses.

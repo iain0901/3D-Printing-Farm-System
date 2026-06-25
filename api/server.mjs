@@ -1518,6 +1518,8 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "POST" && routePath === "/api/commerce/import-csv") return true;
   if (method === "POST" && routePath === "/api/purchaseRequests") return true;
   if (method === "POST" && routePath === "/api/purchaseRequests/reorderPlan") return true;
+  if (method === "POST" && routePath === "/api/apiKeys") return true;
+  if (method === "POST" && routePath === "/api/users") return true;
   if (method === "POST" && routePath === "/api/admin/audit-retention/run") return true;
   if (method === "POST" && routePath === "/api/support/snapshot") return true;
   if (method === "POST" && routePath === "/api/billing/portal") return true;
@@ -1532,6 +1534,8 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "PATCH" && /^\/api\/webhooks\/[^/]+$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/notificationChannels\/[^/]+$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/commerceConnectors\/[^/]+$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/apiKeys\/[^/]+$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/users\/[^/]+$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/onboarding\/[^/]+$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/public\/quoteRequests\/[^/]+\/decision$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/orders\/[^/]+\/generate-jobs$/.test(routePath)) return true;
@@ -1548,6 +1552,7 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "POST" && /^\/api\/productionTemplates\/[^/]+\/run$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/commerceConnectors\/[^/]+\/import$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/purchaseRequests\/[^/]+\/receive$/.test(routePath)) return true;
+  if (method === "POST" && /^\/api\/users\/[^/]+\/reset-password$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/purchaseRequests\/[^/]+$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/printers\/[^/]+$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/parts\/[^/]+$/.test(routePath)) return true;
