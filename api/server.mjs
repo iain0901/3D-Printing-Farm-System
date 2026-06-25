@@ -542,7 +542,7 @@ const apiKeySchema = z.object({
   expiresAt: z.string().optional().default("")
 });
 const apiKeyPatchSchema = apiKeySchema.partial();
-const workspaceSettingsSchema = z.object({
+const workspaceSettingsBaseSchema = z.object({
   workspaceId: z.string().min(1).default(DEFAULT_WORKSPACE_ID),
   organizationName: z.string().min(1).default("North Campus Lab"),
   defaultLocation: z.string().min(1).default("Studio North"),
@@ -554,7 +554,7 @@ const workspaceSettingsSchema = z.object({
   auditLogRetention: z.boolean().default(true),
   auditLogRetentionDays: z.number().int().min(7).max(3650).default(365),
   restrictApiByIp: z.boolean().default(false),
-  allowedApiIps: z.array(z.string().min(1)).default([]),
+  allowedApiIps: z.array(z.string().trim().min(1).refine(isValidIpAllowlistRule, { message: "Must be an IPv4 address or IPv4 CIDR range" })).default([]),
   storageLimitGb: z.number().positive().default(10),
   hotDropMode: z.enum(["Upload Only", "Direct Print", "Auto-Queue"]).default("Direct Print"),
   plan: z.string().min(1).default("Print Farm Trial"),
@@ -567,6 +567,15 @@ const workspaceSettingsSchema = z.object({
   stripeCustomerId: z.string().min(1).optional(),
   stripeSubscriptionId: z.string().min(1).optional()
 });
+const workspaceSettingsSchema = workspaceSettingsBaseSchema.superRefine((value, ctx) => {
+  if (value.restrictApiByIp && !value.allowedApiIps.length) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["allowedApiIps"],
+      message: "At least one IPv4 address or CIDR range is required when API key IP restrictions are enabled"
+    });
+  }
+});
 const workspaceRecordSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -576,7 +585,7 @@ const workspaceRecordSchema = z.object({
   updatedAt: z.string().min(1),
   settings: workspaceSettingsSchema
 });
-const workspaceSettingsPatchSchema = workspaceSettingsSchema.partial();
+const workspaceSettingsPatchSchema = workspaceSettingsBaseSchema.partial();
 const onboardingStepPatchSchema = z.object({
   status: z.enum(["pending", "complete", "skipped"]).default("complete"),
   note: z.string().max(500).optional().default("")
@@ -760,6 +769,20 @@ function matchesIpRule(ip, rule) {
   if (client === null || range === null) return false;
   const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
   return (client & mask) === (range & mask);
+}
+
+function isValidIpAllowlistRule(rule) {
+  const candidate = String(rule || "").trim();
+  if (!candidate) return false;
+  if (!candidate.includes("/")) return net.isIP(normalizeClientIp(candidate)) === 4;
+  const [rangeIp, prefixText, ...rest] = candidate.split("/");
+  if (rest.length) return false;
+  const prefix = Number(prefixText);
+  return net.isIP(normalizeClientIp(rangeIp)) === 4 && Number.isInteger(prefix) && prefix >= 0 && prefix <= 32;
+}
+
+function invalidIpAllowlistRules(rules = []) {
+  return (Array.isArray(rules) ? rules : []).map((rule) => String(rule || "").trim()).filter((rule) => !isValidIpAllowlistRule(rule));
 }
 
 function isApiKeyIpAllowed(settings, request) {
@@ -3583,6 +3606,21 @@ function productionReadinessConfigChecks(data, env = process.env) {
     name: "production-default-access",
     ok: defaultUserIssues.length === 0,
     detail: defaultUserIssues.length ? defaultUserIssues.join("; ") : "default and demo access disabled"
+  });
+
+  const settings = data.workspaceSettings || {};
+  const allowlist = Array.isArray(settings.allowedApiIps) ? settings.allowedApiIps : [];
+  const allowlistIssues = [];
+  if (settings.restrictApiByIp === true && !allowlist.length) {
+    allowlistIssues.push("restrictApiByIp is true but allowedApiIps is empty");
+  }
+  for (const rule of invalidIpAllowlistRules(allowlist)) {
+    allowlistIssues.push(`invalid allowedApiIps rule: ${rule || "(blank)"}`);
+  }
+  checks.push({
+    name: "production-api-ip-allowlist",
+    ok: allowlistIssues.length === 0,
+    detail: allowlistIssues.length ? allowlistIssues.join("; ") : "API key IP allowlist configuration is valid"
   });
 
   const dependencyIssues = productionDependencyConfigIssues(env);
@@ -6536,8 +6574,11 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   app.patch("/api/workspaceSettings", async (request, reply) => {
     if (!hasPermission(request.user, "settings:write")) return reply.code(403).send({ error: "Missing permission: settings:write" });
     const parsed = workspaceSettingsPatchSchema.safeParse(request.body);
-    if (!parsed.success) return reply.code(400).send({ error: "Invalid workspace settings", issues: parsed.error.issues });
-    const settings = updateWorkspaceSettings(database.data, request.user.workspaceId, parsed.data);
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid workspace settings payload", issues: parsed.error.issues });
+    const current = workspaceForId(database.data, request.user.workspaceId).settings || database.data.workspaceSettings || {};
+    const next = workspaceSettingsSchema.safeParse({ ...current, ...parsed.data, workspaceId: request.user.workspaceId || current.workspaceId || DEFAULT_WORKSPACE_ID });
+    if (!next.success) return reply.code(400).send({ error: "Invalid workspace settings payload", issues: next.error.issues });
+    const settings = updateWorkspaceSettings(database.data, request.user.workspaceId, next.data);
     await dispatchEvent(database, "settings.updated", `${settings.organizationName} settings updated`, { workspaceId: request.user.workspaceId, settings }, { actor: request.user });
     await database.write();
     return settings;

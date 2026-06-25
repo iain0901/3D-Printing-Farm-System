@@ -125,7 +125,7 @@ Run the production preflight first:
 scripts/ubuntu-deploy.sh doctor
 ```
 
-The doctor check verifies Docker Compose, current-user access to the Docker daemon, required deployment files, private `.env` permissions, required production secrets, demo/default user disabling, non-default and minimum-length worker/metrics tokens, password length, boolean/numeric environment values, public/billing URL formats, S3 settings when object storage is enabled, Stripe price/webhook settings when billing is configured, MQTT URL/QoS/retain settings when event streaming is configured, and Compose config rendering. If Docker was just installed, run `newgrp docker` or reconnect before running deploy commands as a non-root user.
+The doctor check verifies Docker Compose, current-user access to the Docker daemon, required deployment files, private `.env` permissions, required production secrets, demo/default user disabling, non-default and minimum-length worker/metrics tokens, password length, boolean/numeric environment values, public/billing URL formats, S3 settings when object storage is enabled, Stripe price/webhook settings when billing is configured, MQTT URL/QoS/retain settings when event streaming is configured, and Compose config rendering. Live `/api/readiness` also fails when workspace API-key IP restrictions are enabled with an empty or invalid IPv4/CIDR allowlist. If Docker was just installed, run `newgrp docker` or reconnect before running deploy commands as a non-root user.
 
 ```bash
 scripts/ubuntu-deploy.sh deploy

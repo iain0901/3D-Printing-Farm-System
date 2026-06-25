@@ -1,17 +1,30 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 67 committed and pushed
+- Phase: round 68 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 67 worker freshness readiness gate is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 68 workspace API allowlist validation/readiness hardening is in progress on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage proving production `/api/readiness` fails when enabled worker jobs have no fresh heartbeat and passes when the heartbeat is current.
-  - Add a worker freshness readiness check based on configured worker intervals and enabled telemetry/bridge polling flags.
-  - Document the worker freshness deployment gate in README, operations, and production-readiness docs.
-  - Run targeted readiness/worker tests and full QC, then commit and push.
+  - Add regression coverage proving workspace API-key IP allowlists reject invalid rules and production readiness fails when persisted allowlist configuration is empty or invalid.
+  - Implement strict IPv4/CIDR validation for `allowedApiIps` and a production readiness gate for enabled API IP restrictions.
+  - Document the API-key allowlist deployment gate in README, operations, and production-readiness docs.
+  - Run targeted readiness/settings tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 68 repo inspection started at 2026-06-25T13:39:37Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, readiness/auth/IP allowlist code, route list, and existing readiness/settings tests before editing.
+  - Selected production-readiness slice: workspace API-key IP allowlist validation and readiness gate so production cannot silently deploy invalid or empty automation network restrictions.
+  - Added regression coverage proving production readiness fails for invalid persisted API-key IP allowlist rules and workspace settings writes reject invalid allowlist rules.
+  - Targeted allowlist regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "API key IP allowlist|workspace settings"` (readiness returned `200`; settings accepted invalid allowlist rules).
+  - Added shared IPv4/CIDR allowlist validation, enforced valid non-empty allowlists when API-key IP restrictions are enabled, and added a production readiness check for invalid/empty persisted allowlists.
+  - Targeted allowlist coverage passed: `npm run test -- api/server.test.mjs -t "API key IP allowlist|workspace settings"` (2 tests).
+  - Documented the API-key IP allowlist readiness gate in README, install docs, operations, production-readiness, and Ubuntu deployment docs.
+  - Broader targeted readiness/API-key/settings coverage passed: `npm run test -- api/server.test.mjs -t "readiness|API keys|workspace settings"` (11 tests).
+  - Deployment docs/tests passed: `npm run test -- api/deploy.test.mjs` (3 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (126 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 144 tests passed).
+  - Tightened allowlist validation to IPv4-only for both direct addresses and CIDR ranges, added IPv6 rejection coverage, reran targeted allowlist coverage, and reran final QC successfully.
   - Round 67 repo inspection started at 2026-06-25T13:29:26Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, readiness implementation, worker heartbeat code, deployment docs, and existing readiness/worker tests before editing.
   - Selected production-readiness slice: worker freshness readiness gate so production deployments with enabled telemetry or bridge polling fail readiness when the background worker has never reported or is stale.

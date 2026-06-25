@@ -139,6 +139,7 @@
   - Current `HEAD` `docs: record codex round 66 push`
   - `07c77ea` `feat: gate readiness on worker freshness`
   - `0a3226e` `docs: record codex round 67 status`
+  - Current `HEAD` `feat: validate api key ip allowlists`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -365,6 +366,11 @@
   - Round 67 targeted `npm run test -- api/worker.test.mjs`: passed, 2 tests passed.
   - Round 67 targeted `npm run test -- api/server.test.mjs`: passed, 125 tests passed.
   - Round 67 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 143 tests passed.
+  - Round 68 targeted `npm run test -- api/server.test.mjs -t "API key IP allowlist|workspace settings"`: failed before implementation, then passed, 2 tests passed.
+  - Round 68 targeted `npm run test -- api/server.test.mjs -t "readiness|API keys|workspace settings"`: passed, 11 tests passed.
+  - Round 68 targeted `npm run test -- api/deploy.test.mjs`: passed, 3 tests passed.
+  - Round 68 targeted `npm run test -- api/server.test.mjs`: passed, 126 tests passed.
+  - Round 68 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 144 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs -t "spool metadata updates|maintenance job updates"`: failed before implementation, then passed, 2 tests passed.
   - Round 50 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
   - Round 50 targeted `npm run test -- api/server.test.mjs`: passed, 114 tests passed.
@@ -574,6 +580,8 @@
 - Added regression coverage for production query-token rejection and documented header-only metrics/worker token transport in README, install, operations, and production-readiness docs.
 - Added a production `/api/readiness` worker freshness gate so enabled background telemetry or bridge polling requires a recent durable worker heartbeat.
 - Added regression coverage for missing, stale, and fresh worker heartbeat readiness outcomes, and documented the gate in README, install, operations, and production-readiness docs.
+- Added strict workspace API-key IP allowlist validation for IPv4 addresses and IPv4 CIDR ranges, rejecting invalid or empty enabled allowlists at settings write time.
+- Added a production `/api/readiness` gate for persisted invalid or empty API-key IP allowlists, plus regression coverage and README/install/operations/production-readiness/deploy documentation.
 
 ## Remaining Blockers
 
@@ -632,3 +640,4 @@
 - Support snapshots now redact secret-like fields and URL paths/query strings, but operators should still review generated support bundles before sharing customer evidence externally.
 - Production metrics scrapers and worker notifiers must send shared ops tokens in headers; query-token URLs are intentionally rejected in `NODE_ENV=production`.
 - Production readiness now fails when worker telemetry or bridge polling is enabled and the worker heartbeat is missing or stale; operators must verify the `layerpilot-worker` service and shared database/volume on the live host.
+- Production readiness now fails when API-key IP restrictions are enabled with an empty or invalid IPv4/CIDR allowlist; operators must correct workspace settings before relying on scoped automation keys.

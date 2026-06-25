@@ -98,6 +98,7 @@ Useful production environment variables:
 - `LAYERPILOT_DISABLE_DEMO_LOGIN`, set to `true` to prevent auto-creating the demo login
 - `LAYERPILOT_SESSION_TTL_HOURS`, user session lifetime, default `168` hours
 - `LAYERPILOT_SESSION_IDLE_TIMEOUT_HOURS`, idle user session timeout, default `24` hours
+- Workspace API-key IP restrictions accept only explicit IPv4 addresses or IPv4 CIDR ranges such as `203.0.113.25` or `203.0.113.0/24`; if restrictions are enabled with an empty or invalid allowlist in production, `/api/readiness` fails until the settings are corrected.
 - `LAYERPILOT_METRICS_TOKEN`, optional token for Prometheus-style `/api/metrics` scraping without a user session; production scrapers must send it with the `x-layerpilot-metrics-token` header, not a URL query parameter
 - `LAYERPILOT_OPS_EMAIL` and `LAYERPILOT_OPS_PASSWORD`, optional dedicated smoke account for `scripts/ubuntu-deploy.sh ops-check`; blank values fall back to the bootstrap admin credentials
 - `LAYERPILOT_AUTO_BACKUP_ON_MIGRATE`, defaults to `true`; writes a sibling `*.pre-migration-*.bak.json` before schema migrations when an existing DB file is upgraded
@@ -118,7 +119,7 @@ Useful production environment variables:
 - `LAYERPILOT_SLICER_CMD`, optional external slicer executable such as PrusaSlicer, OrcaSlicer, or SuperSlicer
 - `LAYERPILOT_SLICER_ARGS`, optional JSON array or space-separated args using `{input}`, `{output}`, and `{config}` placeholders
 
-The production API also enables security headers through `@fastify/helmet` and route-level rate limiting through `@fastify/rate-limit` for authentication, API key creation, billing sessions, and admin exports.
+The production API also enables security headers through `@fastify/helmet` and route-level rate limiting through `@fastify/rate-limit` for authentication, API key creation, billing sessions, and admin exports. API-key IP allowlists are validated as IPv4 addresses or IPv4 CIDR ranges at settings write time, and production readiness fails if a persisted allowlist is empty or invalid while API-key IP restrictions are enabled.
 
 Authenticated admins can run `/api/admin/integrity?checkStorage=true` before backup or restore drills to verify stored model/G-code object coverage. The report includes expected stored payloads, present payloads, total bytes, missing objects, and a `complete` flag so missing local or S3 file bytes are visible before an export or restore is trusted. The `admin.integrity_checked` audit event records whether storage was checked, whether coverage was complete, byte/count totals, and the missing-file count without storing file contents. `npm run smoke:prod` and `scripts/ubuntu-deploy.sh ops-check` run the same storage-aware integrity check whenever authenticated smoke credentials are configured, and they fail if `storage.complete` is false.
 

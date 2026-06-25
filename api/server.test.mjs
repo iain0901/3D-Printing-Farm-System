@@ -286,6 +286,37 @@ describe("3DSTU FarmFlow API", () => {
     });
   });
 
+  it("fails production readiness when API key IP allowlist rules are invalid", async () => {
+    await withEnv({
+      NODE_ENV: "production",
+      LAYERPILOT_ADMIN_EMAIL: "owner@example.com",
+      LAYERPILOT_ADMIN_PASSWORD: "production-owner-password",
+      LAYERPILOT_WORKER_TOKEN: "worker-token-32-characters-minimum",
+      LAYERPILOT_METRICS_TOKEN: "metrics-token-32-characters-minimum",
+      LAYERPILOT_DISABLE_DEFAULT_USERS: "true",
+      LAYERPILOT_DISABLE_DEMO_LOGIN: "true",
+      LAYERPILOT_WORKER_TELEMETRY: "false",
+      LAYERPILOT_WORKER_BRIDGE_POLLING: "false"
+    }, async () => {
+      await withApp(async ({ app, db }) => {
+        db.data.workspaceSettings.restrictApiByIp = true;
+        db.data.workspaceSettings.allowedApiIps = ["203.0.113.0/24", "not-an-ip", "10.0.0.1/99"];
+        db.data.workspaces[0].settings.restrictApiByIp = true;
+        db.data.workspaces[0].settings.allowedApiIps = db.data.workspaceSettings.allowedApiIps;
+        await db.write();
+
+        const readiness = await app.inject({ method: "GET", url: "/api/readiness" });
+        expect(readiness.statusCode).toBe(503);
+        expect(readiness.json().checks).toEqual(expect.arrayContaining([
+          expect.objectContaining({ name: "production-api-ip-allowlist", ok: false })
+        ]));
+        const detail = readiness.json().checks.find((check) => check.name === "production-api-ip-allowlist").detail;
+        expect(detail).toContain("not-an-ip");
+        expect(detail).toContain("10.0.0.1/99");
+      });
+    });
+  });
+
   it("fails production readiness when enabled worker jobs have no fresh heartbeat", async () => {
     const productionEnv = {
       NODE_ENV: "production",
@@ -1481,10 +1512,10 @@ describe("3DSTU FarmFlow API", () => {
         method: "PATCH",
         url: "/api/workspaceSettings",
         headers: auth(token),
-        payload: { organizationName: "QC Print Farm", defaultLocation: "QC Bay", currency: "TWD", restrictApiByIp: true, hotDropMode: "Auto-Queue" }
+        payload: { organizationName: "QC Print Farm", defaultLocation: "QC Bay", currency: "TWD", restrictApiByIp: true, allowedApiIps: ["127.0.0.0/8"], hotDropMode: "Auto-Queue" }
       });
       expect(updated.statusCode).toBe(200);
-      expect(updated.json()).toMatchObject({ organizationName: "QC Print Farm", defaultLocation: "QC Bay", currency: "TWD", restrictApiByIp: true, hotDropMode: "Auto-Queue" });
+      expect(updated.json()).toMatchObject({ organizationName: "QC Print Farm", defaultLocation: "QC Bay", currency: "TWD", restrictApiByIp: true, allowedApiIps: ["127.0.0.0/8"], hotDropMode: "Auto-Queue" });
 
       const invalidMode = await app.inject({
         method: "PATCH",
@@ -1493,6 +1524,16 @@ describe("3DSTU FarmFlow API", () => {
         payload: { hotDropMode: "Fire and forget" }
       });
       expect(invalidMode.statusCode).toBe(400);
+
+      const invalidAllowlist = await app.inject({
+        method: "PATCH",
+        url: "/api/workspaceSettings",
+        headers: auth(token),
+        payload: { restrictApiByIp: true, allowedApiIps: ["127.0.0.1", "bad-rule", "10.0.0.1/99", "::1"] }
+      });
+      expect(invalidAllowlist.statusCode).toBe(400);
+      expect(invalidAllowlist.json()).toMatchObject({ error: "Invalid workspace settings payload" });
+      expect(invalidAllowlist.json().issues.map((issue) => issue.path[0])).toContain("allowedApiIps");
 
       const apiKey = await app.inject({
         method: "POST",
@@ -1504,7 +1545,7 @@ describe("3DSTU FarmFlow API", () => {
       expect(denied.statusCode).toBe(403);
 
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
-      expect(persisted.workspaceSettings).toMatchObject({ organizationName: "QC Print Farm", defaultLocation: "QC Bay", currency: "TWD", restrictApiByIp: true, hotDropMode: "Auto-Queue" });
+      expect(persisted.workspaceSettings).toMatchObject({ organizationName: "QC Print Farm", defaultLocation: "QC Bay", currency: "TWD", restrictApiByIp: true, allowedApiIps: ["127.0.0.0/8"], hotDropMode: "Auto-Queue" });
       expect(persisted.events.some((event) => event.type === "settings.updated")).toBe(true);
     });
   });

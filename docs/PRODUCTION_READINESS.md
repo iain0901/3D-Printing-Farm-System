@@ -11,7 +11,7 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 - [ ] `LAYERPILOT_WORKER_TOKEN` and `LAYERPILOT_METRICS_TOKEN` are unique strong values.
 - [ ] Metrics scraping uses the `x-layerpilot-metrics-token` header and worker broadcasts use the `x-layerpilot-worker-token` header; production does not accept these shared tokens in URL query parameters.
 - [ ] `.env` is not committed and is readable only by the deployment user.
-- [ ] `/api/readiness` reports `ok: true`; in `NODE_ENV=production`, this also verifies required owner credentials, strong non-default worker/metrics tokens, disabled default/demo access, consistent optional S3, Stripe, and MQTT dependency configuration, and a fresh worker heartbeat when `LAYERPILOT_WORKER_TELEMETRY` or `LAYERPILOT_WORKER_BRIDGE_POLLING` is enabled.
+- [ ] `/api/readiness` reports `ok: true`; in `NODE_ENV=production`, this also verifies required owner credentials, strong non-default worker/metrics tokens, disabled default/demo access, valid API-key IP allowlist configuration when restrictions are enabled, consistent optional S3, Stripe, and MQTT dependency configuration, and a fresh worker heartbeat when `LAYERPILOT_WORKER_TELEMETRY` or `LAYERPILOT_WORKER_BRIDGE_POLLING` is enabled.
 - [ ] `npm run smoke:prod` passes against the live URL.
 - [ ] `scripts/ubuntu-deploy.sh ops-check` passes with authenticated state, audit, and metrics checks enabled through `LAYERPILOT_OPS_EMAIL`/`LAYERPILOT_OPS_PASSWORD` or the bootstrap admin credentials.
 - [ ] Authenticated `npm run smoke:prod` and `scripts/ubuntu-deploy.sh ops-check` runs report storage-aware integrity with `storage.complete: true`, and `/api/audit` shows `admin.integrity_checked` metadata with `checkStorage: true` and `storageComplete: true`.
@@ -26,7 +26,7 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 - [ ] API keys use only grantable automation scopes and no wildcard, user-management, settings, or API-key-management scope.
 - [ ] API keys are tested against their intended read endpoints and are blocked from unrelated UI/admin resources.
 - [ ] API-key creation and rotation are performed from a logged-in Owner/Admin user session, not from another API key.
-- [ ] API key IP/CIDR allowlists are enabled when automation runs from fixed networks.
+- [ ] API key IP/CIDR allowlists are enabled when automation runs from fixed networks, and every rule is an explicit IPv4 address or IPv4 CIDR range; empty or invalid allowlists are rejected by settings writes and fail production readiness.
 - [ ] `/api/audit` shows login, logout, password-change, signup, and 2FA setup/enable/verify/disable events with workspace, user, actor, and session metadata where applicable, and without bearer tokens, passwords, TOTP secrets, or recovery codes.
 - [ ] `/api/audit` shows recent production/admin events with the expected workspace and operator context, including scheduling, queue, bridge, file-version, history annotation/reprint, onboarding, support snapshot, settings, billing, add-on, cost catalog, material mapping, API-key, and user-management changes; filtered audit review and CSV exports have been checked with `type`, `search`, `limit`, and `offset` so the matched count and `hasMore` metadata line up with operator evidence.
 

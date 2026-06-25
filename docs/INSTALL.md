@@ -39,6 +39,8 @@ In production, `LAYERPILOT_WORKER_TOKEN` is accepted only through the `x-layerpi
 
 If `LAYERPILOT_WORKER_TELEMETRY` or `LAYERPILOT_WORKER_BRIDGE_POLLING` is enabled in production, `/api/readiness` expects the background worker to write a recent heartbeat to the shared data store. Keep the API and worker services on the same volume/database path and check the worker logs if readiness reports a stale or missing `worker` check.
 
+If workspace API-key IP restrictions are enabled, use only IPv4 addresses or IPv4 CIDR ranges in `allowedApiIps`, for example `203.0.113.25` or `203.0.113.0/24`. Production `/api/readiness` fails when the persisted allowlist is empty or invalid.
+
 For customer production, also set:
 
 - `LAYERPILOT_DISABLE_DEFAULT_USERS=true`
