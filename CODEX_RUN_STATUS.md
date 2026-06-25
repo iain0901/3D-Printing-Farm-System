@@ -1,16 +1,28 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 36 committed
+- Phase: round 37 verified pending commit
 - Started: 2026-06-24 UTC
-- Current state: Round 36 catalog/profile/printer configuration idempotency hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 37 catalog governance retry hardening is implemented and verified on `codex/production-saas-completion-20260624`; commit/push is pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 96 tests passed)
 - Current plan:
-  - Add regression coverage for retry-safe catalog, slicer profile, production template, and printer capability configuration writes.
-  - Add those configuration routes to the persisted `Idempotency-Key` allowlist.
-  - Document configuration-write idempotency, run targeted tests and full QC, then commit and push.
+  - Add regression coverage for retry-safe cost catalog updates and material-map runs.
+  - Add cost catalog and material-map routes to the persisted `Idempotency-Key` allowlist.
+  - Ensure material-map audit events include workspace and authenticated actor context.
+  - Document catalog governance idempotency, run targeted tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 37 repo inspection started at 2026-06-25T07:48:55Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: retry-safe catalog governance writes for cost catalog pricing and material normalization runs.
+  - Added failing regression coverage proving cost catalog and material-map retries need replay semantics to avoid duplicate pricing/material normalization audit or run records.
+  - Added cost catalog updates and catalog material-map runs to the persisted `Idempotency-Key` allowlist.
+  - Scoped material mapping to the authenticated workspace and added workspace/authenticated actor context to material-map audit events.
+  - Documented catalog governance idempotency and material-map audit traceability in README, operations, and production-readiness docs.
+  - Targeted catalog governance test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "catalog governance"` (1 test).
+  - Targeted catalog/pricing tests passed: `npm run test -- api/server.test.mjs -t "cost catalog"`, `npm run test -- api/server.test.mjs -t "catalog records"`, and `npm run test -- api/server.test.mjs -t "catalog governance"` (3 tests total).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (102 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 119 tests passed).
   - Round 36 repo inspection started at 2026-06-25T07:38:37Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: idempotent catalog/profile/printer configuration writes to prevent duplicate setup records and audit events after operator/browser retries.

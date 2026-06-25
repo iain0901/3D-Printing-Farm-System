@@ -1506,6 +1506,7 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "POST" && routePath === "/api/maintenance/templates") return true;
   if (method === "POST" && routePath === "/api/maintenance/reports") return true;
   if (method === "POST" && routePath === "/api/public/quoteRequests") return true;
+  if (method === "POST" && routePath === "/api/catalog/material-map") return true;
   if (method === "POST" && routePath === "/api/commerce/import-csv") return true;
   if (method === "POST" && routePath === "/api/purchaseRequests/reorderPlan") return true;
   if (method === "POST" && routePath === "/api/admin/audit-retention/run") return true;
@@ -1513,6 +1514,7 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "POST" && routePath === "/api/bridges/sync") return true;
   if (method === "POST" && /^\/api\/schedule\/(auto|optimize|constraint)$/.test(routePath)) return true;
   if (method === "PATCH" && routePath === "/api/billing/plan") return true;
+  if (method === "PATCH" && routePath === "/api/costCatalog") return true;
   if (method === "PATCH" && routePath === "/api/profile-policy") return true;
   if (method === "POST" && /^\/api\/public\/quoteRequests\/[^/]+\/decision$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/orders\/[^/]+\/generate-jobs$/.test(routePath)) return true;
@@ -5752,19 +5754,25 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!hasPermission(request.user, "catalog:write")) return reply.code(403).send({ error: "Missing permission: catalog:write" });
     const parsed = materialMapSchema.safeParse(request.body || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid material map payload", issues: parsed.error.issues });
-    const result = buildMaterialMapping(database.data, parsed.data);
-    database.data.materialMappings = result.mappings;
+    const scoped = workspaceScopeForUser(database.data, request.user);
+    const result = buildMaterialMapping(scoped, parsed.data);
+    database.data.materialMappings = [
+      ...(database.data.materialMappings || []).filter((item) => !itemInWorkspace(item, request.user.workspaceId)),
+      ...result.mappings.map((mapping) => ({ ...mapping, workspaceId: request.user.workspaceId }))
+    ];
     database.data.materialMapRuns.unshift({
       id: randomUUID(),
+      workspaceId: request.user.workspaceId,
       generatedAt: result.generatedAt,
       applied: result.applied,
       changed: result.changed,
       unmapped: result.unmapped,
       mappings: result.mappings.length
     });
-    await dispatchEvent(database, "catalog.material_mapped", `${result.changed} material labels normalized`, { changed: result.changed, unmapped: result.unmapped, applied: result.applied });
+    await dispatchEvent(database, "catalog.material_mapped", `${result.changed} material labels normalized`, { workspaceId: request.user.workspaceId, changed: result.changed, unmapped: result.unmapped, applied: result.applied }, { actor: request.user });
     await database.write();
-    return { ...result, parts: database.data.parts, files: database.data.files, queue: database.data.queue };
+    const updatedScope = workspaceScopeForUser(database.data, request.user);
+    return { ...result, parts: updatedScope.parts, files: updatedScope.files, queue: updatedScope.queue };
   });
 
   app.get("/api/history", async (request) => buildPrintHistory(workspaceScopeForUser(database.data, request.user)));

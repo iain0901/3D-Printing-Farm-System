@@ -1618,6 +1618,72 @@ describe("3DSTU FarmFlow API", () => {
     });
   });
 
+  it("replays idempotent catalog governance writes without duplicate pricing or material-map events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+
+      const costHeaders = { ...auth(token), "idempotency-key": "catalog-cost-governance-retry-001" };
+      const costPayload = { materialRates: { PETG: 2.4 }, machineHourlyRate: 42, failureReservePercent: 12, overheadPercent: 4, minimumQuote: 8 };
+      const cost = await app.inject({ method: "PATCH", url: "/api/costCatalog", headers: costHeaders, payload: costPayload });
+      expect(cost.statusCode).toBe(200);
+      const costReplay = await app.inject({ method: "PATCH", url: "/api/costCatalog", headers: costHeaders, payload: costPayload });
+      expect(costReplay.statusCode).toBe(200);
+      expect(costReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(costReplay.json()).toEqual(cost.json());
+
+      const part = await app.inject({
+        method: "POST",
+        url: "/api/parts",
+        headers: auth(token),
+        payload: { name: "Governance material alias", fileId: "f2", material: "Any PETG", process: "0.20mm Production", plates: 1, variants: ["Black"], status: "ready" }
+      });
+      expect(part.statusCode).toBe(201);
+
+      const mapHeaders = { ...auth(token), "idempotency-key": "catalog-material-map-retry-001" };
+      const mapPayload = { apply: true };
+      const mapped = await app.inject({ method: "POST", url: "/api/catalog/material-map", headers: mapHeaders, payload: mapPayload });
+      expect(mapped.statusCode).toBe(200);
+      expect(mapped.json()).toMatchObject({ applied: true });
+      expect(mapped.json().changed).toBeGreaterThanOrEqual(1);
+      const mappedReplay = await app.inject({ method: "POST", url: "/api/catalog/material-map", headers: mapHeaders, payload: mapPayload });
+      expect(mappedReplay.statusCode).toBe(200);
+      expect(mappedReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(mappedReplay.json()).toEqual(mapped.json());
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/catalog/material-map",
+        headers: mapHeaders,
+        payload: { apply: false }
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.costCatalog).toMatchObject({ machineHourlyRate: 42, materialRates: { PETG: 2.4 } });
+      expect(persisted.materialMapRuns).toHaveLength(1);
+      expect(persisted.materialMapRuns[0]).toMatchObject({ applied: true });
+      expect(persisted.parts.find((item) => item.id === part.json().id)).toMatchObject({ material: "PETG" });
+
+      const costEvents = persisted.events.filter((event) => event.type === "cost_catalog.updated" && event.data?.costCatalog?.machineHourlyRate === 42);
+      const mapEvents = persisted.events.filter((event) => event.type === "catalog.material_mapped");
+      expect(costEvents).toHaveLength(1);
+      expect(mapEvents).toHaveLength(1);
+      expect(mapEvents[0]).toMatchObject({
+        workspaceId: "ws-default",
+        data: expect.objectContaining({
+          workspaceId: "ws-default",
+          actorEmail: "demo@layerpilot.test",
+          actorRole: "Admin",
+          actorType: "user",
+          applied: true
+        })
+      });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "catalog-cost-governance-retry-001")).toMatchObject({ method: "PATCH", path: "/api/costCatalog", replayCount: 1, statusCode: 200 });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "catalog-material-map-retry-001")).toMatchObject({ method: "POST", path: "/api/catalog/material-map", replayCount: 1, statusCode: 200 });
+    });
+  });
+
   it("persists add-on marketplace status, config, and audit events", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);
