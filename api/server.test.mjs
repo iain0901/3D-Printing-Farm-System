@@ -2217,12 +2217,30 @@ describe("3DSTU FarmFlow API", () => {
       expect(persisted.notificationChannels.filter((item) => item.name === "Retry notification config")).toHaveLength(1);
       expect(persisted.commerceConnectors.filter((item) => item.name === "Retry commerce config")).toHaveLength(1);
       expect(persisted.bridges.filter((item) => item.name === "Retry bridge config")).toHaveLength(1);
-      expect(persisted.events.filter((event) => event.type === "webhook.created" && event.data?.webhookId === webhook.json().id)).toHaveLength(1);
-      expect(persisted.events.filter((event) => event.type === "webhook.updated" && event.data?.webhookId === webhook.json().id)).toHaveLength(1);
-      expect(persisted.events.filter((event) => event.type === "notification.channel_created" && event.data?.channelId === channel.json().id)).toHaveLength(1);
-      expect(persisted.events.filter((event) => event.type === "notification.channel_updated" && event.data?.channelId === channel.json().id)).toHaveLength(1);
-      expect(persisted.events.filter((event) => event.type === "commerce.connector_created" && event.data?.connectorId === connector.json().id)).toHaveLength(1);
-      expect(persisted.events.filter((event) => event.type === "commerce.connector_updated" && event.data?.connectorId === connector.json().id)).toHaveLength(1);
+      for (const [type, idKey, idValue] of [
+        ["webhook.created", "webhookId", webhook.json().id],
+        ["webhook.updated", "webhookId", webhook.json().id],
+        ["notification.channel_created", "channelId", channel.json().id],
+        ["notification.channel_updated", "channelId", channel.json().id],
+        ["commerce.connector_created", "connectorId", connector.json().id],
+        ["commerce.connector_updated", "connectorId", connector.json().id]
+      ]) {
+        const event = persisted.events.find((item) => item.type === type && item.data?.[idKey] === idValue);
+        expect(event).toMatchObject({
+          workspaceId: "ws-default",
+          data: {
+            workspaceId: "ws-default",
+            [idKey]: idValue,
+            actorEmail: "demo@layerpilot.test",
+            actorType: "user"
+          }
+        });
+        expect(JSON.stringify(event)).not.toContain("secret-token");
+        expect(JSON.stringify(event)).not.toContain("commerce-secret");
+        expect(JSON.stringify(event)).not.toContain("https://hooks.example.test/config");
+        expect(JSON.stringify(event)).not.toContain("https://hooks.slack.test/config");
+        expect(JSON.stringify(event)).not.toContain("https://commerce.example.test/feed.json");
+      }
       expect(persisted.events.filter((event) => event.type === "addon.updated" && event.data?.addonId === "mqtt")).toHaveLength(1);
       expect(persisted.events.filter((event) => event.type === "bridge.saved" && event.data?.bridgeId === bridge.json().id)).toHaveLength(1);
       expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "webhook-config-retry-001")).toMatchObject({ method: "POST", path: "/api/webhooks", replayCount: 1, statusCode: 201 });
@@ -6069,6 +6087,18 @@ endsolid s3_store`;
         expect(testDelivery.statusCode).toBe(200);
         expect(testDelivery.json().delivery).toMatchObject({ eventType: "webhook.test", status: "delivered" });
         expect(calls).toHaveLength(2);
+        const persistedAfterTest = JSON.parse(await readFile(dbPath, "utf8"));
+        const testEvent = persistedAfterTest.events.find((event) => event.type === "webhook.test" && event.data?.webhookId === hook.json().id);
+        expect(testEvent).toMatchObject({
+          workspaceId: "ws-default",
+          data: {
+            workspaceId: "ws-default",
+            webhookId: hook.json().id,
+            actorEmail: "demo@layerpilot.test",
+            actorType: "user"
+          }
+        });
+        expect(JSON.stringify(testEvent)).not.toContain("https://automation.test/layerpilot");
       } finally {
         global.fetch = originalFetch;
       }
@@ -6119,6 +6149,18 @@ endsolid s3_store`;
         const persisted = JSON.parse(await readFile(dbPath, "utf8"));
         expect(persisted.notificationChannels.find((item) => item.id === channel.json().id)).toMatchObject({ token: "secret-token", lastStatus: "delivered" });
         expect(persisted.notificationDeliveries.some((item) => item.channelId === channel.json().id && item.eventType === "order.status" && item.status === "delivered")).toBe(true);
+        const testEvent = persisted.events.find((event) => event.type === "notification.test" && event.data?.channelId === channel.json().id);
+        expect(testEvent).toMatchObject({
+          workspaceId: "ws-default",
+          data: {
+            workspaceId: "ws-default",
+            channelId: channel.json().id,
+            actorEmail: "demo@layerpilot.test",
+            actorType: "user"
+          }
+        });
+        expect(JSON.stringify(testEvent)).not.toContain("https://hooks.slack.test/qc");
+        expect(JSON.stringify(testEvent)).not.toContain("secret-token");
 
         const channels = await app.inject({ method: "GET", url: "/api/notificationChannels", headers: auth(token) });
         expect(channels.json().some((item) => item.token)).toBe(false);

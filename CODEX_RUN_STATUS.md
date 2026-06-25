@@ -1,17 +1,27 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 79 committed and pushed
+- Phase: round 80 integration endpoint audit context hardening in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 79 direct file creation audit context hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 80 is hardening integration endpoint configuration/test-send audit context on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage proving direct metadata file creation writes actor-aware audit evidence.
-  - Replace the remaining bare `file.created` write with the standard workspace/operator audit dispatcher.
-  - Document direct file-creation audit evidence review in README, operations, and production-readiness docs.
-  - Run targeted file tests, full API tests, and full QC, then commit and push.
+  - Add regression coverage proving webhook, notification, and commerce endpoint configuration/test-send audit events include workspace/operator context without endpoint URLs or tokens.
+  - Replace remaining bare integration endpoint audit writes with actor-aware compact audit records.
+  - Document integration endpoint audit evidence review in README, operations, and production-readiness docs.
+  - Run targeted integration tests, full API tests, and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 80 repo inspection started at 2026-06-25T17:05:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route list, audit dispatcher, integration endpoint routes, and existing integration tests before editing.
+  - Selected production-readiness slice: actor-aware audit context for integration endpoint configuration and test sends so webhook, notification, and commerce endpoint changes are traceable without exposing endpoint URLs or tokens.
+  - Added regression coverage requiring webhook/notification test-send events and webhook/notification/commerce connector create/update events to include workspace/operator context and exclude endpoint URLs/tokens.
+  - Targeted integration audit regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "integration configuration writes|webhooks, delivers matching events|notification channels"` (events lacked actor metadata and some test events lacked workspace metadata).
+  - Added a shared compact audit-event constructor for manual one-off events and wired webhook, notification channel, and commerce connector configuration/test-send routes to record actor-aware endpoint metadata without URL or token values.
+  - Documented integration endpoint audit evidence review in README, operations, and production-readiness docs.
+  - Targeted integration audit coverage passed: `npm run test -- api/server.test.mjs -t "integration configuration writes|webhooks, delivers matching events|notification channels"` (3 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (132 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 151 tests passed).
   - Round 79 repo inspection started at 2026-06-25T17:05:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route list, idempotency surface, admin export coverage, direct file creation route, audit dispatcher, and existing file tests before editing.
   - Selected production-readiness slice: direct file creation audit context hardening so metadata-created model/G-code records are traceable to the authenticated workspace/operator like upload, generated, preview, and download paths.

@@ -2450,13 +2450,19 @@ async function deliverWebhook(database, webhook, event, fetchImpl = globalThis.f
   return delivery;
 }
 
-async function dispatchEvent(database, type, message, data = {}, options = {}) {
+function createAuditEvent(database, type, message, data = {}, options = {}) {
   const actor = options.actor || null;
   const workspaceId = data.workspaceId || options.workspaceId || actor?.workspaceId || DEFAULT_WORKSPACE_ID;
   const actorData = actor ? { actorId: actor.id, actorEmail: actor.email, actorRole: actor.role, actorType: "user" } : {};
   const event = { id: randomUUID(), workspaceId, type, message, data: { ...data, ...actorData, workspaceId }, at: options.at || new Date().toISOString() };
   database.data.events.unshift(event);
   applyAuditRetention(database.data, { now: event.at });
+  return event;
+}
+
+async function dispatchEvent(database, type, message, data = {}, options = {}) {
+  const event = createAuditEvent(database, type, message, data, options);
+  const workspaceId = event.workspaceId;
   const matching = (database.data.webhooks || []).filter((webhook) => itemInWorkspace(webhook, workspaceId) && webhookMatches(webhook, type));
   const deliveries = [];
   for (const webhook of matching) {
@@ -6622,7 +6628,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsed.success) return reply.code(400).send({ error: "Invalid webhook payload", issues: parsed.error.issues });
     const webhook = { id: randomUUID(), workspaceId: request.user.workspaceId, ...parsed.data, lastStatus: "not sent", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     database.data.webhooks.push(webhook);
-    await dispatchEvent(database, "webhook.created", `${webhook.name} configured`, { webhookId: webhook.id });
+    await dispatchEvent(database, "webhook.created", `${webhook.name} configured`, { workspaceId: request.user.workspaceId, webhookId: webhook.id, enabled: webhook.enabled, events: webhook.events }, { actor: request.user });
     await database.write();
     return reply.code(201).send(sanitizeWebhook(webhook));
   });
@@ -6634,7 +6640,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const webhook = database.data.webhooks.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!webhook) return reply.code(404).send({ error: "Webhook not found" });
     Object.assign(webhook, parsed.data, { updatedAt: new Date().toISOString() });
-    await dispatchEvent(database, "webhook.updated", `${webhook.name} updated`, { webhookId: webhook.id });
+    await dispatchEvent(database, "webhook.updated", `${webhook.name} updated`, { workspaceId: request.user.workspaceId, webhookId: webhook.id, enabled: webhook.enabled, events: webhook.events }, { actor: request.user });
     await database.write();
     return sanitizeWebhook(webhook);
   });
@@ -6643,10 +6649,10 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!hasPermission(request.user, "webhooks:write")) return reply.code(403).send({ error: "Missing permission: webhooks:write" });
     const webhook = database.data.webhooks.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!webhook) return reply.code(404).send({ error: "Webhook not found" });
-    const event = { id: randomUUID(), type: "webhook.test", message: `${webhook.name} test delivery`, data: { webhookId: webhook.id }, at: new Date().toISOString() };
-    database.data.events.unshift(event);
+    const event = createAuditEvent(database, "webhook.test", `${webhook.name} test delivery`, { workspaceId: request.user.workspaceId, webhookId: webhook.id, enabled: webhook.enabled, events: webhook.events }, { actor: request.user });
     const delivery = await deliverWebhook(database, webhook, event);
     await database.write();
+    broadcastRealtime(database, "event", { event, deliveries: [sanitizeWebhookDelivery(delivery)] });
     return { event, delivery: sanitizeWebhookDelivery(delivery), webhook: sanitizeWebhook(webhook) };
   });
 
@@ -6656,7 +6662,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsed.success) return reply.code(400).send({ error: "Invalid notification channel payload", issues: parsed.error.issues });
     const channel = { id: randomUUID(), workspaceId: request.user.workspaceId, ...parsed.data, lastStatus: "not sent", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     database.data.notificationChannels.push(channel);
-    await dispatchEvent(database, "notification.channel_created", `${channel.name} configured`, { channelId: channel.id });
+    await dispatchEvent(database, "notification.channel_created", `${channel.name} configured`, { workspaceId: request.user.workspaceId, channelId: channel.id, channelType: channel.type, enabled: channel.enabled, events: channel.events, recipients: channel.recipients?.length || 0, hasToken: Boolean(channel.token) }, { actor: request.user });
     await database.write();
     return reply.code(201).send(sanitizeNotificationChannel(channel));
   });
@@ -6668,7 +6674,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const channel = database.data.notificationChannels.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!channel) return reply.code(404).send({ error: "Notification channel not found" });
     Object.assign(channel, parsed.data, { updatedAt: new Date().toISOString() });
-    await dispatchEvent(database, "notification.channel_updated", `${channel.name} updated`, { channelId: channel.id });
+    await dispatchEvent(database, "notification.channel_updated", `${channel.name} updated`, { workspaceId: request.user.workspaceId, channelId: channel.id, channelType: channel.type, enabled: channel.enabled, events: channel.events, recipients: channel.recipients?.length || 0, hasToken: Boolean(channel.token) }, { actor: request.user });
     await database.write();
     return sanitizeNotificationChannel(channel);
   });
@@ -6677,8 +6683,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!hasPermission(request.user, "notifications:write")) return reply.code(403).send({ error: "Missing permission: notifications:write" });
     const channel = database.data.notificationChannels.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!channel) return reply.code(404).send({ error: "Notification channel not found" });
-    const event = { id: randomUUID(), type: "notification.test", message: `${channel.name} test alert`, data: { channelId: channel.id }, at: new Date().toISOString() };
-    database.data.events.unshift(event);
+    const event = createAuditEvent(database, "notification.test", `${channel.name} test alert`, { workspaceId: request.user.workspaceId, channelId: channel.id, channelType: channel.type, enabled: channel.enabled, events: channel.events, recipients: channel.recipients?.length || 0, hasToken: Boolean(channel.token) }, { actor: request.user });
     const delivery = await deliverNotification(database, channel, event);
     await database.write();
     const safeDelivery = sanitizeNotificationDelivery(delivery);
@@ -6946,7 +6951,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsed.success) return reply.code(400).send({ error: "Invalid commerce connector payload", issues: parsed.error.issues });
     const connector = { id: randomUUID(), workspaceId: request.user.workspaceId, ...parsed.data, lastStatus: "not synced", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     database.data.commerceConnectors.push(connector);
-    await dispatchEvent(database, "commerce.connector_created", `${connector.name} configured`, { connectorId: connector.id, source: connector.source });
+    await dispatchEvent(database, "commerce.connector_created", `${connector.name} configured`, { workspaceId: request.user.workspaceId, connectorId: connector.id, source: connector.source, enabled: connector.enabled, hasToken: Boolean(connector.token) }, { actor: request.user });
     await database.write();
     return reply.code(201).send(sanitizeCommerceConnector(connector));
   });
@@ -6958,7 +6963,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const connector = database.data.commerceConnectors.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!connector) return reply.code(404).send({ error: "Commerce connector not found" });
     Object.assign(connector, parsed.data, { updatedAt: new Date().toISOString() });
-    await dispatchEvent(database, "commerce.connector_updated", `${connector.name} updated`, { connectorId: connector.id, source: connector.source });
+    await dispatchEvent(database, "commerce.connector_updated", `${connector.name} updated`, { workspaceId: request.user.workspaceId, connectorId: connector.id, source: connector.source, enabled: connector.enabled, hasToken: Boolean(connector.token) }, { actor: request.user });
     await database.write();
     return sanitizeCommerceConnector(connector);
   });

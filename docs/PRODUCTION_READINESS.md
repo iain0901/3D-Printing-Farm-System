@@ -35,6 +35,7 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 - [ ] Repeated known-account authentication failures create `auth.account_locked` and `auth.login_locked` audit evidence, and Owner/Admin password reset has been verified as the immediate recovery path for legitimate locked users.
 - [ ] `/api/audit` shows recent production/admin events with the expected workspace and operator context, including scheduling, queue, bridge, file-version, history annotation/reprint, onboarding, support snapshot, settings, billing, add-on, cost catalog, material mapping, API-key, and user-management changes; filtered audit review and CSV exports have been checked with `type`, `search`, `limit`, and `offset` so the matched count and `hasMore` metadata line up with operator evidence, and `admin.audit_exported` records the audit CSV export filters and counts without storing the exported CSV body.
 - [ ] `/api/audit` shows inventory and maintenance events with workspace and operator context for spool creation, label export, scan/usage/update, purchase request creation/reorder/update/receive, maintenance job creation/update, maintenance templates, and problem reports.
+- [ ] `/api/audit` shows webhook, notification channel, and commerce connector configuration or test-send events with workspace/operator context and compact endpoint metadata, without endpoint URLs, URL paths/query strings, or bearer tokens.
 - [ ] Audit-retention settings have been reviewed per workspace; manual retention runs prune only the authenticated workspace's non-protected events and preserve protected admin/system evidence.
 
 ## Production Workflows
@@ -50,6 +51,7 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 - [ ] Maintenance templates and problem reports are configured for the fleet.
 - [ ] Hardware bridges are tested for every connected printer before live work.
 - [ ] Webhook, notification, commerce connector, and bridge endpoints are stored only in the intended production instance; exported/shared API responses redact credential-bearing URL paths and query strings.
+- [ ] Webhook and notification test sends have been reviewed in `/api/audit` to confirm the operator, endpoint record ID, enabled status, and subscribed event names are present without storing the outbound URL or token.
 
 ## Data And Recovery
 
