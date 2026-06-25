@@ -64,6 +64,7 @@
   - `4800365` `feat: add idempotent configuration writes`
   - `df83599` `feat: add idempotent catalog governance writes`
   - `f03111a` `docs: record codex round 37 status`
+  - `56b86c8` `feat: add idempotent slicer retries`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -173,6 +174,9 @@
   - Round 37 targeted `npm run test -- api/server.test.mjs -t "catalog records"`: passed, 1 test passed.
   - Round 37 targeted `npm run test -- api/server.test.mjs`: passed, 102 tests passed.
   - Round 37 final `npm run qc`: passed, build passed, Vitest 10 files / 119 tests passed.
+  - Round 38 targeted `npm run test -- api/server.test.mjs -t "slicer"`: failed before implementation, then passed, 4 tests passed.
+  - Round 38 targeted `npm run test -- api/server.test.mjs`: passed, 104 tests passed.
+  - Round 38 final `npm run qc`: passed, build passed, Vitest 10 files / 121 tests passed.
 
 ## Completed Features
 
@@ -258,6 +262,9 @@
 - Added idempotent replay/conflict protection for admin audit-retention runs.
 - Added regression coverage proving audit-retention retries replay without duplicate `admin.audit_retention_run` events while still pruning stale audit entries and preserving protected restore events.
 - Documented audit-retention `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for backend slicer job runs and quick file-slice actions.
+- Added regression coverage proving slicer retries replay without duplicate slicer job records, stored G-code artifacts, file-version increments, or slicer audit events.
+- Documented slicer `Idempotency-Key` usage in README, operations, and production-readiness docs.
 - Added idempotent replay/conflict protection for billing plan changes and billing portal session creation.
 - Added regression coverage proving billing retries replay without duplicate invoices, billing sessions, billing audit events, or duplicate external Stripe checkout session calls.
 - Documented billing `Idempotency-Key` usage in README, operations, and production-readiness docs.
