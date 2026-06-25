@@ -229,6 +229,55 @@ describe("3DSTU FarmFlow API", () => {
     });
   });
 
+  it("fails production readiness when default access or weak ops tokens are configured", async () => {
+    await withEnv({
+      NODE_ENV: "production",
+      LAYERPILOT_ADMIN_EMAIL: "owner@example.com",
+      LAYERPILOT_ADMIN_PASSWORD: "change-this-password",
+      LAYERPILOT_WORKER_TOKEN: "change-this-worker-token",
+      LAYERPILOT_METRICS_TOKEN: "change-this-metrics-token",
+      LAYERPILOT_DISABLE_DEFAULT_USERS: "",
+      LAYERPILOT_DISABLE_DEMO_LOGIN: ""
+    }, async () => {
+      await withApp(async ({ app }) => {
+        const readiness = await app.inject({ method: "GET", url: "/api/readiness" });
+        expect(readiness.statusCode).toBe(503);
+        expect(readiness.json()).toMatchObject({ ok: false });
+        expect(readiness.json().checks).toEqual(expect.arrayContaining([
+          expect.objectContaining({ name: "production-env-required", ok: true }),
+          expect.objectContaining({ name: "production-secrets", ok: false }),
+          expect.objectContaining({ name: "production-default-access", ok: false })
+        ]));
+        expect(readiness.json().checks.find((check) => check.name === "production-secrets").detail).toContain("uses documented default");
+        expect(readiness.json().checks.find((check) => check.name === "production-default-access").detail).toContain("LAYERPILOT_DISABLE_DEFAULT_USERS is not true");
+        expect(readiness.json().checks.find((check) => check.name === "production-default-access").detail).toContain("demo@layerpilot.test");
+      });
+    });
+  });
+
+  it("passes production readiness when deployment gates are satisfied", async () => {
+    await withEnv({
+      NODE_ENV: "production",
+      LAYERPILOT_ADMIN_EMAIL: "owner@example.com",
+      LAYERPILOT_ADMIN_PASSWORD: "production-owner-password",
+      LAYERPILOT_WORKER_TOKEN: "worker-token-32-characters-minimum",
+      LAYERPILOT_METRICS_TOKEN: "metrics-token-32-characters-minimum",
+      LAYERPILOT_DISABLE_DEFAULT_USERS: "true",
+      LAYERPILOT_DISABLE_DEMO_LOGIN: "true"
+    }, async () => {
+      await withApp(async ({ app }) => {
+        const readiness = await app.inject({ method: "GET", url: "/api/readiness" });
+        expect(readiness.statusCode).toBe(200);
+        expect(readiness.json()).toMatchObject({ ok: true });
+        expect(readiness.json().checks).toEqual(expect.arrayContaining([
+          expect.objectContaining({ name: "production-env-required", ok: true }),
+          expect.objectContaining({ name: "production-secrets", ok: true }),
+          expect.objectContaining({ name: "production-default-access", ok: true })
+        ]));
+      });
+    });
+  });
+
   it("replays idempotent mutating requests and rejects key reuse with a different body", async () => {
     await withApp(async ({ app, db }) => {
       const token = await login(app);

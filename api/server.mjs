@@ -768,8 +768,8 @@ function isApiKeyIpAllowed(settings, request) {
   return allowed.some((rule) => matchesIpRule(request.ip, rule));
 }
 
-function envFlag(name) {
-  return ["1", "true", "yes", "on"].includes(String(process.env[name] || "").trim().toLowerCase());
+function envFlag(name, env = process.env) {
+  return ["1", "true", "yes", "on"].includes(String(env[name] || "").trim().toLowerCase());
 }
 
 function envFlagDefault(name, fallback = true) {
@@ -3053,6 +3053,56 @@ async function buildStorageUsage(data) {
   };
 }
 
+const productionDefaultSecretValues = new Map([
+  ["LAYERPILOT_ADMIN_PASSWORD", "change-this-password"],
+  ["LAYERPILOT_WORKER_TOKEN", "change-this-worker-token"],
+  ["LAYERPILOT_METRICS_TOKEN", "change-this-metrics-token"]
+]);
+
+function productionReadinessConfigChecks(data, env = process.env) {
+  if (env.NODE_ENV !== "production") return [];
+  const checks = [];
+  const required = ["LAYERPILOT_ADMIN_EMAIL", "LAYERPILOT_ADMIN_PASSWORD", "LAYERPILOT_WORKER_TOKEN", "LAYERPILOT_METRICS_TOKEN"];
+  const missing = required.filter((key) => !String(env[key] || "").trim());
+  checks.push({
+    name: "production-env-required",
+    ok: missing.length === 0,
+    detail: missing.length ? `Missing ${missing.join(", ")}` : "required production env values present"
+  });
+
+  const weak = [];
+  const adminPassword = String(env.LAYERPILOT_ADMIN_PASSWORD || "");
+  const workerToken = String(env.LAYERPILOT_WORKER_TOKEN || "");
+  const metricsToken = String(env.LAYERPILOT_METRICS_TOKEN || "");
+  if (adminPassword && adminPassword.length < 14) weak.push("LAYERPILOT_ADMIN_PASSWORD length < 14");
+  if (workerToken && workerToken.length < 32) weak.push("LAYERPILOT_WORKER_TOKEN length < 32");
+  if (metricsToken && metricsToken.length < 32) weak.push("LAYERPILOT_METRICS_TOKEN length < 32");
+  for (const [key, defaultValue] of productionDefaultSecretValues.entries()) {
+    if (String(env[key] || "") === defaultValue) weak.push(`${key} uses documented default`);
+  }
+  checks.push({
+    name: "production-secrets",
+    ok: weak.length === 0,
+    detail: weak.length ? weak.join("; ") : "production secrets pass minimum checks"
+  });
+
+  const disableDefaultUsers = envFlag("LAYERPILOT_DISABLE_DEFAULT_USERS", env);
+  const disableDemoLogin = disableDefaultUsers || envFlag("LAYERPILOT_DISABLE_DEMO_LOGIN", env);
+  const seededUsers = (data.users || [])
+    .map((user) => String(user.email || "").toLowerCase())
+    .filter((email) => defaultSeedUserEmails.has(email));
+  const defaultUserIssues = [];
+  if (!disableDefaultUsers) defaultUserIssues.push("LAYERPILOT_DISABLE_DEFAULT_USERS is not true");
+  if (!disableDemoLogin) defaultUserIssues.push("LAYERPILOT_DISABLE_DEMO_LOGIN is not true");
+  if (seededUsers.length) defaultUserIssues.push(`seeded users present: ${seededUsers.join(", ")}`);
+  checks.push({
+    name: "production-default-access",
+    ok: defaultUserIssues.length === 0,
+    detail: defaultUserIssues.length ? defaultUserIssues.join("; ") : "default and demo access disabled"
+  });
+  return checks;
+}
+
 async function checkReadiness(database, startedAt) {
   const checks = [];
   const checkedAt = new Date().toISOString();
@@ -3082,6 +3132,7 @@ async function checkReadiness(database, startedAt) {
       detail: `${database.data.dataMeta.worker.id || "worker"} last ran at ${database.data.dataMeta.worker.lastRunAt}`
     });
   }
+  checks.push(...productionReadinessConfigChecks(database.data));
   const ok = checks.every((check) => check.ok);
   return {
     ok,

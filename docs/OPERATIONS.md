@@ -10,6 +10,8 @@ This runbook covers routine production operation for a 3DSTU FarmFlow VPS.
 - Review failed webhook, notification, MQTT, commerce, and bridge delivery logs.
 - Resolve generated todos for slicing, scheduling, material, maintenance, and exceptions.
 
+In `NODE_ENV=production`, `/api/readiness` is a deployment gate, not just a liveness check. It fails if required owner credentials or worker/metrics tokens are missing, if documented default secrets are still in use, if production token/password minimum lengths are not met, or if default/demo access is still enabled.
+
 ## Session Policy
 
 - User bearer tokens are stored only as server-side hashes in persisted data.

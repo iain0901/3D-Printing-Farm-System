@@ -1,16 +1,25 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 7 pushed
+- Phase: round 8 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 7 API-key read-scope hardening implemented, targeted tests and full QC passed, and branch pushed to `origin/codex/production-saas-completion-20260624`.
+- Current state: Round 8 runtime production readiness gates implemented; targeted tests and full QC passed.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 9 files / 79 tests passed)
 - Current plan:
-  - Add regression coverage proving API keys can read only resources implied by their automation scopes.
-  - Add a central read-route allowlist for API-key requests while preserving user-session UI access.
+  - Add regression coverage for `/api/readiness` rejecting production deployments with default demo access or weak/missing ops tokens.
+  - Add runtime production readiness checks aligned with the Ubuntu deployment doctor.
+  - Document the readiness gate in operations and production readiness docs.
   - Run targeted API tests, full `npm run qc`, commit, and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 8 repo inspection started at 2026-06-25T02:32:59Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: runtime deployment gate checks in `/api/readiness`.
+  - Added production readiness checks for required owner credentials, non-default strong worker/metrics tokens, and disabled default/demo access.
+  - Added regression coverage for failing unsafe production readiness and passing hardened production readiness.
+  - Documented the runtime readiness deployment gate in operations and production-readiness docs.
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (69 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 85 tests passed).
   - Round 7 repo inspection started at 2026-06-25T02:24:30Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: API-key read-scope hardening for automation least privilege.
