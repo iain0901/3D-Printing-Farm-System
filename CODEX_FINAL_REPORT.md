@@ -29,6 +29,7 @@
   - `625f290` `feat: add authenticated ops checks`
   - Current `HEAD` `docs: record codex round 13 push`
   - `75e7dae` `feat: redact support snapshot urls`
+  - Current `HEAD` `feat: add idempotent quote conversion`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -64,6 +65,9 @@
   - Round 14 targeted `npm run test -- api/server.test.mjs -t "tracks onboarding readiness"`: passed, 1 test passed.
   - Round 14 targeted `npm run test -- api/server.test.mjs`: passed, 73 tests passed.
   - Round 14 final `npm run qc`: passed, build passed, Vitest 9 files / 89 tests passed.
+  - Round 15 targeted `npm run test -- api/server.test.mjs -t "idempotent quote conversions"`: passed, 1 test passed.
+  - Round 15 targeted `npm run test -- api/server.test.mjs`: passed, 74 tests passed.
+  - Round 15 final `npm run qc`: passed, build passed, Vitest 9 files / 90 tests passed.
 
 ## Completed Features
 
@@ -116,6 +120,9 @@
 - Added deployment packaging guards so Ubuntu release bundles must include the authenticated ops checker.
 - Hardened API support snapshots so recent event payloads preserve endpoint hosts but redact URL paths and query strings before support handoff.
 - Added regression coverage proving support snapshots omit credential-bearing webhook/bridge URL path and query secrets while keeping host hints useful for troubleshooting.
+- Added idempotent replay/conflict protection for authenticated quote-to-order conversion retries.
+- Added regression coverage proving quote conversion retries replay the original response without creating duplicate orders or duplicate conversion audit events.
+- Documented quote conversion `Idempotency-Key` usage in README, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -133,6 +140,7 @@
 - Workspace exports intentionally omit customer quote portal bearer tokens; operators should regenerate or rotate portal links after restore when customers need access.
 - API responses intentionally show only host-level metadata for webhook, notification, commerce, and bridge endpoints; operators should re-enter full provider URLs when rotating those integration credentials.
 - Commerce import idempotency now protects connector and CSV batch retries; broader write API coverage should still be added only after route-specific response and secret review.
+- Quote conversion idempotency now protects authenticated operator retries; public customer quote decisions remain intentionally token-gated and should be reviewed separately before adding public idempotency semantics.
 - Audit context now covers the highest-impact production scheduling/queue/bridge/file-version operator actions; remaining lower-risk direct event writes should be migrated only with route-specific delivery and notification review.
 - Ops-check authenticated verification requires valid Owner/Admin credentials or a dedicated smoke account configured in `.env`; otherwise it warns and continues with unauthenticated host checks.
 - Support snapshots now redact secret-like fields and URL paths/query strings, but operators should still review generated support bundles before sharing customer evidence externally.

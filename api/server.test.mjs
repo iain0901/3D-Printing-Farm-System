@@ -2490,6 +2490,70 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent quote conversions without creating duplicate orders", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const quote = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        payload: {
+          customer: "Retry Quote Buyer",
+          email: "retry-quote@example.com",
+          company: "Retry Studio",
+          project: "Nylon latch batch",
+          material: "Nylon",
+          quantity: 4,
+          due: "2026-07-22",
+          budget: 360,
+          notes: "Retry conversion test",
+          fileName: "nylon-latch.3mf"
+        }
+      });
+      expect(quote.statusCode).toBe(201);
+      const id = quote.json().quoteRequest.id;
+      const headers = { ...auth(token), "idempotency-key": "quote-convert-retry-001" };
+      const payload = { due: "2026-07-25", value: 390 };
+
+      const converted = await app.inject({
+        method: "POST",
+        url: `/api/quoteRequests/${id}/convert-order`,
+        headers,
+        payload
+      });
+      expect(converted.statusCode).toBe(201);
+
+      const replay = await app.inject({
+        method: "POST",
+        url: `/api/quoteRequests/${id}/convert-order`,
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(201);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(converted.json());
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: `/api/quoteRequests/${id}/convert-order`,
+        headers,
+        payload: { ...payload, value: 410 }
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.orders.filter((order) => order.quoteRequestId === id)).toHaveLength(1);
+      expect(persisted.quoteRequests.find((item) => item.id === id)).toMatchObject({ status: "converted", orderId: converted.json().order.id });
+      expect(persisted.events.filter((event) => event.type === "quote_request.converted" && event.data?.quoteRequestId === id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "quote-convert-retry-001")).toMatchObject({
+        method: "POST",
+        path: `/api/quoteRequests/${id}/convert-order`,
+        replayCount: 1,
+        statusCode: 201
+      });
+    });
+  });
+
   it("lets customers accept quoted requests through the public quote portal", async () => {
     await withApp(async ({ app, dbPath }) => {
       const quote = await app.inject({

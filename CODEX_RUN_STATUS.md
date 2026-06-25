@@ -1,16 +1,23 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 14 pushed
+- Phase: round 15 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 14 support snapshot URL redaction is implemented, verified, committed, and pushed to `origin/codex/production-saas-completion-20260624`.
+- Current state: Round 15 quote-conversion idempotency hardening is in progress on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 9 files / 79 tests passed)
 - Current plan:
-  - Harden support snapshot redaction for URL-shaped operational event fields.
-  - Cover support snapshot endpoint redaction with targeted regression tests.
+  - Add retry-safe idempotency coverage for quote-to-order conversion.
+  - Extend the idempotency route allowlist for authenticated quote conversion.
   - Update operations/readiness docs, run targeted tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 15 repo inspection started at 2026-06-25T03:49:18Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent quote-to-order conversion retries to prevent duplicate orders during customer intake handoff.
+  - Added regression coverage proving quote conversion retries replay the original response without creating duplicate orders or audit events.
+  - Added authenticated quote conversion to the persisted `Idempotency-Key` allowlist and documented the supported route.
+  - Targeted quote conversion idempotency test passed: `npm run test -- api/server.test.mjs -t "idempotent quote conversions"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (74 tests).
   - Round 14 repo inspection started at 2026-06-25T03:39:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: support snapshot URL redaction for safer operational handoff bundles.
