@@ -4,8 +4,9 @@
 - Pushed remote: `origin/codex/production-saas-completion-20260624`
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
-- Latest round: Round 87 workspace-scoped cost catalog isolation implemented, verified, committed, and pushed.
+- Latest round: Round 88 TOTP enrollment password-proof hardening implemented, verified, committed, and pending push.
 - Commits:
+  - `d92b164` `feat: require password for 2fa enablement`
   - `c224949` `feat: scope cost catalogs by workspace`
   - `8805eef` `docs: record codex round 87 status`
   - `e17cd95` `docs: record codex round 87 push`
@@ -187,6 +188,12 @@
   - `7e42cc7` `feat: scope audit retention by workspace`
   - Current `HEAD` `docs: record codex round 69 push`
 - QC result:
+  - Round 88 targeted `npm run test -- api/server.test.mjs -t "two-factor|2FA"`: failed before implementation as expected, wrong-password TOTP enablement returned `200`.
+  - Round 88 targeted `npm run test -- api/server.test.mjs -t "two-factor|2FA"`: passed, 4 tests passed.
+  - Round 88 broader auth `npm run test -- api/server.test.mjs -t "authenticates users and supports logout|two-factor auth|2FA|password changes|production Owner and Admin"`: passed, 6 tests passed.
+  - Round 88 full API `npm run test -- api/server.test.mjs`: passed, 134 tests passed.
+  - Round 88 i18n fix `npm run test -- api/i18n.test.mjs`: passed, 2 tests passed.
+  - Round 88 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 153 tests passed.
   - Round 87 targeted `npm run test -- api/server.test.mjs -t "creates isolated workspaces"`: passed, 1 test passed.
   - Round 87 adjacent cost catalog `npm run test -- api/server.test.mjs -t "cost catalog|catalog governance|creates isolated workspaces|quotes and file estimates"`: passed, 3 tests passed.
   - Round 87 full API `npm run test -- api/server.test.mjs`: passed, 134 tests passed.
