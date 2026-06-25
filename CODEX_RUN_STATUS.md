@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 91 implementation committed, report pending
+- Phase: round 91 committed and pushed
 - Started: 2026-06-24 UTC
-- Current state: Round 91 restore-prepared audit evidence hardening is implemented, verified, and committed as `273a436` on `codex/production-saas-completion-20260624`.
+- Current state: Round 91 restore-prepared audit evidence hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
 - Baseline QC: Round 86 passed `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed)
 - Current plan:
   - Add regression coverage requiring committed restore-prepared audit evidence to include workspace/operator context and compact restore coverage counts without restored backup contents.
@@ -24,6 +24,8 @@
   - Full API suite passed: `npm run test -- api/server.test.mjs` (134 tests).
   - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed).
   - Committed round 91 implementation/status/docs as `273a436` (`feat: add restore prepared audit context`).
+  - Committed round 91 final report/status as `5387543` (`docs: record codex round 91 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
   - Round 90 repo inspection started at 2026-06-25T19:10:45Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, API route/idempotency surface, `/api/actions` implementation, and existing printer-action tests before editing.
   - Selected production-readiness slice: actor-aware audit context for real printer action commands so pause/resume/cancel evidence is traceable to the authenticated workspace/operator without exposing bridge credentials.
