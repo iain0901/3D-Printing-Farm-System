@@ -4,8 +4,9 @@
 - Pushed remote: `origin/codex/production-saas-completion-20260624`
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
-- Latest round: Round 85 queue lifecycle retry-safety evidence implemented, verified, committed, and pushed.
+- Latest round: Round 86 order lifecycle retry-safety evidence implemented, verified, and committed; push pending.
 - Commits:
+  - `cdacddd` `test: cover order lifecycle retries`
   - `9e4f9eb` `docs: record codex round 85 push`
   - `1e5b5ab` `docs: record codex round 85 status`
   - `cb73ea0` `test: cover queue lifecycle retries`
@@ -181,6 +182,10 @@
   - `7e42cc7` `feat: scope audit retention by workspace`
   - Current `HEAD` `docs: record codex round 69 push`
 - QC result:
+  - Round 86 targeted `npm run test -- api/server.test.mjs -t "order lifecycle cancellation"`: passed, 1 test passed.
+  - Round 86 broader order/queue `npm run test -- api/server.test.mjs -t "order lifecycle cancellation|order jobs|queue lifecycle updates|catalog records and generates order jobs|quote conversions"`: passed, 4 tests passed.
+  - Round 86 full API `npm run test -- api/server.test.mjs`: passed, 134 tests passed.
+  - Round 86 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 153 tests passed.
   - Round 85 targeted `npm run test -- api/server.test.mjs -t "queue lifecycle updates"`: passed, 1 test passed.
   - Round 85 broader queue/scheduler `npm run test -- api/server.test.mjs -t "queue lifecycle updates|schedules queue jobs|creates queue jobs|queue matching|scheduler writes|auto schedules|constraint schedules"`: passed, 8 tests passed.
   - Round 85 full API `npm run test -- api/server.test.mjs`: passed, 134 tests passed.
