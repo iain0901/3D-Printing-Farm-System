@@ -132,6 +132,8 @@ Authenticated direct file creation writes `file.created` audit events with works
 
 Backend slicer jobs and quick file-slice actions write `slicer.completed`, `slicer.failed`, or `file.sliced` audit events with workspace/operator context, slicer job ID, source file ID, printer/profile IDs, engine, material settings, status, and output size. These records do not include generated G-code bodies, slicer command arguments, local output paths, config paths, or object-storage keys.
 
+Slicer profile creation, import, update, default selection, matching-policy updates, archive actions, and production-template create/update/run actions write workspace/operator audit events. These records include compact profile/template IDs, kind/source/target, file/printer/material/quantity/priority, policy flags, and generated job counts without storing full profile settings, template notes, or generated queue response bodies.
+
 Generated sample files, Hot Drop handling, parametric nameplate generation, file-folder creation/reuse, and printer capability create/update actions also write workspace/operator audit events. These records include compact file, folder, job, part, printer, material, build-volume, and byte-count metadata for production traceability without storing generated STL bodies, local storage paths, object-storage keys, or printer credentials.
 
 Authenticated catalog CSV exports are scoped to the requesting workspace and write `catalog.exported` audit events with row and catalog object counts, without storing the exported CSV body. Audit CSV exports write `admin.audit_exported` events with export filters, matched counts, and exported event counts, also without storing exported evidence rows.

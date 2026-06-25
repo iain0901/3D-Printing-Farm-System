@@ -4972,6 +4972,22 @@ endsolid s3_store`;
       expect(persisted.events.filter((event) => event.type === "sku.created" && event.data?.skuId === sku.json().id)).toHaveLength(1);
       expect(persisted.events.filter((event) => event.type === "production_template.created" && event.data?.templateId === template.json().id)).toHaveLength(1);
       expect(persisted.events.filter((event) => event.type === "production_template.updated" && event.data?.templateId === template.json().id)).toHaveLength(1);
+      for (const eventType of ["production_template.created", "production_template.updated"]) {
+        const event = persisted.events.find((item) => item.type === eventType && item.data?.templateId === template.json().id);
+        expect(event).toMatchObject({
+          workspaceId: "ws-default",
+          data: expect.objectContaining({
+            workspaceId: "ws-default",
+            actorEmail: "demo@layerpilot.test",
+            actorType: "user",
+            templateId: template.json().id,
+            fileId: "f1",
+            sku: expect.any(String),
+            quantity: expect.any(Number)
+          })
+        });
+        expect(JSON.stringify(event.data)).not.toContain("Retry safe");
+      }
       expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "catalog-part-retry-001")).toMatchObject({ method: "POST", path: "/api/parts", replayCount: 1, statusCode: 201 });
       expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "production-template-update-retry-001")).toMatchObject({ method: "PATCH", path: `/api/productionTemplates/${template.json().id}`, replayCount: 1, statusCode: 200 });
     });
@@ -5678,7 +5694,24 @@ endsolid s3_store`;
 
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
       expect(persisted.productionTemplates.find((item) => item.id === created.json().id)).toMatchObject({ runCount: 3 });
-      expect(persisted.events.some((event) => event.type === "production_template.run")).toBe(true);
+      const runEvent = persisted.events.find((event) => event.type === "production_template.run" && event.data?.templateId === created.json().id);
+      expect(runEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: expect.objectContaining({
+          workspaceId: "ws-default",
+          actorEmail: "demo@layerpilot.test",
+          actorType: "user",
+          templateId: created.json().id,
+          fileId: "f1",
+          printerId: "p1",
+          quantity: 2,
+          jobCount: 3,
+          jobs: expect.any(Array)
+        })
+      });
+      expect(runEvent.data.jobs).toHaveLength(3);
+      expect(JSON.stringify(runEvent.data)).not.toContain("Run before weekend pickup");
+      expect(JSON.stringify(runEvent.data)).not.toContain("Template: QC replenishment recipe");
     });
   });
 
@@ -5930,6 +5963,45 @@ endsolid s3_store`;
       expect(persisted.events.filter((event) => event.type === "profile.default_set" && event.data?.profileId === created.json().id)).toHaveLength(1);
       expect(persisted.events.filter((event) => event.type === "profile.policy_updated")).toHaveLength(1);
       expect(persisted.events.filter((event) => event.type === "profile.archived" && event.data?.profileId === created.json().id)).toHaveLength(1);
+      for (const eventType of ["profile.created", "profile.updated", "profile.default_set", "profile.archived"]) {
+        const event = persisted.events.find((item) => item.type === eventType && item.data?.profileId === created.json().id);
+        expect(event).toMatchObject({
+          workspaceId: "ws-default",
+          data: expect.objectContaining({
+            workspaceId: "ws-default",
+            actorEmail: "demo@layerpilot.test",
+            actorType: "user",
+            profileId: created.json().id,
+            kind: "Process"
+          })
+        });
+        expect(JSON.stringify(event.data)).not.toContain("layer_height");
+        expect(JSON.stringify(event.data)).not.toContain("infill");
+      }
+      const importEvent = persisted.events.find((event) => event.type === "profile.imported" && event.data?.source === "Orca import");
+      expect(importEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: expect.objectContaining({
+          workspaceId: "ws-default",
+          actorEmail: "demo@layerpilot.test",
+          actorType: "user",
+          imported: expect.any(Array),
+          skipped: expect.any(Array)
+        })
+      });
+      const policyEvent = persisted.events.find((event) => event.type === "profile.policy_updated");
+      expect(policyEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: expect.objectContaining({
+          workspaceId: "ws-default",
+          actorEmail: "demo@layerpilot.test",
+          actorType: "user",
+          materialCompatibility: expect.any(Boolean),
+          dueWindowHours: 8,
+          warnBeforeFallback: false
+        })
+      });
+      expect(policyEvent.data.policy).toBeUndefined();
       expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "profile-archive-retry-001")).toMatchObject({ method: "DELETE", path: `/api/profiles/${created.json().id}`, replayCount: 1, statusCode: 200 });
     });
   });

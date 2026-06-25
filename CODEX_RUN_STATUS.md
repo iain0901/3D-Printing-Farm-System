@@ -1,17 +1,28 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 82 committed and pushed
+- Phase: round 83 verified; commit pending
 - Started: 2026-06-24 UTC
-- Current state: Round 82 slicer audit context hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 83 production configuration audit context hardening is implemented and verified on `codex/production-saas-completion-20260624`; commit/push is pending.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage proving backend slicer-job and quick file-slice audit events include workspace/operator context without storing generated G-code bodies, slicer command arguments, or local/object-storage paths.
-  - Replace remaining bare slicer audit writes with actor-aware compact audit records.
-  - Document slicer audit evidence review in README, operations, and production-readiness docs.
-  - Run targeted slicer tests, full API tests, and full QC, then commit and push.
+  - Add regression coverage proving slicer profile and production-template configuration/run audit events include workspace/operator context without storing full profile settings or generated queue response bodies.
+  - Replace bare profile and production-template audit writes with actor-aware compact audit records.
+  - Document profile/template audit evidence review in README, operations, and production-readiness docs.
+  - Run targeted profile/template tests, full API tests, and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 83 repo inspection started at 2026-06-25T17:45:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route list, audit dispatcher, production-template/profile routes, and existing profile/template tests before editing.
+  - Selected production-readiness slice: actor-aware audit context for slicer profile and production-template configuration/run events so changes affecting generated production jobs and slicer selection are traceable to the authenticated workspace/operator without dumping full settings or queue response bodies.
+  - Added regression coverage requiring production-template create/update and profile create/import/update/default/policy/archive audit events to include workspace/operator context and compact configuration metadata without full notes, profile settings, or policy blobs.
+  - Targeted profile/template audit regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "catalog configuration writes|profile configuration"` (2 tests failed because template/profile audit events lacked actor metadata and compact update metadata).
+  - Replaced bare slicer profile and production-template audit writes with actor-aware compact records for create, import, update, default selection, matching-policy update, archive, and template run events.
+  - Added production-template run audit regression coverage for workspace/operator context, generated-job counts, and no template notes or generated queue response bodies.
+  - Targeted profile/template coverage passed: `npm run test -- api/server.test.mjs -t "production templates|catalog configuration writes|profile configuration"` (3 tests).
+  - Documented slicer profile and production-template audit evidence review in README, operations, and production-readiness docs.
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (132 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 151 tests passed).
   - Round 82 repo inspection started at 2026-06-25T17:31:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route list, idempotency allowlist, slicer implementation, and existing slicer tests before editing.
   - Selected production-readiness slice: actor-aware audit context for backend slicer jobs and quick file-slice flows so production G-code generation is traceable to the authenticated workspace/operator without exposing generated G-code, slicer command arguments, or storage paths.

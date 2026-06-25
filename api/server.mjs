@@ -7691,7 +7691,16 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (duplicate) return reply.code(409).send({ error: "Production template already exists" });
     const template = { id: randomUUID(), workspaceId: request.user.workspaceId, ...parsed.data, runCount: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     database.data.productionTemplates.unshift(template);
-    await dispatchEvent(database, "production_template.created", `${template.name} template saved`, { templateId: template.id, fileId: template.fileId, sku: template.sku });
+    await dispatchEvent(database, "production_template.created", `${template.name} template saved`, {
+      workspaceId: request.user.workspaceId,
+      templateId: template.id,
+      fileId: template.fileId,
+      sku: template.sku,
+      printerId: template.printerId || "",
+      material: template.material,
+      quantity: template.quantity,
+      priority: template.priority
+    }, { actor: request.user });
     await database.write();
     return reply.code(201).send(template);
   });
@@ -7705,7 +7714,16 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const template = database.data.productionTemplates.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!template) return reply.code(404).send({ error: "Production template not found" });
     Object.assign(template, parsed.data, { updatedAt: new Date().toISOString() });
-    await dispatchEvent(database, "production_template.updated", `${template.name} template updated`, { templateId: template.id });
+    await dispatchEvent(database, "production_template.updated", `${template.name} template updated`, {
+      workspaceId: request.user.workspaceId,
+      templateId: template.id,
+      fileId: template.fileId,
+      sku: template.sku,
+      printerId: template.printerId || "",
+      material: template.material,
+      quantity: template.quantity,
+      priority: template.priority
+    }, { actor: request.user });
     await database.write();
     return template;
   });
@@ -7717,7 +7735,16 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const result = createJobsFromProductionTemplate(database.data, request.params.id, { ...parsed.data, workspaceId: request.user.workspaceId });
     if (result.error) return reply.code(result.statusCode || 400).send({ error: result.error });
     if (!result.dryRun) {
-      await dispatchEvent(database, "production_template.run", `${result.jobs.length} jobs created from ${result.template.name}`, { templateId: result.template.id, jobs: result.jobs.map((job) => job.id) });
+      await dispatchEvent(database, "production_template.run", `${result.jobs.length} jobs created from ${result.template.name}`, {
+        workspaceId: request.user.workspaceId,
+        templateId: result.template.id,
+        fileId: result.template.fileId,
+        sku: result.template.sku,
+        printerId: result.template.printerId || "",
+        quantity: result.template.quantity,
+        jobs: result.jobs.map((job) => job.id),
+        jobCount: result.jobs.length
+      }, { actor: request.user });
       await database.write();
     }
     return result;
@@ -7731,7 +7758,13 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (exists) return reply.code(409).send({ error: "Profile already exists" });
     const profile = { id: randomUUID(), workspaceId: request.user.workspaceId, ...parsed.data, updated: "Just now", updatedAt: new Date().toISOString() };
     database.data.profiles.push(profile);
-    await dispatchEvent(database, "profile.created", `${profile.name} profile created`, { profileId: profile.id, kind: profile.kind, source: profile.source });
+    await dispatchEvent(database, "profile.created", `${profile.name} profile created`, {
+      workspaceId: request.user.workspaceId,
+      profileId: profile.id,
+      kind: profile.kind,
+      source: profile.source,
+      target: profile.target || ""
+    }, { actor: request.user });
     await database.write();
     return reply.code(201).send(profile);
   });
@@ -7754,7 +7787,14 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       database.data.profiles.push(profile);
       imported.push(profile);
     }
-    await dispatchEvent(database, "profile.imported", `${imported.length} profiles imported from ${parsed.data.source}`, { source: parsed.data.source, imported: imported.map((profile) => profile.id), skipped });
+    await dispatchEvent(database, "profile.imported", `${imported.length} profiles imported from ${parsed.data.source}`, {
+      workspaceId: request.user.workspaceId,
+      source: parsed.data.source,
+      imported: imported.map((profile) => profile.id),
+      importedCount: imported.length,
+      skipped,
+      skippedCount: skipped.length
+    }, { actor: request.user });
     await database.write();
     return { imported, skipped, profiles: database.data.profiles };
   });
@@ -7766,7 +7806,13 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const profile = database.data.profiles.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!profile) return reply.code(404).send({ error: "Profile not found" });
     Object.assign(profile, parsed.data, { updated: "Just now", updatedAt: new Date().toISOString() });
-    await dispatchEvent(database, "profile.updated", `${profile.name} profile updated`, { profileId: profile.id, kind: profile.kind });
+    await dispatchEvent(database, "profile.updated", `${profile.name} profile updated`, {
+      workspaceId: request.user.workspaceId,
+      profileId: profile.id,
+      kind: profile.kind,
+      source: profile.source,
+      target: profile.target || ""
+    }, { actor: request.user });
     await database.write();
     return profile;
   });
@@ -7780,7 +7826,12 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     profile.default = true;
     profile.updated = "Just now";
     profile.updatedAt = new Date().toISOString();
-    await dispatchEvent(database, "profile.default_set", `${profile.name} set as default ${profile.kind} profile`, { profileId: profile.id, kind: profile.kind, defaults: database.data.profileDefaults });
+    await dispatchEvent(database, "profile.default_set", `${profile.name} set as default ${profile.kind} profile`, {
+      workspaceId: request.user.workspaceId,
+      profileId: profile.id,
+      kind: profile.kind,
+      defaultProfileId: profile.id
+    }, { actor: request.user });
     await database.write();
     return { profile, profileDefaults: database.data.profileDefaults, profiles: database.data.profiles };
   });
@@ -7790,7 +7841,13 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const parsed = profileMatchingPolicyPatchSchema.safeParse(request.body || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid profile matching policy", issues: parsed.error.issues });
     database.data.profileMatchingPolicy = profileMatchingPolicySchema.parse({ ...(database.data.profileMatchingPolicy || {}), ...parsed.data, updatedAt: new Date().toISOString(), updatedBy: request.user.email });
-    await dispatchEvent(database, "profile.policy_updated", "Profile matching policy updated", { policy: database.data.profileMatchingPolicy });
+    await dispatchEvent(database, "profile.policy_updated", "Profile matching policy updated", {
+      workspaceId: request.user.workspaceId,
+      materialCompatibility: database.data.profileMatchingPolicy.materialCompatibility,
+      machineCompatibility: database.data.profileMatchingPolicy.machineCompatibility,
+      dueWindowHours: database.data.profileMatchingPolicy.dueWindowHours,
+      warnBeforeFallback: database.data.profileMatchingPolicy.warnBeforeFallback
+    }, { actor: request.user });
     await database.write();
     return database.data.profileMatchingPolicy;
   });
@@ -7799,9 +7856,16 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!hasPermission(request.user, "catalog:write")) return reply.code(403).send({ error: "Missing permission: catalog:write" });
     const profile = database.data.profiles.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!profile) return reply.code(404).send({ error: "Profile not found" });
-    if (database.data.profileDefaults?.[profile.kind] === profile.id) database.data.profileDefaults[profile.kind] = "";
+    const wasDefault = database.data.profileDefaults?.[profile.kind] === profile.id;
+    if (wasDefault) database.data.profileDefaults[profile.kind] = "";
     database.data.profiles = database.data.profiles.filter((item) => item.id !== profile.id);
-    await dispatchEvent(database, "profile.archived", `${profile.name} profile archived`, { profileId: profile.id, kind: profile.kind });
+    await dispatchEvent(database, "profile.archived", `${profile.name} profile archived`, {
+      workspaceId: request.user.workspaceId,
+      profileId: profile.id,
+      kind: profile.kind,
+      source: profile.source,
+      wasDefault
+    }, { actor: request.user });
     await database.write();
     return { ok: true, profile };
   });
