@@ -32,6 +32,8 @@ Set real values for:
 - `LAYERPILOT_WORKSPACE_NAME`
 - `LAYERPILOT_WORKER_TOKEN`
 - `LAYERPILOT_METRICS_TOKEN`
+- `LAYERPILOT_PUBLIC_URL`
+- `LAYERPILOT_CORS_ORIGINS`, only when an additional browser origin needs to call the API
 - `LAYERPILOT_ENABLE_PUBLIC_SIGNUP=false` unless self-service tenant registration is intentional
 - `LAYERPILOT_SESSION_TTL_HOURS`, defaults to `168`
 - `LAYERPILOT_SESSION_IDLE_TIMEOUT_HOURS`, defaults to `24`
@@ -39,6 +41,8 @@ Set real values for:
 - `LAYERPILOT_AUTH_LOCK_MINUTES`, defaults to `15`
 
 In production, `LAYERPILOT_WORKER_TOKEN` is accepted only through the `x-layerpilot-worker-token` header and `LAYERPILOT_METRICS_TOKEN` only through the `x-layerpilot-metrics-token` header. Do not put these shared tokens in URLs.
+
+In production, browser CORS is limited to the origin from `LAYERPILOT_PUBLIC_URL` plus comma-separated `LAYERPILOT_CORS_ORIGINS`. Leave `LAYERPILOT_CORS_ORIGINS` blank for same-origin app/API deployments. Add only explicit `http://` or `https://` origins for separate public quote portals or admin frontends; wildcard origins are rejected.
 
 If `LAYERPILOT_WORKER_TELEMETRY` or `LAYERPILOT_WORKER_BRIDGE_POLLING` is enabled in production, `/api/readiness` expects the background worker to write a recent heartbeat to the shared data store. Keep the API and worker services on the same volume/database path and check the worker logs if readiness reports a stale or missing `worker` check.
 

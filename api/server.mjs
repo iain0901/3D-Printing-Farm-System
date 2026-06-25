@@ -815,6 +815,55 @@ function envFlagDefault(name, fallback = true) {
   return ["1", "true", "yes", "on"].includes(value.toLowerCase());
 }
 
+function httpOriginFromUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return { origin: "", error: "" };
+  if (raw === "*") return { origin: "", error: "wildcard origins are not allowed in production" };
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return { origin: "", error: `${raw} is not a valid http(s) URL` };
+    }
+    return { origin: parsed.origin, error: "" };
+  } catch {
+    return { origin: "", error: `${raw} is not a valid http(s) URL` };
+  }
+}
+
+function configuredCorsOriginEntries(env = process.env) {
+  const entries = [];
+  if (String(env.LAYERPILOT_PUBLIC_URL || "").trim()) {
+    entries.push({ source: "LAYERPILOT_PUBLIC_URL", value: env.LAYERPILOT_PUBLIC_URL });
+  }
+  for (const value of String(env.LAYERPILOT_CORS_ORIGINS || "").split(",")) {
+    const trimmed = value.trim();
+    if (trimmed) entries.push({ source: "LAYERPILOT_CORS_ORIGINS", value: trimmed });
+  }
+  return entries;
+}
+
+function productionCorsOriginConfig(env = process.env) {
+  const origins = new Set();
+  const issues = [];
+  for (const entry of configuredCorsOriginEntries(env)) {
+    const resolved = httpOriginFromUrl(entry.value);
+    if (resolved.error) issues.push(`${entry.source}: ${resolved.error}`);
+    else if (resolved.origin) origins.add(resolved.origin);
+  }
+  return { origins, issues };
+}
+
+function corsOriginOption(env = process.env) {
+  if (env.NODE_ENV !== "production") return true;
+  const { origins } = productionCorsOriginConfig(env);
+  return (origin, callback) => {
+    if (!origin) return callback(null, false);
+    const resolved = httpOriginFromUrl(origin);
+    if (resolved.origin && origins.has(resolved.origin)) return callback(null, resolved.origin);
+    return callback(null, false);
+  };
+}
+
 function envPositiveNumber(name, fallback, env = process.env) {
   const value = Number(env[name]);
   if (!Number.isFinite(value) || value <= 0) return fallback;
@@ -3692,6 +3741,14 @@ function productionReadinessConfigChecks(data, env = process.env) {
     detail: signupEnabled ? "public signup explicitly enabled" : "public signup disabled by default"
   });
 
+  const corsConfig = productionCorsOriginConfig(env);
+  checks.push({
+    name: "production-cors-origins",
+    ok: corsConfig.issues.length === 0,
+    allowedOrigins: [...corsConfig.origins],
+    detail: corsConfig.issues.length ? corsConfig.issues.join("; ") : corsConfig.origins.size ? `${corsConfig.origins.size} trusted browser origin(s) configured` : "same-origin browser access only"
+  });
+
   const settings = data.workspaceSettings || {};
   const allowlist = Array.isArray(settings.allowedApiIps) ? settings.allowedApiIps : [];
   const allowlistIssues = [];
@@ -5721,7 +5778,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       done(error, undefined);
     }
   });
-  await app.register(cors, { origin: true });
+  await app.register(cors, { origin: corsOriginOption(process.env) });
   await app.register(helmet, {
     contentSecurityPolicy: {
       directives: {

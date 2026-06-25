@@ -287,6 +287,71 @@ describe("3DSTU FarmFlow API", () => {
     });
   });
 
+  it("restricts production CORS to configured trusted browser origins", async () => {
+    await withEnv({
+      NODE_ENV: "production",
+      LAYERPILOT_ADMIN_EMAIL: "owner@example.com",
+      LAYERPILOT_ADMIN_PASSWORD: "production-owner-password",
+      LAYERPILOT_WORKER_TOKEN: "worker-token-32-characters-minimum",
+      LAYERPILOT_METRICS_TOKEN: "metrics-token-32-characters-minimum",
+      LAYERPILOT_DISABLE_DEFAULT_USERS: "true",
+      LAYERPILOT_DISABLE_DEMO_LOGIN: "true",
+      LAYERPILOT_WORKER_TELEMETRY: "false",
+      LAYERPILOT_WORKER_BRIDGE_POLLING: "false",
+      LAYERPILOT_PUBLIC_URL: "https://farm.example.com/app",
+      LAYERPILOT_CORS_ORIGINS: "https://quotes.example.com, https://ops.example.com/path"
+    }, async () => {
+      await withApp(async ({ app }) => {
+        const readiness = await app.inject({ method: "GET", url: "/api/readiness" });
+        expect(readiness.statusCode).toBe(200);
+        expect(readiness.json().checks).toEqual(expect.arrayContaining([
+          expect.objectContaining({ name: "production-cors-origins", ok: true })
+        ]));
+
+        const appOrigin = await app.inject({ method: "GET", url: "/api/health", headers: { origin: "https://farm.example.com" } });
+        expect(appOrigin.headers["access-control-allow-origin"]).toBe("https://farm.example.com");
+
+        const portalOrigin = await app.inject({ method: "GET", url: "/api/health", headers: { origin: "https://quotes.example.com" } });
+        expect(portalOrigin.headers["access-control-allow-origin"]).toBe("https://quotes.example.com");
+
+        const normalizedOrigin = await app.inject({ method: "GET", url: "/api/health", headers: { origin: "https://ops.example.com" } });
+        expect(normalizedOrigin.headers["access-control-allow-origin"]).toBe("https://ops.example.com");
+
+        const blockedOrigin = await app.inject({ method: "GET", url: "/api/health", headers: { origin: "https://evil.example.com" } });
+        expect(blockedOrigin.statusCode).toBe(200);
+        expect(blockedOrigin.headers["access-control-allow-origin"]).toBeUndefined();
+      });
+    });
+  });
+
+  it("fails production readiness when configured CORS origins are invalid", async () => {
+    await withEnv({
+      NODE_ENV: "production",
+      LAYERPILOT_ADMIN_EMAIL: "owner@example.com",
+      LAYERPILOT_ADMIN_PASSWORD: "production-owner-password",
+      LAYERPILOT_WORKER_TOKEN: "worker-token-32-characters-minimum",
+      LAYERPILOT_METRICS_TOKEN: "metrics-token-32-characters-minimum",
+      LAYERPILOT_DISABLE_DEFAULT_USERS: "true",
+      LAYERPILOT_DISABLE_DEMO_LOGIN: "true",
+      LAYERPILOT_WORKER_TELEMETRY: "false",
+      LAYERPILOT_WORKER_BRIDGE_POLLING: "false",
+      LAYERPILOT_PUBLIC_URL: "not-a-url",
+      LAYERPILOT_CORS_ORIGINS: "https://quotes.example.com, *, ftp://legacy.example.com"
+    }, async () => {
+      await withApp(async ({ app }) => {
+        const readiness = await app.inject({ method: "GET", url: "/api/readiness" });
+        expect(readiness.statusCode).toBe(503);
+        expect(readiness.json().checks).toEqual(expect.arrayContaining([
+          expect.objectContaining({ name: "production-cors-origins", ok: false })
+        ]));
+        const detail = readiness.json().checks.find((check) => check.name === "production-cors-origins").detail;
+        expect(detail).toContain("LAYERPILOT_PUBLIC_URL: not-a-url is not a valid http(s) URL");
+        expect(detail).toContain("wildcard origins are not allowed in production");
+        expect(detail).toContain("ftp://legacy.example.com");
+      });
+    });
+  });
+
   it("blocks public signup in production unless explicitly enabled", async () => {
     const productionEnv = {
       NODE_ENV: "production",

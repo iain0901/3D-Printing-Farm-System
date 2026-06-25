@@ -85,6 +85,8 @@ Useful production environment variables:
 
 - `LAYERPILOT_HOST`, default `0.0.0.0` in Docker
 - `LAYERPILOT_API_PORT`, default `8797`
+- `LAYERPILOT_PUBLIC_URL`, public app URL used by smoke checks, links, and production CORS trusted-origin defaults
+- `LAYERPILOT_CORS_ORIGINS`, optional comma-separated extra trusted browser origins for cross-origin quote portals or admin frontends; production rejects wildcard or non-HTTP(S) origins
 - `LAYERPILOT_DB_PATH`, default `/data/layerpilot.db.json` in Docker
 - `LAYERPILOT_DB_ADAPTER`, `json` by default; set to `sqlite` with a `.sqlite` DB path for SQLite-backed document persistence
 - `LAYERPILOT_STORAGE_DIR`, default `/data/storage` in Docker
@@ -122,7 +124,7 @@ Useful production environment variables:
 - `LAYERPILOT_SLICER_CMD`, optional external slicer executable such as PrusaSlicer, OrcaSlicer, or SuperSlicer
 - `LAYERPILOT_SLICER_ARGS`, optional JSON array or space-separated args using `{input}`, `{output}`, and `{config}` placeholders
 
-The production API also enables security headers through `@fastify/helmet` and route-level rate limiting through `@fastify/rate-limit` for authentication, signup, API key creation, billing sessions, and admin exports. In `NODE_ENV=production`, public signup is disabled unless `LAYERPILOT_ENABLE_PUBLIC_SIGNUP=true` is set intentionally; `/api/readiness` reports whether that tenant-registration gate is closed or explicitly open. API-key IP allowlists are validated as IPv4 addresses or IPv4 CIDR ranges at settings write time, and production readiness fails if a persisted allowlist is empty or invalid while API-key IP restrictions are enabled.
+The production API also enables security headers through `@fastify/helmet` and route-level rate limiting through `@fastify/rate-limit` for authentication, signup, API key creation, billing sessions, and admin exports. In `NODE_ENV=production`, public signup is disabled unless `LAYERPILOT_ENABLE_PUBLIC_SIGNUP=true` is set intentionally; `/api/readiness` reports whether that tenant-registration gate is closed or explicitly open. Production CORS reflects only the origin from `LAYERPILOT_PUBLIC_URL` plus any comma-separated `LAYERPILOT_CORS_ORIGINS` entries; wildcard and non-HTTP(S) origins fail readiness. API-key IP allowlists are validated as IPv4 addresses or IPv4 CIDR ranges at settings write time, and production readiness fails if a persisted allowlist is empty or invalid while API-key IP restrictions are enabled.
 
 Authenticated admins can run `/api/admin/integrity?checkStorage=true` before backup or restore drills to verify stored model/G-code object coverage. The report includes expected stored payloads, present payloads, total bytes, missing objects, and a `complete` flag so missing local or S3 file bytes are visible before an export or restore is trusted. The `admin.integrity_checked` audit event records whether storage was checked, whether coverage was complete, byte/count totals, and the missing-file count without storing file contents. `npm run smoke:prod` and `scripts/ubuntu-deploy.sh ops-check` run the same storage-aware integrity check whenever authenticated smoke credentials are configured, and they fail if `storage.complete` is false.
 

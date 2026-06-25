@@ -113,7 +113,7 @@ LAYERPILOT_WORKSPACE_NAME='My Print Farm' \
 scripts/ubuntu-deploy.sh init-env
 ```
 
-The script creates `.env` with private permissions, shell/Compose-safe quoted values, a `LAYERPILOT_PUBLIC_URL` used by smoke checks, and random worker/metrics tokens. Edit `.env` if you need Stripe, MQTT, S3-compatible storage, or external slicer integration. Environment values may contain spaces and punctuation, but must not contain newlines.
+The script creates `.env` with private permissions, shell/Compose-safe quoted values, a `LAYERPILOT_PUBLIC_URL` used by smoke checks and production CORS defaults, a blank `LAYERPILOT_CORS_ORIGINS` for optional extra browser origins, and random worker/metrics tokens. Edit `.env` if you need a separate quote portal/admin frontend origin, Stripe, MQTT, S3-compatible storage, or external slicer integration. Environment values may contain spaces and punctuation, but must not contain newlines.
 
 By default, `.env` sets `LAYERPILOT_BIND_ADDRESS=127.0.0.1`. Keep that setting when using Nginx. Set it to `0.0.0.0` only if you intentionally want to expose `:8797` directly on the server network.
 
@@ -125,7 +125,7 @@ Run the production preflight first:
 scripts/ubuntu-deploy.sh doctor
 ```
 
-The doctor check verifies Docker Compose, current-user access to the Docker daemon, required deployment files, private `.env` permissions, required production secrets, demo/default user disabling, non-default and minimum-length worker/metrics tokens, password length, boolean/numeric environment values including the public-signup opt-in flag, public/billing URL formats, S3 settings when object storage is enabled, Stripe price/webhook settings when billing is configured, MQTT URL/QoS/retain settings when event streaming is configured, and Compose config rendering. Live `/api/readiness` also reports whether production public signup is disabled or explicitly enabled, and fails when workspace API-key IP restrictions are enabled with an empty or invalid IPv4/CIDR allowlist. If Docker was just installed, run `newgrp docker` or reconnect before running deploy commands as a non-root user.
+The doctor check verifies Docker Compose, current-user access to the Docker daemon, required deployment files, private `.env` permissions, required production secrets, demo/default user disabling, non-default and minimum-length worker/metrics tokens, password length, boolean/numeric environment values including the public-signup opt-in flag, public/billing URL formats, optional comma-separated `LAYERPILOT_CORS_ORIGINS` values without wildcards, S3 settings when object storage is enabled, Stripe price/webhook settings when billing is configured, MQTT URL/QoS/retain settings when event streaming is configured, and Compose config rendering. Live `/api/readiness` also reports whether production public signup is disabled or explicitly enabled, validates production CORS trusted origins, and fails when workspace API-key IP restrictions are enabled with an empty or invalid IPv4/CIDR allowlist. If Docker was just installed, run `newgrp docker` or reconnect before running deploy commands as a non-root user.
 
 ```bash
 scripts/ubuntu-deploy.sh deploy

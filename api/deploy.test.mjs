@@ -112,6 +112,7 @@ describe("3DSTU FarmFlow deployment packaging", () => {
     expect(script).toContain("check_boolean_env");
     expect(script).toContain("check_number_env");
     expect(script).toContain("check_optional_url_env");
+    expect(script).toContain("check_cors_origins_env");
     expect(script).toContain("check_optional_mqtt_url_env");
     expect(script).toContain("check_integration_env");
     expect(script).toContain("[ -f Dockerfile ]");
@@ -130,7 +131,10 @@ describe("3DSTU FarmFlow deployment packaging", () => {
     expect(script).toContain("curl-only smoke checks");
     expect(script).toContain("LAYERPILOT_WORKER_TOKEN");
     expect(script).toContain("LAYERPILOT_PUBLIC_URL");
+    expect(script).toContain("LAYERPILOT_CORS_ORIGINS");
+    expect(script).toContain("must not include wildcard origins in production");
     expect(script).toContain("write_env_line \"LAYERPILOT_ADMIN_PASSWORD\"");
+    expect(script).toContain("write_env_line \"LAYERPILOT_CORS_ORIGINS\"");
     expect(script).toContain("write_env_line \"LAYERPILOT_OPS_EMAIL\"");
     expect(script).toContain("write_env_line \"LAYERPILOT_OPS_PASSWORD\"");
     expect(script).not.toContain("LAYERPILOT_ADMIN_PASSWORD=${LAYERPILOT_ADMIN_PASSWORD}");

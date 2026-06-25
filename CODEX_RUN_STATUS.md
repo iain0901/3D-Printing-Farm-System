@@ -1,17 +1,30 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 73 committed and pushed
+- Phase: round 74 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 73 auth abuse lockout/backoff hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 74 production CORS origin hardening is implemented and verified; commit/push is in progress on `codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage proving repeated password and 2FA failures lock known accounts temporarily, audit the lock, and do not store submitted secrets.
-  - Implement per-user auth failure counters, lock windows, and reset-on-success/password-reset behavior.
-  - Document account lockout/backoff behavior in operator docs.
-  - Run targeted auth tests, full API tests, and full QC, then commit and push.
+  - Add regression coverage proving production CORS reflects only configured trusted origins and omits arbitrary origins.
+  - Implement production CORS origin resolution from `LAYERPILOT_PUBLIC_URL` and explicit `LAYERPILOT_CORS_ORIGINS`, while preserving permissive local development behavior.
+  - Add a production readiness/deployment doctor gate for invalid CORS origin configuration.
+  - Document trusted-origin configuration for public quote portals and same-origin app deployments.
+  - Run targeted CORS/readiness/deploy tests, full API tests, and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 74 repo inspection started at 2026-06-25T15:57:40Z.
+  - Reviewed current branch, recent commits, run status, final report, README, production-readiness, operations, install, roadmap, package metadata, server CORS/readiness code, deployment doctor, and existing readiness tests before editing.
+  - Selected production-readiness slice: production CORS trusted-origin hardening so the API no longer reflects arbitrary browser origins in `NODE_ENV=production`.
+  - Added regression coverage proving production CORS reflects `LAYERPILOT_PUBLIC_URL` and explicit `LAYERPILOT_CORS_ORIGINS`, omits arbitrary origins, and fails readiness for invalid, wildcard, or non-HTTP(S) origin configuration.
+  - Targeted CORS/readiness regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "production CORS|CORS origins|production readiness"` (missing readiness gate and arbitrary-origin behavior still permissive).
+  - Implemented production CORS origin normalization, trusted-origin allowlisting, and a `production-cors-origins` readiness check while preserving permissive local development CORS.
+  - Added Ubuntu deployment doctor validation for `LAYERPILOT_CORS_ORIGINS`, generated the variable in `.env`, and documented same-origin and explicit cross-origin deployment behavior.
+  - Targeted CORS/readiness coverage passed: `npm run test -- api/server.test.mjs -t "production CORS|CORS origins|production readiness"` (7 tests).
+  - Deployment coverage passed: `npm run test -- api/deploy.test.mjs` (3 tests).
+  - Deploy script syntax check passed: `bash -n scripts/ubuntu-deploy.sh`.
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (132 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 151 tests passed).
   - Round 73 repo inspection started at 2026-06-25T15:57:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, auth/session code, audit helpers, and existing auth tests before editing.
   - Selected production-readiness slice: account lockout/backoff for repeated password and 2FA failures so audited brute-force evidence also slows online credential attacks against known accounts.
