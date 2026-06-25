@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 72 in progress
+- Phase: round 72 committed; final status update in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 72 auth failure audit hardening is implemented and verified on `codex/production-saas-completion-20260624`; commit/push is in progress.
+- Current state: Round 72 auth failure audit hardening is implemented, verified, and committed on `codex/production-saas-completion-20260624`; final status commit/push is in progress.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
   - Add regression coverage proving failed password and failed 2FA login attempts create durable audit evidence without storing submitted secrets.
@@ -22,6 +22,7 @@
   - Targeted auth coverage passed: `npm run test -- api/server.test.mjs -t "authenticates users and supports logout|two-factor auth"` (2 tests).
   - Full API suite passed: `npm run test -- api/server.test.mjs` (128 tests).
   - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 147 tests passed).
+  - Committed round 72 implementation/status as `4a0aa91` (`feat: audit failed auth attempts`).
   - Round 71 repo inspection started at 2026-06-25T15:22:07Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, auth/signup route, readiness checks, deployment doctor, env example, and existing auth/readiness tests before editing.
   - Selected production-readiness slice: production public-signup hardening so a customer VPS cannot mint arbitrary new Owner workspaces unless the operator explicitly opts in.

@@ -5,6 +5,7 @@
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
 - Commits:
+  - `4a0aa91` `feat: audit failed auth attempts`
   - Current `HEAD` `docs: record codex round 71 push`
   - Current `HEAD` `docs: record codex round 71 status`
   - `63051bb` `feat: gate production public signup`
@@ -148,6 +149,9 @@
   - `7e42cc7` `feat: scope audit retention by workspace`
   - Current `HEAD` `docs: record codex round 69 push`
 - QC result:
+  - Round 72 targeted `npm run test -- api/server.test.mjs -t "authenticates users and supports logout|two-factor auth"`: passed, 2 tests passed.
+  - Round 72 full API `npm run test -- api/server.test.mjs`: passed, 128 tests passed.
+  - Round 72 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 147 tests passed.
   - Round 71 targeted `npm run test -- api/server.test.mjs -t "public signup|production readiness"`: passed, 6 tests passed.
   - Round 71 deployment `npm run test -- api/deploy.test.mjs`: passed, 3 tests passed.
   - Round 71 deploy syntax `bash -n scripts/ubuntu-deploy.sh`: passed.
@@ -398,6 +402,9 @@
 
 ## Completed Features
 
+- Added failed-authentication audit evidence for rejected password and TOTP/recovery-code login attempts.
+- Failed login audit events include known workspace/user context, normalized email, reason, and compact request metadata without storing submitted passwords or second-factor codes.
+- Added regression coverage for sanitized `auth.login_failed` and `auth.2fa_failed` events and documented incident-review expectations in README, operations, and production-readiness docs.
 - Added a production public-signup gate so `/api/auth/signup` is blocked in `NODE_ENV=production` unless `LAYERPILOT_ENABLE_PUBLIC_SIGNUP=true` is explicitly set.
 - Added a `production-public-signup` readiness check, Ubuntu deploy env/default validation, `.env.example` coverage, and operator documentation for the signup posture.
 - Added regression coverage proving blocked production signup does not create a user and explicit production opt-in still creates an Owner workspace.
