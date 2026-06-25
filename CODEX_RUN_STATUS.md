@@ -1,17 +1,30 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 62 committed and pushed
+- Phase: round 63 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 62 audit evidence for storage-aware integrity checks is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
+- Current state: Round 63 selected production-readiness slice: idempotent multipart model uploads for retry-safe operator file intake.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 128 tests passed)
 - Current plan:
-  - Add regression coverage that `/api/admin/integrity?checkStorage=true` audit events include storage coverage evidence.
-  - Wire integrity audit metadata to record whether storage was checked, whether coverage was complete, and missing counts without exposing file contents.
-  - Document audit evidence for storage-aware integrity checks.
-  - Run targeted API tests and full QC, then commit and push.
+  - Add regression coverage for retry-safe `POST /api/files/upload` multipart uploads.
+  - Implement upload-specific idempotency using filename/material/folder plus file-byte digest before storage writes.
+  - Wire the built-in Files upload control to send stable idempotency headers for the same attempted upload.
+  - Document multipart upload retry safety.
+  - Run targeted API/browser tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 63 repo inspection started at 2026-06-25T12:45:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, API idempotency matcher, multipart upload route, upload tests, and Files UI upload flow before editing.
+  - Selected production-readiness slice: idempotent multipart model uploads so dropped browser/API responses do not duplicate stored file records, stored bytes, or upload audit events.
+  - Added regression coverage proving repeated `POST /api/files/upload` multipart requests replay the original parsed file response, avoid duplicate stored file records/upload audit events, and reject changed uploads under the same key.
+  - Targeted upload regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "idempotent model uploads"` (missing idempotent replay header).
+  - Implemented upload-specific idempotency after multipart parsing using filename, material, folder, and file-byte digest before storage writes, and moved upload audit events through the standard actor/workspace-aware dispatcher.
+  - Wired the built-in Files upload action to send stable `Idempotency-Key` headers for the same selected file/material/folder until success.
+  - Documented multipart model upload retry safety in README, operations, and production-readiness docs.
+  - Targeted upload/file coverage passed: `npm run test -- api/server.test.mjs -t "model files|stored files in an S3|idempotent model uploads|file artifact writes"` (4 tests).
+  - Targeted browser idempotency helper coverage passed: `npm run test -- src/idempotency.test.ts` (2 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (122 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 140 tests passed).
   - Round 62 repo inspection started at 2026-06-25T12:27:57Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, admin integrity code, and audit/idempotency surface before editing.
   - Selected production-readiness slice: audit trail evidence for storage-aware integrity checks so backup/restore gate results remain reviewable after live ops checks.

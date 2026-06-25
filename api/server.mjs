@@ -1532,6 +1532,7 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "POST" && routePath === "/api/actions") return true;
   if (method === "POST" && routePath === "/api/file-folders") return true;
   if (method === "POST" && routePath === "/api/files") return true;
+  if (method === "POST" && routePath === "/api/files/upload") return true;
   if (method === "POST" && routePath === "/api/files/sample") return true;
   if (method === "POST" && routePath === "/api/hot-drop") return true;
   if (method === "POST" && routePath === "/api/parametric/nameplate") return true;
@@ -1634,6 +1635,16 @@ function requestBodyDigest(body) {
   return sha256(stableSerialize(body));
 }
 
+function uploadRequestBodyDigest({ filename, material, folder, buffer }) {
+  const byteDigest = Buffer.isBuffer(buffer) ? createHash("sha256").update(buffer).digest("hex") : "";
+  return sha256(stableSerialize({
+    filename: path.basename(filename || "model.stl"),
+    material: material || "PLA",
+    folder: folder || "Uploads",
+    byteDigest
+  }));
+}
+
 function ensureIdempotencyLedger(data) {
   data.dataMeta ||= {};
   if (!Array.isArray(data.dataMeta.idempotencyKeys)) data.dataMeta.idempotencyKeys = [];
@@ -1729,6 +1740,11 @@ async function prepareIdempotentRequest(database, request, reply, { workspaceId,
   }
   request.idempotency = { key, method, path: routePath, workspaceId, actorId, bodyDigest, fingerprint, createdAt: new Date().toISOString() };
   return false;
+}
+
+function idempotencyActorForRequest(request) {
+  const user = request.user || {};
+  return request.apiKey ? `api-key:${request.apiKey.id}` : `user:${user.id}`;
 }
 
 async function prepareRestoreCommitIdempotentRequest(database, request, reply, { workspaceId, actorId }) {
@@ -5595,9 +5611,10 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       return reply.code(403).send({ error: "API key scope does not allow reading this resource" });
     }
     const workspaceId = user.workspaceId || DEFAULT_WORKSPACE_ID;
-    const actorId = apiKey ? `api-key:${apiKey.id}` : `user:${user.id}`;
+    const actorId = idempotencyActorForRequest(request);
     if (!apiKey && await prepareRestoreCommitIdempotentRequest(database, request, reply, { workspaceId, actorId })) return;
-    if (await prepareIdempotentRequest(database, request, reply, { workspaceId, actorId })) return;
+    const uploadMultipartRoute = String(request.method || "").toUpperCase() === "POST" && routePath === "/api/files/upload";
+    if (!uploadMultipartRoute && await prepareIdempotentRequest(database, request, reply, { workspaceId, actorId })) return;
     const now = new Date().toISOString();
     if (session) session.lastSeenAt = now;
     if (apiKey) apiKey.lastUsedAt = now;
@@ -6818,8 +6835,12 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const material = typeof part.fields?.material?.value === "string" ? part.fields.material.value : "PLA";
     const folder = typeof part.fields?.folder?.value === "string" ? part.fields.folder.value : "Uploads";
     const buffer = await part.toBuffer();
+    const workspaceId = request.user.workspaceId || DEFAULT_WORKSPACE_ID;
+    const actorId = idempotencyActorForRequest(request);
+    const bodyDigest = uploadRequestBodyDigest({ filename, material, folder, buffer });
+    if (await prepareIdempotentRequest(database, request, reply, { workspaceId, actorId, bodyDigest })) return;
     const { file } = await createStoredModelFile(database, { filename, buffer, material, folder, tags: ["uploaded", "parsed"], source: "Operator upload" }, { workspaceId: request.user.workspaceId });
-    database.data.events.unshift({ id: randomUUID(), type: "file.uploaded", message: `${filename} parsed and stored`, at: new Date().toISOString() });
+    await dispatchEvent(database, "file.uploaded", `${filename} parsed and stored`, { fileId: file.id, filename, material, folder: file.folder, bytes: buffer.length }, { actor: request.user });
     await database.write();
     return reply.code(201).send(file);
   });

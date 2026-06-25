@@ -2712,14 +2712,18 @@ function App() {
     formData.append("file", fileBlob);
     formData.append("material", material);
     formData.append("folder", folder);
+    const attemptKey = `file-upload:${fileBlob.name}:${fileBlob.size}:${fileBlob.lastModified}:${material}:${folder}`;
+    const attemptPayload = { name: fileBlob.name, size: fileBlob.size, lastModified: fileBlob.lastModified, type: fileBlob.type, material, folder };
     try {
       const uploaded = await apiRequest<Partial<PrintFile>>("/api/files/upload", {
         method: "POST",
+        headers: operatorIdempotencyHeaders(attemptKey, attemptPayload),
         body: formData
       });
       const normalized = normalizeFiles([uploaded])[0];
       setFiles((items) => [...items, normalized]);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return normalized;
     } catch {
       const extension = fileBlob.name.split(".").pop()?.toUpperCase();

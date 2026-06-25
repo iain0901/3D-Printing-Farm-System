@@ -2409,6 +2409,64 @@ endsolid bracket`;
     });
   });
 
+  it("replays idempotent model uploads without duplicate stored files or upload events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const headers = { ...auth(token), "idempotency-key": "file-upload-retry-001" };
+      const stl = `solid retry
+facet normal 0 0 0
+outer loop
+vertex 0 0 0
+vertex 60 0 0
+vertex 0 30 12
+endloop
+endfacet
+endsolid retry`;
+      const uploadPayload = (content = stl) => multipartPayload({
+        boundary: "layerpilot-upload-retry",
+        filename: "retry-upload.stl",
+        content,
+        fields: { material: "PETG", folder: "Retry Uploads" }
+      });
+      const upload = await app.inject({
+        method: "POST",
+        url: "/api/files/upload",
+        headers: { ...headers, "content-type": "multipart/form-data; boundary=layerpilot-upload-retry" },
+        payload: uploadPayload()
+      });
+      expect(upload.statusCode).toBe(201);
+
+      const replay = await app.inject({
+        method: "POST",
+        url: "/api/files/upload",
+        headers: { ...headers, "content-type": "multipart/form-data; boundary=layerpilot-upload-retry" },
+        payload: uploadPayload()
+      });
+      expect(replay.statusCode).toBe(201);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toMatchObject({ id: upload.json().id, name: "retry-upload.stl", folder: "Retry Uploads", material: "PETG" });
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/files/upload",
+        headers: { ...headers, "content-type": "multipart/form-data; boundary=layerpilot-upload-retry" },
+        payload: uploadPayload(`${stl}\nsolid changed\nendsolid changed`)
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.files.filter((file) => file.name === "retry-upload.stl")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "file.uploaded" && event.data?.fileId === upload.json().id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "file-upload-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/files/upload",
+        replayCount: 1,
+        statusCode: 201
+      });
+    });
+  });
+
   it("creates file folders and generated sample STL files with stored bytes", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);
