@@ -25,6 +25,7 @@
   - Current `HEAD` `docs: record codex round 10 push`
   - `2b714f3` `feat: add idempotent commerce imports`
   - Current `HEAD` `docs: record codex round 11 push`
+  - Current `HEAD` `feat: add actor-aware production audit events`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -50,6 +51,9 @@
   - Round 11 targeted `npm run test -- api/server.test.mjs -t "idempotent commerce"`: passed, 2 tests passed.
   - Round 11 targeted `npm run test -- api/server.test.mjs`: passed, 72 tests passed.
   - Round 11 final `npm run qc`: passed, build passed, Vitest 9 files / 88 tests passed.
+  - Round 12 targeted `npm run test -- api/server.test.mjs -t "operator context"`: passed, 1 test passed.
+  - Round 12 targeted `npm run test -- api/server.test.mjs`: passed, 73 tests passed.
+  - Round 12 final `npm run qc`: passed, build passed, Vitest 9 files / 89 tests passed.
 
 ## Completed Features
 
@@ -94,6 +98,9 @@
 - Added idempotent replay/conflict protection for commerce connector import and CSV import routes.
 - Added regression coverage proving connector import retries do not refetch external commerce feeds and CSV import retries do not create duplicate import runs.
 - Documented commerce import `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added actor-aware audit context for production scheduling, queue creation/matching/status/priority, bridge save/test, printer status, history annotation/reprint, and file-version operator actions.
+- Added regression coverage proving production scheduling, queue, bridge, and file-version audit events include workspace and authenticated operator metadata.
+- Documented expanded operator audit traceability in README, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -111,3 +118,4 @@
 - Workspace exports intentionally omit customer quote portal bearer tokens; operators should regenerate or rotate portal links after restore when customers need access.
 - API responses intentionally show only host-level metadata for webhook, notification, commerce, and bridge endpoints; operators should re-enter full provider URLs when rotating those integration credentials.
 - Commerce import idempotency now protects connector and CSV batch retries; broader write API coverage should still be added only after route-specific response and secret review.
+- Audit context now covers the highest-impact production scheduling/queue/bridge/file-version operator actions; remaining lower-risk direct event writes should be migrated only with route-specific delivery and notification review.

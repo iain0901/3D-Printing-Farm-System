@@ -5625,7 +5625,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsed.success) return reply.code(400).send({ error: "Invalid auto schedule payload", issues: parsed.error.issues });
     const scoped = workspaceScopeForUser(database.data, request.user);
     const result = autoScheduleQueue(scoped, parsed.data);
-    database.data.events.unshift({ id: randomUUID(), workspaceId: request.user.workspaceId, type: "queue.auto_scheduled", message: `${result.scheduled.length} jobs auto scheduled`, data: { workspaceId: request.user.workspaceId }, at: new Date().toISOString() });
+    await dispatchEvent(database, "queue.auto_scheduled", `${result.scheduled.length} jobs auto scheduled`, { workspaceId: request.user.workspaceId }, { actor: request.user });
     await database.write();
     return result;
   });
@@ -5635,7 +5635,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsed.success) return reply.code(400).send({ error: "Invalid schedule optimization payload", issues: parsed.error.issues });
     const scoped = workspaceScopeForUser(database.data, request.user);
     const result = optimizeScheduleQueue(scoped, parsed.data);
-    database.data.events.unshift({ id: randomUUID(), workspaceId: request.user.workspaceId, type: "queue.optimized", message: `${result.scheduled.length} jobs optimized by ${result.strategy}`, data: { workspaceId: request.user.workspaceId, strategy: result.strategy, scheduled: result.scheduled.map((item) => item.jobId), skipped: result.skipped.length }, at: new Date().toISOString() });
+    await dispatchEvent(database, "queue.optimized", `${result.scheduled.length} jobs optimized by ${result.strategy}`, { workspaceId: request.user.workspaceId, strategy: result.strategy, scheduled: result.scheduled.map((item) => item.jobId), skipped: result.skipped.length }, { actor: request.user });
     await database.write();
     return result;
   });
@@ -5646,14 +5646,14 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const scoped = workspaceScopeForUser(database.data, request.user);
     const result = constraintScheduleQueue(scoped, parsed.data);
     if (!result.dryRun) {
-      database.data.events.unshift({
-        id: randomUUID(),
+      await dispatchEvent(database, "queue.constraint_scheduled", `${result.scheduled.length} jobs solved by ${result.solver.engine}`, {
         workspaceId: request.user.workspaceId,
-        type: "queue.constraint_scheduled",
-        message: `${result.scheduled.length} jobs solved by ${result.solver.engine}`,
-        data: { workspaceId: request.user.workspaceId, objective: result.solver.objective, feasible: result.solver.feasible, cost: result.solver.result, scheduled: result.scheduled.map((item) => item.jobId), skipped: result.skipped.length },
-        at: new Date().toISOString()
-      });
+        objective: result.solver.objective,
+        feasible: result.solver.feasible,
+        cost: result.solver.result,
+        scheduled: result.scheduled.map((item) => item.jobId),
+        skipped: result.skipped.length
+      }, { actor: request.user });
       await database.write();
     }
     return result;
@@ -5762,7 +5762,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       }
     }
     job.updatedAt = now;
-    await dispatchEvent(database, "history.annotated", `${job.file} history updated`, { workspaceId: request.user.workspaceId, jobId: job.id, issueTag: job.issueTag || "", issueSeverity: job.issueSeverity || "", failureCategory: job.failureCategory || "", wasteGrams: Number(job.wasteGrams || 0), wasteCost: Number(job.wasteCost || 0), wasteInventory });
+    await dispatchEvent(database, "history.annotated", `${job.file} history updated`, { workspaceId: request.user.workspaceId, jobId: job.id, issueTag: job.issueTag || "", issueSeverity: job.issueSeverity || "", failureCategory: job.failureCategory || "", wasteGrams: Number(job.wasteGrams || 0), wasteCost: Number(job.wasteCost || 0), wasteInventory }, { actor: request.user });
     await database.write();
     const history = buildPrintHistory(workspaceScopeForUser(database.data, request.user));
     const historyRecord = history.find((item) => item.id === job.id);
@@ -5778,7 +5778,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const result = createReprintJob(database.data, sourceJob, parsed.data);
     if (result.error) return reply.code(result.statusCode || 400).send({ error: result.error });
     result.job.workspaceId = request.user.workspaceId;
-    await dispatchEvent(database, "queue.reprint", `${result.job.file} reprint queued`, { workspaceId: request.user.workspaceId, sourceJobId: sourceJob.id, jobId: result.job.id });
+    await dispatchEvent(database, "queue.reprint", `${result.job.file} reprint queued`, { workspaceId: request.user.workspaceId, sourceJobId: sourceJob.id, jobId: result.job.id }, { actor: request.user });
     await database.write();
     return reply.code(201).send({ job: result.job, todos: deriveTodos(workspaceScopeForUser(database.data, request.user)) });
   });
@@ -6924,7 +6924,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       scheduleWarnings: getScheduleWarnings(scoped, { ...parsed.data, id: "draft", workspaceId: request.user.workspaceId, printerId: printer.id, printer: printer.name }, printer, parsed.data.scheduledStart)
     };
     database.data.queue.push(job);
-    await dispatchEvent(database, "queue.created", `${job.file} queued`, { workspaceId: request.user.workspaceId, jobId: job.id, fileId: job.fileId, printerId: job.printerId, material: job.material });
+    await dispatchEvent(database, "queue.created", `${job.file} queued`, { workspaceId: request.user.workspaceId, jobId: job.id, fileId: job.fileId, printerId: job.printerId, material: job.material }, { actor: request.user });
     await database.write();
     return reply.code(201).send({ job, todos: deriveTodos(workspaceScopeForUser(database.data, request.user)) });
   });
@@ -6935,7 +6935,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsed.success) return reply.code(400).send({ error: "Invalid queue match payload", issues: parsed.error.issues });
     const result = matchQueueNow(workspaceScopeForUser(database.data, request.user), parsed.data);
     if (!result.dryRun) {
-      await dispatchEvent(database, "queue.matched", `${result.matches.length} queued jobs started`, { workspaceId: request.user.workspaceId, matches: result.matches.map((match) => ({ jobId: match.jobId, printerId: match.printerId })), skipped: result.skipped.length });
+      await dispatchEvent(database, "queue.matched", `${result.matches.length} queued jobs started`, { workspaceId: request.user.workspaceId, matches: result.matches.map((match) => ({ jobId: match.jobId, printerId: match.printerId })), skipped: result.skipped.length }, { actor: request.user });
       await database.write();
     }
     return result;
@@ -6952,7 +6952,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     Object.assign(bridge, parsed.data, { updatedAt: new Date().toISOString() });
     if (!existing) database.data.bridges.push(bridge);
     printer.connection = parsed.data.kind === "octoprint" ? "OctoPrint" : parsed.data.kind === "moonraker" ? "Klipper / Moonraker" : parsed.data.kind === "prusalink" ? "PrusaLink" : "Manual bridge";
-    database.data.events.unshift({ id: randomUUID(), workspaceId: request.user.workspaceId, type: "bridge.saved", message: `${bridge.name} saved for ${printer.name}`, data: { workspaceId: request.user.workspaceId }, at: new Date().toISOString() });
+    await dispatchEvent(database, "bridge.saved", `${bridge.name} saved for ${printer.name}`, { workspaceId: request.user.workspaceId, bridgeId: bridge.id, printerId: printer.id, kind: bridge.kind }, { actor: request.user });
     await database.write();
     return reply.code(existing ? 200 : 201).send(sanitizeBridge(bridge));
   });
@@ -6977,12 +6977,12 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       if (diagnostic.status) applyBridgeStatus(printer, diagnostic.status);
       bridge.lastStatus = "connected";
       bridge.lastError = "";
-      database.data.events.unshift({ id: randomUUID(), workspaceId: request.user.workspaceId, type: "bridge.connected", message: `${bridge.name} connected`, data: { workspaceId: request.user.workspaceId, diagnostic: { ok: true, latencyMs: diagnostic.latencyMs } }, at: bridge.lastSyncAt });
+      await dispatchEvent(database, "bridge.connected", `${bridge.name} connected`, { workspaceId: request.user.workspaceId, bridgeId: bridge.id, printerId: printer.id, diagnostic: { ok: true, latencyMs: diagnostic.latencyMs } }, { actor: request.user, at: bridge.lastSyncAt });
     } else {
       bridge.lastStatus = "error";
       bridge.lastError = diagnostic.summary || "Bridge test failed";
       printer.status = "offline";
-      database.data.events.unshift({ id: randomUUID(), workspaceId: request.user.workspaceId, type: "bridge.diagnostic_failed", message: `${bridge.name} diagnostic failed`, data: { workspaceId: request.user.workspaceId, diagnostic: { ok: false, latencyMs: diagnostic.latencyMs, recommendation: diagnostic.recommendation } }, at: bridge.lastSyncAt });
+      await dispatchEvent(database, "bridge.diagnostic_failed", `${bridge.name} diagnostic failed`, { workspaceId: request.user.workspaceId, bridgeId: bridge.id, printerId: printer.id, diagnostic: { ok: false, latencyMs: diagnostic.latencyMs, recommendation: diagnostic.recommendation } }, { actor: request.user, at: bridge.lastSyncAt });
     }
     await database.write();
     return { ok: diagnostic.ok, bridge: sanitizeBridge(bridge), printer, status: diagnostic.status, diagnostic: sanitizeBridgeDiagnostic(diagnostic) };
@@ -7019,7 +7019,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (parsed.data.progress !== undefined) printer.progress = parsed.data.progress;
     if (parsed.data.targetNozzle !== undefined) printer.targetNozzle = parsed.data.targetNozzle;
     if (parsed.data.targetBed !== undefined) printer.targetBed = parsed.data.targetBed;
-    await dispatchEvent(database, "printer.status", `${printer.name} -> ${printer.status}`, { workspaceId: request.user.workspaceId, printerId: printer.id, status: printer.status });
+    await dispatchEvent(database, "printer.status", `${printer.name} -> ${printer.status}`, { workspaceId: request.user.workspaceId, printerId: printer.id, status: printer.status }, { actor: request.user });
     await database.write();
     return printer;
   });
@@ -7039,7 +7039,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (job.stage !== "needs slicing") job.stage = "scheduled";
     const materialReservation = reserveJobMaterial(scoped, job);
     job.scheduleWarnings = getScheduleWarnings(scoped, job, printer, parsed.data.scheduledStart);
-    database.data.events.unshift({ id: randomUUID(), workspaceId: request.user.workspaceId, type: "queue.scheduled", message: `${job.file} on ${printer.name}`, data: { workspaceId: request.user.workspaceId, materialReservation }, at: new Date().toISOString() });
+    await dispatchEvent(database, "queue.scheduled", `${job.file} on ${printer.name}`, { workspaceId: request.user.workspaceId, jobId: job.id, printerId: printer.id, materialReservation }, { actor: request.user });
     await database.write();
     return { job, warnings: job.scheduleWarnings, materialReservation, spools: scoped.spools, todos: deriveTodos(workspaceScopeForUser(database.data, request.user)) };
   });
@@ -7060,7 +7060,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       : ["failed", "cancelled"].includes(parsed.data.status)
         ? releaseJobMaterialReservation(scoped, job)
         : null;
-    await dispatchEvent(database, "queue.status", `${job.file} -> ${job.status}`, { workspaceId: request.user.workspaceId, jobId: job.id, status: job.status, stage: job.stage, materialChange });
+    await dispatchEvent(database, "queue.status", `${job.file} -> ${job.status}`, { workspaceId: request.user.workspaceId, jobId: job.id, status: job.status, stage: job.stage, materialChange }, { actor: request.user });
     await database.write();
     return { job, materialChange, spools: scoped.spools, todos: deriveTodos(workspaceScopeForUser(database.data, request.user)) };
   });
@@ -7072,7 +7072,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const job = database.data.queue.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!job) return reply.code(404).send({ error: "Queue job not found" });
     job.priority = parsed.data.priority;
-    database.data.events.unshift({ id: randomUUID(), workspaceId: request.user.workspaceId, type: "queue.priority", message: `${job.file} -> ${job.priority}`, data: { workspaceId: request.user.workspaceId }, at: new Date().toISOString() });
+    await dispatchEvent(database, "queue.priority", `${job.file} -> ${job.priority}`, { workspaceId: request.user.workspaceId, jobId: job.id, priority: job.priority }, { actor: request.user });
     await database.write();
     return { job, todos: deriveTodos(workspaceScopeForUser(database.data, request.user)) };
   });
@@ -7083,7 +7083,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!file) return reply.code(404).send({ error: "File not found" });
     file.version += 1;
     file.status = "needs review";
-    database.data.events.unshift({ id: randomUUID(), workspaceId: request.user.workspaceId, type: "file.versioned", message: `${file.name} v${file.version}`, data: { workspaceId: request.user.workspaceId }, at: new Date().toISOString() });
+    await dispatchEvent(database, "file.versioned", `${file.name} v${file.version}`, { workspaceId: request.user.workspaceId, fileId: file.id, version: file.version }, { actor: request.user });
     await database.write();
     return file;
   });

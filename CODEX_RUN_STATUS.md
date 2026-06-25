@@ -1,13 +1,22 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 11 pushed
+- Phase: round 12 pushed
 - Started: 2026-06-24 UTC
-- Current state: Round 11 commerce import idempotency is implemented, verified, committed, and pushed to `origin/codex/production-saas-completion-20260624`.
+- Current state: Round 12 actor-aware audit context for production scheduling, queue, bridge, and file-version operator actions is implemented, verified, committed, and pushed to `origin/codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 9 files / 79 tests passed)
 - Current plan:
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 12 repo inspection started at 2026-06-25T03:14:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: actor-aware audit context for production scheduling, queue, bridge, and file-version operator actions.
+  - Added regression coverage proving production scheduling, queue, bridge, and file-version audit events include workspace and authenticated operator metadata.
+  - Routed focused production scheduling, queue, bridge, printer status, history/reprint, and file-version audit writes through the actor-aware dispatcher.
+  - Documented expanded operator audit traceability in README, operations, and production-readiness docs.
+  - Targeted audit-context test passed: `npm run test -- api/server.test.mjs -t "operator context"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (73 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 89 tests passed).
   - Round 11 repo inspection started at 2026-06-25T03:03:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: idempotent commerce import retries for connector and CSV intake routes.

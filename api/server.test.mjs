@@ -915,6 +915,56 @@ describe("3DSTU FarmFlow API", () => {
     });
   });
 
+  it("records operator context for production scheduling, bridge, and file-version audit events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const headers = auth(token);
+
+      const queued = await app.inject({
+        method: "POST",
+        url: "/api/queue",
+        headers,
+        payload: { fileId: "f2", file: "Audit actor fixture.3mf", material: "PETG", dimensions: [80, 60, 30], time: "1h 00m", cost: 20 }
+      });
+      expect(queued.statusCode).toBe(201);
+      const jobId = queued.json().job.id;
+
+      const scheduled = await app.inject({ method: "PATCH", url: `/api/queue/${jobId}/schedule`, headers, payload: { printerId: "p2", scheduledStart: "15:00" } });
+      expect(scheduled.statusCode).toBe(200);
+
+      const priority = await app.inject({ method: "PATCH", url: `/api/queue/${jobId}/priority`, headers, payload: { priority: "Rush" } });
+      expect(priority.statusCode).toBe(200);
+
+      const auto = await app.inject({ method: "POST", url: "/api/schedule/auto", headers, payload: { includeBusyPrinters: true, respectMaterial: true, respectBuildVolume: true, startMinute: 600 } });
+      expect(auto.statusCode).toBe(200);
+
+      const bridge = await app.inject({
+        method: "POST",
+        url: "/api/bridges",
+        headers,
+        payload: { printerId: "p1", kind: "manual", name: "Audit Manual Bridge", baseUrl: "manual://audit", enabled: true }
+      });
+      expect([200, 201]).toContain(bridge.statusCode);
+
+      const versioned = await app.inject({ method: "PATCH", url: "/api/files/f2/version", headers });
+      expect(versioned.statusCode).toBe(200);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      for (const type of ["queue.created", "queue.scheduled", "queue.priority", "queue.auto_scheduled", "bridge.saved", "file.versioned"]) {
+        const event = persisted.events.find((item) => item.type === type);
+        expect(event, `missing ${type}`).toBeTruthy();
+        expect(event).toMatchObject({
+          workspaceId: "ws-default",
+          data: {
+            workspaceId: "ws-default",
+            actorEmail: "demo@layerpilot.test",
+            actorType: "user"
+          }
+        });
+      }
+    });
+  });
+
   it("manages team users with invites, role updates, and owner protection", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);
