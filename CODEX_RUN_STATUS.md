@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 87 verified locally; commit and push pending
+- Phase: round 87 implementation committed; push pending
 - Started: 2026-06-24 UTC
-- Current state: Round 87 workspace-scoped cost catalog isolation is implemented and verified locally; commit and push are pending.
+- Current state: Round 87 workspace-scoped cost catalog isolation is implemented, verified, and committed locally; push is pending.
 - Baseline QC: Round 86 passed `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed)
 - Current plan:
   - Add regression coverage proving signup-created tenant cost catalog changes do not leak into the default workspace, scoped state does not expose the raw `costCatalogs` map, and quote/file estimates use the authenticated workspace catalog.
@@ -22,6 +22,7 @@
   - Adjacent cost catalog coverage passed: `npm run test -- api/server.test.mjs -t "cost catalog|catalog governance|creates isolated workspaces|quotes and file estimates"` (3 tests).
   - Full API suite passed: `npm run test -- api/server.test.mjs` (134 tests).
   - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed).
+  - Committed round 87 implementation/status/docs as `c224949` (`feat: scope cost catalogs by workspace`).
   - Round 86 repo inspection started at 2026-06-25T18:19:59Z.
   - Reviewed current branch, recent commits, run status, final report, README, install, operations, release, production-readiness, roadmap, package metadata, API route list, idempotency allowlist, order lifecycle routes, UI idempotency headers, and existing order/queue/material tests before editing.
   - Selected production-readiness slice: order lifecycle retry-safety regression coverage for status changes that mutate generated queue jobs, material reservations, and operator audit evidence.
