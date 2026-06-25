@@ -1,16 +1,21 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 42 committed and pushed
+- Phase: round 43 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 42 purchase-request retry hardening is implemented, verified, committed, and pushed on `codex/production-saas-completion-20260624`.
-- Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 96 tests passed)
+- Current state: Round 43 governance setup retry hardening is in progress on `codex/production-saas-completion-20260624`.
+- Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 125 tests passed)
 - Current plan:
-  - Add regression coverage for retry-safe direct purchase-request create and update writes.
-  - Add direct purchase-request create/update routes to the persisted `Idempotency-Key` allowlist.
-  - Document purchase-request write idempotency, run targeted tests and full QC, then commit and push.
+  - Add regression coverage for retry-safe governance setup writes.
+  - Add workspace settings, onboarding checklist, and support snapshot routes to the persisted `Idempotency-Key` allowlist.
+  - Document governance setup write idempotency, run targeted tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 43 repo inspection started at 2026-06-25T08:51:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, and roadmap docs before editing.
+  - Selected production-readiness slice: idempotent governance setup writes for workspace settings, onboarding checklist updates, and support snapshots to prevent duplicate audit events after dropped operator/browser responses.
+  - Added failing regression coverage proving governance setup retries need replay semantics.
+  - Added workspace settings, onboarding checklist, and support snapshot routes to the persisted `Idempotency-Key` allowlist.
   - Round 42 repo inspection started at 2026-06-25T08:45:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, and production-readiness docs before editing.
   - Selected production-readiness slice: idempotent direct purchase-request create/update writes to prevent duplicate reorder records and duplicate purchasing audit events after dropped operator/browser responses.

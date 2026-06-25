@@ -1265,6 +1265,74 @@ describe("3DSTU FarmFlow API", () => {
     });
   });
 
+  it("replays idempotent governance setup writes without duplicate audit events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+
+      const settingsHeaders = { ...auth(token), "idempotency-key": "governance-settings-retry-001" };
+      const settingsPayload = { organizationName: "Retry Safe Farm", auditLogRetentionDays: 180 };
+      const settings = await app.inject({
+        method: "PATCH",
+        url: "/api/workspaceSettings",
+        headers: settingsHeaders,
+        payload: settingsPayload
+      });
+      expect(settings.statusCode).toBe(200);
+      const settingsReplay = await app.inject({
+        method: "PATCH",
+        url: "/api/workspaceSettings",
+        headers: settingsHeaders,
+        payload: settingsPayload
+      });
+      expect(settingsReplay.statusCode).toBe(200);
+      expect(settingsReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(settingsReplay.json()).toEqual(settings.json());
+
+      const onboardingHeaders = { ...auth(token), "idempotency-key": "governance-onboarding-retry-001" };
+      const onboardingPayload = { status: "complete", note: "Restore drill verified" };
+      const onboarding = await app.inject({
+        method: "PATCH",
+        url: "/api/onboarding/backup",
+        headers: onboardingHeaders,
+        payload: onboardingPayload
+      });
+      expect(onboarding.statusCode).toBe(200);
+      const onboardingReplay = await app.inject({
+        method: "PATCH",
+        url: "/api/onboarding/backup",
+        headers: onboardingHeaders,
+        payload: onboardingPayload
+      });
+      expect(onboardingReplay.statusCode).toBe(200);
+      expect(onboardingReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(onboardingReplay.json()).toEqual(onboarding.json());
+
+      const snapshotHeaders = { ...auth(token), "idempotency-key": "governance-snapshot-retry-001" };
+      const snapshot = await app.inject({ method: "POST", url: "/api/support/snapshot", headers: snapshotHeaders });
+      expect(snapshot.statusCode).toBe(200);
+      const snapshotReplay = await app.inject({ method: "POST", url: "/api/support/snapshot", headers: snapshotHeaders });
+      expect(snapshotReplay.statusCode).toBe(200);
+      expect(snapshotReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(snapshotReplay.json()).toEqual(snapshot.json());
+
+      const conflict = await app.inject({
+        method: "PATCH",
+        url: "/api/workspaceSettings",
+        headers: settingsHeaders,
+        payload: { organizationName: "Different Farm" }
+      });
+      expect(conflict.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.events.filter((event) => event.type === "settings.updated" && event.data?.settings?.organizationName === "Retry Safe Farm")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "onboarding.updated" && event.data?.stepId === "backup")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "support.snapshot")).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "governance-settings-retry-001")).toMatchObject({ method: "PATCH", path: "/api/workspaceSettings", replayCount: 1, statusCode: 200 });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "governance-onboarding-retry-001")).toMatchObject({ method: "PATCH", path: "/api/onboarding/backup", replayCount: 1, statusCode: 200 });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "governance-snapshot-retry-001")).toMatchObject({ method: "POST", path: "/api/support/snapshot", replayCount: 1, statusCode: 200 });
+    });
+  });
+
   it("redacts credential-bearing integration endpoints from state, lists, delivery logs, and exports", async () => {
     await withApp(async ({ app, db, dbPath }) => {
       const token = await login(app);
