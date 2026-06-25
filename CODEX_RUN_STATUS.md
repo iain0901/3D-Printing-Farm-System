@@ -1,16 +1,26 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 19 pushed
+- Phase: round 20 pushed
 - Started: 2026-06-24 UTC
-- Current state: Round 19 public quote UI idempotency-key usage is implemented, verified, committed, and ready on `origin/codex/production-saas-completion-20260624`.
-- Baseline QC: passed `npm run qc` (build passed; Vitest 9 files / 92 tests passed)
+- Current state: Round 20 filament purchasing idempotency is implemented, verified, committed, and ready on `origin/codex/production-saas-completion-20260624`.
+- Baseline QC: passed `npm run qc` (build passed; Vitest 10 files / 96 tests passed)
 - Current plan:
-  - Add a focused idempotency-key helper for retry-prone browser writes.
-  - Wire public quote intake and quote decision UI requests to reuse a key for the same attempted payload until success.
-  - Document shipped UI idempotency behavior, run targeted tests and full QC, then commit and push.
+  - Add persisted idempotency replay/conflict protection for retry-prone filament purchasing writes.
+  - Cover reorder-plan and purchase-receive retries so retries do not duplicate purchase requests, spools, or audit events.
+  - Document supported filament purchasing idempotency routes, run targeted tests and full QC, then commit and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 20 repo inspection started at 2026-06-25T04:39:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent filament purchasing retries for reorder-plan and receive flows.
+  - Added failing regression coverage proving purchase reorder-plan and receive retries need replay semantics.
+  - Added purchase reorder-plan and purchase receive routes to the persisted `Idempotency-Key` allowlist.
+  - Added regression coverage proving retries replay without creating duplicate purchase requests, duplicate received spools, or duplicate purchase audit events, and conflicting payloads return `409`.
+  - Documented filament purchasing idempotency in README, operations, and production-readiness docs.
+  - Targeted purchasing idempotency test passed: `npm run test -- api/server.test.mjs -t "idempotent purchase"` (2 tests).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (79 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 96 tests passed).
   - Round 19 repo inspection started at 2026-06-25T04:30:31Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Selected production-readiness slice: customer-facing public quote UI idempotency-key usage for retry-prone quote intake and portal decision writes.

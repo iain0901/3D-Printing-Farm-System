@@ -2297,6 +2297,114 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent purchase reorder plans without creating duplicate requests", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const spool = await app.inject({
+        method: "POST",
+        url: "/api/spools",
+        headers: auth(token),
+        payload: { material: "PETG", color: "#f97316", brand: "Retry", remaining: 120, weight: 1000, location: "Rack Retry", dry: true, nfc: "LP-REORDER" }
+      });
+      expect(spool.statusCode).toBe(201);
+      const headers = { ...auth(token), "idempotency-key": "purchase-reorder-retry-001" };
+      const payload = { thresholdGrams: 250, targetGrams: 1200, quantity: 3, supplier: "Retry Supplier" };
+
+      const planned = await app.inject({
+        method: "POST",
+        url: "/api/purchaseRequests/reorderPlan",
+        headers,
+        payload
+      });
+      expect(planned.statusCode).toBe(200);
+      expect(planned.json().created).toHaveLength(1);
+
+      const replay = await app.inject({
+        method: "POST",
+        url: "/api/purchaseRequests/reorderPlan",
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(planned.json());
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/purchaseRequests/reorderPlan",
+        headers,
+        payload: { ...payload, quantity: 1 }
+      });
+      expect(conflict.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.purchaseRequests.filter((request) => request.spoolId === spool.json().id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "purchase_request.reorder_plan")).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "purchase-reorder-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/purchaseRequests/reorderPlan",
+        replayCount: 1,
+        statusCode: 200
+      });
+    });
+  });
+
+  it("replays idempotent purchase receives without creating duplicate spools", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/purchaseRequests",
+        headers: auth(token),
+        payload: { material: "ASA", color: "Black", brand: "Retry", quantity: 2, targetGrams: 1000, supplier: "Retry Supplier", status: "ordered", due: "This week" }
+      });
+      expect(created.statusCode).toBe(201);
+      const headers = { ...auth(token), "idempotency-key": "purchase-receive-retry-001" };
+      const payload = { location: "Rack Receive Retry", nfcPrefix: "LP-ASA-RETRY" };
+
+      const received = await app.inject({
+        method: "POST",
+        url: `/api/purchaseRequests/${created.json().id}/receive`,
+        headers,
+        payload
+      });
+      expect(received.statusCode).toBe(200);
+      expect(received.json().spools).toHaveLength(2);
+
+      const replay = await app.inject({
+        method: "POST",
+        url: `/api/purchaseRequests/${created.json().id}/receive`,
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(received.json());
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: `/api/purchaseRequests/${created.json().id}/receive`,
+        headers,
+        payload: { ...payload, location: "Different Rack" }
+      });
+      expect(conflict.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.spools.filter((spool) => spool.purchaseRequestId === created.json().id)).toHaveLength(2);
+      expect(persisted.purchaseRequests.find((request) => request.id === created.json().id)).toMatchObject({
+        status: "received",
+        receivedSpoolIds: received.json().spools.map((spool) => spool.id)
+      });
+      expect(persisted.events.filter((event) => event.type === "purchase_request.received" && event.data?.purchaseRequestId === created.json().id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "purchase-receive-retry-001")).toMatchObject({
+        method: "POST",
+        path: `/api/purchaseRequests/${created.json().id}/receive`,
+        replayCount: 1,
+        statusCode: 200
+      });
+    });
+  });
+
   it("persists catalog records and generates order jobs from SKU-linked parts", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);

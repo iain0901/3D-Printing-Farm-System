@@ -40,6 +40,7 @@
   - Current `HEAD` `docs: record codex round 18 push`
   - `ac08c88` `feat: add public quote ui idempotency keys`
   - Current `HEAD` `docs: record codex round 19 status`
+  - Current `HEAD` `feat: add idempotent filament purchasing`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
@@ -91,6 +92,9 @@
   - Round 19 targeted `npm run test -- api/server.test.mjs -t "public quote revision"`: passed, 1 test passed.
   - Round 19 targeted `npm run test -- api/server.test.mjs`: passed, 77 tests passed.
   - Round 19 final `npm run qc`: passed, build passed, Vitest 10 files / 94 tests passed.
+  - Round 20 targeted `npm run test -- api/server.test.mjs -t "idempotent purchase"`: passed, 2 tests passed.
+  - Round 20 targeted `npm run test -- api/server.test.mjs`: passed, 79 tests passed.
+  - Round 20 final `npm run qc`: passed, build passed, Vitest 10 files / 96 tests passed.
 
 ## Completed Features
 
@@ -158,6 +162,9 @@
 - Added browser idempotency-key generation and same-payload retry reuse for the built-in public quote form and customer quote portal decision controls.
 - Added regression coverage proving public quote revision-request retries replay without creating duplicate revision audit events.
 - Documented built-in public quote form and portal idempotency behavior in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for filament purchasing reorder-plan and purchase receive writes.
+- Added regression coverage proving purchase reorder-plan and receive retries replay without duplicate purchase requests, duplicate received spools, or duplicate purchase audit events.
+- Documented filament purchasing `Idempotency-Key` usage in README, operations, and production-readiness docs.
 
 ## Remaining Blockers
 
@@ -178,6 +185,7 @@
 - Quote conversion idempotency now protects authenticated operator retries; public customer quote decisions remain intentionally token-gated and should be reviewed separately before adding public idempotency semantics.
 - Public quote intake and token-verified customer quote decision idempotency now protect customer form submissions and portal approval retries; any broader public portal write coverage should still be added only with route-specific replay and token review.
 - The built-in public quote UI now sends idempotency headers for quote intake and customer accept/reject/revision decisions; embedded third-party forms still need their own per-attempt key generation.
+- Filament purchasing idempotency now protects reorder-plan and receive retries; broader inventory write coverage should still be added only after route-specific replay and response review.
 - Idempotency replay records are intentionally omitted from shared state and admin exports; retry clients should use fresh keys after workspace export/restore rather than expecting replay cache continuity.
 - Audit context now covers the highest-impact production scheduling/queue/bridge/file-version operator actions; remaining lower-risk direct event writes should be migrated only with route-specific delivery and notification review.
 - Ops-check authenticated verification requires valid Owner/Admin credentials or a dedicated smoke account configured in `.env`; otherwise it warns and continues with unauthenticated host checks.
