@@ -16,7 +16,8 @@
   - `6a7f6b4` `feat: require user session for restore commits`
   - `85e949a` `feat: harden api key scope grants`
   - Current `HEAD` `docs: record codex round 6 push`
-  - Current `HEAD` `feat: scope api key read access`
+  - `fff9664` `feat: scope api key read access`
+  - Current `HEAD` `docs: record codex round 7 push`
 - QC result:
   - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
   - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.

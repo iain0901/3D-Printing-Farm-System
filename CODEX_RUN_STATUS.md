@@ -1,9 +1,9 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 7 committed
+- Phase: round 7 pushed
 - Started: 2026-06-24 UTC
-- Current state: Round 7 API-key read-scope hardening implemented, targeted tests and full QC passed, committed at current `HEAD`, and pending push.
+- Current state: Round 7 API-key read-scope hardening implemented, targeted tests and full QC passed, and branch pushed to `origin/codex/production-saas-completion-20260624`.
 - Baseline QC: passed `npm run qc` (build passed; Vitest 9 files / 79 tests passed)
 - Current plan:
   - Add regression coverage proving API keys can read only resources implied by their automation scopes.
@@ -19,7 +19,8 @@
   - Documented API-key read-scope expectations in operations and readiness docs.
   - Targeted API suite passed: `npm run test -- api/server.test.mjs` (67 tests).
   - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 83 tests passed).
-  - Committed round 7 as current `HEAD` (`feat: scope api key read access`).
+  - Committed round 7 as `fff9664` (`feat: scope api key read access`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
   - Round 6 repo inspection started at 2026-06-25T02:11:00Z.
   - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
   - Added regression coverage for over-scoped API-key creation and API-key credential chaining.
