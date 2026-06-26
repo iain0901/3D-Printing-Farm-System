@@ -4,9 +4,9 @@
 - Pushed remote: `origin/codex/production-saas-completion-20260624`
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
-- Latest round: Round 98 go-live evidence handoff clarity implemented and verified locally; push is pending.
+- Latest round: Round 98 go-live evidence handoff clarity implemented, verified, committed, and pushed to `origin/codex/production-saas-completion-20260624`.
 - Commits:
-  - Pending round 98 commit: go-live report skipped-check clarity and sanitized env-file path reporting.
+  - `afe1856` `docs: clarify go-live evidence handoff`
   - `940515a` `docs: record codex round 97 status`
   - `f6309ea` `feat: add go-live evidence report`
   - `4a03133` `docs: record codex round 96 status`
