@@ -4,8 +4,9 @@
 - Pushed remote: `origin/codex/production-saas-completion-20260624`
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
-- Latest round: Round 97 go-live evidence automation implemented, verified, committed locally as `f6309ea`, and ready to push.
+- Latest round: Round 97 go-live evidence automation implemented, verified, committed, and pushed through `940515a`.
 - Commits:
+  - `940515a` `docs: record codex round 97 status`
   - `f6309ea` `feat: add go-live evidence report`
   - `4a03133` `docs: record codex round 96 status`
   - `51272ab` `feat: redact idempotency replay secrets`
