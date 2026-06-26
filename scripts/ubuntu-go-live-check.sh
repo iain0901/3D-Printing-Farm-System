@@ -98,20 +98,26 @@ write_go_live_report() {
   local report
   report="$(go_live_report_path)"
   mkdir -p "$(dirname "$report")"
-  local finished_at branch commit deploy_result qc_result public_url
+  local finished_at branch commit deploy_result qc_result public_url env_label
   finished_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   branch="$(git_value "unknown" rev-parse --abbrev-ref HEAD)"
   commit="$(git_value "unknown" rev-parse --short HEAD)"
   public_url="$(report_public_origin)"
+  env_label="${ENV_FILE##*/}"
+  if [ -z "$env_label" ]; then
+    env_label=".env"
+  fi
   if [ "$RUN_DEPLOY" = "true" ]; then
     deploy_result="passed"
   else
-    deploy_result="skipped"
+    deploy_result="skipped (not requested)"
   fi
   if [ "$RUN_LOCAL_QC" = "true" ] && command -v npm >/dev/null 2>&1 && [ -f package-lock.json ]; then
     qc_result="passed"
+  elif [ "$RUN_LOCAL_QC" = "true" ]; then
+    qc_result="skipped (npm or package-lock.json unavailable)"
   else
-    qc_result="skipped"
+    qc_result="skipped (disabled)"
   fi
   cat > "$report" <<EOF
 # 3DSTU FarmFlow Go-Live Evidence
@@ -120,7 +126,7 @@ write_go_live_report() {
 - Started UTC: $STARTED_AT
 - Branch: $branch
 - Commit: $commit
-- Environment file: $ENV_FILE
+- Environment file: loaded ($env_label; path omitted)
 - Public URL: $public_url
 - Result: passed
 
@@ -144,6 +150,8 @@ write_go_live_report() {
 ## Notes
 
 - This report intentionally excludes passwords, tokens, API keys, and full environment values.
+- Environment file paths are omitted from this report; rerun from the deployment host to inspect private host paths.
+- A skipped deploy means the script validated the already-running deployment. A skipped host QC must be intentional for minimal hosts without Node/npm.
 - Attach this file to the release handoff with the release commit and deployment notes.
 EOF
   echo "Go-live evidence report written: $report"

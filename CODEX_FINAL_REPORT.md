@@ -4,8 +4,9 @@
 - Pushed remote: `origin/codex/production-saas-completion-20260624`
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
-- Latest round: Round 97 go-live evidence automation implemented, verified, committed, and pushed to `origin/codex/production-saas-completion-20260624`.
+- Latest round: Round 98 go-live evidence handoff clarity implemented and verified locally; push is pending.
 - Commits:
+  - Pending round 98 commit: go-live report skipped-check clarity and sanitized env-file path reporting.
   - `940515a` `docs: record codex round 97 status`
   - `f6309ea` `feat: add go-live evidence report`
   - `4a03133` `docs: record codex round 96 status`
@@ -209,6 +210,8 @@
   - `7e42cc7` `feat: scope audit retention by workspace`
   - Current `HEAD` `docs: record codex round 69 push`
 - QC result:
+  - Round 98 targeted deployment coverage `bash -n scripts/ubuntu-go-live-check.sh` and `npm run test -- api/deploy.test.mjs`: passed, 3 tests passed.
+  - Round 98 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 154 tests passed.
   - Round 97 targeted deployment coverage `bash -n scripts/ubuntu-go-live-check.sh` and `npm run test -- api/deploy.test.mjs`: passed, 3 tests passed.
   - Round 97 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 154 tests passed.
   - Round 96 targeted `npm run test -- api/server.test.mjs -t "public quote intake retries|admin account writes|quote portal link rotations"`: failed before implementation as expected, raw quote tokens, API keys, and temporary passwords were replayed from persisted response bodies.

@@ -18,7 +18,7 @@ Use this checklist before treating a 3DSTU FarmFlow instance as production.
 - [ ] `npm run smoke:prod` passes against the live URL.
 - [ ] `scripts/ubuntu-deploy.sh ops-check` passes with authenticated state, audit, and metrics checks enabled through `LAYERPILOT_OPS_EMAIL`/`LAYERPILOT_OPS_PASSWORD` or the bootstrap admin credentials.
 - [ ] Authenticated `npm run smoke:prod` and `scripts/ubuntu-deploy.sh ops-check` runs report storage-aware integrity with `storage.complete: true`, and `/api/audit` shows `admin.integrity_checked` metadata with `checkStorage: true` and `storageComplete: true`.
-- [ ] `scripts/ubuntu-go-live-check.sh` has produced a sanitized `release/go-live-evidence-*.md` report, or `LAYERPILOT_GO_LIVE_REPORT` points to the stored release handoff report.
+- [ ] `scripts/ubuntu-go-live-check.sh` has produced a sanitized `release/go-live-evidence-*.md` report, or `LAYERPILOT_GO_LIVE_REPORT` points to the stored release handoff report; any skipped host QC or deploy line is explained and intentional.
 
 ## Access Control
 

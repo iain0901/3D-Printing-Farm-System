@@ -418,10 +418,17 @@ describe("3DSTU FarmFlow deployment packaging", () => {
     expect(goLive).toContain("check_boolean");
     expect(goLive).toContain("write_go_live_report");
     expect(goLive).toContain("report_public_origin");
+    expect(goLive).toContain('env_label="${ENV_FILE##*/}"');
+    expect(goLive).toContain("Environment file: loaded ($env_label; path omitted)");
+    expect(goLive).toContain("skipped (not requested)");
+    expect(goLive).toContain("skipped (npm or package-lock.json unavailable)");
+    expect(goLive).toContain("skipped (disabled)");
     expect(goLive).toContain("Go-live evidence report written");
     expect(goLive).toContain("3DSTU FarmFlow Go-Live Evidence");
     expect(goLive).toContain("Backup archive");
     expect(goLive).toContain("Result: passed");
+    expect(goLive).toContain("Environment file paths are omitted from this report");
+    expect(goLive).toContain("A skipped deploy means the script validated the already-running deployment.");
     expect(goLive).toContain("trap on_failure ERR");
     expect(goLive).toContain("3DSTU FarmFlow go-live check failed with exit code");
     expect(goLive).toContain("Creating support bundle for failed go-live check");

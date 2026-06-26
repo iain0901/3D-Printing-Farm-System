@@ -37,6 +37,9 @@ When the go-live check passes, it writes a sanitized evidence report to `release
 Record:
 
 - The generated go-live evidence report.
+- The release branch and commit from the report.
+- Whether host QC or deploy were skipped in the report, and why that was intentional.
+- The verified backup archive from the report and the operator responsible for rollback.
 - Known blockers or customer-specific limits.
 
 ## Rollback Plan

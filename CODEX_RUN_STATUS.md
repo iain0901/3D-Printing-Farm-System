@@ -1,17 +1,25 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 97 complete
+- Phase: round 98 validation complete
 - Started: 2026-06-24 UTC
-- Current state: Round 97 go-live evidence automation is implemented, verified, committed, and pushed to `origin/codex/production-saas-completion-20260624`; no external blocker is open.
-- Baseline QC: Round 86 passed `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed)
+- Current state: Round 98 go-live evidence handoff clarity is implemented and verified locally; push is pending.
+- Baseline QC: Round 98 passed `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 154 tests passed)
 - Current plan:
-  - Add deployment test coverage for a sanitized go-live evidence report emitted by `scripts/ubuntu-go-live-check.sh`.
-  - Implement the report so release candidates leave branch, commit, check results, and backup evidence without secrets.
-  - Update release/deployment documentation and final report.
-  - Run targeted deploy tests, full `npm run qc`, commit, and push.
+  - Tighten go-live evidence report fields so skipped host QC/deploy states are explicit and private environment-file paths are omitted.
+  - Update release/deployment documentation and deployment tests for the clarified report contract.
+  - Run targeted deployment checks and full `npm run qc`.
+  - Commit and push round 98.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 98 repo inspection started at 2026-06-26T01:12:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, release runbook, production-readiness checklist, Ubuntu deployment guide, go-live/deploy scripts, package metadata, operations/install docs, and deployment tests before editing.
+  - Selected release-candidate convergence slice: go-live evidence handoff clarity so a release report cannot expose private env-file paths and skipped host QC/deploy states are unambiguous.
+  - Updated `scripts/ubuntu-go-live-check.sh` to record the loaded environment file by basename with path omitted, sanitize the public URL origin as before, and distinguish `skipped (not requested)`, `skipped (disabled)`, and `skipped (npm or package-lock.json unavailable)` report states.
+  - Added deployment test assertions for the clarified report contract and sanitized env-file path note.
+  - Updated README, Ubuntu deployment guide, release runbook, and production-readiness checklist so release handoff records branch/commit, backup archive, skipped-check rationale, rollback operator, and customer-specific limits.
+  - Targeted deployment coverage passed: `bash -n scripts/ubuntu-go-live-check.sh` and `npm run test -- api/deploy.test.mjs` (3 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 154 tests passed).
   - Round 97 repo inspection started at 2026-06-26T01:07:56Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, release runbook, package metadata, Ubuntu deployment scripts, production smoke, ops-check, and deployment tests before editing.
   - Selected production-readiness slice: go-live evidence automation so the final host check produces one sanitized release-candidate report for deployment handoff.
