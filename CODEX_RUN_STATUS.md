@@ -3,7 +3,7 @@
 - Branch: `codex/production-saas-completion-20260624`
 - Phase: round 97 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 97 go-live evidence automation is implemented and verified; commit/push is in progress.
+- Current state: Round 97 go-live evidence automation is implemented, verified, and committed locally as `f6309ea`; final report update and push are in progress.
 - Baseline QC: Round 86 passed `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed)
 - Current plan:
   - Add deployment test coverage for a sanitized go-live evidence report emitted by `scripts/ubuntu-go-live-check.sh`.
@@ -22,6 +22,7 @@
   - Tightened the evidence report public URL field to record only a sanitized origin, stripping paths, query strings, fragments, and URL userinfo.
   - Targeted deployment coverage passed after the sanitization tweak: `bash -n scripts/ubuntu-go-live-check.sh` and `npm run test -- api/deploy.test.mjs` (3 tests).
   - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 154 tests passed).
+  - Committed round 97 implementation/status/docs as `f6309ea` (`feat: add go-live evidence report`).
   - Round 96 repo inspection started at 2026-06-25T20:53:33Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, API route list, idempotency middleware, admin account routes, public quote intake/portal routes, and existing retry-safety tests before editing.
   - Selected production-readiness slice: idempotency replay secret-storage hardening so retry ledgers do not persist generated API keys, temporary passwords, or quote portal tokens in raw response bodies.

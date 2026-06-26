@@ -4,8 +4,9 @@
 - Pushed remote: `origin/codex/production-saas-completion-20260624`
 - Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
 - PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
-- Latest round: Round 96 idempotency replay secret-storage hardening implemented, verified, committed, and pushed through `4a03133`; local push-status documentation is blocked by missing GitHub HTTPS credentials.
+- Latest round: Round 97 go-live evidence automation implemented, verified, committed locally as `f6309ea`, and ready to push.
 - Commits:
+  - `f6309ea` `feat: add go-live evidence report`
   - `4a03133` `docs: record codex round 96 status`
   - `51272ab` `feat: redact idempotency replay secrets`
   - `c28466f` `docs: record codex round 95 status`
@@ -207,6 +208,8 @@
   - `7e42cc7` `feat: scope audit retention by workspace`
   - Current `HEAD` `docs: record codex round 69 push`
 - QC result:
+  - Round 97 targeted deployment coverage `bash -n scripts/ubuntu-go-live-check.sh` and `npm run test -- api/deploy.test.mjs`: passed, 3 tests passed.
+  - Round 97 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 154 tests passed.
   - Round 96 targeted `npm run test -- api/server.test.mjs -t "public quote intake retries|admin account writes|quote portal link rotations"`: failed before implementation as expected, raw quote tokens, API keys, and temporary passwords were replayed from persisted response bodies.
   - Round 96 targeted `npm run test -- api/server.test.mjs -t "public quote intake retries|admin account writes|quote portal link rotations"`: passed, 3 tests passed.
   - Round 96 broader idempotency/auth/billing/quote coverage `npm run test -- api/server.test.mjs -t "public quote intake retries|admin account writes|quote portal link rotations|queries audit events|billing|replays idempotent"`: passed, 51 tests passed.
