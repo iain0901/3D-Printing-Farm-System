@@ -1,17 +1,27 @@
 # Codex Run Status
 
 - Branch: `codex/production-saas-completion-20260624`
-- Phase: round 96 blocked on final push-status commit
+- Phase: round 97 in progress
 - Started: 2026-06-24 UTC
-- Current state: Round 96 idempotency replay secret-storage hardening is implemented, verified, committed, and pushed through `4a03133` on `origin/codex/production-saas-completion-20260624`; local final push-status documentation is blocked by missing GitHub HTTPS credentials.
+- Current state: Round 97 go-live evidence automation is implemented and verified; commit/push is in progress.
 - Baseline QC: Round 86 passed `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed)
 - Current plan:
-  - Add regression coverage requiring persisted idempotency replay bodies for generated API keys, temporary passwords, and quote portal tokens to redact those secrets.
-  - Redact secret-like fields before idempotency response bodies are persisted or replayed.
-  - Update production docs/runbooks for idempotency replay redaction behavior.
-  - Run targeted idempotency/account/quote coverage, full API tests, and full QC, then commit and push.
+  - Add deployment test coverage for a sanitized go-live evidence report emitted by `scripts/ubuntu-go-live-check.sh`.
+  - Implement the report so release candidates leave branch, commit, check results, and backup evidence without secrets.
+  - Update release/deployment documentation and final report.
+  - Run targeted deploy tests, full `npm run qc`, commit, and push.
   - Leave unrelated Codex prompt/log artifacts untracked.
 - Completed:
+  - Round 97 repo inspection started at 2026-06-26T01:07:56Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, release runbook, package metadata, Ubuntu deployment scripts, production smoke, ops-check, and deployment tests before editing.
+  - Selected production-readiness slice: go-live evidence automation so the final host check produces one sanitized release-candidate report for deployment handoff.
+  - Added deployment test coverage for the new go-live evidence report environment knobs and report content markers.
+  - Implemented `scripts/ubuntu-go-live-check.sh` evidence report generation after successful smoke, backup, restore-drill, and ops-check completion.
+  - Documented the report in README, Ubuntu deployment docs, release runbook, and production-readiness checklist.
+  - Targeted deployment coverage passed: `bash -n scripts/ubuntu-go-live-check.sh` and `npm run test -- api/deploy.test.mjs` (3 tests).
+  - Tightened the evidence report public URL field to record only a sanitized origin, stripping paths, query strings, fragments, and URL userinfo.
+  - Targeted deployment coverage passed after the sanitization tweak: `bash -n scripts/ubuntu-go-live-check.sh` and `npm run test -- api/deploy.test.mjs` (3 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 154 tests passed).
   - Round 96 repo inspection started at 2026-06-25T20:53:33Z.
   - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, API route list, idempotency middleware, admin account routes, public quote intake/portal routes, and existing retry-safety tests before editing.
   - Selected production-readiness slice: idempotency replay secret-storage hardening so retry ledgers do not persist generated API keys, temporary passwords, or quote portal tokens in raw response bodies.

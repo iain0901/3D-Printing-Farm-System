@@ -413,7 +413,15 @@ describe("3DSTU FarmFlow deployment packaging", () => {
     expect(goLive).toContain("LAYERPILOT_GO_LIVE_DEPLOY");
     expect(goLive).toContain("LAYERPILOT_GO_LIVE_QC");
     expect(goLive).toContain("LAYERPILOT_GO_LIVE_SUPPORT_ON_FAILURE");
+    expect(goLive).toContain("LAYERPILOT_GO_LIVE_REPORT");
+    expect(goLive).toContain("LAYERPILOT_GO_LIVE_REPORT_DIR");
     expect(goLive).toContain("check_boolean");
+    expect(goLive).toContain("write_go_live_report");
+    expect(goLive).toContain("report_public_origin");
+    expect(goLive).toContain("Go-live evidence report written");
+    expect(goLive).toContain("3DSTU FarmFlow Go-Live Evidence");
+    expect(goLive).toContain("Backup archive");
+    expect(goLive).toContain("Result: passed");
     expect(goLive).toContain("trap on_failure ERR");
     expect(goLive).toContain("3DSTU FarmFlow go-live check failed with exit code");
     expect(goLive).toContain("Creating support bundle for failed go-live check");
@@ -429,6 +437,8 @@ describe("3DSTU FarmFlow deployment packaging", () => {
     expect(goLive).toContain("bash scripts/ubuntu-backup.sh backup");
     expect(goLive).toContain("bash scripts/ubuntu-backup.sh restore-drill \"$archive\"");
     expect(goLive).toContain("bash scripts/ubuntu-deploy.sh ops-check");
+    expect(guide).toContain("writes a sanitized go-live evidence report");
+    expect(guide).toContain("LAYERPILOT_GO_LIVE_REPORT");
     expect(packageScript).toContain("LAYERPILOT_PACKAGE_DIR");
     expect(packageScript).toContain("layerpilot-ubuntu-");
     expect(packageScript).toContain("verify_archive");

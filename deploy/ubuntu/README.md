@@ -156,7 +156,7 @@ After `.env` is ready and before treating a server as production-ready, run the 
 scripts/ubuntu-go-live-check.sh
 ```
 
-It loads `.env`, then runs Bash syntax checks, setup preflight, deployment doctor, optional host `npm run qc`, live smoke checks, a verified backup, restore-drill, and ops-check. Loading `.env` keeps values like `LAYERPILOT_BACKUP_DIR`, `LAYERPILOT_PUBLIC_URL`, and smoke-check credentials consistent with deployment. By default it assumes the app is already deployed. To include deployment in the same pass:
+It loads `.env`, then runs Bash syntax checks, setup preflight, deployment doctor, optional host `npm run qc`, live smoke checks, a verified backup, restore-drill, and ops-check. Loading `.env` keeps values like `LAYERPILOT_BACKUP_DIR`, `LAYERPILOT_PUBLIC_URL`, and smoke-check credentials consistent with deployment. When every step passes, it writes a sanitized go-live evidence report under `release/go-live-evidence-*.md` with the branch, commit, check results, public URL, and backup archive path, but not passwords, tokens, API keys, or full environment values. Set `LAYERPILOT_GO_LIVE_REPORT=/path/to/report.md` to write a fixed handoff path. By default it assumes the app is already deployed. To include deployment in the same pass:
 
 ```bash
 LAYERPILOT_GO_LIVE_DEPLOY=true scripts/ubuntu-go-live-check.sh

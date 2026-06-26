@@ -30,15 +30,13 @@ scripts/ubuntu-go-live-check.sh
 
 Set `LAYERPILOT_GO_LIVE_DEPLOY=true` only when the host and environment variables are ready for deployment.
 
+When the go-live check passes, it writes a sanitized evidence report to `release/go-live-evidence-*.md` by default. Set `LAYERPILOT_GO_LIVE_REPORT=/path/to/report.md` when the release handoff needs a fixed file path.
+
 ## Release Evidence
 
 Record:
 
-- Git branch and commit SHA.
-- `npm run qc` result.
-- Deployment doctor result.
-- Live smoke result.
-- Backup archive path and restore-drill result.
+- The generated go-live evidence report.
 - Known blockers or customer-specific limits.
 
 ## Rollback Plan
