@@ -8,8 +8,18 @@
 - [简体中文 README](README.zh-CN.md)
 - [繁體中文授權](LICENSE.zh-TW.md)
 - [Ubuntu 部署說明](deploy/ubuntu/README.zh-TW.md)
+- [Production readiness checklist](docs/PRODUCTION_READINESS.md)
+- [Progress tracker](docs/PROGRESS.md)
 
 如果需要專業技術支援或安裝設定服務，請聯絡 `support@3dstu.com`。
+
+## 目前狀態
+
+3DSTU FarmFlow 目前正在進行 production-readiness hardening。應用程式功能、Docker/Ubuntu 部署流程、readiness checks、authenticated ops checks、備份工具、安全標頭、rate limiting、管理員 2FA、稽核追蹤、敏感資料遮蔽，以及 retry-safe/idempotent 的生產流程已經相當完整。
+
+但在客戶農場正式上線前，仍必須完成目標 production environment 設定與驗證：正式 domain 與 TLS、真實 Owner/Admin 帳號與強密碼/token、客戶需要的 S3/Stripe/MQTT/commerce 設定、實際打印機 fleet 的 bridge 驗證、已驗證的備份與 restore drill，以及 Ubuntu 主機上的 live readiness/smoke/ops checks。
+
+最新進度請看 [docs/PROGRESS.md](docs/PROGRESS.md)。
 
 ## 授權
 

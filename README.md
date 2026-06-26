@@ -19,8 +19,18 @@ Project links:
 - GitHub: https://github.com/iain0901/3D-Printing-Farm-System
 - Installation guide: docs/INSTALL.md
 - Operations runbook: docs/OPERATIONS.md
+- Production readiness checklist: docs/PRODUCTION_READINESS.md
+- Progress tracker: docs/PROGRESS.md
 - Product roadmap: docs/ROADMAP.md
 - Release runbook: docs/RELEASE.md
+
+## Current Status
+
+3DSTU FarmFlow is in production-readiness hardening. The application code, Docker/Ubuntu deployment path, readiness checks, authenticated ops checks, backup helpers, security headers, rate limiting, admin 2FA enforcement, audit traceability, redaction, and retry-safe/idempotent production workflows are already substantial.
+
+It is not yet a turn-key go-live for a customer farm until the target production environment is configured and verified. Before live work, a deployment still needs a real domain and TLS certificate, real Owner/Admin credentials and strong tokens, customer-specific S3/Stripe/MQTT/commerce settings if used, printer bridge validation against the actual fleet, a verified backup plus restore drill, and live readiness/smoke/ops checks on the Ubuntu host.
+
+For the current documentation and readiness snapshot, see [docs/PROGRESS.md](docs/PROGRESS.md).
 
 
 ## License

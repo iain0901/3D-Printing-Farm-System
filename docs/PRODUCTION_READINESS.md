@@ -2,6 +2,8 @@
 
 Use this checklist before treating a 3DSTU FarmFlow instance as production.
 
+Current project status: code readiness is high, but each customer go-live still depends on target-host configuration and live validation. Track the current estimate, active implementation slice, blockers, and documentation cadence in [PROGRESS.md](PROGRESS.md).
+
 ## Required Gate
 
 - [ ] `npm run qc` passes on the release branch.
