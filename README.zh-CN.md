@@ -11,6 +11,56 @@
 
 如果需要专业技术支持或安装设置服务，请联系 `support@3dstu.com`。
 
+## 平台重点
+
+3DSTU FarmFlow 是给真实打印农场使用的生产控制层，不只是打印机列表。目前 release-candidate 版本已覆盖：
+
+| 范围 | 平台处理内容 |
+|---|---|
+| 接单 | 手动订单、报价需求、CSV/电商导入、SKU 对应生产任务 |
+| 文件 | STL/3MF/G-code 模型库、版本、预览、示例模型、切片输出 |
+| 排产 | 打印机匹配、材料/颜色限制、交期风险、负载平衡 |
+| 现场 | 打印机状态、队列流程、操作员待办、维护报告、历史/重印 |
+| 材料 | 线材库存、预留、用量扫描、补货计划、标签导出 |
+| 运营 | 权限、2FA、审计、Webhook、通知、备份、还原演练、上线证据 |
+
+## 实际产品画面
+
+以下截图是从本 repo 的可运行 demo UI 实际截取。
+
+### 生产驾驶舱
+
+![FarmFlow 生产驾驶舱](docs/screenshots/dashboard-production-cockpit.png)
+
+### 排产与产能规划
+
+![FarmFlow 排产与产能规划](docs/screenshots/scheduler-capacity-planning.png)
+
+### 模型文件库
+
+![FarmFlow 模型文件库](docs/screenshots/files-model-library.png)
+
+### 线材与材料库存
+
+![FarmFlow 线材与材料库存](docs/screenshots/filament-inventory.png)
+
+### 设置、备份与治理
+
+![FarmFlow 设置、备份与治理](docs/screenshots/settings-backup-governance.png)
+
+## 文档索引
+
+| 需求 | 文档 |
+|---|---|
+| 本地安装 | [本地运行](#本地运行) |
+| Ubuntu 部署 | [docs/INSTALL.md](docs/INSTALL.md)、[deploy/ubuntu/README.zh-CN.md](deploy/ubuntu/README.zh-CN.md) |
+| 正式运营 | [docs/OPERATIONS.md](docs/OPERATIONS.md) |
+| 上线检查 | [docs/PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md) |
+| 发版流程 | [docs/RELEASE.md](docs/RELEASE.md) |
+| 产品方向 | [docs/ROADMAP.md](docs/ROADMAP.md) |
+
+
+
 ## 许可
 
 3DSTU FarmFlow 是 3DSTU 开发给 3DSTU 农场客户免费使用的 SaaS 平台。许可采用 [3DSTU Farm Customer Source-Available License](LICENSE.zh-CN.md)：客户可以自行部署、修改并用于自己的 3D 打印农场运营，也可以通过自己的打印件、设计、教育、维护或生产服务获利；但不得销售、转售、分发、重新打包、白标、托管、出租、发布源代码、Docker image、脚本、修改版或以本软件为基础的第三方商业服务。

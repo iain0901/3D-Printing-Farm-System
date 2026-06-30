@@ -23,6 +23,56 @@ Project links:
 - Release runbook: docs/RELEASE.md
 
 
+## Platform At A Glance
+
+3DSTU FarmFlow is built as a production-control layer for real print-farm operations, not just a printer list. The current release-candidate branch includes:
+
+| Area | What the platform handles |
+|---|---|
+| Intake | Manual orders, quote requests, CSV/commerce import, SKU-linked job generation |
+| Files | STL/3MF/G-code library, versions, previews, generated sample models, slicer outputs |
+| Scheduling | Printer matching, material/color constraints, due-risk warnings, load balancing |
+| Shop floor | Printer states, queue lifecycle, operator todos, maintenance reports, history/reprints |
+| Materials | Spool inventory, reservations, usage scans, reorder planning, label export |
+| Operations | Roles, 2FA, audit trail, webhooks, notifications, backups, restore drills, go-live evidence |
+
+## Actual Product Screens
+
+These screenshots are captured from the working local demo UI in this repository.
+
+### Production cockpit
+
+![FarmFlow production cockpit](docs/screenshots/dashboard-production-cockpit.png)
+
+### Scheduler and capacity planning
+
+![FarmFlow scheduler and capacity planning](docs/screenshots/scheduler-capacity-planning.png)
+
+### Model file library
+
+![FarmFlow cloud files and model library](docs/screenshots/files-model-library.png)
+
+### Filament and material inventory
+
+![FarmFlow filament inventory](docs/screenshots/filament-inventory.png)
+
+### Settings, backup, and governance
+
+![FarmFlow settings, backup, and governance](docs/screenshots/settings-backup-governance.png)
+
+## Documentation Map
+
+| Need | Start here |
+|---|---|
+| Install locally | [Run Locally](#run-locally) |
+| Deploy on Ubuntu | [docs/INSTALL.md](docs/INSTALL.md) and [deploy/ubuntu/README.md](deploy/ubuntu/README.md) |
+| Operate a live farm | [docs/OPERATIONS.md](docs/OPERATIONS.md) |
+| Decide whether it is ready for production | [docs/PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md) |
+| Release and go-live flow | [docs/RELEASE.md](docs/RELEASE.md) |
+| Product direction | [docs/ROADMAP.md](docs/ROADMAP.md) |
+
+
+
 ## License
 
 3DSTU FarmFlow is developed by 3DSTU as a free SaaS platform for 3DSTU farm customers. It is source-available under the [3DSTU Farm Customer Source-Available License](LICENSE.md): customers may run, modify, and use it internally to operate their own 3D printing farms and earn revenue from their own printed parts or production services, but may not sell, redistribute, rebrand, host, white-label, or commercially provide the software, modified versions, scripts, Docker images, or related services to third parties without a separate written agreement from 3DSTU.
