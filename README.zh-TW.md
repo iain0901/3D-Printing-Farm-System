@@ -58,6 +58,7 @@
 | 上線檢查 | [docs/PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md) |
 | 發版流程 | [docs/RELEASE.md](docs/RELEASE.md) |
 | 產品方向 | [docs/ROADMAP.md](docs/ROADMAP.md) |
+| 平台 Wiki | [docs/wiki/README.md](docs/wiki/README.md) |
 
 
 

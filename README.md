@@ -70,6 +70,7 @@ These screenshots are captured from the working local demo UI in this repository
 | Decide whether it is ready for production | [docs/PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md) |
 | Release and go-live flow | [docs/RELEASE.md](docs/RELEASE.md) |
 | Product direction | [docs/ROADMAP.md](docs/ROADMAP.md) |
+| Platform wiki | [docs/wiki/README.md](docs/wiki/README.md) |
 
 
 
