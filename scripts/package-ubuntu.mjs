@@ -22,6 +22,7 @@ const requiredFiles = [
   "src/App.tsx",
   "api/server.mjs",
   "api/worker.mjs",
+  "scripts/ops-auth-check.mjs",
   "scripts/ubuntu-deploy.sh",
   "scripts/ubuntu-backup.sh",
   "scripts/ubuntu-setup.sh",

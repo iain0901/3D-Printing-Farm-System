@@ -1,64 +1,53 @@
 # Release Runbook
 
-This project uses a simple release discipline: every production deployment gets a version bump, a Git commit, GitHub CI evidence, VPS QC evidence, and a public smoke check.
+Use this process for every production release branch.
 
-## Release Checklist
-
-1. Update `package.json`, `package-lock.json`, and `docs/ROADMAP.md` with the new version.
-2. Run the full QC suite:
+## Branch And QC
 
 ```bash
+git status --short --branch
 npm run qc
 ```
 
-3. Confirm GitHub Actions passes on `main`.
-4. On the VPS, deploy from `/opt/layerpilot`:
+Do not commit or push a release candidate while QC is failing.
+
+## Production Package
 
 ```bash
-scripts/ubuntu-deploy.sh update
+npm run package:ubuntu
 ```
 
-5. Confirm readiness and public smoke checks:
+The package task verifies required deployment files and excludes local databases, uploaded files, `.env`, build outputs, backups, support bundles, and `node_modules`.
+
+## VPS Validation
+
+On the target host:
 
 ```bash
-curl -fsS http://127.0.0.1:8797/api/readiness
-curl -fsS https://farm-saas.3dstu.com/api/health
+scripts/ubuntu-deploy.sh doctor
+scripts/ubuntu-go-live-check.sh
 ```
 
-6. Confirm the production bundle contains the expected version marker shown in the global footer.
-7. Commit and push the release:
+Set `LAYERPILOT_GO_LIVE_DEPLOY=true` only when the host and environment variables are ready for deployment.
+
+When the go-live check passes, it writes a sanitized evidence report to `release/go-live-evidence-*.md` by default. Set `LAYERPILOT_GO_LIVE_REPORT=/path/to/report.md` when the release handoff needs a fixed file path.
+
+## Release Evidence
+
+Record:
+
+- The generated go-live evidence report.
+- The release branch and commit from the report.
+- Whether host QC or deploy were skipped in the report, and why that was intentional.
+- The verified backup archive from the report and the operator responsible for rollback.
+- Known blockers or customer-specific limits.
+
+## Rollback Plan
+
+Every release must have a verified backup before deployment. Use:
 
 ```bash
-git add .
-git commit -m "Release vX.Y.Z"
-git push origin main
+scripts/ubuntu-deploy.sh rollback /path/to/layerpilot-data-YYYYmmdd-HHMMSS.tgz
 ```
 
-## GitHub CI
-
-`.github/workflows/ci.yml` runs on every push to `main` and every pull request. It installs dependencies with `npm ci`, runs `npm run qc`, and stores the production `dist` folder as a short-retention artifact when available.
-
-The CI job is intentionally read-only. It does not contain VPS secrets, deployment keys, or production credentials. Production deploys remain controlled from the VPS release path.
-
-## VPS Deployment Notes
-
-The VPS source of truth is `/opt/layerpilot`. Normal releases should use the built-in Ubuntu deployment script because it runs preflight checks, creates a verified backup, rebuilds Docker Compose services, waits for readiness, and runs smoke checks.
-
-Use rollback only with a known-good backup archive:
-
-```bash
-scripts/ubuntu-deploy.sh rollback /path/to/layerpilot-backup.tgz
-```
-
-## Evidence To Keep
-
-For each release, keep these facts in the handoff or release note:
-
-- Version number
-- Git commit SHA
-- GitHub CI result
-- VPS QC result
-- Docker container health
-- `/api/readiness` result
-- Public `/api/health` result
-- Smoke checks that prove the new UI/API path is present
+Rollback restores the selected volume backup, then runs readiness, smoke, and ops checks.

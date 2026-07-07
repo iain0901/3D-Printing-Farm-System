@@ -1,0 +1,1267 @@
+# Codex Run Status
+
+- Branch: `codex/production-saas-completion-20260624`
+- Phase: round 98 complete
+- Started: 2026-06-24 UTC
+- Current state: Round 98 go-live evidence handoff clarity is implemented, verified, committed, and pushed to `origin/codex/production-saas-completion-20260624`; no external blocker is open.
+- Baseline QC: Round 98 passed `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 154 tests passed)
+- Current plan:
+  - Tighten go-live evidence report fields so skipped host QC/deploy states are explicit and private environment-file paths are omitted.
+  - Update release/deployment documentation and deployment tests for the clarified report contract.
+  - Run targeted deployment checks and full `npm run qc`.
+  - Commit and push round 98.
+  - Leave unrelated Codex prompt/log artifacts untracked.
+- Completed:
+  - Round 98 repo inspection started at 2026-06-26T01:12:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, release runbook, production-readiness checklist, Ubuntu deployment guide, go-live/deploy scripts, package metadata, operations/install docs, and deployment tests before editing.
+  - Selected release-candidate convergence slice: go-live evidence handoff clarity so a release report cannot expose private env-file paths and skipped host QC/deploy states are unambiguous.
+  - Updated `scripts/ubuntu-go-live-check.sh` to record the loaded environment file by basename with path omitted, sanitize the public URL origin as before, and distinguish `skipped (not requested)`, `skipped (disabled)`, and `skipped (npm or package-lock.json unavailable)` report states.
+  - Added deployment test assertions for the clarified report contract and sanitized env-file path note.
+  - Updated README, Ubuntu deployment guide, release runbook, and production-readiness checklist so release handoff records branch/commit, backup archive, skipped-check rationale, rollback operator, and customer-specific limits.
+  - Targeted deployment coverage passed: `bash -n scripts/ubuntu-go-live-check.sh` and `npm run test -- api/deploy.test.mjs` (3 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 154 tests passed).
+  - Committed round 98 implementation/status/docs as `afe1856` (`docs: clarify go-live evidence handoff`).
+  - Pushed branch through `afe1856`: `origin/codex/production-saas-completion-20260624`.
+  - Round 97 repo inspection started at 2026-06-26T01:07:56Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, release runbook, package metadata, Ubuntu deployment scripts, production smoke, ops-check, and deployment tests before editing.
+  - Selected production-readiness slice: go-live evidence automation so the final host check produces one sanitized release-candidate report for deployment handoff.
+  - Added deployment test coverage for the new go-live evidence report environment knobs and report content markers.
+  - Implemented `scripts/ubuntu-go-live-check.sh` evidence report generation after successful smoke, backup, restore-drill, and ops-check completion.
+  - Documented the report in README, Ubuntu deployment docs, release runbook, and production-readiness checklist.
+  - Targeted deployment coverage passed: `bash -n scripts/ubuntu-go-live-check.sh` and `npm run test -- api/deploy.test.mjs` (3 tests).
+  - Tightened the evidence report public URL field to record only a sanitized origin, stripping paths, query strings, fragments, and URL userinfo.
+  - Targeted deployment coverage passed after the sanitization tweak: `bash -n scripts/ubuntu-go-live-check.sh` and `npm run test -- api/deploy.test.mjs` (3 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 154 tests passed).
+  - Committed round 97 implementation/status/docs as `f6309ea` (`feat: add go-live evidence report`).
+  - Committed round 97 final report/status as `940515a` (`docs: record codex round 97 status`).
+  - Pushed branch through `940515a`: `origin/codex/production-saas-completion-20260624`.
+  - Pushed final round 97 push-status documentation to `origin/codex/production-saas-completion-20260624`.
+  - Round 96 repo inspection started at 2026-06-25T20:53:33Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, API route list, idempotency middleware, admin account routes, public quote intake/portal routes, and existing retry-safety tests before editing.
+  - Selected production-readiness slice: idempotency replay secret-storage hardening so retry ledgers do not persist generated API keys, temporary passwords, or quote portal tokens in raw response bodies.
+  - Added regression coverage requiring public quote intake, admin account, quote update/conversion, and quote portal-link retry ledgers to redact generated secret fields in persisted replay bodies and replay responses while preserving duplicate-write protection.
+  - Targeted secret-storage regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "public quote intake retries|admin account writes|quote portal link rotations"` (raw quote tokens, API keys, and temporary passwords were replayed from persisted response bodies).
+  - Implemented centralized idempotency response-body redaction for secret-like JSON fields and token-bearing URLs before ledger persistence/replay.
+  - Targeted secret-storage coverage passed: `npm run test -- api/server.test.mjs -t "public quote intake retries|admin account writes|quote portal link rotations"` (3 tests).
+  - Broader idempotency/auth/billing/quote coverage passed: `npm run test -- api/server.test.mjs -t "public quote intake retries|admin account writes|quote portal link rotations|queries audit events|billing|replays idempotent"` (51 tests).
+  - Documented idempotency replay secret redaction and recovery expectations in README, operations, and production-readiness docs.
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (135 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 154 tests passed).
+  - Committed round 96 implementation/status/docs as `51272ab` (`feat: redact idempotency replay secrets`).
+  - Committed round 96 final report/status as `4a03133` (`docs: record codex round 96 status`).
+  - Pushed branch through `4a03133`: `origin/codex/production-saas-completion-20260624`.
+  - Created local push-status commit `8e08a56` (`docs: record codex round 96 push`), but pushing it failed because GitHub HTTPS credentials are unavailable (`could not read Username for 'https://github.com': No such device or address`).
+  - Created `CODEX_NEEDS_USER.md` with the exact GitHub credential unblocker.
+  - Round 95 repo inspection started at 2026-06-25T20:39:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route list, bridge routes, and existing bridge tests before editing.
+  - Selected production-readiness slice: printer bridge audit hardening so bridge setup, diagnostics, and manual syncs leave compact operator/workspace evidence without exposing endpoint paths, query tokens, or API keys.
+  - Added regression coverage requiring bridge save, diagnostic, and sync audit evidence to include workspace/operator context, bridge/printer IDs, kind, enabled status, endpoint host, base URL/API-key presence, and sync counts while excluding endpoint paths, query tokens, and API keys.
+  - Targeted bridge regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "replays idempotent bridge diagnostics"` (`bridge.saved` lacked redacted bridge metadata).
+  - Implemented shared compact bridge audit metadata and passed the authenticated actor through operator-triggered bridge polling.
+  - Targeted bridge retry/audit coverage passed: `npm run test -- api/server.test.mjs -t "replays idempotent bridge diagnostics"` (1 test).
+  - Documented bridge setup/diagnostic/sync audit evidence review in README, operations, and production-readiness docs.
+  - Broader bridge/printer-action coverage passed: `npm run test -- api/server.test.mjs -t "bridge|printer actions|production scheduling"` (5 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (135 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 154 tests passed).
+  - Committed round 95 implementation/status/docs as `44d68ef` (`feat: add bridge audit context`).
+  - Committed round 95 final report/status as `c28466f` (`docs: record codex round 95 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 94 repo inspection started at 2026-06-25T20:33:52Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route/idempotency surface, file routes, and existing file tests before editing.
+  - Selected production-readiness slice: file deletion audit hardening so destructive file-library cleanup leaves compact workspace/operator evidence without exposing file bodies, storage paths, object keys, or raw reference records.
+  - Added regression coverage requiring `file.deleted` evidence to include workspace/operator context, file identity, storage-backed status, storage cleanup result, force flag, and reference counts while excluding storage paths and file contents.
+  - Targeted file deletion regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "downloads stored files and deletes unreferenced files"` (`file.deleted` lacked actor and compact file metadata).
+  - Implemented compact `file.deleted` audit metadata and passed the authenticated actor through the deletion audit dispatch.
+  - Targeted file deletion coverage passed: `npm run test -- api/server.test.mjs -t "downloads stored files and deletes unreferenced files"` (1 test).
+  - Documented file deletion audit evidence review in README, operations, and production-readiness docs.
+  - Broader file coverage passed: `npm run test -- api/server.test.mjs -t "creates files with validation|file artifact writes|downloads stored files|builds safe file previews|stores uploaded files|model uploads"` (6 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (135 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 154 tests passed).
+  - Committed round 94 implementation/status/docs as `163957a` (`feat: add file deletion audit context`).
+  - Committed round 94 final report/status as `91e48b5` (`docs: record codex round 94 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 93 repo inspection started at 2026-06-25T20:20:44Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, auth/session helpers, realtime WebSocket/SSE routes, and existing auth/realtime tests before editing.
+  - Selected production-readiness slice: realtime session-token URL hardening so production browser connections do not put long-lived user bearer tokens in proxy/access-log URLs.
+  - Added regression coverage requiring production protected APIs to reject `?token=` session credentials, `/api/events/token` to issue a short-lived one-time realtime ticket without persisting the raw ticket, ticket replay to fail, and old realtime `?token=` auth to be rejected.
+  - Targeted realtime-token regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "realtime tickets"` (protected `/api/state?token=<session>` returned `200` in production).
+  - Implemented in-memory hashed realtime tickets with 60-second expiry and one-time consumption, added protected `POST /api/events/token`, and moved WebSocket/SSE route auth into realtime handlers so ticket URLs work without reopening query credential auth for protected APIs.
+  - Updated the React realtime client to request a ticket over normal `Authorization` auth, then use `?ticket=` for WebSocket/SSE URLs instead of `?token=<bearer>`.
+  - Documented production realtime-ticket behavior in README, operations, and production-readiness docs.
+  - Targeted realtime-token coverage passed: `npm run test -- api/server.test.mjs -t "realtime tickets"` (1 test).
+  - Adjacent auth/realtime coverage passed: `npm run test -- api/server.test.mjs -t "realtime|authenticates users and supports logout|production Owner and Admin sessions"` (4 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (135 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 154 tests passed).
+  - Committed round 93 implementation/status/docs as `9e67961` (`feat: add realtime auth tickets`).
+  - Committed round 93 final report/status as `449b773` (`docs: record codex round 93 status`).
+  - Committed round 93 push status as `0a9646f` (`docs: record codex round 93 push`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 92 repo inspection started at 2026-06-25T20:06:39Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, auth/session routes, and existing auth tests before editing.
+  - Selected production-readiness slice: 2FA enablement failure audit hardening so invalid authenticator-code attempts during TOTP enrollment leave sanitized operator/workspace evidence.
+  - Added regression coverage requiring invalid-code TOTP enablement attempts to emit `auth.2fa_enable_failed` with workspace/operator context and without submitted codes or TOTP secrets.
+  - Targeted 2FA regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "two-factor|2FA"` (invalid-code TOTP enablement left no audit event).
+  - Implemented sanitized `auth.2fa_enable_failed` evidence for invalid authenticator-code attempts during TOTP enrollment.
+  - Targeted 2FA coverage passed after implementation: `npm run test -- api/server.test.mjs -t "two-factor|2FA"` (4 tests).
+  - Documented invalid-code TOTP enablement failure evidence in README, operations, and production-readiness docs.
+  - Targeted 2FA coverage passed after docs/status updates: `npm run test -- api/server.test.mjs -t "two-factor|2FA"` (4 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (134 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed).
+  - Committed round 92 implementation/status/docs as `a6c28eb` (`feat: audit 2fa enable code failures`).
+  - Committed round 92 final report/status as `c10349c` (`docs: record codex round 92 status`).
+  - Committed round 92 push status as `e7d4c7d` (`docs: record codex round 92 push`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 91 repo inspection started at 2026-06-25T19:20:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, API route list, restore implementation, and restore tests before editing.
+  - Selected production-readiness slice: restore-prepared audit evidence hardening so destructive restore commits leave compact operator/workspace evidence without restored backup contents.
+  - Added regression coverage requiring the committed `admin.restore_prepared` event to include workspace/operator context, restore counts, storage-path strip count, and file-payload coverage counts while excluding restored printer names, restored backup user emails, and stripped storage paths.
+  - Targeted restore regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "previews and commits sanitized workspace restores"` (the `admin.restore_prepared` event lacked actor/context metadata).
+  - Implemented compact `admin.restore_prepared` metadata inside prepared restore data, including actor context, collection counts, warning count, storage-path strip count, restored file-payload count, and summarized file-payload coverage.
+  - Targeted restore coverage passed after implementation: `npm run test -- api/server.test.mjs -t "previews and commits sanitized workspace restores"` (1 test).
+  - Documented restore-prepared audit evidence review in README, operations, and production-readiness docs.
+  - Targeted restore coverage passed after docs/status updates: `npm run test -- api/server.test.mjs -t "previews and commits sanitized workspace restores"` (1 test).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (134 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed).
+  - Committed round 91 implementation/status/docs as `273a436` (`feat: add restore prepared audit context`).
+  - Committed round 91 final report/status as `5387543` (`docs: record codex round 91 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 90 repo inspection started at 2026-06-25T19:10:45Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, API route/idempotency surface, `/api/actions` implementation, and existing printer-action tests before editing.
+  - Selected production-readiness slice: actor-aware audit context for real printer action commands so pause/resume/cancel evidence is traceable to the authenticated workspace/operator without exposing bridge credentials.
+  - Added regression coverage requiring idempotent real printer action audit evidence to include workspace/operator context and exclude bridge secrets or endpoint hosts.
+  - Targeted printer-action regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "idempotent printer actions"` (the `printer.action` event lacked actor metadata).
+  - Wired `/api/actions` `printer.action` audit dispatch through the actor-aware path with the authenticated user.
+  - Targeted printer-action coverage passed after implementation: `npm run test -- api/server.test.mjs -t "idempotent printer actions"` (1 test).
+  - Documented `printer.action` audit evidence and bridge credential redaction expectations in README, operations, and production-readiness docs.
+  - Broader printer/bridge/action coverage passed: `npm run test -- api/server.test.mjs -t "printer actions|bridge diagnostics|production scheduling, bridge, and file-version|direct printer status|printer capability"` (7 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (134 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed).
+  - Committed round 90 implementation/status/docs as `71ccd09` (`feat: add printer action audit context`).
+  - Committed round 90 status/final report as `71dca69` (`docs: record codex round 90 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 89 repo inspection started at 2026-06-25T19:00:45Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, API mutating route/idempotency allowlist, billing webhook code, and existing billing tests before editing.
+  - Selected production-readiness slice: Stripe webhook duplicate-delivery hardening so provider retries do not duplicate billing audit evidence.
+  - Added regression coverage requiring duplicate signed Stripe webhook delivery to return a replay marker, avoid duplicate `billing.stripe_webhook` audit events, and record compact replay metadata.
+  - Targeted Stripe webhook regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "Stripe billing"` (duplicate delivery lacked replay header).
+  - Implemented a compact internal Stripe webhook event ledger keyed by provider `event.id`, replay responses with `x-layerpilot-stripe-webhook-replay: true`, and state/export sanitization for the internal ledger.
+  - Documented duplicate Stripe webhook delivery behavior in README, operations, and production-readiness docs.
+  - Targeted Stripe billing coverage passed: `npm run test -- api/server.test.mjs -t "Stripe billing"` (1 test).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (134 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed).
+  - Committed round 89 implementation/status/docs as `2115f11` (`feat: dedupe stripe webhooks`).
+  - Committed round 89 final report/status as `cf4796d` (`docs: record codex round 89 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 88 repo inspection started at 2026-06-25T18:45:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, API write-route/idempotency surface, auth/2FA routes, auth tests, and Settings 2FA UI before editing.
+  - Selected production-readiness slice: TOTP enrollment password-proof hardening so a stolen signed-in browser session cannot enable 2FA without knowing the account password.
+  - Added regression coverage requiring `/api/auth/2fa/enable` to reject a valid TOTP setup code when the current account password is wrong, preserve the disabled 2FA state, and write sanitized `auth.2fa_enable_failed` evidence.
+  - Targeted 2FA regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "two-factor|2FA"` (wrong-password enable returned `200`).
+  - Implemented current-password verification for TOTP enablement and wired the Settings UI to collect/send the password proof.
+  - Targeted 2FA coverage passed: `npm run test -- api/server.test.mjs -t "two-factor|2FA"` (4 tests).
+  - Broader auth coverage passed: `npm run test -- api/server.test.mjs -t "authenticates users and supports logout|two-factor auth|2FA|password changes|production Owner and Admin"` (6 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (134 tests).
+  - First final QC run found one missing Traditional Chinese translation for the new 2FA setup failure toast.
+  - Targeted i18n coverage passed after adding the translation: `npm run test -- api/i18n.test.mjs` (2 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed).
+  - Committed round 88 implementation/status/docs as `d92b164` (`feat: require password for 2fa enablement`).
+  - Committed round 88 status/final report as `cd308d8` (`docs: record codex round 88 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 87 repo inspection started at 2026-06-25T18:33:08Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, install docs, roadmap, package metadata, API route list, workspace scoping helpers, cost catalog routes, quote/file estimate call sites, and existing tenant/cost catalog tests before editing.
+  - Selected production-readiness slice: workspace-scoped cost catalog isolation for tenant pricing, quote calculation, and file/slicer estimates.
+  - Added regression coverage requiring signup-created tenant pricing changes to stay out of default workspace state and quote calculations, with scoped `/api/state` omitting the raw multi-tenant `costCatalogs` map.
+  - Implemented per-workspace cost catalog helpers and wired authenticated cost catalog reads/updates plus quote, direct file, generated file, upload, parametric, and slicer estimate paths through the authenticated workspace catalog.
+  - Documented tenant pricing isolation in README, operations, and production-readiness docs.
+  - Targeted tenant isolation coverage passed: `npm run test -- api/server.test.mjs -t "creates isolated workspaces"` (1 test).
+  - Adjacent cost catalog coverage passed: `npm run test -- api/server.test.mjs -t "cost catalog|catalog governance|creates isolated workspaces|quotes and file estimates"` (3 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (134 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed).
+  - Committed round 87 implementation/status/docs as `c224949` (`feat: scope cost catalogs by workspace`).
+  - Committed round 87 status/final report as `8805eef` (`docs: record codex round 87 status`).
+  - Committed round 87 push status as `e17cd95` (`docs: record codex round 87 push`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 86 repo inspection started at 2026-06-25T18:19:59Z.
+  - Reviewed current branch, recent commits, run status, final report, README, install, operations, release, production-readiness, roadmap, package metadata, API route list, idempotency allowlist, order lifecycle routes, UI idempotency headers, and existing order/queue/material tests before editing.
+  - Selected production-readiness slice: order lifecycle retry-safety regression coverage for status changes that mutate generated queue jobs, material reservations, and operator audit evidence.
+  - Added targeted regression coverage requiring cancelled generated-order status retries to return idempotent replays, preserve released spool reservations, avoid duplicate `order.status` audit events, and record replay metadata.
+  - Documented order lifecycle retry-safety evidence in README, operations, and production-readiness docs.
+  - Targeted order lifecycle retry-safety coverage passed: `npm run test -- api/server.test.mjs -t "order lifecycle cancellation"` (1 test).
+  - Broader order/queue coverage passed: `npm run test -- api/server.test.mjs -t "order lifecycle cancellation|order jobs|queue lifecycle updates|catalog records and generates order jobs|quote conversions"` (4 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (134 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed).
+  - Committed round 86 implementation/status/docs as `cdacddd` (`test: cover order lifecycle retries`).
+  - Committed round 86 status/final report as `5d60b0c` (`docs: record codex round 86 status`).
+  - Committed round 86 push status as `c9d4b41` (`docs: record codex round 86 push`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 85 repo inspection started at 2026-06-25T18:00:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, route list, idempotency allowlist, queue lifecycle routes, UI idempotency headers, and existing queue/material reservation tests before editing.
+  - Selected production-readiness slice: queue lifecycle retry-safety regression coverage for schedule, priority, complete, and cancel operations that mutate material reservations and operator audit evidence.
+  - Added targeted regression coverage requiring queue schedule, priority, complete, and cancel retries to return idempotent replays, preserve spool reservation/remaining values, and create only one audit event per operator action.
+  - Targeted queue lifecycle retry-safety coverage passed: `npm run test -- api/server.test.mjs -t "queue lifecycle updates"` (1 test).
+  - Broader queue/scheduler coverage passed: `npm run test -- api/server.test.mjs -t "queue lifecycle updates|schedules queue jobs|creates queue jobs|queue matching|scheduler writes|auto schedules|constraint schedules"` (8 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (134 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 153 tests passed).
+  - Committed round 85 implementation/status/docs as `cb73ea0` (`test: cover queue lifecycle retries`).
+  - Committed round 85 status/final report as `1e5b5ab` (`docs: record codex round 85 status`).
+  - Committed round 85 push status as `9e4f9eb` (`docs: record codex round 85 push`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 84 repo inspection started at 2026-06-25T17:54:24Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route list, idempotency allowlist, audit dispatcher usage, quote/order/catalog routes, and existing quote/catalog tests before editing.
+  - Selected production-readiness slice: actor-aware audit context for remaining quote, order, part, and SKU configuration/lifecycle events so customer quote decisions, operator reviews, production order status changes, generated jobs, and catalog setup are traceable to the authenticated workspace/operator without exposing portal bearer tokens or customer/internal notes.
+  - Added regression coverage requiring operator quote update, quote portal-link rotation, quote conversion, order create/status/job-generation, and part/SKU setup audit events to include workspace/operator context and compact metadata without portal access tokens or quote notes.
+  - Targeted quote/order/catalog audit regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "operator context for quote, order, and catalog audit events"` (missing actor metadata on `quote_request.updated`).
+  - Replaced remaining bare operator quote/order lifecycle audit writes with actor-aware compact records and tightened order job-generation plus part/SKU setup event metadata.
+  - Targeted quote/order/catalog audit coverage passed: `npm run test -- api/server.test.mjs -t "operator context for quote, order, and catalog audit events"` (1 test).
+  - Broader quote/order/catalog coverage passed: `npm run test -- api/server.test.mjs -t "quote request|catalog configuration|order work|operator context for quote"` (6 tests).
+  - Documented quote/order/catalog audit evidence review in README, operations, and production-readiness docs.
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (133 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 152 tests passed).
+  - Committed round 84 implementation/status/docs as `be6ef57` (`feat: add quote order audit context`).
+  - Committed round 84 status/final report as `60033a3` (`docs: record codex round 84 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 83 repo inspection started at 2026-06-25T17:45:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route list, audit dispatcher, production-template/profile routes, and existing profile/template tests before editing.
+  - Selected production-readiness slice: actor-aware audit context for slicer profile and production-template configuration/run events so changes affecting generated production jobs and slicer selection are traceable to the authenticated workspace/operator without dumping full settings or queue response bodies.
+  - Added regression coverage requiring production-template create/update and profile create/import/update/default/policy/archive audit events to include workspace/operator context and compact configuration metadata without full notes, profile settings, or policy blobs.
+  - Targeted profile/template audit regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "catalog configuration writes|profile configuration"` (2 tests failed because template/profile audit events lacked actor metadata and compact update metadata).
+  - Replaced bare slicer profile and production-template audit writes with actor-aware compact records for create, import, update, default selection, matching-policy update, archive, and template run events.
+  - Added production-template run audit regression coverage for workspace/operator context, generated-job counts, and no template notes or generated queue response bodies.
+  - Targeted profile/template coverage passed: `npm run test -- api/server.test.mjs -t "production templates|catalog configuration writes|profile configuration"` (3 tests).
+  - Documented slicer profile and production-template audit evidence review in README, operations, and production-readiness docs.
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (132 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 151 tests passed).
+  - Committed round 83 implementation/status/docs as `7efd401` (`feat: add profile template audit context`).
+  - Committed round 83 status/final report as `3b09db4` (`docs: record codex round 83 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 82 repo inspection started at 2026-06-25T17:31:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route list, idempotency allowlist, slicer implementation, and existing slicer tests before editing.
+  - Selected production-readiness slice: actor-aware audit context for backend slicer jobs and quick file-slice flows so production G-code generation is traceable to the authenticated workspace/operator without exposing generated G-code, slicer command arguments, or storage paths.
+  - Added regression coverage requiring backend slicer-job and quick file-slice audit events to include workspace/operator context plus compact slicer metadata, while excluding generated G-code bodies, slicer config paths, output paths, storage paths, and command arguments.
+  - Targeted slicer audit regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "slicer job|file-slice"` (2 tests failed because slicer events lacked actor and compact slicer metadata).
+  - Replaced remaining bare slicer audit writes with actor-aware compact audit records for `slicer.completed`, `slicer.failed`, and `file.sliced`.
+  - Targeted slicer coverage passed: `npm run test -- api/server.test.mjs -t "slicer job|file-slice"` (3 tests).
+  - Documented slicer audit evidence review in README, operations, and production-readiness docs.
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (132 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 151 tests passed).
+  - Committed round 82 implementation/status/final report as `a469f40` (`feat: add slicer audit context`).
+  - Committed round 82 status/final report as `8831a58` (`docs: record codex round 82 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 81 repo inspection started at 2026-06-25T17:18:41Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, API route list, idempotency allowlist, audit dispatcher usage, file/printer routes, and existing backup/file/printer tests before editing.
+  - Selected production-readiness slice: actor-aware audit context for printer setup/update and generated-file flows so core production asset creation is traceable to the authenticated workspace/operator without exposing generated file bodies or storage locations.
+  - Added regression coverage requiring printer create/update, generated sample STL, Hot Drop, and parametric nameplate audit events to include workspace/operator context and compact production metadata without generated model bodies or storage paths.
+  - Targeted audit regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "creates file folders|handles Hot Drop|parametric nameplate|printer capability"` (4 tests failed because audit events lacked actor context and compact file/printer identity metadata).
+  - Replaced remaining bare printer setup and generated-file audit writes for printer create/update, file-folder create/reuse, sample STL generation, Hot Drop generated-file/queue/handled events, and parametric nameplate generation with actor-aware compact audit records.
+  - Documented printer setup and generated-file audit evidence review in README, operations, and production-readiness docs.
+  - Targeted printer/file-generation audit coverage passed: `npm run test -- api/server.test.mjs -t "creates file folders|handles Hot Drop|parametric nameplate|printer capability"` (6 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (132 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 151 tests passed).
+  - Committed round 81 implementation/status/final report as `81603d4` (`feat: add printer file generation audit context`).
+  - Committed round 81 status/final report as `d73aa26` (`docs: record codex round 81 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 80 repo inspection started at 2026-06-25T17:05:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route list, audit dispatcher, integration endpoint routes, and existing integration tests before editing.
+  - Selected production-readiness slice: actor-aware audit context for integration endpoint configuration and test sends so webhook, notification, and commerce endpoint changes are traceable without exposing endpoint URLs or tokens.
+  - Added regression coverage requiring webhook/notification test-send events and webhook/notification/commerce connector create/update events to include workspace/operator context and exclude endpoint URLs/tokens.
+  - Targeted integration audit regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "integration configuration writes|webhooks, delivers matching events|notification channels"` (events lacked actor metadata and some test events lacked workspace metadata).
+  - Added a shared compact audit-event constructor for manual one-off events and wired webhook, notification channel, and commerce connector configuration/test-send routes to record actor-aware endpoint metadata without URL or token values.
+  - Documented integration endpoint audit evidence review in README, operations, and production-readiness docs.
+  - Targeted integration audit coverage passed: `npm run test -- api/server.test.mjs -t "integration configuration writes|webhooks, delivers matching events|notification channels"` (3 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (132 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 151 tests passed).
+  - Committed round 80 implementation/status/docs as `c8669bc` (`feat: add integration endpoint audit context`).
+  - Committed round 80 final report/status as `effe6ed` (`docs: record codex round 80 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 79 repo inspection started at 2026-06-25T17:05:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route list, idempotency surface, admin export coverage, direct file creation route, audit dispatcher, and existing file tests before editing.
+  - Selected production-readiness slice: direct file creation audit context hardening so metadata-created model/G-code records are traceable to the authenticated workspace/operator like upload, generated, preview, and download paths.
+  - Added regression coverage requiring direct `POST /api/files` metadata creation to persist `file.created` audit evidence with workspace/operator/file context and without storage paths.
+  - Targeted file creation audit regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "creates files with validation"` (no structured `file.created` event was found).
+  - Replaced the remaining bare `file.created` write with the standard actor-aware audit dispatcher and compact file metadata.
+  - Documented direct file-creation audit evidence review in README, operations, and production-readiness docs.
+  - Targeted file creation coverage passed: `npm run test -- api/server.test.mjs -t "creates files with validation"` (1 test).
+  - Broader file coverage passed: `npm run test -- api/server.test.mjs -t "creates files with validation|file artifact writes|model files|stored files|downloads stored files|builds safe file previews"` (7 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (132 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 151 tests passed).
+  - Committed round 79 implementation/status/final report as `2a01df1` (`feat: add file creation audit context`).
+  - Committed round 79 push status as `5545b1e` (`docs: record codex round 79 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 78 repo inspection started at 2026-06-25T16:48:24Z.
+  - Reviewed current branch, recent commits, run status, final report, README, install docs, operations, production-readiness, roadmap, package metadata, API route list, audit dispatcher, inventory/maintenance routes, and existing inventory/maintenance tests before editing.
+  - Selected production-readiness slice: operator audit context for direct inventory and maintenance create/update events so physical spool and service-log changes are traceable to the authenticated workspace/operator.
+  - Added regression coverage requiring authenticated spool create/update and maintenance create/update events to include workspace/operator context.
+  - Targeted inventory/maintenance audit regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "persists inventory, maintenance, and order operations"` (direct spool events lacked structured workspace/operator metadata).
+  - Replaced remaining bare inventory/maintenance event writes with actor-aware audit dispatch for spool create/labels/scan/update/usage, purchase request create/reorder/update/receive, maintenance job create/update, maintenance templates, and maintenance reports.
+  - Documented inventory and maintenance audit review in README, operations, and production-readiness docs.
+  - Targeted inventory/maintenance coverage passed: `npm run test -- api/server.test.mjs -t "persists inventory, maintenance, and order operations|spool metadata|maintenance job updates|maintenance job creation|maintenance template saves|maintenance reports|spool label exports|spool creation|spool usage|spool scan|purchase request"` (11 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (132 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 151 tests passed).
+  - Committed round 78 implementation/status/final report as `48afba7` (`feat: add inventory maintenance audit context`).
+  - Committed round 78 push status as `32580b6` (`docs: record codex round 78 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 77 repo inspection started at 2026-06-25T16:37:53Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route list, export/audit implementation, and existing export tests before editing.
+  - Selected production-readiness slice: audit trail evidence for authenticated CSV exports so catalog exports and audit evidence exports are themselves reviewable without storing exported CSV bodies.
+  - Added regression coverage requiring audit CSV exports to create `admin.audit_exported` metadata without exported event body contents, and requiring catalog CSV exports to be workspace-scoped and create `catalog.exported` metadata without exported CSV contents.
+  - Targeted CSV export regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "audit events with filters|catalog records"` (catalog export included another workspace SKU and audit export had no event).
+  - Scoped `/api/catalog/export` to the authenticated workspace and added compact `catalog.exported` and `admin.audit_exported` events with counts/filter metadata only.
+  - Documented CSV export audit review in README, operations, and production-readiness docs.
+  - Targeted CSV export coverage passed: `npm run test -- api/server.test.mjs -t "audit events with filters|catalog records"` (2 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (132 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 151 tests passed).
+  - Committed round 77 implementation/status/final report as `0348328` (`feat: audit csv exports`).
+  - Committed round 77 push status as `137d724` (`docs: record codex round 77 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 76 repo inspection started at 2026-06-25T16:22:42Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, API route list, file download/preview implementation, and existing file tests before editing.
+  - Selected production-readiness slice: audit trail evidence for authenticated model/G-code previews so production file-byte access is reviewable even when operators inspect a preview instead of downloading the file.
+  - Added regression coverage requiring authenticated stored G-code previews to write one `file.previewed` audit event with file ID/name/type, storage-backed status, preview kind, byte count, and no file contents or storage path.
+  - Targeted preview-audit regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "builds safe file previews"` (no `file.previewed` event was persisted).
+  - Implemented compact `file.previewed` audit events for stored-byte and metadata-only preview paths.
+  - Documented file-preview audit review in README, operations, and production-readiness docs.
+  - Targeted preview coverage passed: `npm run test -- api/server.test.mjs -t "builds safe file previews"` (1 test).
+  - Broader file/storage coverage passed: `npm run test -- api/server.test.mjs -t "model files|stored files|file artifact writes|storage payload coverage|downloads stored files|builds safe file previews"` (7 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (132 tests).
+  - Tightened preview audit coverage to assert `previewKind`, fixed preview audit metadata to await async preview generation before deriving the preview kind, and reran targeted preview coverage successfully.
+  - Broader file/storage coverage passed after the async fix: `npm run test -- api/server.test.mjs -t "model files|stored files|file artifact writes|storage payload coverage|downloads stored files|builds safe file previews"` (7 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 151 tests passed).
+  - Committed round 76 implementation/status/final report as `a90fb7f` (`feat: audit file previews`).
+  - Committed round 76 status/final report as `c1705fc` (`docs: record codex round 76 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 75 repo inspection started at 2026-06-25T16:12:57Z.
+  - Reviewed current branch, recent commits, run status, final report, README, production-readiness, operations, package metadata, API route/idempotency/auth/readiness code, and file download tests before editing.
+  - Selected production-readiness slice: audit trail evidence for stored file/model downloads so production model/G-code exports are reviewable without storing file contents in audit metadata.
+  - Added regression coverage requiring authenticated stored file downloads to write one `file.downloaded` audit event with file ID/name/type, storage-backed status, fallback-manifest flag, and no model body or storage path.
+  - Targeted download-audit regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "downloads stored files"` (no `file.downloaded` event was persisted).
+  - Implemented compact `file.downloaded` audit events for stored-byte downloads and fallback manifest downloads, including byte count while excluding file contents, local storage paths, and object-storage keys.
+  - Documented model/G-code download audit evidence in README, operations, and production-readiness docs.
+  - Targeted download coverage passed: `npm run test -- api/server.test.mjs -t "downloads stored files"` (1 test).
+  - Broader file/storage coverage passed: `npm run test -- api/server.test.mjs -t "model files|stored files|file artifact writes|storage payload coverage|downloads stored files"` (6 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (132 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 151 tests passed).
+  - Committed round 75 implementation/status as `9be0f6c` (`feat: audit file downloads`).
+  - Committed round 75 final report/status as `a7b67e6` (`docs: record codex round 75 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 74 repo inspection started at 2026-06-25T15:57:40Z.
+  - Reviewed current branch, recent commits, run status, final report, README, production-readiness, operations, install, roadmap, package metadata, server CORS/readiness code, deployment doctor, and existing readiness tests before editing.
+  - Selected production-readiness slice: production CORS trusted-origin hardening so the API no longer reflects arbitrary browser origins in `NODE_ENV=production`.
+  - Added regression coverage proving production CORS reflects `LAYERPILOT_PUBLIC_URL` and explicit `LAYERPILOT_CORS_ORIGINS`, omits arbitrary origins, and fails readiness for invalid, wildcard, or non-HTTP(S) origin configuration.
+  - Targeted CORS/readiness regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "production CORS|CORS origins|production readiness"` (missing readiness gate and arbitrary-origin behavior still permissive).
+  - Implemented production CORS origin normalization, trusted-origin allowlisting, and a `production-cors-origins` readiness check while preserving permissive local development CORS.
+  - Added Ubuntu deployment doctor validation for `LAYERPILOT_CORS_ORIGINS`, generated the variable in `.env`, and documented same-origin and explicit cross-origin deployment behavior.
+  - Targeted CORS/readiness coverage passed: `npm run test -- api/server.test.mjs -t "production CORS|CORS origins|production readiness"` (7 tests).
+  - Deployment coverage passed: `npm run test -- api/deploy.test.mjs` (3 tests).
+  - Deploy script syntax check passed: `bash -n scripts/ubuntu-deploy.sh`.
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (132 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 151 tests passed).
+  - Committed round 74 implementation/status as `057d415` (`feat: restrict production cors origins`).
+  - Committed round 74 final report/status as `2e3966d` (`docs: record codex round 74 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 73 repo inspection started at 2026-06-25T15:57:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, auth/session code, audit helpers, and existing auth tests before editing.
+  - Selected production-readiness slice: account lockout/backoff for repeated password and 2FA failures so audited brute-force evidence also slows online credential attacks against known accounts.
+  - Added regression coverage proving repeated password failures and repeated 2FA failures lock known accounts temporarily, audit the lock, avoid storing submitted credentials/codes, and clear locks on password reset or successful login after expiry.
+  - Targeted auth lockout regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "locks known accounts|authenticates users and supports logout|two-factor auth"` (missing lock response; repeated failures returned `401`).
+  - Implemented per-user auth failure counters, configurable `LAYERPILOT_AUTH_LOCK_THRESHOLD`/`LAYERPILOT_AUTH_LOCK_MINUTES`, active-lock `423` responses, `auth.account_locked` and `auth.login_locked` audit evidence, and reset-on-success/password-change/password-reset behavior.
+  - Documented account lockout/backoff env vars and operator recovery workflow in README, install docs, Ubuntu docs, operations, production-readiness, and `.env.example`.
+  - Targeted auth coverage passed: `npm run test -- api/server.test.mjs -t "locks known accounts|authenticates users and supports logout|two-factor auth|supports password changes"` (5 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (130 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 149 tests passed).
+  - Committed round 73 implementation/status as `cbf2b88` (`feat: lock repeated auth failures`).
+  - Committed round 73 final report/status as `e3368f0` (`docs: record codex round 73 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 72 repo inspection started at 2026-06-25T15:44:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, auth/session code, audit helpers, and existing auth tests before editing.
+  - Selected production-readiness slice: failed authentication audit evidence for password and 2FA failures so production access-review evidence includes rejected attempts without storing submitted secrets.
+  - Added regression coverage requiring failed password and failed 2FA login attempts to create sanitized audit events.
+  - Targeted auth failure regression failed before implementation as expected for missing `auth.login_failed` audit evidence.
+  - Implemented `auth.login_failed` and `auth.2fa_failed` audit events with known workspace/user context, normalized email, failure reason, and compact request metadata without submitted passwords or second-factor codes.
+  - Documented failed-auth audit evidence in README, operations, and production-readiness docs.
+  - Targeted auth coverage passed: `npm run test -- api/server.test.mjs -t "authenticates users and supports logout|two-factor auth"` (2 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (128 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 147 tests passed).
+  - Committed round 72 implementation/status as `4a0aa91` (`feat: audit failed auth attempts`).
+  - Committed round 72 status/final report as `b82c05a` (`docs: record codex round 72 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 71 repo inspection started at 2026-06-25T15:22:07Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, auth/signup route, readiness checks, deployment doctor, env example, and existing auth/readiness tests before editing.
+  - Selected production-readiness slice: production public-signup hardening so a customer VPS cannot mint arbitrary new Owner workspaces unless the operator explicitly opts in.
+  - Added production signup regression coverage proving `/api/auth/signup` returns `403` by default in production, does not create the requested user, and succeeds only when `LAYERPILOT_ENABLE_PUBLIC_SIGNUP=true`.
+  - Added a `production-public-signup` readiness check that reports whether production public signup is disabled or explicitly enabled.
+  - Wired Ubuntu deployment env generation and doctor validation to include `LAYERPILOT_ENABLE_PUBLIC_SIGNUP=false` by default.
+  - Documented the public-signup production gate in README, install docs, operations, production-readiness, Ubuntu deployment docs, and `.env.example`.
+  - Targeted public-signup/readiness coverage passed: `npm run test -- api/server.test.mjs -t "public signup|production readiness"` (6 tests).
+  - Deployment coverage passed: `npm run test -- api/deploy.test.mjs` (3 tests).
+  - Deploy script syntax check passed: `bash -n scripts/ubuntu-deploy.sh`.
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (128 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 147 tests passed).
+  - Committed round 71 implementation/status as `63051bb` (`feat: gate production public signup`).
+  - Committed round 71 status/final report as `4457b59` (`docs: record codex round 71 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 70 repo inspection started at 2026-06-25T15:06:58Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, idempotency matcher, production-template routes, parametric-nameplate route/UI, and existing catalog tests before editing.
+  - Selected production-readiness slice: operator retry safety for built-in production-template runs and parametric nameplate generation so dropped browser responses do not duplicate queue jobs or catalog artifacts.
+  - Added regression coverage proving repeated `POST /api/parametric/nameplate` requests replay the original stored file/part response, avoid duplicate stored files/linked parts/audit events, and reject changed payloads under the same key.
+  - Wired built-in production-template create/run controls and the parametric nameplate generator to send stable browser `Idempotency-Key` headers for the same attempted payload until success.
+  - Documented production-template run and parametric-nameplate retry safety in README, operations, and production-readiness docs.
+  - Targeted retry-safety coverage passed: `npm run test -- api/server.test.mjs -t "parametric nameplate|production templates"` (3 tests) and `npm run test -- src/idempotency.test.ts` (3 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (127 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 146 tests passed).
+  - Committed round 70 implementation/status/final report as `f5201f4` (`feat: add operator catalog retry safety`).
+  - Committed round 70 status/final report as `17b8499` (`docs: record codex round 70 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 69 repo inspection started at 2026-06-25T13:54:56Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API route list, readiness/auth/admin/audit code, and existing audit/restore tests before editing.
+  - Selected production-readiness slice: workspace-scoped audit-retention safety so one tenant/operator cannot prune another workspace's audit evidence.
+  - Added regression coverage proving an audit-retention run from the default workspace prunes only default-workspace stale non-protected events and leaves another workspace's stale event intact.
+  - Targeted audit-retention regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "audit retention"` (retention pruned 2 events instead of 1).
+  - Implemented workspace-scoped audit retention using the authenticated workspace ID and workspace settings, with summary counts scoped to that workspace.
+  - Targeted audit-retention coverage passed: `npm run test -- api/server.test.mjs -t "audit retention"` (2 tests).
+  - Broader targeted audit coverage passed: `npm run test -- api/server.test.mjs -t "audit"` (14 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (126 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 144 tests passed).
+  - Committed round 69 implementation/status/final report as `7e42cc7` (`feat: scope audit retention by workspace`).
+  - Committed round 69 status/final report as `87bdb04` (`docs: record codex round 69 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 68 repo inspection started at 2026-06-25T13:39:37Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, readiness/auth/IP allowlist code, route list, and existing readiness/settings tests before editing.
+  - Selected production-readiness slice: workspace API-key IP allowlist validation and readiness gate so production cannot silently deploy invalid or empty automation network restrictions.
+  - Added regression coverage proving production readiness fails for invalid persisted API-key IP allowlist rules and workspace settings writes reject invalid allowlist rules.
+  - Targeted allowlist regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "API key IP allowlist|workspace settings"` (readiness returned `200`; settings accepted invalid allowlist rules).
+  - Added shared IPv4/CIDR allowlist validation, enforced valid non-empty allowlists when API-key IP restrictions are enabled, and added a production readiness check for invalid/empty persisted allowlists.
+  - Targeted allowlist coverage passed: `npm run test -- api/server.test.mjs -t "API key IP allowlist|workspace settings"` (2 tests).
+  - Documented the API-key IP allowlist readiness gate in README, install docs, operations, production-readiness, and Ubuntu deployment docs.
+  - Broader targeted readiness/API-key/settings coverage passed: `npm run test -- api/server.test.mjs -t "readiness|API keys|workspace settings"` (11 tests).
+  - Deployment docs/tests passed: `npm run test -- api/deploy.test.mjs` (3 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (126 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 144 tests passed).
+  - Tightened allowlist validation to IPv4-only for both direct addresses and CIDR ranges, added IPv6 rejection coverage, reran targeted allowlist coverage, and reran final QC successfully.
+  - Committed round 68 implementation/status/final report as `e986278` (`feat: validate api key ip allowlists`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 67 repo inspection started at 2026-06-25T13:29:26Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, readiness implementation, worker heartbeat code, deployment docs, and existing readiness/worker tests before editing.
+  - Selected production-readiness slice: worker freshness readiness gate so production deployments with enabled telemetry or bridge polling fail readiness when the background worker has never reported or is stale.
+  - Added regression coverage proving production readiness fails when `LAYERPILOT_WORKER_TELEMETRY` or `LAYERPILOT_WORKER_BRIDGE_POLLING` is enabled but no fresh worker heartbeat exists.
+  - Targeted worker-readiness regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "production readiness"` (enabled worker jobs returned readiness `200` without a heartbeat).
+  - Added production worker freshness readiness checks using enabled worker flags, configured intervals, and a minimum 60-second tolerance before failing stale heartbeats.
+  - Documented the worker heartbeat readiness gate in README, install docs, operations, and production-readiness docs.
+  - Targeted readiness coverage passed: `npm run test -- api/server.test.mjs -t "production readiness"` (4 tests).
+  - Targeted readiness/worker coverage passed: `npm run test -- api/server.test.mjs -t "production readiness|worker broadcast"` (5 tests) and `npm run test -- api/worker.test.mjs` (2 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (125 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 143 tests passed).
+  - Updated final report with round 67 scope, verification, completed feature, and residual worker freshness note.
+  - Committed round 67 implementation as `07c77ea` (`feat: gate readiness on worker freshness`).
+  - Committed round 67 status/final report as `0a3226e` (`docs: record codex round 67 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 66 repo inspection started at 2026-06-25T13:19:39Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, install docs, package metadata, health/readiness/metrics code, worker broadcast auth, worker notifier, and existing metrics/worker tests before editing.
+  - Selected production-readiness slice: header-only production transport for worker and metrics ops tokens so secrets are not accepted in URL query strings that can leak through access logs.
+  - Added regression coverage proving production rejects `/api/metrics?metricsToken=...` and `/api/internal/worker-broadcast?workerToken=...` while accepting the documented `x-layerpilot-metrics-token` and `x-layerpilot-worker-token` headers.
+  - Targeted ops-token regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "operational metrics|worker broadcast|ops tokens"` (query metrics token returned `200` in production).
+  - Hardened metrics and worker token extraction so query-token compatibility remains available outside production only.
+  - Targeted ops-token coverage passed: `npm run test -- api/server.test.mjs -t "operational metrics|worker broadcast|ops tokens"` (4 tests).
+  - Documented production header-only metrics and worker token transport in README, install docs, operations, and production-readiness docs.
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (124 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 142 tests passed).
+  - Updated final report with round 66 scope, verification, completed feature, and residual production token transport note.
+  - Committed round 66 implementation as `1473a72` (`feat: require header ops tokens in production`).
+  - Committed round 66 status/final report as `cb0bfbc` (`docs: record codex round 66 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 65 repo inspection started at 2026-06-25T13:04:30Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, idempotency matcher, mutating API routes, telemetry tick handler, and existing telemetry tests before editing.
+  - Selected production-readiness slice: idempotent authenticated telemetry ticks so dropped API responses cannot double-advance production progress or completion side effects.
+  - Added regression coverage proving repeated `POST /api/telemetry/tick` requests replay the first response, preserve printer progress, avoid premature completion side effects, and reject changed payloads under the same key.
+  - Targeted telemetry regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "telemetry ticks"` (missing idempotent replay header).
+  - Added `/api/telemetry/tick` to the persisted idempotency route matcher.
+  - Documented telemetry tick retry safety in README, operations, and production-readiness docs.
+  - Targeted telemetry coverage passed: `npm run test -- api/server.test.mjs -t "advances production telemetry|telemetry ticks|history reprints|history annotations"` (4 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (123 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 141 tests passed).
+  - Committed round 65 implementation as `5d32570` (`feat: add idempotent telemetry ticks`).
+  - Updated final report with round 65 commit, verification, completed feature, and residual blocker notes.
+  - Round 64 repo inspection started at 2026-06-25T12:53:44Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, mutating API routes, idempotency surface, auth/session code, and existing auth tests before editing.
+  - Selected production-readiness slice: session/auth audit evidence hardening so security-sensitive login, logout, password, and 2FA events are reviewable with workspace/operator context.
+  - Added regression coverage requiring login, logout, password-change, and 2FA setup/enable/verify/disable audit events to include workspace, user, actor, and session metadata where applicable while excluding bearer tokens, passwords, TOTP secrets, and recovery codes.
+  - Targeted auth audit regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "authenticates users and supports logout|supports password changes|two-factor auth"` (3 failing tests).
+  - Hardened auth audit events to use the actor/workspace-aware dispatcher for login, signup, 2FA verification, 2FA setup/enable/disable, and password changes.
+  - Added `auth.logout` audit events with session ID and revoked-session count so session revocation is reviewable after operator/security incidents.
+  - Documented auth/session audit evidence expectations in README, operations, and production-readiness docs.
+  - Targeted auth audit coverage passed: `npm run test -- api/server.test.mjs -t "authenticates users and supports logout|supports password changes|two-factor auth"` (3 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (122 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 140 tests passed).
+  - Committed round 64 implementation as `d3a2937` (`feat: add session audit evidence`).
+  - Updated final report with round 64 commit, verification, completed feature, and residual blocker notes.
+  - Committed round 64 status/final report as `5ee420a` (`docs: record codex round 64 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 63 repo inspection started at 2026-06-25T12:45:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, API idempotency matcher, multipart upload route, upload tests, and Files UI upload flow before editing.
+  - Selected production-readiness slice: idempotent multipart model uploads so dropped browser/API responses do not duplicate stored file records, stored bytes, or upload audit events.
+  - Added regression coverage proving repeated `POST /api/files/upload` multipart requests replay the original parsed file response, avoid duplicate stored file records/upload audit events, and reject changed uploads under the same key.
+  - Targeted upload regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "idempotent model uploads"` (missing idempotent replay header).
+  - Implemented upload-specific idempotency after multipart parsing using filename, material, folder, and file-byte digest before storage writes, and moved upload audit events through the standard actor/workspace-aware dispatcher.
+  - Wired the built-in Files upload action to send stable `Idempotency-Key` headers for the same selected file/material/folder until success.
+  - Documented multipart model upload retry safety in README, operations, and production-readiness docs.
+  - Targeted upload/file coverage passed: `npm run test -- api/server.test.mjs -t "model files|stored files in an S3|idempotent model uploads|file artifact writes"` (4 tests).
+  - Targeted browser idempotency helper coverage passed: `npm run test -- src/idempotency.test.ts` (2 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (122 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 140 tests passed).
+  - Committed round 63 implementation as `4d806eb` (`feat: add idempotent model uploads`).
+  - Updated final report with round 63 commit, verification, completed feature, and residual blocker notes.
+  - Committed round 63 status/final report as `31e2f68` (`docs: record codex round 63 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 62 repo inspection started at 2026-06-25T12:27:57Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, admin integrity code, and audit/idempotency surface before editing.
+  - Selected production-readiness slice: audit trail evidence for storage-aware integrity checks so backup/restore gate results remain reviewable after live ops checks.
+  - Added regression coverage proving `/api/admin/integrity?checkStorage=true` writes compact storage coverage metadata to the `admin.integrity_checked` audit event.
+  - Targeted storage-audit regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "storage payload coverage"` (audit event lacked storage-specific metadata).
+  - Added integrity audit metadata for `checkStorage`, storage completeness, expected/present counts, bytes, and missing-file count without exposing stored file contents.
+  - Targeted storage-audit regression passed: `npm run test -- api/server.test.mjs -t "storage payload coverage"` (1 test).
+  - Documented storage-aware integrity audit evidence in README, operations, and production-readiness docs.
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (121 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 139 tests passed).
+  - Committed round 62 implementation as `5f20670` (`feat: audit storage integrity checks`).
+  - Updated final report with round 62 commit, verification, completed feature, and residual blocker notes.
+  - Committed round 62 status/final report as `b7ba010` (`docs: record codex round 62 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 61 repo inspection started at 2026-06-25T12:22:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, ops/smoke scripts, deployment packaging tests, and admin integrity code before editing.
+  - Selected production-readiness slice: live ops/smoke storage-aware integrity verification before backup/restore trust.
+  - Added deployment regression coverage requiring `scripts/ops-auth-check.mjs` and `scripts/prod-smoke.mjs` to call `/api/admin/integrity?checkStorage=true` and assert `storage.complete`.
+  - Targeted deployment regression failed before implementation as expected: `npm run test -- api/deploy.test.mjs` (missing storage-aware integrity call in ops auth check).
+  - Wired authenticated ops and production smoke scripts to fail closed when storage-aware integrity reports errors or incomplete stored file coverage, and to include storage coverage in their JSON output.
+  - Documented smoke/ops storage integrity enforcement in README, operations, and production-readiness docs.
+  - Targeted deployment test passed: `npm run test -- api/deploy.test.mjs` (3 tests).
+  - Script syntax checks passed: `node --check scripts/ops-auth-check.mjs && node --check scripts/prod-smoke.mjs && bash -n scripts/ubuntu-ops-check.sh`.
+  - Local authenticated ops checker passed against a temporary API on `127.0.0.1:19099`, reporting `storage.complete: true`.
+  - Local production smoke against the same temporary API reached the frontend check and failed with `Frontend failed with 401` because the temporary API was not serving built static assets.
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 139 tests passed).
+  - Local authenticated production smoke passed against a temporary static-serving API on `127.0.0.1:19100`, reporting `storage.complete: true`.
+  - Local authenticated ops checker passed against the same static-serving API on `127.0.0.1:19100`, reporting `storage.complete: true`.
+  - Committed round 61 implementation as `27f41f0` (`feat: enforce storage integrity ops checks`).
+  - Updated final report with round 61 commit, verification, completed feature, and residual blocker notes.
+  - Committed round 61 status/final report as `9d45c2b` (`docs: record codex round 61 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 60 repo inspection started at 2026-06-25T12:09:01Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, mutating API routes, idempotency allowlist, admin export/restore/integrity code, and existing integrity/backup tests before editing.
+  - Selected production-readiness slice: admin integrity storage coverage for safer backup/restore/export operations.
+  - Added regression coverage proving `/api/admin/integrity?checkStorage=true` reports stored file coverage and missing stored objects.
+  - Targeted integrity storage regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "storage payload coverage"` (missing `storage` coverage object).
+  - Added storage coverage metadata to admin integrity reports using the existing backup storage manifest logic.
+  - Documented the storage-aware integrity check in README, operations, and production-readiness docs.
+  - Targeted integrity/backup coverage passed: `npm run test -- api/server.test.mjs -t "admin integrity|storage payload coverage|full backup|file payload coverage|stored file payloads|configured byte limit"` (6 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (121 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 139 tests passed).
+  - Committed round 60 implementation as `a1015d8` (`feat: report integrity storage coverage`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 59 repo inspection started at 2026-06-25T11:57:49Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API readiness/backup/restore code, backup UI, and existing backup/restore tests before editing.
+  - Selected production-readiness slice: full backup export missing-file guard for safer backup/export operations.
+  - Added regression coverage proving `/api/admin/export?includeFiles=true` blocks missing stored file payloads by default while allowing an explicit `allowMissingFiles=true` partial export.
+  - Targeted full-backup missing-file regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "stored file payloads are missing"` (received `200` instead of `409`).
+  - Implemented a fail-closed full-backup preflight for missing stored file payloads, including blocked audit metadata and an explicit partial-export override.
+  - Documented the missing-file guard and `allowMissingFiles=true` override in README, operations, and production-readiness docs.
+  - Targeted backup/export coverage passed: `npm run test -- api/server.test.mjs -t "stored file payloads are missing|stored model bytes|missing file payload coverage|configured byte limit"` (4 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (120 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 138 tests passed).
+  - Committed round 59 implementation as `ddefc9b` (`feat: block incomplete full backup exports`).
+  - Committed round 59 final report as `7eacd3d` (`docs: record codex round 59 final report`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 58 repo inspection started at 2026-06-25T12:00:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, mutating API routes, idempotency allowlist, commerce connector routes/UI, and existing commerce/idempotency tests before editing.
+  - Selected production-readiness slice: idempotent commerce connector test calls for retry-safe external feed checks.
+  - Added regression coverage proving `POST /api/commerceConnectors/:id/test` retries replay without refetching the external commerce feed or exposing stored connector tokens.
+  - Targeted commerce connector test failed before implementation as expected: `npm run test -- api/server.test.mjs -t "commerce connector tests"` (missing idempotent replay header).
+  - Added commerce connector test routes to the persisted `Idempotency-Key` allowlist.
+  - Wired the built-in Orders commerce connector Test, Import, and CSV intake controls to generate and reuse browser `Idempotency-Key` headers for the same attempted payload until success.
+  - Documented retry-safe commerce connector tests in README, operations, and production-readiness docs.
+  - Targeted commerce/idempotency coverage passed: `npm run test -- api/server.test.mjs -t "commerce connector tests|commerce connector imports|commerce CSV imports|integration configuration"` (4 tests) and `npm run test -- src/idempotency.test.ts` (2 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (119 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 137 tests passed).
+  - Committed round 58 implementation as `cecb222` (`feat: add idempotent commerce connector tests`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Updated final report after round 58 push.
+  - Round 57 repo inspection started at 2026-06-25T11:34:07Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, API auth/IP allowlist coverage, backup/export/restore code, restore UI, and existing restore/export tests before editing.
+  - Selected production-readiness slice: restore preview file-payload coverage for safer backup/restore/export operations.
+  - Added regression coverage proving restore previews report missing stored file payload coverage before implementation.
+  - Targeted restore coverage failed before implementation as expected: `npm run test -- api/server.test.mjs -t "missing file payload coverage"` (missing `filePayloadCoverage` summary).
+  - Implemented restore summary file-payload coverage metadata for expected, included, missing, extra, completeness, and storage-included state.
+  - Wired the Settings restore panel to show stored file payload coverage during preview/commit.
+  - Targeted restore coverage passed: `npm run test -- api/server.test.mjs -t "missing file payload coverage"` (1 test).
+  - Targeted restore/export regression passed: `npm run test -- api/server.test.mjs -t "exports and restores stored model bytes|missing file payload coverage|sanitized workspace restores|configured byte limit"` (4 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (118 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 136 tests passed).
+  - Committed round 57 implementation as `8fc02b1` (`feat: report restore file payload coverage`).
+  - Committed round 57 status/final report as `ce8e8e8` (`docs: record codex round 57 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 56 repo inspection started at 2026-06-25T11:21:57Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, Stripe billing route/tests, and residual README notes before editing.
+  - Selected production-readiness slice: Stripe billing webhook signature verification with documented fallback for trusted edge proxies.
+  - Added regression coverage proving an invalid `Stripe-Signature` is rejected and a valid signed Stripe webhook succeeds without the legacy proxy secret header.
+  - Implemented raw JSON body preservation and Stripe `constructEvent` signature verification for `/api/billing/webhook/stripe`, while retaining the existing `x-layerpilot-billing-webhook-secret` fallback when no Stripe signature is present.
+  - Documented signed Stripe webhook verification and the trusted-proxy fallback in README, operations, and production-readiness docs.
+  - Targeted Stripe billing regression passed: `npm run test -- api/server.test.mjs -t "Stripe billing"` (1 test).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (117 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 135 tests passed).
+  - Committed round 56 implementation as `03bd3db` (`feat: verify stripe webhook signatures`).
+  - Committed round 56 status/final report as `7e4decd` (`docs: record codex round 56 status`).
+  - Committed round 56 push prep as `11432e6` (`docs: record codex round 56 push prep`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 55 repo inspection started at 2026-06-25T11:22:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, audit API/UI, audit retention tests, and existing audit query/export coverage before editing.
+  - Selected production-readiness slice: audit trail/operator event log usability with filtered counts and pagination.
+  - Added regression coverage for filtered audit matched counts, returned counts, offset pagination, and offset-aware CSV export.
+  - Targeted audit regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "queries audit events"` (missing `matched`, `offset`, `limit`, and `hasMore` metadata).
+  - Implemented `/api/audit` matched totals, offset pagination, returned count, and `hasMore` metadata, and made `/api/audit/export` honor `offset` with existing filters.
+  - Wired the Add-ons audit timeline to show live matched totals, show an empty live result state, and load additional audit pages.
+  - Added Traditional/Simplified Chinese coverage for the new audit empty-state string.
+  - Documented audit query pagination and filtered CSV export behavior in README, operations, and production-readiness docs.
+  - Targeted audit regression passed: `npm run test -- api/server.test.mjs -t "queries audit events"` (1 test).
+  - Targeted i18n coverage passed after adding the new audit empty-state translation: `npm run test -- api/i18n.test.mjs` (2 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (117 tests).
+  - Final QC passed: `npm run qc` (build passed with existing Vite chunk-size warning; Vitest 10 files / 135 tests passed).
+  - Committed round 55 implementation as `3489f3d` (`feat: paginate audit trail queries`).
+  - Updated final report with round 55 commit, verification, completed feature, and residual blocker notes.
+  - Committed round 55 status/final report as `edf6c38` (`docs: record codex round 55 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 54 repo inspection started at 2026-06-25T11:08:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, admin export/restore code, full backup UI, and existing backup/restore tests before editing.
+  - Selected production-readiness slice: full backup export size guard for safer backup/export operations.
+  - Added regression coverage proving oversized full file-byte exports return `413` with a storage manifest instead of embedding stored file bytes.
+  - Targeted full-backup limit regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "configured byte limit"` (received `200`).
+  - Added a configurable `LAYERPILOT_FULL_BACKUP_MAX_BYTES` ceiling with a storage-manifest preflight for `/api/admin/export?includeFiles=true`.
+  - Targeted full-backup limit regression passed: `npm run test -- api/server.test.mjs -t "configured byte limit"` (1 test).
+  - Existing local full-backup/restore and restore commit tests passed: `npm run test -- api/server.test.mjs -t "exports and restores stored model bytes|previews and commits sanitized workspace restores|builds analytics, print history, reprints completed jobs, and exports backups"` (3 tests).
+  - S3/full-backup targeted coverage passed: `npm run test -- api/server.test.mjs -t "S3-compatible object store|configured byte limit|exports and restores stored model bytes"` (3 tests).
+  - Documented the full-backup export ceiling in `.env.example`, README, operations, and production-readiness docs.
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (117 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 135 tests passed).
+  - Committed round 54 implementation as `bb37bd0` (`feat: cap full backup exports`).
+  - Updated final report with round 54 commit, verification, completed feature, and residual backup-size notes.
+  - Committed round 54 status/final report as `df73728` (`docs: record codex round 54 status`).
+  - Committed round 54 push marker as `d1f0507` (`docs: record codex round 54 push`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 53 repo inspection started at 2026-06-25T10:48:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, mutating API routes, idempotency allowlist, direct printer status route/UI, and existing printer tests before editing.
+  - Selected production-readiness slice: idempotent direct printer status updates for retry-safe operator controls.
+  - Added regression coverage proving `PATCH /api/printers/:id/status` retries replay the original status response without duplicate `printer.status` audit events.
+  - Targeted direct-printer-status regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "direct printer status"` (retry returned a fresh response without replay metadata).
+  - Added `PATCH /api/printers/:id/status` to the persisted `Idempotency-Key` allowlist.
+  - Wired the built-in printer status controls to generate and reuse browser `Idempotency-Key` headers for the same attempted payload until success.
+  - Targeted direct-printer-status regression passed: `npm run test -- api/server.test.mjs -t "direct printer status"` (1 test).
+  - Documented direct printer status retry safety in README, operations, and production-readiness docs.
+  - Targeted browser idempotency helper test passed: `npm run test -- src/idempotency.test.ts` (2 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (116 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 134 tests passed).
+  - Committed round 53 implementation as `4b15a23` (`feat: add idempotent printer status updates`).
+  - Updated final report with round 53 commit, verification, completed feature, and residual blocker notes.
+  - Committed round 53 status/final report as `45462c7` (`docs: record codex round 53 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 52 repo inspection started at 2026-06-25T10:36:26Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, mutating API routes, idempotency allowlist, file folder route/UI, and existing file tests before editing.
+  - Selected production-readiness slice: idempotent file folder creation for retry-safe operator file organization.
+  - Added regression coverage proving `POST /api/file-folders` retries replay the original folder response without duplicate folder audit events.
+  - Targeted file-folder regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "file folders"` (retry returned normal reuse response instead of idempotent replay).
+  - Added `POST /api/file-folders` to the persisted `Idempotency-Key` allowlist.
+  - Wired the built-in Files page folder action to generate and reuse browser `Idempotency-Key` headers for the same attempted payload until success.
+  - Targeted file-folder regression passed: `npm run test -- api/server.test.mjs -t "file folders"` (1 test).
+  - Documented file folder retry safety in README, operations, and production-readiness docs.
+  - Targeted browser idempotency helper test passed: `npm run test -- src/idempotency.test.ts` (2 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (115 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 133 tests passed).
+  - Committed round 52 implementation as `6822902` (`feat: add idempotent file folders`).
+  - Updated final report with round 52 commit, verification, completed feature, and residual blocker notes.
+  - Committed round 52 status/final report as `0282a0a` (`docs: record codex round 52 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 51 repo inspection started at 2026-06-25T10:26:05Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, API readiness code, deploy doctor checks, object storage health, and existing readiness tests before editing.
+  - Selected production-readiness slice: live `/api/readiness` dependency configuration gate for production S3, Stripe, and MQTT settings.
+  - Added regression coverage for incomplete optional dependency configuration in production readiness.
+  - Targeted dependency readiness test failed before implementation as expected: `npm run test -- api/server.test.mjs -t "incomplete optional dependency configuration"` (missing `production-dependencies` check).
+  - Added production dependency validation for DB adapter, S3 object storage, Stripe billing, and MQTT event streaming configuration without exposing secret values.
+  - Targeted dependency readiness test passed: `npm run test -- api/server.test.mjs -t "incomplete optional dependency configuration"` (1 test).
+  - Targeted readiness/health/integrity tests passed: `npm run test -- api/server.test.mjs -t "readiness|health|integrity"` (7 tests).
+  - Documented live optional dependency readiness validation in README, operations, and production-readiness docs.
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (115 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 133 tests passed).
+  - Committed round 51 implementation as `4a82481` (`feat: add production dependency readiness gate`).
+  - Updated final report with round 51 commit, verification, completed feature, and residual blocker notes.
+  - Committed round 51 status/final report as `4ddeb7d` (`docs: record codex round 51 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 50 repo inspection started at 2026-06-25T10:10:49Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, API route allowlist, inventory/maintenance routes, and existing tests before editing.
+  - Selected production-readiness slice: idempotent spool metadata and maintenance job updates for retry-safe operator workflows.
+  - Added regression coverage for retry-safe spool metadata and maintenance job updates.
+  - Targeted regression failed before implementation as expected: `npm run test -- api/server.test.mjs -t "spool metadata updates|maintenance job updates"` (2 failing tests; retries did not replay).
+  - Added `PATCH /api/spools/:id` and `PATCH /api/maintenance/:id` to the persisted `Idempotency-Key` allowlist.
+  - Targeted retry-safe inventory/maintenance tests passed: `npm run test -- api/server.test.mjs -t "spool metadata updates|maintenance job updates"` (2 tests).
+  - Wired the built-in spool metadata and maintenance job update controls to generate and reuse browser `Idempotency-Key` headers for the same attempted payload until success.
+  - Targeted browser idempotency helper test passed: `npm run test -- src/idempotency.test.ts` (2 tests).
+  - Documented spool metadata and maintenance job update retry safety in README, operations, and production-readiness docs.
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (114 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 132 tests passed).
+  - Committed round 50 implementation as `a48fdb5` (`feat: add idempotent inventory maintenance updates`).
+  - Updated final report with round 50 commit, verification, completed feature, and residual blocker notes.
+  - Committed round 50 status/final report as `e752bbb` (`docs: record codex round 50 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 49 repo inspection started at 2026-06-25T10:06:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, auth/session/TOTP code, idempotency code, and auth/readiness tests before editing.
+  - Selected production-readiness slice: prevent production Owner/Admin users from disabling TOTP while workspace `requireAdmin2fa` is enabled.
+  - Added regression coverage proving production Owner/Admin users cannot disable TOTP while the workspace `requireAdmin2fa` policy remains enabled.
+  - Targeted 2FA-disable test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "prevents production Owner and Admin users"` (1 test).
+  - Related auth regressions passed: `npm run test -- api/server.test.mjs -t "TOTP two-factor"` and `npm run test -- api/server.test.mjs -t "production Owner and Admin sessions"` (2 tests total).
+  - Added production policy enforcement to `/api/auth/2fa/disable` for Owner/Admin users when `NODE_ENV=production` and `requireAdmin2fa` is enabled.
+  - Documented production 2FA disable behavior in README, operations, and production-readiness docs.
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (112 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 130 tests passed).
+  - Committed round 49 implementation as `3558b1a` (`feat: prevent required admin 2fa disable`).
+  - Committed round 49 status/final report as `ebde687` (`docs: record codex round 49 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 48 repo inspection started at 2026-06-25T09:50:47Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, roadmap, package metadata, restore/idempotency server code, restore UI code, and restore tests before editing.
+  - Selected production-readiness slice: idempotent admin restore commits that can replay the successful restore response after the commit invalidates the original user session.
+  - Added regression coverage proving a confirmed restore commit with an `Idempotency-Key` replays after the original session is revoked and does not duplicate `admin.restore` events.
+  - Targeted restore test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "sanitized workspace restores"` (1 test).
+  - Added route-specific restore commit idempotency handling without making restore previews public replay routes.
+  - Wired the Settings restore commit action to send and reuse a browser idempotency key for the same attempted payload.
+  - Targeted browser idempotency helper test passed: `npm run test -- src/idempotency.test.ts` (2 tests).
+  - Documented confirmed restore commit retry behavior in README, operations, and production-readiness docs.
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (111 tests).
+  - Production build passed: `npm run build`.
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 129 tests passed).
+  - Committed round 48 implementation as `166e6bc` (`feat: add idempotent restore commits`).
+  - Committed round 48 status/final report as `b78a615` (`docs: record codex round 48 status`).
+  - Committed round 48 push prep as `abbdff8` (`docs: record codex round 48 push prep`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Committed round 48 push marker as `6ffee13` (`docs: record codex round 48 push`).
+  - Current `HEAD` records the round 48 final report consistency update.
+  - Round 47 repo inspection started at 2026-06-25T09:30:45Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, package metadata, and auth/session/readiness code before editing.
+  - Selected production-readiness slice: enforce the documented admin 2FA deployment gate in production so Owner/Admin sessions without enrolled TOTP cannot access protected production APIs until they enroll.
+  - Added regression coverage proving production Owner/Admin sessions are blocked from protected APIs until TOTP enrollment while `/api/auth/me`, 2FA setup, and 2FA enablement remain available.
+  - Added production pre-handler enforcement for workspace `requireAdmin2fa` on unenrolled Owner/Admin user sessions.
+  - Updated the browser API error path so the production 2FA enrollment gate routes the user to Settings instead of falling back to local/demo state.
+  - Documented production admin 2FA enforcement in README, operations, and production-readiness docs.
+  - Targeted auth test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "production Owner and Admin sessions"` (1 test).
+  - Targeted TOTP regression passed: `npm run test -- api/server.test.mjs -t "TOTP two-factor"` (1 test).
+  - Production build passed: `npm run build`.
+  - Expanded realtime gating so production admin streams close rather than continuing after the account becomes non-compliant with required 2FA enrollment.
+  - Targeted i18n coverage passed after adding translations for the new 2FA gate UI: `npm run test -- api/i18n.test.mjs` (2 tests).
+  - Full API suite passed: `npm run test -- api/server.test.mjs` (111 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 129 tests passed).
+  - Committed round 47 implementation as `0155d47` (`feat: enforce production admin 2fa`).
+  - Committed round 47 status/final report as `9ea77a6` (`docs: record codex round 47 status`).
+  - Committed round 47 push prep as `51048dc` (`docs: record codex round 47 push prep`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 46 repo inspection started at 2026-06-25T09:19:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, and roadmap docs before editing.
+  - Selected production-readiness slice: browser-side idempotency keys for authenticated daily operator production controls so dropped browser/API responses replay backend-safe queue, scheduler, order, quote, file, slicer, printer, todo, spool, and purchasing writes instead of duplicating work.
+  - Added a scoped browser operator idempotency attempt store that reuses `Idempotency-Key` values for the same attempted payload until the request succeeds.
+  - Wired Queue, Scheduler, Order, operator quote, file sample/version/delete/slice, Hot Drop, slicer job, printer action, todo action, spool label/scan/usage/create, and filament purchasing actions to send stable idempotency headers.
+  - Documented expanded built-in operator idempotency coverage in README, operations, and production-readiness docs.
+  - Targeted browser helper test passed: `npm run test -- src/idempotency.test.ts` (2 tests).
+  - Production build passed: `npm run build`.
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 128 tests passed).
+  - Committed round 46 implementation as `9c538d7` (`feat: add operator browser idempotency`).
+  - Updated final report with round 46 commit, verification, completed feature, and residual UI coverage notes.
+  - Committed round 46 status/final report as `eb4b36c` (`docs: record codex round 46 status`).
+  - Committed round 46 push prep as `e252f00` (`docs: record codex round 46 push prep`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 45 repo inspection started at 2026-06-25T09:09:57Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, and roadmap docs before editing.
+  - Selected production-readiness slice: browser-side idempotency keys for authenticated admin/governance UI writes so operator retries replay backend-safe actions instead of creating duplicate support, billing, settings, onboarding, or API-key effects.
+  - Added browser helper coverage for stable idempotency header generation across repeated payloads and changed payloads.
+  - Wired Team page user invite/update/password-reset actions to generate and reuse per-attempt `Idempotency-Key` headers until success.
+  - Wired Integrations page API-key create/update actions to generate and reuse per-attempt `Idempotency-Key` headers until success.
+  - Wired Settings page workspace settings, onboarding checklist, support snapshot, billing plan, and billing portal actions to generate and reuse per-attempt `Idempotency-Key` headers until success.
+  - Left restore preview/commit without browser idempotency headers because `/api/admin/restore` has separate session-invalidating commit semantics and requires a route-specific design.
+  - Documented built-in browser idempotency coverage in README, operations, and production-readiness docs.
+  - Targeted browser helper test passed: `npm run test -- src/idempotency.test.ts` (2 tests).
+  - Targeted API replay suites passed: `npm run test -- api/server.test.mjs -t "admin account writes"` (1 test), `npm run test -- api/server.test.mjs -t "governance setup"` (1 test), and `npm run test -- api/server.test.mjs -t "billing"` (3 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 128 tests passed).
+  - Committed round 45 implementation as `8aac61e` (`feat: add browser idempotency for admin UX`).
+  - Committed round 45 status docs as `8ccc520` (`docs: record codex round 45 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 44 repo inspection started at 2026-06-25T08:59:42Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, and roadmap docs before editing.
+  - Selected production-readiness slice: idempotent admin account and API-key management writes to prevent duplicate generated secrets, duplicate invites, duplicate password resets, and duplicate governance audit events after dropped owner/admin responses.
+  - Added failing regression coverage proving API-key create/update, user invite/update, and password-reset retries need replay semantics.
+  - Added admin account management routes to the persisted `Idempotency-Key` allowlist.
+  - Documented admin account management idempotency in README, operations, and production-readiness docs.
+  - Targeted admin account idempotency test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "admin account writes"` (1 test).
+  - Targeted account-management tests passed: `npm run test -- api/server.test.mjs -t "API keys"` (2 tests), `npm run test -- api/server.test.mjs -t "team users"` (1 test), and `npm run test -- api/server.test.mjs -t "password"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (110 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 127 tests passed).
+  - Committed round 44 implementation as `ba282c8` (`feat: add idempotent admin account writes`).
+  - Committed round 44 status docs as `6bff247` (`docs: record codex round 44 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 43 repo inspection started at 2026-06-25T08:51:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, production-readiness, and roadmap docs before editing.
+  - Selected production-readiness slice: idempotent governance setup writes for workspace settings, onboarding checklist updates, and support snapshots to prevent duplicate audit events after dropped operator/browser responses.
+  - Added failing regression coverage proving governance setup retries need replay semantics.
+  - Added workspace settings, onboarding checklist, and support snapshot routes to the persisted `Idempotency-Key` allowlist.
+  - Documented governance setup idempotency in README, operations, and production-readiness docs.
+  - Targeted governance setup idempotency test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "governance setup"` (1 test).
+  - Targeted governance tests passed: `npm run test -- api/server.test.mjs -t "governance"` (3 tests).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (109 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 126 tests passed).
+  - Committed round 43 implementation as `1b194c6` (`feat: add idempotent governance setup writes`).
+  - Committed round 43 status docs as `f8d7c26` (`docs: record codex round 43 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 42 repo inspection started at 2026-06-25T08:45:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, and production-readiness docs before editing.
+  - Selected production-readiness slice: idempotent direct purchase-request create/update writes to prevent duplicate reorder records and duplicate purchasing audit events after dropped operator/browser responses.
+  - Added failing regression coverage proving direct purchase-request create/update retries need replay semantics.
+  - Added `POST /api/purchaseRequests` and `PATCH /api/purchaseRequests/:id` to the persisted `Idempotency-Key` allowlist.
+  - Documented direct purchase-request retry idempotency in README, operations, and production-readiness docs.
+  - Targeted purchase-request idempotency test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "purchase request writes"` (1 test).
+  - Targeted purchasing tests passed: `npm run test -- api/server.test.mjs -t "purchase"` (3 tests).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (108 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 125 tests passed).
+  - Committed round 42 implementation as `172616e` (`feat: add idempotent purchase requests`).
+  - Committed round 42 status docs as `314026b` (`docs: record codex round 42 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 41 repo inspection started at 2026-06-25T08:29:16Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, and production-readiness docs before editing.
+  - Selected production-readiness slice: idempotent integration configuration writes to prevent duplicate connector records and duplicate setup/audit events after dropped operator/browser responses.
+  - Added failing regression coverage proving webhook, notification channel, commerce connector, add-on, and bridge configuration retries need replay semantics.
+  - Added integration configuration routes to the persisted `Idempotency-Key` allowlist.
+  - Documented integration configuration retry idempotency in README, operations, and production-readiness docs.
+  - Targeted integration configuration idempotency test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "integration configuration"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (107 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 124 tests passed).
+  - Committed round 41 implementation as `8a128a9` (`feat: add idempotent integration configuration`).
+  - Committed round 41 status docs as `1c417a0` (`docs: record codex round 41 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 40 repo inspection started at 2026-06-25T08:18:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, and production-readiness docs before editing.
+  - Selected production-readiness slice: idempotent file/model artifact writes to prevent duplicate generated model files, Hot Drop queue jobs, and file-version audit events after dropped operator/browser responses.
+  - Added failing regression coverage proving sample model generation, Hot Drop handling, and file version bump retries need replay semantics.
+  - Added JSON file/model artifact routes to the persisted `Idempotency-Key` allowlist while leaving multipart upload out because its stream body is not available for safe pre-handler digesting.
+  - Documented file/model artifact retry idempotency in README, operations, and production-readiness docs.
+  - Targeted file artifact idempotency test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "file artifact writes"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (106 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 123 tests passed).
+  - Committed round 40 implementation as `9e163b2` (`feat: add idempotent file artifact writes`).
+  - Committed round 40 status docs as `39286ce` (`docs: record codex round 40 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 39 repo inspection started at 2026-06-25T08:10:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, operations, and production-readiness docs before editing.
+  - Selected production-readiness slice: idempotent print-history annotation retries to prevent duplicate waste inventory deductions and duplicate history audit events after dropped operator/browser responses.
+  - Added failing regression coverage proving history annotation retries need replay semantics to avoid double-deducting spool inventory or duplicating `history.annotated` audit events.
+  - Added `PATCH /api/history/:id` to the persisted `Idempotency-Key` allowlist.
+  - Documented history annotation idempotency in README, operations, and production-readiness docs.
+  - Targeted history annotation idempotency test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "history annotations"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (105 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 122 tests passed).
+  - Committed round 39 implementation as `57942fd` (`feat: add idempotent history annotations`).
+  - Committed round 39 status docs as `823e1e7` (`docs: record codex round 39 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 38 repo inspection started at 2026-06-25T07:58:56Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent slicer retries to prevent duplicate slicer job records, file-version increments, G-code artifacts, and slicer audit events after dropped operator/browser responses.
+  - Added failing regression coverage proving slicer job and quick file-slice retries need replay semantics.
+  - Added `POST /api/slicer/jobs` and `PATCH /api/files/:id/slice` to the persisted `Idempotency-Key` allowlist.
+  - Documented slicer retry idempotency in README, operations, and production-readiness docs.
+  - Targeted slicer idempotency tests initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "slicer"` (4 tests).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (104 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 121 tests passed).
+  - Committed round 38 implementation as `56b86c8` (`feat: add idempotent slicer retries`).
+  - Committed round 38 status docs as `57b071e` (`docs: record codex round 38 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 37 repo inspection started at 2026-06-25T07:48:55Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: retry-safe catalog governance writes for cost catalog pricing and material normalization runs.
+  - Added failing regression coverage proving cost catalog and material-map retries need replay semantics to avoid duplicate pricing/material normalization audit or run records.
+  - Added cost catalog updates and catalog material-map runs to the persisted `Idempotency-Key` allowlist.
+  - Scoped material mapping to the authenticated workspace and added workspace/authenticated actor context to material-map audit events.
+  - Documented catalog governance idempotency and material-map audit traceability in README, operations, and production-readiness docs.
+  - Targeted catalog governance test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "catalog governance"` (1 test).
+  - Targeted catalog/pricing tests passed: `npm run test -- api/server.test.mjs -t "cost catalog"`, `npm run test -- api/server.test.mjs -t "catalog records"`, and `npm run test -- api/server.test.mjs -t "catalog governance"` (3 tests total).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (102 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 119 tests passed).
+  - Committed round 37 implementation as `df83599` (`feat: add idempotent catalog governance writes`).
+  - Committed round 37 status docs as `f03111a` (`docs: record codex round 37 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 36 repo inspection started at 2026-06-25T07:38:37Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent catalog/profile/printer configuration writes to prevent duplicate setup records and audit events after operator/browser retries.
+  - Added failing regression coverage proving catalog part/SKU/template, profile/import/default/policy/archive, and printer capability retries need replay semantics.
+  - Added catalog, production template, slicer profile, profile policy, printer capability, and profile archive routes to the persisted `Idempotency-Key` allowlist.
+  - Documented configuration-write idempotency in README, operations, and production-readiness docs.
+  - Targeted configuration idempotency tests initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "catalog configuration"`, `npm run test -- api/server.test.mjs -t "profile configuration"`, and `npm run test -- api/server.test.mjs -t "printer capability writes"` (3 tests total).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (101 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 118 tests passed).
+  - Committed and pushed round 36 implementation as `4800365` (`feat: add idempotent configuration writes`).
+  - Round 35 repo inspection started at 2026-06-25T07:30:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: governance audit-context hardening for admin/settings/go-live writes.
+  - Added failing regression coverage proving governance/go-live audit events need workspace and authenticated actor context.
+  - Added authenticated actor context to onboarding, support snapshot, API-key create/update, user invite/update/password-reset, workspace settings, billing plan/portal, add-on, and cost catalog audit events.
+  - Documented expanded governance audit traceability in README, operations, and production-readiness docs.
+  - Targeted governance audit-context test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "governance and go-live audit events"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (98 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 115 tests passed).
+  - Committed and pushed round 35 implementation as `3787b48` (`feat: add governance audit context`).
+  - Round 34 repo inspection started at 2026-06-25T07:17:54Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent spool label export retries to prevent duplicate inventory label audit events after operator/browser retries.
+  - Added failing regression coverage proving spool label export retries need replay semantics to avoid duplicate `spool.labels_generated` audit events and changing generated artifacts.
+  - Added `/api/spools/labels` to the persisted `Idempotency-Key` allowlist.
+  - Documented spool label export idempotency in README, operations, and production-readiness docs.
+  - Targeted spool label export idempotency test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "spool label exports"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (97 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 114 tests passed).
+  - Committed and pushed round 34 implementation as `5ed0f18` (`feat: add idempotent spool label exports`).
+  - Round 33 repo inspection started at 2026-06-25T07:09:55Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent bridge diagnostic and sync retries to prevent repeated hardware polling and duplicate bridge audit events after operator/browser retries.
+  - Added failing regression coverage proving bridge test, all-bridge sync, and single-printer sync retries need replay semantics.
+  - Added bridge diagnostic/sync routes to the persisted `Idempotency-Key` allowlist.
+  - Documented bridge diagnostic/sync idempotency in README, operations, and production-readiness docs.
+  - Targeted bridge diagnostic/sync idempotency test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "bridge diagnostics and syncs"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (96 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 113 tests passed).
+  - Committed round 33 implementation as `6f4a844` (`feat: add idempotent bridge syncs`).
+  - Committed round 33 status docs as `1209bf2` (`docs: record codex round 33 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 32 repo inspection started at 2026-06-25T06:57:55Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent webhook and notification test-delivery retries to prevent duplicate external calls after operator/browser retries.
+  - Added failing regression coverage proving webhook and notification test-delivery retries need replay semantics to avoid duplicate outbound calls, test events, and delivery logs.
+  - Added webhook and notification test routes to the persisted `Idempotency-Key` allowlist.
+  - Documented integration test-delivery idempotency in README, operations, and production-readiness docs.
+  - Targeted integration test-delivery idempotency test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "integration test deliveries"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (95 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 112 tests passed).
+  - Committed round 32 implementation as `62f7a92` (`feat: add idempotent integration test deliveries`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 31 repo inspection started at 2026-06-25T06:51:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent print-history reprint retries to prevent duplicate queue jobs after operator/browser retries.
+  - Added failing regression coverage proving history reprint retries need replay semantics to avoid duplicate reprint queue jobs, todos, and audit events.
+  - Added `/api/history/:id/reprint` to the persisted `Idempotency-Key` allowlist.
+  - Documented history reprint idempotency in README, operations, and production-readiness docs.
+  - Targeted history reprint idempotency test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "history reprints"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (94 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 111 tests passed).
+  - Committed round 31 implementation (`feat: add idempotent history reprints`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 30 repo inspection started at 2026-06-25T06:37:16Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent committed queue matching to prevent duplicate production assignment audit events after operator/browser retries.
+  - Added failing regression coverage proving committed queue-match retries need replay semantics to avoid duplicate `queue.matched` audit events.
+  - Added `/api/queue/match` to the persisted `Idempotency-Key` allowlist.
+  - Documented queue matching idempotency in README, operations, and production-readiness docs.
+  - Targeted queue-match idempotency test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "queue matching commits"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (93 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 110 tests passed).
+  - Committed round 30 implementation (`feat: add idempotent queue matching`).
+  - Round 29 repo inspection started at 2026-06-25T06:27:04Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent authenticated quote request updates to prevent duplicate quote update events after operator/browser retries.
+  - Added failing regression coverage proving quote update retries need replay semantics to avoid duplicate `quote_request.updated` audit events.
+  - Added authenticated quote request updates to the persisted `Idempotency-Key` allowlist.
+  - Documented quote update idempotency in README, operations, and production-readiness docs.
+  - Targeted quote update idempotency test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "quote request updates"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (92 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 109 tests passed).
+  - Committed round 29 implementation (`feat: add idempotent quote updates`).
+  - Round 28 repo inspection started at 2026-06-25T06:25:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent scheduler write retries for auto, optimized, and constraint scheduling operations.
+  - Added failing regression coverage proving scheduler retries need replay semantics to avoid duplicate auto/optimized/constraint scheduling events.
+  - Added scheduler auto/optimize/constraint routes to the persisted `Idempotency-Key` allowlist.
+  - Documented scheduler idempotency in README, operations, and production-readiness docs.
+  - Targeted scheduler idempotency test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "idempotent scheduler"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (91 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 108 tests passed).
+  - Committed round 28 implementation (`feat: add idempotent scheduler writes`).
+  - Round 27 repo inspection started at 2026-06-25T06:07:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent generated todo action retries to prevent duplicate operator action records and audit events after dropped responses.
+  - Added failing regression coverage proving generated todo action retries need replay semantics to avoid duplicate todo action records and duplicate todo audit events.
+  - Added generated todo action route to the persisted `Idempotency-Key` allowlist.
+  - Documented generated todo action idempotency in README, operations, and production-readiness docs.
+  - Targeted generated todo action idempotency test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "idempotent todo actions"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (90 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 107 tests passed).
+  - Committed round 27 implementation as `f947022` (`feat: add idempotent todo actions`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 26 repo inspection started at 2026-06-25T05:41:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent quote customer portal-link generation and rotation retries to prevent duplicate token rotation after operator/network retries.
+  - Added failing regression coverage proving quote portal-link rotation retries need replay semantics to avoid invalidating the first operator-visible link and duplicating portal-link audit events.
+  - Added quote customer-link generation/rotation to the persisted `Idempotency-Key` allowlist.
+  - Documented quote portal-link idempotency in README, operations, and production-readiness docs.
+  - Targeted quote portal-link idempotency test initially failed before implementation, then passed: `npm run test -- api/server.test.mjs -t "quote portal link rotations"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (89 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 106 tests passed).
+  - Committed round 26 implementation as `39f12ad` (`feat: add idempotent quote portal links`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 25 repo inspection started at 2026-06-25T05:31:30Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent printer action command retries to prevent duplicate real bridge commands during operator/network retries.
+  - Added failing regression coverage proving `/api/actions` retries need replay semantics to avoid duplicate outbound bridge commands and duplicate operator audit events.
+  - Added printer action command route to the persisted `Idempotency-Key` allowlist.
+  - Documented printer action idempotency in README, operations, and production-readiness docs.
+  - Targeted printer action idempotency test passed: `npm run test -- api/server.test.mjs -t "idempotent printer actions"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (88 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 105 tests passed).
+  - Committed round 25 implementation as `3ca1c29` (`feat: add idempotent printer actions`).
+  - Committed round 25 status docs as `6857ccf` (`docs: record codex round 25 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 24 repo inspection started at 2026-06-25T05:21:42Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent billing plan and portal writes for retry-safe SaaS billing operations.
+  - Added failing regression coverage proving billing retries need replay semantics to avoid duplicate invoices, portal sessions, and billing audit events.
+  - Added billing plan and billing portal routes to the persisted `Idempotency-Key` allowlist.
+  - Added Stripe billing portal replay coverage proving retries do not create a second external checkout session.
+  - Targeted billing idempotency tests passed: `npm run test -- api/server.test.mjs -t "billing"` (3 tests).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (87 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 104 tests passed).
+  - Committed round 24 implementation as `5577de4` (`feat: add idempotent billing writes`).
+  - Committed round 24 status docs as `bc5b16c` (`docs: record codex round 24 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 23 repo inspection started at 2026-06-25T05:13:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent admin audit-retention runs for retry-safe governance operations.
+  - Added failing regression coverage proving audit-retention retries need replay semantics to avoid duplicate retention-run audit events.
+  - Added admin audit-retention run to the persisted `Idempotency-Key` allowlist.
+  - Documented audit-retention idempotency in README, operations, and production-readiness docs.
+  - Targeted audit-retention idempotency test passed: `npm run test -- api/server.test.mjs -t "audit retention runs"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (86 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 103 tests passed).
+  - Committed round 23 implementation as `6fb7ada` (`feat: add idempotent audit retention runs`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 22 repo inspection started at 2026-06-25T05:00:32Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent maintenance workflow retries for job creation, template save, and problem-report intake.
+  - Added failing regression coverage proving maintenance job, template, and problem-report retries need replay semantics.
+  - Added maintenance job, template, and report create routes to the persisted `Idempotency-Key` allowlist.
+  - Documented maintenance workflow idempotency in README, operations, and production-readiness docs.
+  - Targeted maintenance idempotency test passed: `npm run test -- api/server.test.mjs -t "idempotent maintenance"` (3 tests).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (85 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 102 tests passed).
+  - Committed round 22 implementation as `3f9ed15` (`feat: add idempotent maintenance workflows`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 21 repo inspection started at 2026-06-25T04:50:27Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent inventory write retries for spool creation, usage logging, and scan-based usage/location updates.
+  - Added failing regression coverage proving spool creation, explicit usage logging, and scan-based usage retries need replay semantics.
+  - Added spool create, spool scan, and spool usage routes to the persisted `Idempotency-Key` allowlist.
+  - Added regression coverage proving retries replay without creating duplicate spools, double-consuming filament, or duplicating inventory audit events, and conflicting payloads return `409`.
+  - Documented inventory idempotency in README, operations, and production-readiness docs.
+  - Targeted inventory idempotency test passed: `npm run test -- api/server.test.mjs -t "idempotent spool"` (3 tests).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (82 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 99 tests passed).
+  - Committed round 21 implementation as `dabbdc2` (`feat: add idempotent inventory writes`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 20 repo inspection started at 2026-06-25T04:39:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent filament purchasing retries for reorder-plan and receive flows.
+  - Added failing regression coverage proving purchase reorder-plan and receive retries need replay semantics.
+  - Added purchase reorder-plan and purchase receive routes to the persisted `Idempotency-Key` allowlist.
+  - Added regression coverage proving retries replay without creating duplicate purchase requests, duplicate received spools, or duplicate purchase audit events, and conflicting payloads return `409`.
+  - Documented filament purchasing idempotency in README, operations, and production-readiness docs.
+  - Targeted purchasing idempotency test passed: `npm run test -- api/server.test.mjs -t "idempotent purchase"` (2 tests).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (79 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 96 tests passed).
+  - Round 19 repo inspection started at 2026-06-25T04:30:31Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: customer-facing public quote UI idempotency-key usage for retry-prone quote intake and portal decision writes.
+  - Added a browser idempotency helper that keeps a retry key for the same attempted payload and rotates it when the payload changes.
+  - Wired public quote intake and customer quote decision requests to send generated `Idempotency-Key` headers.
+  - Added regression coverage for the customer revision-request branch of public quote decisions so retries do not duplicate audit events.
+  - Added focused helper coverage for browser idempotency key reuse and rotation.
+  - Documented built-in public quote form and portal idempotency behavior in README, operations, and production-readiness docs.
+  - Targeted browser helper test passed: `npm run test -- src/idempotency.test.ts` (1 test).
+  - Targeted public quote revision regression passed: `npm run test -- api/server.test.mjs -t "public quote revision"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (77 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 10 files / 94 tests passed).
+  - Committed round 19 implementation as `ac08c88` (`feat: add public quote ui idempotency keys`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 18 repo inspection started at 2026-06-25T04:21:51Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotency replay export safety for token-returning retry routes.
+  - Added regression coverage proving a public quote intake replay record can contain the customer token internally while `/api/state` and `/api/admin/export` omit the idempotency ledger, replay body, and token.
+  - Added sanitized public `dataMeta` serialization that excludes `idempotencyKeys` from shared state and admin export payloads.
+  - Documented idempotency ledger export behavior and fresh-key-after-restore expectations in README, operations, and production-readiness docs.
+  - Targeted public quote intake regression passed: `npm run test -- api/server.test.mjs -t "public quote intake retries"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (76 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 92 tests passed).
+  - Committed round 18 implementation as `033726c` (`feat: redact idempotency replay metadata`).
+  - Committed round 18 status docs as `ae6ba58` (`docs: record codex round 18 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 17 repo inspection started at 2026-06-25T04:10:01Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent public quote decision retries to prevent duplicate customer approval handoff errors after an accepted quote creates an order.
+  - Added regression coverage proving public quote approval retries replay the original response without creating duplicate orders or customer-accepted/converted audit events.
+  - Added token-verified public quote decision routes to the persisted `Idempotency-Key` allowlist with quote-scoped public actor context.
+  - Documented public quote decision idempotency in README, operations, and production-readiness docs.
+  - Targeted public quote decision idempotency test passed: `npm run test -- api/server.test.mjs -t "idempotent public quote approvals"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (76 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 92 tests passed).
+  - Committed round 17 implementation as `2d85a39` (`feat: add idempotent public quote decisions`).
+  - Committed round 17 status docs as `e8d1d0a` (`docs: record codex round 17 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 16 repo inspection started at 2026-06-25T04:00:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent public quote intake retries to prevent duplicate customer quote requests from browser/form gateway retries.
+  - Added regression coverage proving public quote intake retries replay the original response without creating duplicate quote requests or audit events.
+  - Added public quote intake to the persisted `Idempotency-Key` allowlist with a public quote-intake actor context.
+  - Targeted public quote intake idempotency test passed: `npm run test -- api/server.test.mjs -t "public quote intake retries"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (75 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 91 tests passed).
+  - Committed round 16 implementation as `0529d85` (`feat: add idempotent public quote intake`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 15 repo inspection started at 2026-06-25T03:49:18Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent quote-to-order conversion retries to prevent duplicate orders during customer intake handoff.
+  - Added regression coverage proving quote conversion retries replay the original response without creating duplicate orders or audit events.
+  - Added authenticated quote conversion to the persisted `Idempotency-Key` allowlist and documented the supported route.
+  - Targeted quote conversion idempotency test passed: `npm run test -- api/server.test.mjs -t "idempotent quote conversions"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (74 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 90 tests passed).
+  - Committed round 15 implementation as `dc29e63` (`feat: add idempotent quote conversion`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 14 repo inspection started at 2026-06-25T03:39:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: support snapshot URL redaction for safer operational handoff bundles.
+  - Added regression coverage proving support snapshots redact URL paths/query strings from recent event payloads.
+  - Updated support snapshot redaction to preserve endpoint hosts while removing URL paths and query strings.
+  - Targeted support snapshot regression passed: `npm run test -- api/server.test.mjs -t "tracks onboarding readiness"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (73 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 89 tests passed).
+  - Committed round 14 implementation as `75e7dae` (`feat: redact support snapshot urls`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 13 repo inspection started at 2026-06-25T03:24:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: authenticated ops-check smoke coverage for production integrity, audit, and metrics verification.
+  - Added `scripts/ops-auth-check.mjs` to verify login, authenticated state, audit access, and metrics-token access without printing credentials.
+  - Wired Ubuntu ops-check to run the authenticated checker from host Node or through the running app container as a fallback.
+  - Added optional `LAYERPILOT_OPS_EMAIL` and `LAYERPILOT_OPS_PASSWORD` env/template/Compose support for a dedicated smoke account.
+  - Updated deployment packaging guards and docs for authenticated ops-check behavior.
+  - Targeted deployment test passed: `npm run test -- api/deploy.test.mjs` (3 tests).
+  - Syntax checks passed: `bash -n scripts/ubuntu-ops-check.sh scripts/ubuntu-deploy.sh scripts/ubuntu-package.sh && node --check scripts/ops-auth-check.mjs && node --check scripts/package-ubuntu.mjs`.
+  - Local authenticated checker smoke passed against a temporary API on `127.0.0.1:19097`.
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 89 tests passed).
+  - Committed round 13 implementation as `625f290` (`feat: add authenticated ops checks`).
+  - Committed round 13 status docs as `97717b2` (`docs: record codex round 13 status`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 12 repo inspection started at 2026-06-25T03:14:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: actor-aware audit context for production scheduling, queue, bridge, and file-version operator actions.
+  - Added regression coverage proving production scheduling, queue, bridge, and file-version audit events include workspace and authenticated operator metadata.
+  - Routed focused production scheduling, queue, bridge, printer status, history/reprint, and file-version audit writes through the actor-aware dispatcher.
+  - Documented expanded operator audit traceability in README, operations, and production-readiness docs.
+  - Targeted audit-context test passed: `npm run test -- api/server.test.mjs -t "operator context"` (1 test).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (73 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 89 tests passed).
+  - Round 11 repo inspection started at 2026-06-25T03:03:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: idempotent commerce import retries for connector and CSV intake routes.
+  - Added regression coverage proving commerce connector imports replay without a second external feed fetch and CSV import retries do not create duplicate import runs.
+  - Added commerce connector import and CSV import routes to the existing `Idempotency-Key` replay/conflict allowlist.
+  - Documented commerce import idempotency in README, operations, and production-readiness docs.
+  - Targeted commerce idempotency tests passed: `npm run test -- api/server.test.mjs -t "idempotent commerce"` (2 tests).
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (72 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 88 tests passed).
+  - Committed round 11 implementation as `2b714f3` (`feat: add idempotent commerce imports`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 10 repo inspection started at 2026-06-25T02:53:49Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: backup/export safety for credential-bearing integration endpoint URLs.
+  - Added regression coverage proving webhook, notification, commerce, and bridge endpoint paths/query strings stay out of API state, lists, delivery logs, and admin exports.
+  - Added endpoint redaction serializers for webhook, notification, commerce, and bridge records plus webhook/notification delivery logs and bridge diagnostics.
+  - Documented integration endpoint redaction and restore/rotation expectations in README and production operations docs.
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (70 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 86 tests passed).
+  - Committed round 10 implementation as `903f22d` (`feat: redact integration endpoints`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 9 repo inspection started at 2026-06-25T02:43:55Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: backup/export safety for customer quote portal access tokens.
+  - Added quote request sanitization for authenticated state, quote list, realtime state, and workspace exports.
+  - Added regression coverage proving quote portal access tokens stay out of quote list, state, and admin export responses while the explicit customer-link endpoint remains usable.
+  - Documented quote portal token handling after backup/restore in operations and production-readiness docs.
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (69 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 85 tests passed).
+  - Committed round 9 implementation as `4e982a7` (`feat: redact quote portal tokens`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 8 repo inspection started at 2026-06-25T02:32:59Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: runtime deployment gate checks in `/api/readiness`.
+  - Added production readiness checks for required owner credentials, non-default strong worker/metrics tokens, and disabled default/demo access.
+  - Added regression coverage for failing unsafe production readiness and passing hardened production readiness.
+  - Documented the runtime readiness deployment gate in operations and production-readiness docs.
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (69 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 85 tests passed).
+  - Committed round 8 as `9132a52` (`feat: gate production readiness config`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 7 repo inspection started at 2026-06-25T02:24:30Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Selected production-readiness slice: API-key read-scope hardening for automation least privilege.
+  - Added a central API-key read-route scope allowlist.
+  - Added regression coverage for metrics-only, queue-only, and admin-export API-key reads.
+  - Documented API-key read-scope expectations in operations and readiness docs.
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (67 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 83 tests passed).
+  - Committed round 7 as `fff9664` (`feat: scope api key read access`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 6 repo inspection started at 2026-06-25T02:11:00Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Added regression coverage for over-scoped API-key creation and API-key credential chaining.
+  - Implemented a grantable automation-scope allowlist for API keys.
+  - Added conservative legacy API-key scope normalization and disabled restored keys that only contain invalid scopes.
+  - Required a user session for API-key create/update operations.
+  - Documented API-key scope minimization and session-only key management in operations/readiness docs.
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (67 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 83 tests passed).
+  - Committed round 6 as `85e949a` (`feat: harden api key scope grants`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 5 repo inspection started at 2026-06-25T02:02:53Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Added regression coverage proving an `admin:restore` API key can preview restore data but cannot commit a destructive restore.
+  - Added a session-only guard for `/api/admin/restore` commits while preserving API-key dry-run restore checks.
+  - Documented the restore commit gate in operations and production-readiness docs.
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (66 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 82 tests passed).
+  - Committed round 5 as `6a7f6b4` (`feat: require user session for restore commits`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 4 repo inspection started at 2026-06-25T01:52:41Z.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Added tenant audit regression coverage for order creation events with workspace and operator context.
+  - Routed core order/catalog/admin audit writes through the event dispatcher with actor metadata.
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (66 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 82 tests passed).
+  - Committed round 4 as `438b340` (`feat: add tenant-safe audit context`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 3 repo inspection started at 2026-06-25 UTC.
+  - Reviewed current branch, recent commits, run status, final report, README, and production docs before editing.
+  - Added regression coverage for hashed session storage, stale session expiry, and legacy plaintext session migration.
+  - Implemented hashed persisted user session tokens with absolute and idle expiry controls.
+  - Documented `LAYERPILOT_SESSION_TTL_HOURS` and `LAYERPILOT_SESSION_IDLE_TIMEOUT_HOURS`.
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (66 tests).
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 82 tests passed).
+  - Committed round 3 as `0f03c57` (`feat: harden persisted user sessions`).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Round 2 repo inspection started at 2026-06-25T01:32:08Z.
+  - Selected production-readiness slice: safer idempotency for retry-prone write APIs.
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (65 tests).
+  - Implemented persisted idempotency replay/conflict protection for supported order and queue write APIs.
+  - Documented `Idempotency-Key` usage in operations and production readiness docs.
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 81 tests passed).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Baseline QC passed.
+  - Added API test for cancelling generated order work and releasing reserved material.
+  - Implemented terminal order safeguards and cascading cancellation.
+  - Targeted API suite passed: `npm run test -- api/server.test.mjs` (64 tests).
+  - Production build passed after UI lifecycle updates.
+  - Added production readiness, install, operations, and release docs.
+  - Final QC passed: `npm run qc` (build passed; Vitest 9 files / 80 tests passed).
+  - Pushed branch: `origin/codex/production-saas-completion-20260624`.
+  - Final report commit prepared as current `HEAD`.
+- Round 96 GitHub push blocker resolved by Hermes; local blocker note removed and branch push credentials verified.

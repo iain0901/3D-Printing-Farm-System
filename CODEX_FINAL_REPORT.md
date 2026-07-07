@@ -1,0 +1,877 @@
+# Codex Final Report
+
+- Branch: `codex/production-saas-completion-20260624`
+- Pushed remote: `origin/codex/production-saas-completion-20260624`
+- Remote branch URL: https://github.com/iain0901/3D-Printing-Farm-System/tree/codex/production-saas-completion-20260624
+- PR URL: not created; `gh` is unavailable in this shell. Create one at https://github.com/iain0901/3D-Printing-Farm-System/pull/new/codex/production-saas-completion-20260624
+- Latest round: Round 98 go-live evidence handoff clarity implemented, verified, committed, and pushed to `origin/codex/production-saas-completion-20260624`.
+- Commits:
+  - `afe1856` `docs: clarify go-live evidence handoff`
+  - `940515a` `docs: record codex round 97 status`
+  - `f6309ea` `feat: add go-live evidence report`
+  - `4a03133` `docs: record codex round 96 status`
+  - `51272ab` `feat: redact idempotency replay secrets`
+  - `c28466f` `docs: record codex round 95 status`
+  - `44d68ef` `feat: add bridge audit context`
+  - `91e48b5` `docs: record codex round 94 status`
+  - `163957a` `feat: add file deletion audit context`
+  - `0a9646f` `docs: record codex round 93 push`
+  - `449b773` `docs: record codex round 93 status`
+  - `9e67961` `feat: add realtime auth tickets`
+  - `e7d4c7d` `docs: record codex round 92 push`
+  - `c10349c` `docs: record codex round 92 status`
+  - `a6c28eb` `feat: audit 2fa enable code failures`
+  - `5387543` `docs: record codex round 91 status`
+  - `273a436` `feat: add restore prepared audit context`
+  - `71dca69` `docs: record codex round 90 status`
+  - `71ccd09` `feat: add printer action audit context`
+  - `cf4796d` `docs: record codex round 89 status`
+  - `2115f11` `feat: dedupe stripe webhooks`
+  - `d92b164` `feat: require password for 2fa enablement`
+  - `cd308d8` `docs: record codex round 88 status`
+  - `c224949` `feat: scope cost catalogs by workspace`
+  - `8805eef` `docs: record codex round 87 status`
+  - `e17cd95` `docs: record codex round 87 push`
+  - `c9d4b41` `docs: record codex round 86 push`
+  - `5d60b0c` `docs: record codex round 86 status`
+  - `cdacddd` `test: cover order lifecycle retries`
+  - `9e4f9eb` `docs: record codex round 85 push`
+  - `1e5b5ab` `docs: record codex round 85 status`
+  - `cb73ea0` `test: cover queue lifecycle retries`
+  - `60033a3` `docs: record codex round 84 status`
+  - `be6ef57` `feat: add quote order audit context`
+  - `3b09db4` `docs: record codex round 83 status`
+  - `7efd401` `feat: add profile template audit context`
+  - `a469f40` `feat: add slicer audit context`
+  - `d73aa26` `docs: record codex round 81 status`
+  - `81603d4` `feat: add printer file generation audit context`
+  - `effe6ed` `docs: record codex round 80 status`
+  - `c8669bc` `feat: add integration endpoint audit context`
+  - `2a01df1` `feat: add file creation audit context`
+  - `5545b1e` `docs: record codex round 79 status`
+  - `32580b6` `docs: record codex round 78 status`
+  - `48afba7` `feat: add inventory maintenance audit context`
+  - `0348328` `feat: audit csv exports`
+  - `137d724` `docs: record codex round 77 status`
+  - Current `HEAD` `docs: record codex round 76 status`
+  - `c1705fc` `docs: record codex round 76 status`
+  - `a90fb7f` `feat: audit file previews`
+  - Current `HEAD` `docs: record codex round 75 status`
+  - `9be0f6c` `feat: audit file downloads`
+  - Current `HEAD` `docs: record codex round 74 push`
+  - `2e3966d` `docs: record codex round 74 status`
+  - `057d415` `feat: restrict production cors origins`
+  - `e3368f0` `docs: record codex round 73 status`
+  - `cbf2b88` `feat: lock repeated auth failures`
+  - Current `HEAD` `docs: record codex round 72 pushed`
+  - `8a490e3` `docs: record codex round 72 push`
+  - `b82c05a` `docs: record codex round 72 status`
+  - `4a0aa91` `feat: audit failed auth attempts`
+  - Current `HEAD` `docs: record codex round 71 push`
+  - Current `HEAD` `docs: record codex round 71 status`
+  - `63051bb` `feat: gate production public signup`
+  - `17b8499` `docs: record codex round 70 status`
+  - `f5201f4` `feat: add operator catalog retry safety`
+  - `2191e6f` `feat: harden production farm operations`
+  - Current `HEAD` `docs: add codex final report`
+  - `b5620df` `feat: add idempotent production write APIs`
+  - `11e2e36` `docs: update codex round 2 report`
+  - `705032a` `docs: finalize codex round 2 status`
+  - Current `HEAD` `docs: record final round 2 push`
+  - `0f03c57` `feat: harden persisted user sessions`
+  - `438b340` `feat: add tenant-safe audit context`
+  - `6a7f6b4` `feat: require user session for restore commits`
+  - `85e949a` `feat: harden api key scope grants`
+  - Current `HEAD` `docs: record codex round 6 push`
+  - `fff9664` `feat: scope api key read access`
+  - Current `HEAD` `docs: record codex round 7 push`
+  - `9132a52` `feat: gate production readiness config`
+  - `4e982a7` `feat: redact quote portal tokens`
+  - Current `HEAD` `docs: record codex round 9 push`
+  - `903f22d` `feat: redact integration endpoints`
+  - Current `HEAD` `docs: record codex round 10 push`
+  - `2b714f3` `feat: add idempotent commerce imports`
+  - Current `HEAD` `docs: record codex round 11 push`
+  - Current `HEAD` `feat: add actor-aware production audit events`
+  - `625f290` `feat: add authenticated ops checks`
+  - Current `HEAD` `docs: record codex round 13 push`
+  - `75e7dae` `feat: redact support snapshot urls`
+  - `dc29e63` `feat: add idempotent quote conversion`
+  - `0529d85` `feat: add idempotent public quote intake`
+  - Current `HEAD` `docs: record codex round 16 push`
+  - `2d85a39` `feat: add idempotent public quote decisions`
+  - `e8d1d0a` `docs: record codex round 17 status`
+  - Current `HEAD` `docs: record codex round 17 push`
+  - `033726c` `feat: redact idempotency replay metadata`
+  - `ae6ba58` `docs: record codex round 18 status`
+  - Current `HEAD` `docs: record codex round 18 push`
+  - `ac08c88` `feat: add public quote ui idempotency keys`
+  - Current `HEAD` `docs: record codex round 19 status`
+  - Current `HEAD` `feat: add idempotent filament purchasing`
+  - `dabbdc2` `feat: add idempotent inventory writes`
+  - Current `HEAD` `docs: record codex round 21 push`
+  - `3f9ed15` `feat: add idempotent maintenance workflows`
+  - `6fb7ada` `feat: add idempotent audit retention runs`
+  - `5577de4` `feat: add idempotent billing writes`
+  - `bc5b16c` `docs: record codex round 24 status`
+  - `3ca1c29` `feat: add idempotent printer actions`
+  - `39f12ad` `feat: add idempotent quote portal links`
+  - `f947022` `feat: add idempotent todo actions`
+  - Current `HEAD` `feat: add idempotent scheduler writes`
+  - Current `HEAD` `feat: add idempotent quote updates`
+  - Current `HEAD` `feat: add idempotent queue matching`
+  - `754a7ff` `feat: add idempotent history reprints`
+  - Current `HEAD` `docs: record codex round 31 push`
+  - `62f7a92` `feat: add idempotent integration test deliveries`
+  - Current `HEAD` `docs: record codex round 32 status`
+  - `6f4a844` `feat: add idempotent bridge syncs`
+  - Current `HEAD` `docs: record codex round 33 status`
+  - `5ed0f18` `feat: add idempotent spool label exports`
+  - `3787b48` `feat: add governance audit context`
+  - `4800365` `feat: add idempotent configuration writes`
+  - `df83599` `feat: add idempotent catalog governance writes`
+  - `f03111a` `docs: record codex round 37 status`
+  - `56b86c8` `feat: add idempotent slicer retries`
+  - `57b071e` `docs: record codex round 38 status`
+  - `57942fd` `feat: add idempotent history annotations`
+  - `823e1e7` `docs: record codex round 39 status`
+  - `9e163b2` `feat: add idempotent file artifact writes`
+  - `39286ce` `docs: record codex round 40 status`
+  - `8a128a9` `feat: add idempotent integration configuration`
+  - `1c417a0` `docs: record codex round 41 status`
+  - `172616e` `feat: add idempotent purchase requests`
+  - `314026b` `docs: record codex round 42 status`
+  - `1b194c6` `feat: add idempotent governance setup writes`
+  - `f8d7c26` `docs: record codex round 43 status`
+  - Current `HEAD` `docs: record codex round 43 push`
+  - `ba282c8` `feat: add idempotent admin account writes`
+  - `6bff247` `docs: record codex round 44 status`
+  - Current `HEAD` `docs: record codex round 44 push`
+  - `8aac61e` `feat: add browser idempotency for admin UX`
+  - `8ccc520` `docs: record codex round 45 status`
+  - Current `HEAD` `docs: record codex round 45 push`
+  - `9c538d7` `feat: add operator browser idempotency`
+  - `eb4b36c` `docs: record codex round 46 status`
+  - `e252f00` `docs: record codex round 46 push prep`
+  - `0155d47` `feat: enforce production admin 2fa`
+  - `9ea77a6` `docs: record codex round 47 status`
+  - `51048dc` `docs: record codex round 47 push prep`
+  - `166e6bc` `feat: add idempotent restore commits`
+  - `b78a615` `docs: record codex round 48 status`
+  - `abbdff8` `docs: record codex round 48 push prep`
+  - `6ffee13` `docs: record codex round 48 push`
+  - Current `HEAD` `docs: record codex round 48 final report`
+  - `3558b1a` `feat: prevent required admin 2fa disable`
+  - `ebde687` `docs: record codex round 49 status`
+  - Current `HEAD` `docs: record codex round 49 push`
+  - `a48fdb5` `feat: add idempotent inventory maintenance updates`
+  - `e752bbb` `docs: record codex round 50 status`
+  - Current `HEAD` `docs: record codex round 50 push`
+  - `4a82481` `feat: add production dependency readiness gate`
+  - `4ddeb7d` `docs: record codex round 51 status`
+  - `6822902` `feat: add idempotent file folders`
+  - `0282a0a` `docs: record codex round 52 status`
+  - `4b15a23` `feat: add idempotent printer status updates`
+  - `45462c7` `docs: record codex round 53 status`
+  - `bb37bd0` `feat: cap full backup exports`
+  - `df73728` `docs: record codex round 54 status`
+  - `d1f0507` `docs: record codex round 54 push`
+  - Current `HEAD` `docs: record codex round 54 pushed`
+  - `3489f3d` `feat: paginate audit trail queries`
+  - `edf6c38` `docs: record codex round 55 status`
+  - `03bd3db` `feat: verify stripe webhook signatures`
+  - `7e4decd` `docs: record codex round 56 status`
+  - `11432e6` `docs: record codex round 56 push prep`
+  - `8fc02b1` `feat: report restore file payload coverage`
+  - `ce8e8e8` `docs: record codex round 57 status`
+  - `cecb222` `feat: add idempotent commerce connector tests`
+  - `178dc30` `docs: record codex round 58 push`
+  - Current `HEAD` `docs: record codex round 58 final report`
+  - `ddefc9b` `feat: block incomplete full backup exports`
+  - `7eacd3d` `docs: record codex round 59 final report`
+  - Current `HEAD` `docs: record codex round 59 push`
+  - `a1015d8` `feat: report integrity storage coverage`
+  - `27f41f0` `feat: enforce storage integrity ops checks`
+  - `9d45c2b` `docs: record codex round 61 status`
+  - `5f20670` `feat: audit storage integrity checks`
+  - `b7ba010` `docs: record codex round 62 status`
+  - `4d806eb` `feat: add idempotent model uploads`
+  - `31e2f68` `docs: record codex round 63 status`
+  - `d3a2937` `feat: add session audit evidence`
+  - `5ee420a` `docs: record codex round 64 status`
+  - `5d32570` `feat: add idempotent telemetry ticks`
+  - Current `HEAD` `docs: record codex round 65 status`
+  - `1473a72` `feat: require header ops tokens in production`
+  - `cb0bfbc` `docs: record codex round 66 status`
+  - Current `HEAD` `docs: record codex round 66 push`
+  - `07c77ea` `feat: gate readiness on worker freshness`
+  - `0a3226e` `docs: record codex round 67 status`
+  - `e986278` `feat: validate api key ip allowlists`
+  - `7e42cc7` `feat: scope audit retention by workspace`
+  - Current `HEAD` `docs: record codex round 69 push`
+- QC result:
+  - Round 98 targeted deployment coverage `bash -n scripts/ubuntu-go-live-check.sh` and `npm run test -- api/deploy.test.mjs`: passed, 3 tests passed.
+  - Round 98 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 154 tests passed.
+  - Round 97 targeted deployment coverage `bash -n scripts/ubuntu-go-live-check.sh` and `npm run test -- api/deploy.test.mjs`: passed, 3 tests passed.
+  - Round 97 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 154 tests passed.
+  - Round 96 targeted `npm run test -- api/server.test.mjs -t "public quote intake retries|admin account writes|quote portal link rotations"`: failed before implementation as expected, raw quote tokens, API keys, and temporary passwords were replayed from persisted response bodies.
+  - Round 96 targeted `npm run test -- api/server.test.mjs -t "public quote intake retries|admin account writes|quote portal link rotations"`: passed, 3 tests passed.
+  - Round 96 broader idempotency/auth/billing/quote coverage `npm run test -- api/server.test.mjs -t "public quote intake retries|admin account writes|quote portal link rotations|queries audit events|billing|replays idempotent"`: passed, 51 tests passed.
+  - Round 96 full API `npm run test -- api/server.test.mjs`: passed, 135 tests passed.
+  - Round 96 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 154 tests passed.
+  - Round 95 targeted `npm run test -- api/server.test.mjs -t "replays idempotent bridge diagnostics"`: failed before implementation as expected, `bridge.saved` audit evidence lacked redacted bridge metadata.
+  - Round 95 targeted `npm run test -- api/server.test.mjs -t "replays idempotent bridge diagnostics"`: passed, 1 test passed.
+  - Round 95 broader bridge/printer-action coverage `npm run test -- api/server.test.mjs -t "bridge|printer actions|production scheduling"`: passed, 5 tests passed.
+  - Round 95 full API `npm run test -- api/server.test.mjs`: passed, 135 tests passed.
+  - Round 95 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 154 tests passed.
+  - Round 94 targeted `npm run test -- api/server.test.mjs -t "downloads stored files and deletes unreferenced files"`: failed before implementation as expected, `file.deleted` audit evidence lacked authenticated actor and compact file metadata.
+  - Round 94 targeted `npm run test -- api/server.test.mjs -t "downloads stored files and deletes unreferenced files"`: passed, 1 test passed.
+  - Round 94 broader file coverage `npm run test -- api/server.test.mjs -t "creates files with validation|file artifact writes|downloads stored files|builds safe file previews|stores uploaded files|model uploads"`: passed, 6 tests passed.
+  - Round 94 full API `npm run test -- api/server.test.mjs`: passed, 135 tests passed.
+  - Round 94 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 154 tests passed.
+  - Round 93 targeted `npm run test -- api/server.test.mjs -t "realtime tickets"`: failed before implementation as expected, production `/api/state?token=<session>` accepted a full session token from the URL query and returned `200`.
+  - Round 93 targeted `npm run test -- api/server.test.mjs -t "realtime tickets"`: passed, 1 test passed.
+  - Round 93 adjacent auth/realtime `npm run test -- api/server.test.mjs -t "realtime|authenticates users and supports logout|production Owner and Admin sessions"`: passed, 4 tests passed.
+  - Round 93 full API `npm run test -- api/server.test.mjs`: passed, 135 tests passed.
+  - Round 93 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 154 tests passed.
+  - Round 92 targeted `npm run test -- api/server.test.mjs -t "two-factor|2FA"`: failed before implementation as expected, invalid-code TOTP enablement returned `401` without `auth.2fa_enable_failed` evidence.
+  - Round 92 targeted `npm run test -- api/server.test.mjs -t "two-factor|2FA"`: passed, 4 tests passed.
+  - Round 92 full API `npm run test -- api/server.test.mjs`: passed, 134 tests passed.
+  - Round 92 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 153 tests passed.
+  - Round 91 targeted `npm run test -- api/server.test.mjs -t "previews and commits sanitized workspace restores"`: failed before implementation as expected, `admin.restore_prepared` audit evidence lacked actor/context metadata.
+  - Round 91 targeted `npm run test -- api/server.test.mjs -t "previews and commits sanitized workspace restores"`: passed, 1 test passed.
+  - Round 91 full API `npm run test -- api/server.test.mjs`: passed, 134 tests passed.
+  - Round 91 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 153 tests passed.
+  - Round 90 targeted `npm run test -- api/server.test.mjs -t "idempotent printer actions"`: failed before implementation as expected, `printer.action` audit events lacked actor metadata.
+  - Round 90 targeted `npm run test -- api/server.test.mjs -t "idempotent printer actions"`: passed, 1 test passed.
+  - Round 90 broader printer/bridge `npm run test -- api/server.test.mjs -t "printer actions|bridge diagnostics|production scheduling, bridge, and file-version|direct printer status|printer capability"`: passed, 7 tests passed.
+  - Round 90 full API `npm run test -- api/server.test.mjs`: passed, 134 tests passed.
+  - Round 90 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 153 tests passed.
+  - Round 89 targeted `npm run test -- api/server.test.mjs -t "Stripe billing"`: failed before implementation as expected, duplicate Stripe webhook delivery lacked the replay header and would create duplicate audit evidence.
+  - Round 89 targeted `npm run test -- api/server.test.mjs -t "Stripe billing"`: passed, 1 test passed.
+  - Round 89 full API `npm run test -- api/server.test.mjs`: passed, 134 tests passed.
+  - Round 89 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 153 tests passed.
+  - Round 88 targeted `npm run test -- api/server.test.mjs -t "two-factor|2FA"`: failed before implementation as expected, wrong-password TOTP enablement returned `200`.
+  - Round 88 targeted `npm run test -- api/server.test.mjs -t "two-factor|2FA"`: passed, 4 tests passed.
+  - Round 88 broader auth `npm run test -- api/server.test.mjs -t "authenticates users and supports logout|two-factor auth|2FA|password changes|production Owner and Admin"`: passed, 6 tests passed.
+  - Round 88 full API `npm run test -- api/server.test.mjs`: passed, 134 tests passed.
+  - Round 88 i18n fix `npm run test -- api/i18n.test.mjs`: passed, 2 tests passed.
+  - Round 88 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 153 tests passed.
+  - Round 87 targeted `npm run test -- api/server.test.mjs -t "creates isolated workspaces"`: passed, 1 test passed.
+  - Round 87 adjacent cost catalog `npm run test -- api/server.test.mjs -t "cost catalog|catalog governance|creates isolated workspaces|quotes and file estimates"`: passed, 3 tests passed.
+  - Round 87 full API `npm run test -- api/server.test.mjs`: passed, 134 tests passed.
+  - Round 87 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 153 tests passed.
+  - Round 86 targeted `npm run test -- api/server.test.mjs -t "order lifecycle cancellation"`: passed, 1 test passed.
+  - Round 86 broader order/queue `npm run test -- api/server.test.mjs -t "order lifecycle cancellation|order jobs|queue lifecycle updates|catalog records and generates order jobs|quote conversions"`: passed, 4 tests passed.
+  - Round 86 full API `npm run test -- api/server.test.mjs`: passed, 134 tests passed.
+  - Round 86 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 153 tests passed.
+  - Round 85 targeted `npm run test -- api/server.test.mjs -t "queue lifecycle updates"`: passed, 1 test passed.
+  - Round 85 broader queue/scheduler `npm run test -- api/server.test.mjs -t "queue lifecycle updates|schedules queue jobs|creates queue jobs|queue matching|scheduler writes|auto schedules|constraint schedules"`: passed, 8 tests passed.
+  - Round 85 full API `npm run test -- api/server.test.mjs`: passed, 134 tests passed.
+  - Round 85 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 153 tests passed.
+  - Round 84 targeted `npm run test -- api/server.test.mjs -t "operator context for quote, order, and catalog audit events"`: failed before implementation as expected, `quote_request.updated` lacked authenticated actor metadata.
+  - Round 84 targeted `npm run test -- api/server.test.mjs -t "operator context for quote, order, and catalog audit events"`: passed, 1 test passed.
+  - Round 84 broader quote/order/catalog `npm run test -- api/server.test.mjs -t "quote request|catalog configuration|order work|operator context for quote"`: passed, 6 tests passed.
+  - Round 84 full API `npm run test -- api/server.test.mjs`: passed, 133 tests passed.
+  - Round 84 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 152 tests passed.
+  - Round 83 targeted `npm run test -- api/server.test.mjs -t "catalog configuration writes|profile configuration"`: failed before implementation as expected, production-template/profile audit events lacked actor metadata and compact update metadata.
+  - Round 83 targeted `npm run test -- api/server.test.mjs -t "production templates|catalog configuration writes|profile configuration"`: passed, 3 tests passed.
+  - Round 83 full API `npm run test -- api/server.test.mjs`: passed, 132 tests passed.
+  - Round 83 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 151 tests passed.
+  - Round 82 targeted `npm run test -- api/server.test.mjs -t "slicer job|file-slice"`: failed before implementation as expected, slicer audit events lacked actor context and compact slicer metadata.
+  - Round 82 targeted `npm run test -- api/server.test.mjs -t "slicer job|file-slice"`: passed, 3 tests passed.
+  - Round 82 full API `npm run test -- api/server.test.mjs`: passed, 132 tests passed.
+  - Round 82 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 151 tests passed.
+  - Round 81 targeted `npm run test -- api/server.test.mjs -t "creates file folders|handles Hot Drop|parametric nameplate|printer capability"`: failed before implementation as expected, printer/file-generation audit events lacked actor context and compact file/printer identity metadata.
+  - Round 81 targeted `npm run test -- api/server.test.mjs -t "creates file folders|handles Hot Drop|parametric nameplate|printer capability"`: passed, 6 tests passed.
+  - Round 81 full API `npm run test -- api/server.test.mjs`: passed, 132 tests passed.
+  - Round 81 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 151 tests passed.
+  - Round 80 targeted `npm run test -- api/server.test.mjs -t "integration configuration writes|webhooks, delivers matching events|notification channels"`: failed before implementation as expected, integration endpoint configuration/test-send audit events lacked actor metadata and some test-send events lacked workspace metadata.
+  - Round 80 targeted `npm run test -- api/server.test.mjs -t "integration configuration writes|webhooks, delivers matching events|notification channels"`: passed, 3 tests passed.
+  - Round 80 full API `npm run test -- api/server.test.mjs`: passed, 132 tests passed.
+  - Round 80 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 151 tests passed.
+  - Round 79 targeted `npm run test -- api/server.test.mjs -t "creates files with validation"`: failed before implementation as expected, direct file creation lacked structured `file.created` audit evidence.
+  - Round 79 targeted `npm run test -- api/server.test.mjs -t "creates files with validation"`: passed, 1 test passed.
+  - Round 79 broader file `npm run test -- api/server.test.mjs -t "creates files with validation|file artifact writes|model files|stored files|downloads stored files|builds safe file previews"`: passed, 7 tests passed.
+  - Round 79 full API `npm run test -- api/server.test.mjs`: passed, 132 tests passed.
+  - Round 79 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 151 tests passed.
+  - Round 78 targeted `npm run test -- api/server.test.mjs -t "persists inventory, maintenance, and order operations"`: failed before implementation as expected, direct spool events lacked structured workspace/operator metadata.
+  - Round 78 targeted `npm run test -- api/server.test.mjs -t "persists inventory, maintenance, and order operations|spool metadata|maintenance job updates|maintenance job creation|maintenance template saves|maintenance reports|spool label exports|spool creation|spool usage|spool scan|purchase request"`: passed, 11 tests passed.
+  - Round 78 full API `npm run test -- api/server.test.mjs`: passed, 132 tests passed.
+  - Round 78 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 151 tests passed.
+  - Round 77 targeted `npm run test -- api/server.test.mjs -t "audit events with filters|catalog records"`: failed before implementation as expected, catalog export included another workspace SKU and audit export had no `admin.audit_exported` evidence.
+  - Round 77 targeted `npm run test -- api/server.test.mjs -t "audit events with filters|catalog records"`: passed, 2 tests passed.
+  - Round 77 full API `npm run test -- api/server.test.mjs`: passed, 132 tests passed.
+  - Round 77 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 151 tests passed.
+  - Round 76 targeted `npm run test -- api/server.test.mjs -t "builds safe file previews"`: failed before implementation as expected, previews did not persist `file.previewed` audit evidence.
+  - Round 76 targeted `npm run test -- api/server.test.mjs -t "builds safe file previews"`: passed, 1 test passed.
+  - Round 76 broader file/storage `npm run test -- api/server.test.mjs -t "model files|stored files|file artifact writes|storage payload coverage|downloads stored files|builds safe file previews"`: passed, 7 tests passed.
+  - Round 76 full API `npm run test -- api/server.test.mjs`: passed, 132 tests passed.
+  - Round 76 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 151 tests passed.
+  - Round 75 targeted `npm run test -- api/server.test.mjs -t "downloads stored files"`: failed before implementation as expected, downloads did not persist `file.downloaded` audit evidence.
+  - Round 75 targeted `npm run test -- api/server.test.mjs -t "downloads stored files"`: passed, 1 test passed.
+  - Round 75 broader file/storage `npm run test -- api/server.test.mjs -t "model files|stored files|file artifact writes|storage payload coverage|downloads stored files"`: passed, 6 tests passed.
+  - Round 75 full API `npm run test -- api/server.test.mjs`: passed, 132 tests passed.
+  - Round 75 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 151 tests passed.
+  - Round 74 targeted `npm run test -- api/server.test.mjs -t "production CORS|CORS origins|production readiness"`: failed before implementation as expected, production readiness lacked the CORS origin gate.
+  - Round 74 targeted `npm run test -- api/server.test.mjs -t "production CORS|CORS origins|production readiness"`: passed, 7 tests passed.
+  - Round 74 deployment `npm run test -- api/deploy.test.mjs`: passed, 3 tests passed.
+  - Round 74 deploy syntax `bash -n scripts/ubuntu-deploy.sh`: passed.
+  - Round 74 full API `npm run test -- api/server.test.mjs`: passed, 132 tests passed.
+  - Round 74 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 151 tests passed.
+  - Round 73 targeted `npm run test -- api/server.test.mjs -t "locks known accounts|authenticates users and supports logout|two-factor auth"`: failed before implementation as expected, repeated failures returned `401` instead of a lock response.
+  - Round 73 targeted `npm run test -- api/server.test.mjs -t "locks known accounts|authenticates users and supports logout|two-factor auth|supports password changes"`: passed, 5 tests passed.
+  - Round 73 full API `npm run test -- api/server.test.mjs`: passed, 130 tests passed.
+  - Round 73 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 149 tests passed.
+  - Round 72 targeted `npm run test -- api/server.test.mjs -t "authenticates users and supports logout|two-factor auth"`: passed, 2 tests passed.
+  - Round 72 full API `npm run test -- api/server.test.mjs`: passed, 128 tests passed.
+  - Round 72 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 147 tests passed.
+  - Round 71 targeted `npm run test -- api/server.test.mjs -t "public signup|production readiness"`: passed, 6 tests passed.
+  - Round 71 deployment `npm run test -- api/deploy.test.mjs`: passed, 3 tests passed.
+  - Round 71 deploy syntax `bash -n scripts/ubuntu-deploy.sh`: passed.
+  - Round 71 full API `npm run test -- api/server.test.mjs`: passed, 128 tests passed.
+  - Round 71 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 147 tests passed.
+  - Round 70 targeted `npm run test -- api/server.test.mjs -t "parametric nameplate|production templates"`: passed, 3 tests passed.
+  - Round 70 targeted `npm run test -- src/idempotency.test.ts`: passed, 3 tests passed.
+  - Round 70 full API `npm run test -- api/server.test.mjs`: passed, 127 tests passed.
+  - Round 70 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 146 tests passed.
+  - Round 69 targeted `npm run test -- api/server.test.mjs -t "audit retention"`: failed before implementation, then passed, 2 tests passed.
+  - Round 69 targeted `npm run test -- api/server.test.mjs -t "audit"`: passed, 14 tests passed.
+  - Round 69 full API `npm run test -- api/server.test.mjs`: passed, 126 tests passed.
+  - Round 69 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 144 tests passed.
+  - Baseline `npm run qc`: passed, build passed, Vitest 9 files / 79 tests passed.
+  - Targeted `npm run test -- api/server.test.mjs`: passed, 64 tests passed.
+  - Final pre-commit `npm run qc`: passed, build passed, Vitest 9 files / 80 tests passed.
+  - Round 2 targeted `npm run test -- api/server.test.mjs`: passed, 65 tests passed.
+  - Round 2 final `npm run qc`: passed, build passed, Vitest 9 files / 81 tests passed.
+  - Round 3 targeted `npm run test -- api/server.test.mjs`: passed, 66 tests passed.
+  - Round 3 final `npm run qc`: passed, build passed, Vitest 9 files / 82 tests passed.
+  - Round 4 targeted `npm run test -- api/server.test.mjs`: passed, 66 tests passed.
+  - Round 4 final `npm run qc`: passed, build passed, Vitest 9 files / 82 tests passed.
+  - Round 5 targeted `npm run test -- api/server.test.mjs`: passed, 66 tests passed.
+  - Round 5 final `npm run qc`: passed, build passed, Vitest 9 files / 82 tests passed.
+  - Round 6 targeted `npm run test -- api/server.test.mjs`: passed, 67 tests passed.
+  - Round 6 final `npm run qc`: passed, build passed, Vitest 9 files / 83 tests passed.
+  - Round 7 targeted `npm run test -- api/server.test.mjs`: passed, 67 tests passed.
+  - Round 7 final `npm run qc`: passed, build passed, Vitest 9 files / 83 tests passed.
+  - Round 8 targeted `npm run test -- api/server.test.mjs`: passed, 69 tests passed.
+  - Round 8 final `npm run qc`: passed, build passed, Vitest 9 files / 85 tests passed.
+  - Round 9 targeted `npm run test -- api/server.test.mjs`: passed, 69 tests passed.
+  - Round 9 final `npm run qc`: passed, build passed, Vitest 9 files / 85 tests passed.
+  - Round 10 targeted `npm run test -- api/server.test.mjs`: passed, 70 tests passed.
+  - Round 10 final `npm run qc`: passed, build passed, Vitest 9 files / 86 tests passed.
+  - Round 11 targeted `npm run test -- api/server.test.mjs -t "idempotent commerce"`: passed, 2 tests passed.
+  - Round 11 targeted `npm run test -- api/server.test.mjs`: passed, 72 tests passed.
+  - Round 11 final `npm run qc`: passed, build passed, Vitest 9 files / 88 tests passed.
+  - Round 12 targeted `npm run test -- api/server.test.mjs -t "operator context"`: passed, 1 test passed.
+  - Round 12 targeted `npm run test -- api/server.test.mjs`: passed, 73 tests passed.
+  - Round 12 final `npm run qc`: passed, build passed, Vitest 9 files / 89 tests passed.
+  - Round 13 targeted `npm run test -- api/deploy.test.mjs`: passed, 3 tests passed.
+  - Round 13 syntax checks `bash -n scripts/ubuntu-ops-check.sh scripts/ubuntu-deploy.sh scripts/ubuntu-package.sh && node --check scripts/ops-auth-check.mjs && node --check scripts/package-ubuntu.mjs`: passed.
+  - Round 13 local authenticated ops checker smoke: passed against a temporary API on `127.0.0.1:19097`.
+  - Round 13 final `npm run qc`: passed, build passed, Vitest 9 files / 89 tests passed.
+  - Round 14 targeted `npm run test -- api/server.test.mjs -t "tracks onboarding readiness"`: passed, 1 test passed.
+  - Round 14 targeted `npm run test -- api/server.test.mjs`: passed, 73 tests passed.
+  - Round 14 final `npm run qc`: passed, build passed, Vitest 9 files / 89 tests passed.
+  - Round 15 targeted `npm run test -- api/server.test.mjs -t "idempotent quote conversions"`: passed, 1 test passed.
+  - Round 15 targeted `npm run test -- api/server.test.mjs`: passed, 74 tests passed.
+  - Round 15 final `npm run qc`: passed, build passed, Vitest 9 files / 90 tests passed.
+  - Round 16 targeted `npm run test -- api/server.test.mjs -t "public quote intake retries"`: passed, 1 test passed.
+  - Round 16 targeted `npm run test -- api/server.test.mjs`: passed, 75 tests passed.
+  - Round 16 final `npm run qc`: passed, build passed, Vitest 9 files / 91 tests passed.
+  - Round 17 targeted `npm run test -- api/server.test.mjs -t "idempotent public quote approvals"`: passed, 1 test passed.
+  - Round 17 targeted `npm run test -- api/server.test.mjs`: passed, 76 tests passed.
+  - Round 17 final `npm run qc`: passed, build passed, Vitest 9 files / 92 tests passed.
+  - Round 18 targeted `npm run test -- api/server.test.mjs -t "public quote intake retries"`: passed, 1 test passed.
+  - Round 18 targeted `npm run test -- api/server.test.mjs`: passed, 76 tests passed.
+  - Round 18 final `npm run qc`: passed, build passed, Vitest 9 files / 92 tests passed.
+  - Round 19 targeted `npm run test -- src/idempotency.test.ts`: passed, 1 test passed.
+  - Round 19 targeted `npm run test -- api/server.test.mjs -t "public quote revision"`: passed, 1 test passed.
+  - Round 19 targeted `npm run test -- api/server.test.mjs`: passed, 77 tests passed.
+  - Round 19 final `npm run qc`: passed, build passed, Vitest 10 files / 94 tests passed.
+  - Round 20 targeted `npm run test -- api/server.test.mjs -t "idempotent purchase"`: passed, 2 tests passed.
+  - Round 20 targeted `npm run test -- api/server.test.mjs`: passed, 79 tests passed.
+  - Round 20 final `npm run qc`: passed, build passed, Vitest 10 files / 96 tests passed.
+  - Round 21 targeted `npm run test -- api/server.test.mjs -t "idempotent spool"`: passed, 3 tests passed.
+  - Round 21 targeted `npm run test -- api/server.test.mjs`: passed, 82 tests passed.
+  - Round 21 final `npm run qc`: passed, build passed, Vitest 10 files / 99 tests passed.
+  - Round 22 targeted `npm run test -- api/server.test.mjs -t "idempotent maintenance"`: passed, 3 tests passed.
+  - Round 22 targeted `npm run test -- api/server.test.mjs`: passed, 85 tests passed.
+  - Round 22 final `npm run qc`: passed, build passed, Vitest 10 files / 102 tests passed.
+  - Round 23 targeted `npm run test -- api/server.test.mjs -t "audit retention runs"`: passed, 1 test passed.
+  - Round 23 targeted `npm run test -- api/server.test.mjs`: passed, 86 tests passed.
+  - Round 23 final `npm run qc`: passed, build passed, Vitest 10 files / 103 tests passed.
+  - Round 24 targeted `npm run test -- api/server.test.mjs -t "billing"`: passed, 3 tests passed.
+  - Round 24 targeted `npm run test -- api/server.test.mjs`: passed, 87 tests passed.
+  - Round 24 final `npm run qc`: passed, build passed, Vitest 10 files / 104 tests passed.
+  - Round 25 targeted `npm run test -- api/server.test.mjs -t "idempotent printer actions"`: passed, 1 test passed.
+  - Round 25 targeted `npm run test -- api/server.test.mjs`: passed, 88 tests passed.
+  - Round 25 final `npm run qc`: passed, build passed, Vitest 10 files / 105 tests passed.
+  - Round 26 targeted `npm run test -- api/server.test.mjs -t "quote portal link rotations"`: failed before implementation, then passed, 1 test passed.
+  - Round 26 targeted `npm run test -- api/server.test.mjs`: passed, 89 tests passed.
+  - Round 26 final `npm run qc`: passed, build passed, Vitest 10 files / 106 tests passed.
+  - Round 27 targeted `npm run test -- api/server.test.mjs -t "idempotent todo actions"`: failed before implementation, then passed, 1 test passed.
+  - Round 27 targeted `npm run test -- api/server.test.mjs`: passed, 90 tests passed.
+  - Round 27 final `npm run qc`: passed, build passed, Vitest 10 files / 107 tests passed.
+  - Round 28 targeted `npm run test -- api/server.test.mjs -t "idempotent scheduler"`: failed before implementation, then passed, 1 test passed.
+  - Round 28 targeted `npm run test -- api/server.test.mjs`: passed, 91 tests passed.
+  - Round 28 final `npm run qc`: passed, build passed, Vitest 10 files / 108 tests passed.
+  - Round 29 targeted `npm run test -- api/server.test.mjs -t "quote request updates"`: failed before implementation, then passed, 1 test passed.
+  - Round 29 targeted `npm run test -- api/server.test.mjs`: passed, 92 tests passed.
+  - Round 29 final `npm run qc`: passed, build passed, Vitest 10 files / 109 tests passed.
+  - Round 30 targeted `npm run test -- api/server.test.mjs -t "queue matching commits"`: failed before implementation, then passed, 1 test passed.
+  - Round 30 targeted `npm run test -- api/server.test.mjs`: passed, 93 tests passed.
+  - Round 30 final `npm run qc`: passed, build passed, Vitest 10 files / 110 tests passed.
+  - Round 31 targeted `npm run test -- api/server.test.mjs -t "history reprints"`: failed before implementation, then passed, 1 test passed.
+  - Round 31 targeted `npm run test -- api/server.test.mjs`: passed, 94 tests passed.
+  - Round 31 final `npm run qc`: passed, build passed, Vitest 10 files / 111 tests passed.
+  - Round 32 targeted `npm run test -- api/server.test.mjs -t "integration test deliveries"`: failed before implementation, then passed, 1 test passed.
+  - Round 32 targeted `npm run test -- api/server.test.mjs`: passed, 95 tests passed.
+  - Round 32 final `npm run qc`: passed, build passed, Vitest 10 files / 112 tests passed.
+  - Round 33 targeted `npm run test -- api/server.test.mjs -t "bridge diagnostics and syncs"`: failed before implementation, then passed, 1 test passed.
+  - Round 33 targeted `npm run test -- api/server.test.mjs`: passed, 96 tests passed.
+  - Round 33 final `npm run qc`: passed, build passed, Vitest 10 files / 113 tests passed.
+  - Round 34 targeted `npm run test -- api/server.test.mjs -t "spool label exports"`: failed before implementation, then passed, 1 test passed.
+  - Round 34 targeted `npm run test -- api/server.test.mjs`: passed, 97 tests passed.
+  - Round 34 final `npm run qc`: passed, build passed, Vitest 10 files / 114 tests passed.
+  - Round 35 targeted `npm run test -- api/server.test.mjs -t "governance and go-live audit events"`: failed before implementation, then passed, 1 test passed.
+  - Round 35 targeted `npm run test -- api/server.test.mjs`: passed, 98 tests passed.
+  - Round 35 final `npm run qc`: passed, build passed, Vitest 10 files / 115 tests passed.
+  - Round 36 targeted `npm run test -- api/server.test.mjs -t "catalog configuration"`: failed before implementation, then passed, 1 test passed.
+  - Round 36 targeted `npm run test -- api/server.test.mjs -t "profile configuration"`: failed before implementation, then passed, 1 test passed.
+  - Round 36 targeted `npm run test -- api/server.test.mjs -t "printer capability writes"`: failed before implementation, then passed, 1 test passed.
+  - Round 36 targeted `npm run test -- api/server.test.mjs`: passed, 101 tests passed.
+  - Round 36 final `npm run qc`: passed, build passed, Vitest 10 files / 118 tests passed.
+  - Round 37 targeted `npm run test -- api/server.test.mjs -t "catalog governance"`: failed before implementation, then passed, 1 test passed.
+  - Round 37 targeted `npm run test -- api/server.test.mjs -t "cost catalog"`: passed, 1 test passed.
+  - Round 37 targeted `npm run test -- api/server.test.mjs -t "catalog records"`: passed, 1 test passed.
+  - Round 37 targeted `npm run test -- api/server.test.mjs`: passed, 102 tests passed.
+  - Round 37 final `npm run qc`: passed, build passed, Vitest 10 files / 119 tests passed.
+  - Round 38 targeted `npm run test -- api/server.test.mjs -t "slicer"`: failed before implementation, then passed, 4 tests passed.
+  - Round 38 targeted `npm run test -- api/server.test.mjs`: passed, 104 tests passed.
+  - Round 38 final `npm run qc`: passed, build passed, Vitest 10 files / 121 tests passed.
+  - Round 39 targeted `npm run test -- api/server.test.mjs -t "history annotations"`: failed before implementation, then passed, 1 test passed.
+  - Round 39 targeted `npm run test -- api/server.test.mjs`: passed, 105 tests passed.
+  - Round 39 final `npm run qc`: passed, build passed, Vitest 10 files / 122 tests passed.
+  - Round 40 targeted `npm run test -- api/server.test.mjs -t "file artifact writes"`: failed before implementation, then passed, 1 test passed.
+  - Round 40 targeted `npm run test -- api/server.test.mjs`: passed, 106 tests passed.
+  - Round 40 final `npm run qc`: passed, build passed, Vitest 10 files / 123 tests passed.
+  - Round 41 targeted `npm run test -- api/server.test.mjs -t "integration configuration"`: failed before implementation, then passed, 1 test passed.
+  - Round 41 targeted `npm run test -- api/server.test.mjs`: passed, 107 tests passed.
+  - Round 41 final `npm run qc`: passed, build passed, Vitest 10 files / 124 tests passed.
+  - Round 42 targeted `npm run test -- api/server.test.mjs -t "purchase request writes"`: failed before implementation, then passed, 1 test passed.
+  - Round 42 targeted `npm run test -- api/server.test.mjs -t "purchase"`: passed, 3 tests passed.
+  - Round 42 targeted `npm run test -- api/server.test.mjs`: passed, 108 tests passed.
+  - Round 42 final `npm run qc`: passed, build passed, Vitest 10 files / 125 tests passed.
+  - Round 43 targeted `npm run test -- api/server.test.mjs -t "governance setup"`: failed before implementation, then passed, 1 test passed.
+  - Round 43 targeted `npm run test -- api/server.test.mjs -t "governance"`: passed, 3 tests passed.
+  - Round 43 targeted `npm run test -- api/server.test.mjs`: passed, 109 tests passed.
+  - Round 43 final `npm run qc`: passed, build passed, Vitest 10 files / 126 tests passed.
+  - Round 44 targeted `npm run test -- api/server.test.mjs -t "admin account writes"`: failed before implementation, then passed, 1 test passed.
+  - Round 44 targeted `npm run test -- api/server.test.mjs -t "API keys"`: passed, 2 tests passed.
+  - Round 44 targeted `npm run test -- api/server.test.mjs -t "team users"`: passed, 1 test passed.
+  - Round 44 targeted `npm run test -- api/server.test.mjs -t "password"`: passed, 1 test passed.
+  - Round 44 targeted `npm run test -- api/server.test.mjs`: passed, 110 tests passed.
+  - Round 44 final `npm run qc`: passed, build passed, Vitest 10 files / 127 tests passed.
+  - Round 45 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
+  - Round 45 targeted `npm run test -- api/server.test.mjs -t "admin account writes"`: passed, 1 test passed.
+  - Round 45 targeted `npm run test -- api/server.test.mjs -t "governance setup"`: passed, 1 test passed.
+  - Round 45 targeted `npm run test -- api/server.test.mjs -t "billing"`: passed, 3 tests passed.
+  - Round 45 final `npm run qc`: passed, build passed, Vitest 10 files / 128 tests passed.
+  - Round 46 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
+  - Round 46 targeted `npm run build`: passed.
+  - Round 46 final `npm run qc`: passed, build passed, Vitest 10 files / 128 tests passed.
+  - Round 47 targeted `npm run test -- api/server.test.mjs -t "production Owner and Admin sessions"`: failed before implementation, then passed, 1 test passed.
+  - Round 47 targeted `npm run test -- api/server.test.mjs -t "TOTP two-factor"`: passed, 1 test passed.
+  - Round 47 targeted `npm run test -- api/i18n.test.mjs`: passed, 2 tests passed.
+  - Round 47 targeted `npm run test -- api/server.test.mjs`: passed, 111 tests passed.
+  - Round 47 final `npm run qc`: passed, build passed, Vitest 10 files / 129 tests passed.
+  - Round 48 targeted `npm run test -- api/server.test.mjs -t "sanitized workspace restores"`: failed before implementation, then passed, 1 test passed.
+  - Round 48 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
+  - Round 48 targeted `npm run test -- api/server.test.mjs`: passed, 111 tests passed.
+  - Round 48 targeted `npm run build`: passed.
+  - Round 48 final `npm run qc`: passed, build passed, Vitest 10 files / 129 tests passed.
+  - Round 49 targeted `npm run test -- api/server.test.mjs -t "prevents production Owner and Admin users"`: failed before implementation, then passed, 1 test passed.
+  - Round 49 targeted `npm run test -- api/server.test.mjs -t "TOTP two-factor"`: passed, 1 test passed.
+  - Round 49 targeted `npm run test -- api/server.test.mjs -t "production Owner and Admin sessions"`: passed, 1 test passed.
+  - Round 49 targeted `npm run test -- api/server.test.mjs`: passed, 112 tests passed.
+  - Round 49 final `npm run qc`: passed, build passed, Vitest 10 files / 130 tests passed.
+  - Round 51 targeted `npm run test -- api/server.test.mjs -t "incomplete optional dependency configuration"`: failed before implementation, then passed, 1 test passed.
+  - Round 51 targeted `npm run test -- api/server.test.mjs -t "readiness|health|integrity"`: passed, 7 tests passed.
+  - Round 51 targeted `npm run test -- api/server.test.mjs`: passed, 115 tests passed.
+  - Round 51 final `npm run qc`: passed, build passed, Vitest 10 files / 133 tests passed.
+  - Round 52 targeted `npm run test -- api/server.test.mjs -t "file folders"`: failed before implementation, then passed, 1 test passed.
+  - Round 52 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
+  - Round 52 targeted `npm run test -- api/server.test.mjs`: passed, 115 tests passed.
+  - Round 52 final `npm run qc`: passed, build passed, Vitest 10 files / 133 tests passed.
+  - Round 53 targeted `npm run test -- api/server.test.mjs -t "direct printer status"`: failed before implementation, then passed, 1 test passed.
+  - Round 53 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
+  - Round 53 targeted `npm run test -- api/server.test.mjs`: passed, 116 tests passed.
+  - Round 53 final `npm run qc`: passed, build passed, Vitest 10 files / 134 tests passed.
+  - Round 54 targeted `npm run test -- api/server.test.mjs -t "configured byte limit"`: failed before implementation, then passed, 1 test passed.
+  - Round 54 targeted `npm run test -- api/server.test.mjs -t "exports and restores stored model bytes|previews and commits sanitized workspace restores|builds analytics, print history, reprints completed jobs, and exports backups"`: passed, 3 tests passed.
+  - Round 54 targeted `npm run test -- api/server.test.mjs -t "S3-compatible object store|configured byte limit|exports and restores stored model bytes"`: passed, 3 tests passed.
+  - Round 54 targeted `npm run test -- api/server.test.mjs`: passed, 117 tests passed.
+  - Round 54 final `npm run qc`: passed, build passed, Vitest 10 files / 135 tests passed.
+  - Round 55 targeted `npm run test -- api/server.test.mjs -t "queries audit events"`: failed before implementation, then passed, 1 test passed.
+  - Round 55 targeted `npm run test -- api/i18n.test.mjs`: passed, 2 tests passed.
+  - Round 55 targeted `npm run test -- api/server.test.mjs`: passed, 117 tests passed.
+  - Round 55 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 135 tests passed.
+  - Round 56 targeted `npm run test -- api/server.test.mjs -t "Stripe billing"`: passed, 1 test passed.
+  - Round 56 targeted `npm run test -- api/server.test.mjs`: passed, 117 tests passed.
+  - Round 56 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 135 tests passed.
+  - Round 57 targeted `npm run test -- api/server.test.mjs -t "missing file payload coverage"`: failed before implementation, then passed, 1 test passed.
+  - Round 57 targeted `npm run test -- api/server.test.mjs -t "exports and restores stored model bytes|missing file payload coverage|sanitized workspace restores|configured byte limit"`: passed, 4 tests passed.
+  - Round 57 targeted `npm run test -- api/server.test.mjs`: passed, 118 tests passed.
+  - Round 57 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 136 tests passed.
+  - Round 58 targeted `npm run test -- api/server.test.mjs -t "commerce connector tests"`: failed before implementation, then passed, 1 test passed.
+  - Round 58 targeted `npm run test -- api/server.test.mjs -t "commerce connector tests|commerce connector imports|commerce CSV imports|integration configuration"`: passed, 4 tests passed.
+  - Round 58 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
+  - Round 58 targeted `npm run test -- api/server.test.mjs`: passed, 119 tests passed.
+  - Round 58 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 137 tests passed.
+  - Round 59 targeted `npm run test -- api/server.test.mjs -t "stored file payloads are missing"`: failed before implementation, then passed, 1 test passed.
+  - Round 59 targeted `npm run test -- api/server.test.mjs -t "stored file payloads are missing|stored model bytes|missing file payload coverage|configured byte limit"`: passed, 4 tests passed.
+  - Round 59 targeted `npm run test -- api/server.test.mjs`: passed, 120 tests passed.
+  - Round 59 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 138 tests passed.
+  - Round 60 targeted `npm run test -- api/server.test.mjs -t "admin integrity|storage payload coverage|full backup|file payload coverage|stored file payloads|configured byte limit"`: passed, 6 tests passed.
+  - Round 60 targeted `npm run test -- api/server.test.mjs`: passed, 121 tests passed.
+  - Round 60 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 139 tests passed.
+  - Round 61 targeted `npm run test -- api/deploy.test.mjs`: failed before implementation, then passed, 3 tests passed.
+  - Round 61 script checks `node --check scripts/ops-auth-check.mjs && node --check scripts/prod-smoke.mjs && bash -n scripts/ubuntu-ops-check.sh`: passed.
+  - Round 61 local authenticated ops checker passed against temporary APIs on `127.0.0.1:19099` and `127.0.0.1:19100`, reporting `storage.complete: true`.
+  - Round 61 local authenticated `scripts/prod-smoke.mjs` passed against a temporary static-serving API on `127.0.0.1:19100`, reporting `storage.complete: true`.
+  - Round 61 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 139 tests passed.
+  - Round 62 targeted `npm run test -- api/server.test.mjs -t "storage payload coverage"`: failed before implementation, then passed, 1 test passed.
+  - Round 62 targeted `npm run test -- api/server.test.mjs`: passed, 121 tests passed.
+  - Round 62 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 139 tests passed.
+  - Round 63 targeted `npm run test -- api/server.test.mjs -t "idempotent model uploads"`: failed before implementation, then passed, 1 test passed.
+  - Round 63 targeted `npm run test -- api/server.test.mjs -t "model files|stored files in an S3|idempotent model uploads|file artifact writes"`: passed, 4 tests passed.
+  - Round 63 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
+  - Round 63 targeted `npm run test -- api/server.test.mjs`: passed, 122 tests passed.
+  - Round 63 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 140 tests passed.
+  - Round 64 targeted `npm run test -- api/server.test.mjs -t "authenticates users and supports logout|supports password changes|two-factor auth"`: failed before implementation, then passed, 3 tests passed.
+  - Round 64 targeted `npm run test -- api/server.test.mjs`: passed, 122 tests passed.
+  - Round 64 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 140 tests passed.
+  - Round 65 targeted `npm run test -- api/server.test.mjs -t "telemetry ticks"`: failed before implementation, then passed, 1 test passed.
+  - Round 65 targeted `npm run test -- api/server.test.mjs -t "advances production telemetry|telemetry ticks|history reprints|history annotations"`: passed, 4 tests passed.
+  - Round 65 targeted `npm run test -- api/server.test.mjs`: passed, 123 tests passed.
+  - Round 65 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 141 tests passed.
+  - Round 66 targeted `npm run test -- api/server.test.mjs -t "operational metrics|worker broadcast|ops tokens"`: failed before implementation, then passed, 4 tests passed.
+  - Round 66 targeted `npm run test -- api/server.test.mjs`: passed, 124 tests passed.
+  - Round 66 final `npm run qc`: passed, build passed, Vitest 10 files / 142 tests passed.
+  - Round 67 targeted `npm run test -- api/server.test.mjs -t "production readiness"`: failed before implementation, then passed, 4 tests passed.
+  - Round 67 targeted `npm run test -- api/server.test.mjs -t "production readiness|worker broadcast"`: passed, 5 tests passed.
+  - Round 67 targeted `npm run test -- api/worker.test.mjs`: passed, 2 tests passed.
+  - Round 67 targeted `npm run test -- api/server.test.mjs`: passed, 125 tests passed.
+  - Round 67 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 143 tests passed.
+  - Round 68 targeted `npm run test -- api/server.test.mjs -t "API key IP allowlist|workspace settings"`: failed before implementation, then passed, 2 tests passed.
+  - Round 68 targeted `npm run test -- api/server.test.mjs -t "readiness|API keys|workspace settings"`: passed, 11 tests passed.
+  - Round 68 targeted `npm run test -- api/deploy.test.mjs`: passed, 3 tests passed.
+  - Round 68 targeted `npm run test -- api/server.test.mjs`: passed, 126 tests passed.
+  - Round 68 final `npm run qc`: passed, build passed with existing Vite chunk-size warning, Vitest 10 files / 144 tests passed.
+  - Round 50 targeted `npm run test -- api/server.test.mjs -t "spool metadata updates|maintenance job updates"`: failed before implementation, then passed, 2 tests passed.
+  - Round 50 targeted `npm run test -- src/idempotency.test.ts`: passed, 2 tests passed.
+  - Round 50 targeted `npm run test -- api/server.test.mjs`: passed, 114 tests passed.
+  - Round 50 final `npm run qc`: passed, build passed, Vitest 10 files / 132 tests passed.
+
+## Completed Features
+
+- Webhook, notification channel, and commerce connector configuration audit events now include workspace and authenticated operator context while excluding endpoint URLs, URL paths/query strings, and bearer tokens.
+- Webhook and notification test-send events now use the same compact actor-aware audit event shape without faning the one-off test event out to unrelated endpoints.
+- Added regression coverage for integration endpoint audit metadata and documented the review path in README, operations, and production-readiness docs.
+- Inventory and maintenance audit events now use actor-aware dispatch for spool creation, label export, scan/usage/update, purchase request creation/reorder/update/receive, maintenance job creation/update, templates, and problem reports.
+- Added regression coverage proving direct spool and maintenance create/update events include workspace and authenticated operator context.
+- Documented inventory and maintenance audit review in README, operations, and production-readiness docs.
+- Scoped authenticated `/api/catalog/export` CSV output to the requesting workspace so another tenant's SKUs/parts are not included in a catalog export.
+- Added `catalog.exported` audit evidence for authenticated catalog CSV exports, including workspace/operator context and row/object counts without storing exported CSV bodies.
+- Added `admin.audit_exported` audit evidence for audit CSV exports, including filter, matched-count, and exported-count metadata without storing exported evidence rows.
+- Added regression coverage for workspace-scoped catalog exports and compact CSV export audit events, and documented the review path in README, operations, and production-readiness docs.
+- Added `file.previewed` audit evidence for authenticated model/G-code previews, including workspace/operator context, file ID/name/type, storage-backed status, preview kind, and byte counts.
+- Added `file.downloaded` audit evidence for authenticated model/G-code downloads, including workspace/operator context, file ID/name/type, storage-backed versus fallback-manifest status, and byte counts.
+- File access audit metadata intentionally excludes file contents, local storage paths, and object-storage keys.
+- Added regression coverage for stored-file preview and download audit evidence and documented access-review expectations in README, operations, and production-readiness docs.
+- Added known-account authentication lockout/backoff for repeated password and 2FA failures, with configurable `LAYERPILOT_AUTH_LOCK_THRESHOLD` and `LAYERPILOT_AUTH_LOCK_MINUTES` defaults.
+- Locked login attempts return `423`, create `auth.login_locked` evidence, and account threshold crossings create `auth.account_locked` audit events without storing submitted passwords, TOTP codes, or recovery codes.
+- Auth failure counters clear on successful authentication after lock expiry, user password change, or Owner/Admin password reset so legitimate operators have a documented recovery path.
+- Added failed-authentication audit evidence for rejected password and TOTP/recovery-code login attempts.
+- Failed login audit events include known workspace/user context, normalized email, reason, and compact request metadata without storing submitted passwords or second-factor codes.
+- Added regression coverage for sanitized `auth.login_failed` and `auth.2fa_failed` events and documented incident-review expectations in README, operations, and production-readiness docs.
+- Added a production public-signup gate so `/api/auth/signup` is blocked in `NODE_ENV=production` unless `LAYERPILOT_ENABLE_PUBLIC_SIGNUP=true` is explicitly set.
+- Added a `production-public-signup` readiness check, Ubuntu deploy env/default validation, `.env.example` coverage, and operator documentation for the signup posture.
+- Added regression coverage proving blocked production signup does not create a user and explicit production opt-in still creates an Owner workspace.
+- Added regression coverage and UI idempotency headers for retry-safe production-template create/run and parametric nameplate generation, preventing duplicate queue jobs, stored nameplate files, linked catalog parts, and audit events after dropped operator responses.
+- Preserved and validated inherited handoff work for v0.1.21 production features.
+- Added v0.1.22 order lifecycle states: `on_hold`, `completed`, and `cancelled`.
+- Cancelled orders now stop linked non-terminal generated queue jobs, move them to blocked, release reserved spool material, and block future job generation for terminal orders.
+- Updated Orders UI with Hold, Ship, Complete, and Cancel lifecycle controls.
+- Added regression coverage for cancellation, terminal-order generation protection, and material reservation release.
+- Added production docs: install guide, operations runbook, release runbook, and production-readiness checklist.
+- Updated roadmap, README, and package metadata to v0.1.22.
+- Added persisted idempotency protection for supported authenticated order and queue write APIs.
+- Idempotent retries now replay the original 2xx response for the same actor, route, key, and body.
+- Reusing an `Idempotency-Key` with a different body or route now returns `409` without creating duplicate production work.
+- Documented supported idempotency routes in the operations runbook and production-readiness checklist.
+- Added hashed persisted user session tokens so bearer tokens are no longer stored in plaintext sessions.
+- Added absolute and idle session expiry controls with defaults of 168 hours and 24 hours.
+- Legacy plaintext session rows are migrated to hashed storage on successful use, avoiding surprise deploy-time logout.
+- Documented session policy in `.env.example`, README, install, operations, and production-readiness docs.
+- Added tenant-safe operator audit context for core order, catalog, job-generation, and admin export/integrity/restore events.
+- Added regression coverage confirming signup-tenant order events appear in that tenant's audit feed with workspace and operator metadata.
+- Documented audit traceability checks in the operations runbook and production-readiness checklist.
+- Hardened destructive workspace restore commits so scoped `admin:restore` API keys can run dry-run restore previews but cannot replace workspace data.
+- Added regression coverage for restore preview automation versus user-session-only restore commits.
+- Documented the restore commit gate in the operations runbook and production-readiness checklist.
+- Hardened API-key grants so automation keys can use only known non-wildcard automation scopes.
+- API keys can no longer create or update other API keys; key management requires a logged-in Owner/Admin user session.
+- Added conservative legacy scope normalization that disables restored keys containing only invalid automation scopes.
+- Added regression coverage for wildcard, unknown, and credential-management API-key scope rejection.
+- Documented API-key scope minimization and session-only key management in operations and production-readiness docs.
+- Added centralized API-key read-scope enforcement so automation keys can read only resources implied by their grantable scopes.
+- Added regression coverage proving metrics-only, queue-only, and admin-export API keys cannot read unrelated UI/admin resources.
+- Documented API-key read-scope validation in operations and production-readiness docs.
+- Added runtime production readiness gates so `/api/readiness` fails in `NODE_ENV=production` when required owner credentials or worker/metrics tokens are missing, documented default secrets are still configured, token/password minimums are not met, or default/demo access remains enabled.
+- Added regression coverage for unsafe production readiness failure and hardened production readiness success.
+- Documented the runtime readiness deployment gate in operations and production-readiness docs.
+- Redacted customer quote portal bearer tokens from authenticated state, quote list, realtime state, and workspace export surfaces while preserving explicit customer-link generation and rotation.
+- Added regression coverage proving quote portal access tokens stay out of quote list, state, and admin export responses.
+- Documented quote portal link regeneration and rotation expectations after restore.
+- Redacted credential-bearing integration endpoint URL paths and query strings from authenticated state, list endpoints, webhook/notification delivery logs, bridge diagnostics, and workspace exports while preserving server-side stored URLs for deliveries, imports, and bridge commands.
+- Added regression coverage proving webhook, notification, commerce connector, and printer bridge endpoint secrets stay out of API state, lists, delivery logs, and admin exports.
+- Documented integration endpoint redaction and restore/rotation expectations.
+- Added idempotent replay/conflict protection for commerce connector import and CSV import routes.
+- Added regression coverage proving connector import retries do not refetch external commerce feeds and CSV import retries do not create duplicate import runs.
+- Documented commerce import `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for commerce connector test routes so dropped operator/browser responses do not refetch external commerce feeds or expose stored connector tokens in replay bodies.
+- Wired the built-in Orders commerce connector Test, Import, and CSV intake controls to generate stable per-attempt browser `Idempotency-Key` headers until success.
+- Added regression coverage proving commerce connector test retries replay the original sanitized response, and documented commerce connector test retry behavior in README, operations, and production-readiness docs.
+- Added actor-aware audit context for production scheduling, queue creation/matching/status/priority, bridge save/test, printer status, history annotation/reprint, and file-version operator actions.
+- Added regression coverage proving production scheduling, queue, bridge, and file-version audit events include workspace and authenticated operator metadata.
+- Documented expanded operator audit traceability in README, operations, and production-readiness docs.
+- Added authenticated Ubuntu ops-check coverage for login, authenticated state, audit access, and metrics-token verification, with host Node and container fallback execution paths.
+- Added optional `LAYERPILOT_OPS_EMAIL` and `LAYERPILOT_OPS_PASSWORD` support for dedicated smoke accounts in `.env`, Compose, deployment init, README, and operations docs.
+- Added deployment packaging guards so Ubuntu release bundles must include the authenticated ops checker.
+- Hardened API support snapshots so recent event payloads preserve endpoint hosts but redact URL paths and query strings before support handoff.
+- Added regression coverage proving support snapshots omit credential-bearing webhook/bridge URL path and query secrets while keeping host hints useful for troubleshooting.
+- Added idempotent replay/conflict protection for authenticated quote-to-order conversion retries.
+- Added regression coverage proving quote conversion retries replay the original response without creating duplicate orders or duplicate conversion audit events.
+- Documented quote conversion `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for public quote intake retries before authentication.
+- Added regression coverage proving public quote form retries replay the original response without creating duplicate quote requests or duplicate quote-created audit events.
+- Documented public quote intake `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added token-verified idempotent replay/conflict protection for public customer quote decisions.
+- Added regression coverage proving public quote approval retries replay the original response without creating duplicate orders or duplicate customer-accepted/converted audit events.
+- Documented public quote decision `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Redacted internal idempotency replay ledger records from shared state and admin export payloads.
+- Added regression coverage proving token-returning public quote intake replay records remain internal while `/api/state` and `/api/admin/export` omit the ledger, replay body, and customer token.
+- Documented that idempotency replay caches are internal-only and that restore clients should use fresh `Idempotency-Key` values after workspace export/restore.
+- Added browser idempotency-key generation and same-payload retry reuse for the built-in public quote form and customer quote portal decision controls.
+- Added regression coverage proving public quote revision-request retries replay without creating duplicate revision audit events.
+- Documented built-in public quote form and portal idempotency behavior in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for filament purchasing reorder-plan and purchase receive writes.
+- Added regression coverage proving purchase reorder-plan and receive retries replay without duplicate purchase requests, duplicate received spools, or duplicate purchase audit events.
+- Documented filament purchasing `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for inventory spool creation, explicit spool usage logging, and scan-based spool usage/location writes.
+- Added regression coverage proving inventory retries replay without duplicate spools, double filament consumption, or duplicate inventory audit events.
+- Documented inventory `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for maintenance job creation, maintenance template saves, and maintenance problem-report intake.
+- Added regression coverage proving maintenance retries replay without duplicate maintenance jobs, duplicate templates/update events, duplicate reports, or duplicate linked jobs.
+- Documented maintenance `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for webhook and notification channel test-delivery retries.
+- Added regression coverage proving test-delivery retries replay without duplicate external calls, test events, or delivery logs.
+- Documented webhook and notification test `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for bridge diagnostic tests, all-bridge sync, and single-printer bridge sync retries.
+- Added regression coverage proving bridge retries replay without repeated hardware status polling or duplicate bridge audit events.
+- Documented bridge diagnostic and sync `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for admin audit-retention runs.
+- Added regression coverage proving audit-retention retries replay without duplicate `admin.audit_retention_run` events while still pruning stale audit entries and preserving protected restore events.
+- Documented audit-retention `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for backend slicer job runs and quick file-slice actions.
+- Added regression coverage proving slicer retries replay without duplicate slicer job records, stored G-code artifacts, file-version increments, or slicer audit events.
+- Documented slicer `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for print-history annotations.
+- Added regression coverage proving history annotation retries replay issue/waste updates without double-deducting spool inventory or duplicating `history.annotated` audit events.
+- Documented history annotation `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for JSON file/model artifact writes covering metadata file creation, sample STL generation, Hot Drop handling, parametric nameplate generation, manual file-version bumps, and file deletion.
+- Added regression coverage proving file artifact retries replay without duplicate generated model records, duplicate Hot Drop queue jobs, duplicate file-version audit events, or same-key different-body acceptance.
+- Documented file/model artifact `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for billing plan changes and billing portal session creation.
+- Added regression coverage proving billing retries replay without duplicate invoices, billing sessions, billing audit events, or duplicate external Stripe checkout session calls.
+- Documented billing `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for real printer action commands through `/api/actions`.
+- Added regression coverage proving printer action retries replay without sending duplicate outbound bridge commands or duplicating operator audit events.
+- Documented printer action `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for quote customer portal-link generation and rotation.
+- Added regression coverage proving `rotate: true` portal-link retries replay the original URL/token without rotating again, invalidating the first operator-visible link, or duplicating portal-link audit events.
+- Documented quote portal-link `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added authenticated actor context for governance and go-live audit events covering onboarding, support snapshots, workspace settings, billing plan/portal, add-ons, cost catalog, API-key create/update, and user-management writes.
+- Added regression coverage proving representative governance audit events persist workspace and authenticated operator metadata.
+- Documented expanded governance audit traceability in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for generated todo actions.
+- Added regression coverage proving todo claim retries replay the original response without duplicate todo action records or duplicate todo audit events, and conflicting retry bodies return `409`.
+- Documented generated todo action `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for scheduler auto, optimize, and constraint write APIs.
+- Added regression coverage proving scheduler retries replay the original response without duplicate auto/optimized/constraint scheduling audit events, and conflicting retry bodies return `409`.
+- Documented scheduler automation `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for authenticated quote request updates.
+- Added regression coverage proving quote update retries replay the original response without duplicate `quote_request.updated` audit events, and conflicting retry bodies return `409`.
+- Documented quote update `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for committed production queue matching.
+- Added regression coverage proving queue-match retries replay the original assignment response without duplicate `queue.matched` audit events, and conflicting retry bodies return `409`.
+- Documented queue matching `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for print-history reprint retries.
+- Added regression coverage proving history reprint retries replay the original queued job response without duplicate reprint queue jobs, todos, or `queue.reprint` audit events, and conflicting retry bodies return `409`.
+- Documented history reprint `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for spool label exports.
+- Added regression coverage proving spool label export retries return the original CSV/HTML artifact without duplicate `spool.labels_generated` audit events, and conflicting retry bodies return `409`.
+- Documented spool label export `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for catalog/profile/printer configuration writes covering parts, SKUs, production templates, slicer profiles/imports/defaults/policy/archive, and printer capability create/update routes.
+- Added regression coverage proving configuration retries replay the original response without duplicate setup records or duplicate setup audit events, and conflicting retry bodies return `409`.
+- Documented configuration-write `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for cost catalog updates and catalog material-map runs.
+- Scoped material mapping to the authenticated workspace and added workspace/authenticated actor context to `catalog.material_mapped` audit events.
+- Added regression coverage proving catalog governance retries replay without duplicate pricing/material-normalization audit or run records, and documented the new retry contract.
+- Added idempotent replay/conflict protection for integration configuration writes covering webhook create/update, notification channel create/update, commerce connector create/update, add-on updates, and bridge saves.
+- Added regression coverage proving integration configuration retries replay without duplicate connector records, duplicate add-on/bridge writes, or duplicate setup audit events.
+- Documented integration configuration `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for direct purchase-request create/update writes.
+- Added regression coverage proving purchase-request retries replay without duplicate reorder records or duplicate purchasing audit events, and conflicting retry bodies return `409`.
+- Documented purchase-request write `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for governance setup writes covering workspace settings, onboarding checklist updates, and support snapshot generation.
+- Added regression coverage proving governance setup retries replay without duplicate settings, onboarding, or support snapshot audit events, and conflicting retry bodies return `409`.
+- Documented governance setup `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for admin account management writes covering API-key create/update, user invite/update, and password reset.
+- Added regression coverage proving admin account retries replay generated API-key and temporary-password responses without rotating secrets again or duplicating governance audit events.
+- Documented admin account management `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Added browser-side idempotency header generation for authenticated Team page account actions, Integrations page API-key actions, and Settings page governance, support snapshot, and billing actions.
+- Added browser helper coverage proving repeated UI payloads reuse the same `Idempotency-Key` while changed payloads rotate to a fresh key.
+- Documented built-in browser idempotency behavior in README, operations, and production-readiness docs.
+- Added browser-side idempotency header generation for daily authenticated operator controls covering queue scheduling/status/priority/matching, scheduler automation, order creation/lifecycle/job generation, operator quote update/link/convert actions, file sample/version/delete/slice actions, Hot Drop, slicer jobs, printer bridge actions, spool creation/usage/scan/labels, generated todo actions, and filament purchase request/reorder/receive workflows.
+- Documented expanded built-in operator browser idempotency behavior in README, operations, and production-readiness docs.
+- Enforced the production `requireAdmin2fa` gate for Owner/Admin user sessions so protected APIs and realtime state streams are unavailable until TOTP is enrolled.
+- Preserved remediation routes for unenrolled production admins: `/api/auth/me`, password change, logout, TOTP setup, and TOTP enablement remain available.
+- Updated the browser to route production 2FA enrollment blocks to Settings instead of falling back to local/demo state, with Traditional Chinese translation coverage for the new notices.
+- Documented production admin 2FA enforcement in README, operations, and production-readiness docs.
+- Added route-specific idempotent replay for confirmed `/api/admin/restore` commits so the original success response can be replayed after the successful restore revokes the old session.
+- Kept restore previews authenticated and outside the post-commit replay path.
+- Wired the Settings restore commit action to generate and reuse a stable browser idempotency key for the same backup payload until success.
+- Added regression coverage proving restore commit retries do not duplicate `admin.restore` audit events, and documented the restore retry contract in README, operations, and production-readiness docs.
+- Prevented production Owner/Admin users from disabling TOTP while workspace `requireAdmin2fa` remains enabled, closing a path that could make an enrolled admin session non-compliant again.
+- Added actor-aware compact audit records for backend slicer jobs and quick file-slice actions through `slicer.completed`, `slicer.failed`, and `file.sliced`, including slicer job, source file, printer/profile, engine, material settings, status, and output-size metadata without generated G-code bodies, slicer command arguments, config paths, local output paths, storage paths, or object-storage keys.
+- Added regression coverage for the required-admin-2FA disable guard and documented the controlled reset path in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for spool metadata updates and maintenance job updates so dropped operator/browser responses do not create duplicate `spool.updated` or `maintenance.updated` audit events.
+- Wired the built-in spool metadata and maintenance job update controls to generate stable per-attempt browser `Idempotency-Key` headers until success.
+- Added regression coverage proving spool metadata and maintenance job update retries replay the original response and conflicting retry bodies return `409`, and documented the retry contract in README, operations, and production-readiness docs.
+- Added a live `NODE_ENV=production` `/api/readiness` dependency gate that validates DB adapter, S3 object storage, Stripe billing, and MQTT event-stream configuration consistency without exposing secret values.
+- Added regression coverage proving incomplete optional production dependency configuration fails readiness, and documented the live gate in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for file folder creation so dropped operator/browser responses replay the original create/reuse response without duplicate folder audit events.
+- Wired the built-in Files page folder action to generate stable per-attempt browser `Idempotency-Key` headers until success.
+- Added regression coverage proving file folder retries replay the original response, and documented the retry contract in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for direct printer status updates so dropped operator/browser responses replay the original status response without duplicate `printer.status` audit events.
+- Wired the built-in printer status controls to generate stable per-attempt browser `Idempotency-Key` headers until success.
+- Added regression coverage proving direct printer status retries replay the original response, and documented the retry contract in README, operations, and production-readiness docs.
+- Added a configurable `LAYERPILOT_FULL_BACKUP_MAX_BYTES` guard for `/api/admin/export?includeFiles=true` so oversized full file-byte exports return `413` with a storage manifest before stored model/G-code bytes are embedded in JSON.
+- Added regression coverage for local and S3 full-backup export paths, including the oversized-export guard, and documented the recommended verified volume/object-storage backup path for larger production file libraries.
+- Added `/api/audit` filtered matched counts, returned counts, offset pagination, and `hasMore` metadata so operators can verify filtered audit evidence without confusing raw workspace totals for matched totals.
+- Made `/api/audit/export` honor matching `type`, `search`, `limit`, and `offset` filters for scoped CSV evidence exports.
+- Updated the Add-ons audit timeline to show live matched counts, load additional audit pages, and display an empty live-result state instead of substituting demo audit rows.
+- Added regression and i18n coverage for audit pagination/export behavior and the new audit empty-state copy, and documented the audit query contract in README, operations, and production-readiness docs.
+- Added raw JSON body preservation and direct `Stripe-Signature` verification for `/api/billing/webhook/stripe` using `LAYERPILOT_STRIPE_WEBHOOK_SECRET`.
+- Preserved the existing `x-layerpilot-billing-webhook-secret` fallback for trusted edge proxies that transform webhook bodies before forwarding to the app.
+- Added regression coverage for invalid and valid signed Stripe webhook delivery, and documented the signed-webhook production checklist in README, operations, and production-readiness docs.
+- Added restore preview/commit `filePayloadCoverage` summaries for stored model/G-code files so operators can see expected, included, missing, and extra payloads before committing a JSON restore.
+- Updated the Settings restore panel to show stored file payload coverage directly in the restore preview.
+- Added regression coverage for missing restore file payload detection, and documented the restore coverage check in README, operations, and production-readiness docs.
+- Added a fail-closed missing-file guard for `/api/admin/export?includeFiles=true` so full JSON exports return `409` with a storage manifest when referenced stored model/G-code bytes cannot be read, unless an operator explicitly requests `allowMissingFiles=true`.
+- Added regression coverage for blocked and intentional partial full-backup exports, and documented the partial-export recovery requirement in README, operations, and production-readiness docs.
+- Added `/api/admin/integrity?checkStorage=true` storage coverage metadata for current stored model/G-code files so operators can see expected, present, missing, total bytes, and completeness before trusting backups or restore drills.
+- Added regression coverage for missing stored-object integrity reporting, and documented the storage-aware integrity check in README, operations, and production-readiness docs.
+- Updated authenticated production smoke and ops-check scripts to call `/api/admin/integrity?checkStorage=true`, fail when `storage.complete` is false, and report storage coverage in their JSON output.
+- Added deployment/script regression coverage and documentation so timer-backed ops checks enforce the same storage integrity gate operators use before backup and restore drills.
+- Added storage-aware integrity audit evidence to `admin.integrity_checked` events, including whether storage was checked, completeness, byte/count totals, and missing-file count without storing model/G-code contents.
+- Added regression coverage and documentation so operators can verify storage integrity gate outcomes later through `/api/audit`.
+- Added route-specific idempotent replay/conflict protection for multipart `/api/files/upload` after parsing the upload stream, using filename, material, folder, and file-byte digest before storage writes.
+- Moved upload audit events through the actor/workspace-aware audit dispatcher so successful uploads have traceable `file.uploaded` evidence.
+- Wired the built-in Files upload action to generate stable per-attempt browser `Idempotency-Key` headers for the same selected file/material/folder until success.
+- Hardened login, signup, password-change, logout, and 2FA setup/enable/verify/disable audit events with workspace, user, actor, and session metadata where applicable.
+- Added `auth.logout` audit evidence for session revocation, including the session ID and revoked-session count without storing bearer tokens.
+- Added regression coverage proving auth/session audit events omit bearer tokens, passwords, TOTP secrets, and recovery codes, and documented the audit evidence expectations in README, operations, and production-readiness docs.
+- Added idempotent replay/conflict protection for authenticated `/api/telemetry/tick` writes so dropped API responses do not double-advance printer progress or prematurely complete production jobs.
+- Added regression coverage proving telemetry tick retries replay the original response, preserve printer progress, avoid duplicate completion side effects, and reject changed payloads under the same key.
+- Documented telemetry tick `Idempotency-Key` usage in README, operations, and production-readiness docs.
+- Hardened production ops token transport so `/api/metrics` accepts `LAYERPILOT_METRICS_TOKEN` only through `x-layerpilot-metrics-token`, and `/api/internal/worker-broadcast` accepts `LAYERPILOT_WORKER_TOKEN` only through `x-layerpilot-worker-token`.
+- Preserved URL query token compatibility outside production for local tooling while preventing production shared tokens from landing in proxy/access-log URLs.
+- Added regression coverage for production query-token rejection and documented header-only metrics/worker token transport in README, install, operations, and production-readiness docs.
+- Added a production `/api/readiness` worker freshness gate so enabled background telemetry or bridge polling requires a recent durable worker heartbeat.
+- Added regression coverage for missing, stale, and fresh worker heartbeat readiness outcomes, and documented the gate in README, install, operations, and production-readiness docs.
+- Added strict workspace API-key IP allowlist validation for IPv4 addresses and IPv4 CIDR ranges, rejecting invalid or empty enabled allowlists at settings write time.
+- Added a production `/api/readiness` gate for persisted invalid or empty API-key IP allowlists, plus regression coverage and README/install/operations/production-readiness/deploy documentation.
+- Scoped manual audit-retention runs to the authenticated workspace and that workspace's retention settings, so a tenant/operator cannot prune another workspace's non-protected audit evidence.
+- Added regression coverage for cross-workspace audit-retention preservation and documented the tenant-scoped retention contract in README, operations, and production-readiness docs.
+- Hardened committed restore-prepared audit evidence so destructive restores add `admin.restore_prepared` metadata with workspace/operator context, collection counts, warning count, stripped-storage-path count, restored file-payload count, and compact file-payload coverage counts.
+- Added regression coverage proving `admin.restore_prepared` omits restored backup record names, restored backup user emails, stripped storage paths, file bytes, and backup contents, and documented the evidence review in README, operations, and production-readiness docs.
+
+## Remaining Blockers
+
+- Public signup is now closed by default on production VPS deployments; enabling self-service tenant registration remains an explicit business/security decision for the live SaaS environment.
+- Production-template and parametric nameplate retry safety is verified in API/UI helper coverage; real browser smoke on the deployed VPS should still be included in the go-live checklist.
+- No destructive deployment was performed because production env, domain, TLS, and customer deployment target were not confirmed.
+- Go-live still requires completing `docs/PRODUCTION_READINESS.md` on the actual VPS/customer environment.
+- Hardware bridge validation must be performed against the real printer fleet.
+- Optional production services such as Stripe, S3, MQTT, commerce feeds, and external slicer remain customer-environment dependent.
+- Live production readiness now fails when configured S3, Stripe, or MQTT integrations are incomplete or malformed; operators must either complete those settings or leave the optional integration disabled before go-live.
+- Frontend bundle size warning remains from the existing single-bundle app; it does not fail QC.
+- Full API JSON file-byte exports are intentionally capped by `LAYERPILOT_FULL_BACKUP_MAX_BYTES`; large production farms should rely on verified volume/object-storage backups unless an operator deliberately raises the API export ceiling.
+- Full API JSON file-byte exports now fail closed when stored file payloads are missing; `allowMissingFiles=true` should be used only with a documented separate volume/object-storage recovery plan.
+- Restore previews now report incomplete JSON file-payload coverage, but operators must still verify any separate volume/object-storage restore path before committing a restore that intentionally omits file bytes.
+- Restore-prepared audit evidence now records compact counts and operator context after committed restores, but operators must still verify the actual restored records and separate file-byte recovery plan during live restore drills.
+- Admin integrity checks, authenticated production smoke, and authenticated ops-check runs now report and audit current storage coverage with `checkStorage=true`, but operators must still run verified volume/object-storage backups and restore drills for the actual deployment target.
+- Idempotency coverage is route-specific; token- or secret-returning replay records are intentionally retained only in internal server metadata and omitted from shared state/admin exports.
+- Session expiry policy should be reviewed against the customer's shared-device operating model before go-live.
+- Auth/session audit events now include workspace/operator/session evidence without secrets, but operators still need to review `/api/audit` on the live deployment during access reviews and incident-response drills.
+- Production Owner/Admin users must enroll TOTP before protected API access when workspace `requireAdmin2fa` remains enabled; this is now enforced in `NODE_ENV=production`.
+- Production Owner/Admin users cannot disable TOTP while workspace `requireAdmin2fa` remains enabled; controlled resets should temporarily disable the workspace policy, remediate the account, then re-enable the policy.
+- First-time destructive restore commits still require a logged-in Owner/Admin user session; automation should use dry-run restore validation and hand off final commit to an operator.
+- Confirmed destructive restore commits now support route-specific idempotent replay after session revocation, but operators should still use fresh `Idempotency-Key` values after restoring from an exported backup because exports omit internal replay records.
+- API-key grants are intentionally limited to automation scopes; account, settings, and API-key administration should remain user-session-only unless a customer-specific security review changes that policy.
+- API-key read access is intentionally allowlisted by route and scope; integrations that need broader reads should be reviewed and granted a purpose-specific automation scope instead of falling back to user sessions.
+- Runtime production readiness now fails hard on unsafe default/demo access or weak/missing deployment secrets; operators must fix `.env` before live smoke checks can pass.
+- Workspace exports intentionally omit customer quote portal bearer tokens; operators should regenerate or rotate portal links after restore when customers need access.
+- API responses intentionally show only host-level metadata for webhook, notification, commerce, and bridge endpoints; operators should re-enter full provider URLs when rotating those integration credentials.
+- Integration endpoint audit events now identify operator/workspace and endpoint record metadata without URLs or tokens; operators still need provider-side logs for exact outbound destinations during credential rotation or delivery troubleshooting.
+- Commerce connector idempotency now protects feed tests, connector imports, and CSV batch retries; broader write API coverage should still be added only after route-specific response and secret review.
+- Quote conversion idempotency now protects authenticated operator retries; public customer quote decisions remain intentionally token-gated and should be reviewed separately before adding public idempotency semantics.
+- Public quote intake and token-verified customer quote decision idempotency now protect customer form submissions and portal approval retries; any broader public portal write coverage should still be added only with route-specific replay and token review.
+- The built-in public quote UI now sends idempotency headers for quote intake and customer accept/reject/revision decisions; embedded third-party forms still need their own per-attempt key generation.
+- Filament purchasing idempotency now protects direct purchase-request create/update, reorder-plan, and receive retries; broader inventory write coverage should still be added only after route-specific replay and response review.
+- Inventory idempotency now protects spool creation, metadata updates, label export, usage logging, and scan-based usage/location retries; broader inventory write coverage should still be added only after route-specific replay and response review.
+- Maintenance idempotency now protects job creation, job updates, template saves, and problem-report intake retries; broader maintenance write coverage should still be added only after route-specific replay and response review.
+- Audit-retention run idempotency now protects retry-prone governance cleanup runs; broader admin write coverage should still be added only after route-specific replay and response review.
+- Audit-retention pruning is now workspace-scoped, but operators still need to review each workspace's retention policy against customer compliance requirements before enabling aggressive retention windows.
+- Billing idempotency now protects plan-change and portal-session retries; Stripe webhooks now verify direct `Stripe-Signature` deliveries or the trusted-proxy shared-secret fallback rather than client `Idempotency-Key` headers, and duplicate Stripe provider event IDs replay without duplicating `billing.stripe_webhook` audit evidence.
+- Printer action idempotency now protects `/api/actions` retries before bridge dispatch; real hardware validation is still required against the customer's printer fleet before go-live.
+- Direct printer status idempotency now protects manual status update retries from duplicate `printer.status` audit events; real hardware status correctness still depends on bridge validation against the customer's printer fleet.
+- Quote portal-link idempotency now protects generation and rotation retries; operators should still avoid sharing superseded customer links after intentional manual rotation.
+- Generated todo action idempotency now protects claim/snooze/complete/reopen retries; clients still need to provide stable per-attempt keys for retry-prone operator actions.
+- Scheduler idempotency now protects auto/optimize/constraint retries from duplicate audit events; clients still need stable per-attempt keys when operators retry scheduler automation.
+- Telemetry tick idempotency now protects authenticated progress ticks from double-advancing jobs after dropped API responses; clients still need stable per-attempt keys when retrying manual or integration-triggered ticks.
+- Quote update idempotency now protects authenticated operator quote-review retries from duplicate audit events; clients still need stable per-attempt keys when operators retry quote updates.
+- Queue matching idempotency now protects committed production assignment retries from duplicate audit events; clients still need stable per-attempt keys when operators retry queue matching commits.
+- History reprint idempotency now protects operator reprint retries from duplicate queue jobs, generated todos, and audit events; clients still need stable per-attempt keys when retrying history reprint actions.
+- History annotation idempotency now protects operator issue/waste updates from duplicate audit events and double inventory deduction; clients still need stable per-attempt keys when retrying history annotations.
+- File/model artifact idempotency now protects JSON file creation, multipart model upload, sample generation, Hot Drop, parametric nameplate, file version, and file deletion retries; multipart upload uses route-specific stream-body digesting before storage writes.
+- Catalog/profile/printer configuration idempotency now protects setup retries from duplicate setup records and duplicate setup audit events; clients still need stable per-attempt keys when retrying configuration writes.
+- Cost catalog and material-map idempotency now protects catalog governance retries from duplicate pricing/material-normalization audit or run records; clients still need stable per-attempt keys when retrying those governance writes.
+- Integration configuration idempotency now protects webhook, notification channel, commerce connector, add-on, and bridge setup retries from duplicate records and audit events; clients still need stable per-attempt keys when retrying integration setup writes.
+- Governance setup idempotency now protects workspace settings, onboarding checklist updates, and support snapshot generation from duplicate audit events; clients still need stable per-attempt keys when retrying go-live setup actions.
+- Admin account management idempotency now protects API-key create/update, user invite/update, and password-reset retries from duplicate generated secrets and duplicate governance audit events; clients still need stable per-attempt keys when retrying owner/admin actions.
+- The built-in Team, API-key, Settings governance, support snapshot, billing, and confirmed restore commit UI now generates stable per-attempt idempotency headers for supported retry-prone writes.
+- The built-in daily operator UI now generates stable per-attempt idempotency headers for supported queue, scheduler, order, quote, file upload/artifact, slicer, printer, todo, spool, maintenance job, and purchasing writes; lower-risk integration/history components still need route-specific browser retry handling before claiming complete UI coverage.
+- Idempotency replay records are intentionally omitted from shared state and admin exports; retry clients should use fresh keys after workspace export/restore rather than expecting replay cache continuity.
+- Audit context now covers the highest-impact production scheduling/queue/bridge/file-version operator actions; remaining lower-risk direct event writes should be migrated only with route-specific delivery and notification review.
+- Ops-check authenticated verification requires valid Owner/Admin credentials or a dedicated smoke account configured in `.env`; otherwise it warns and continues with unauthenticated host checks.
+- Support snapshots now redact secret-like fields and URL paths/query strings, but operators should still review generated support bundles before sharing customer evidence externally.
+- Production metrics scrapers and worker notifiers must send shared ops tokens in headers; query-token URLs are intentionally rejected in `NODE_ENV=production`.
+- Production readiness now fails when worker telemetry or bridge polling is enabled and the worker heartbeat is missing or stale; operators must verify the `layerpilot-worker` service and shared database/volume on the live host.
+- Production readiness now fails when API-key IP restrictions are enabled with an empty or invalid IPv4/CIDR allowlist; operators must correct workspace settings before relying on scoped automation keys.
+- File-download and file-preview audit evidence is now captured, but operators still need to include `/api/audit?type=file.downloaded` and `/api/audit?type=file.previewed` review in live access-review and incident-response drills.
+- Catalog CSV and audit CSV export evidence is now captured, but operators still need to include `/api/audit?type=catalog.exported` and `/api/audit?type=admin.audit_exported` review in live access-review and evidence-export drills.

@@ -1,7 +1,7 @@
 ﻿/// <reference types="vite/client" />
 import type * as React from "react";
 import packageJson from "../package.json";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -66,6 +66,7 @@ import {
   XAxis,
   YAxis
 } from "recharts";
+import { idempotencyFingerprint, idempotencyHeadersForAttempt, idempotencyKeyForAttempt, type IdempotencyAttempt } from "./idempotency";
 
 const APP_VERSION = packageJson.version;
 
@@ -231,9 +232,11 @@ type Part = { id: string; name: string; fileId: string; material: string; proces
 type SKU = { id: string; sku: string; title: string; parts: string[]; variants: string[]; price: number; stock: number; channel: string };
 type ProductionTemplate = { id: string; name: string; sku?: string; fileId: string; material: string; color: string; priority: QueueItem["priority"]; stage: TaskStage; printerId?: string; process: string; dueOffsetDays: number; quantity: number; time: string; cost: number; notes?: string; runCount?: number; lastRunAt?: string; createdAt?: string; updatedAt?: string };
 type ProductionTemplateRunResult = { template: ProductionTemplate; jobs: QueueItem[]; dryRun: boolean; queue: QueueItem[]; todos: Todo[] };
-type Order = { id: string; source: "Shopify" | "Etsy" | "Manual" | "eBay"; externalId?: string; customer: string; items: string[]; status: "received" | "queued" | "printing" | "packed" | "shipped"; due: string; value: number };
-type QuoteRequest = { id: string; customer: string; email: string; company?: string; project: string; material: string; quantity: number; due: string; budget: number; notes?: string; fileName?: string; fileId?: string; fileType?: string; fileSize?: string; estimatedGrams?: number; estimatedMinutes?: number; estimatedQuote?: number; source: string; status: "new" | "reviewing" | "quoted" | "accepted" | "converted" | "rejected"; priority: QueueItem["priority"]; quotedValue?: number; validUntil?: string; internalNote?: string; orderId?: string; customerAccessToken?: string; portalLinkGeneratedAt?: string; createdAt?: string; updatedAt?: string };
-type PublicQuoteStatus = Pick<QuoteRequest, "id" | "status" | "project" | "material" | "quantity" | "due" | "budget" | "quotedValue" | "validUntil" | "fileName" | "fileType" | "fileSize" | "estimatedGrams" | "estimatedMinutes" | "estimatedQuote" | "orderId" | "createdAt" | "updatedAt"> & { customerDecision?: string; customerDecisionAt?: string };
+type OrderStatus = "received" | "queued" | "printing" | "on_hold" | "packed" | "shipped" | "completed" | "cancelled";
+type Order = { id: string; source: "Shopify" | "Etsy" | "Manual" | "eBay"; externalId?: string; customer: string; items: string[]; status: OrderStatus; due: string; value: number };
+type OrderStatusUpdateResult = Order & { order?: Order; jobs?: QueueItem[]; materialChanges?: Array<{ spoolId: string; grams: number; material: string }>; spools?: Spool[]; todos?: Todo[] };
+type QuoteRequest = { id: string; customer: string; email: string; company?: string; project: string; material: string; quantity: number; due: string; budget: number; notes?: string; fileName?: string; fileId?: string; fileType?: string; fileSize?: string; estimatedGrams?: number; estimatedMinutes?: number; estimatedQuote?: number; source: string; status: "new" | "reviewing" | "quoted" | "accepted" | "converted" | "rejected"; priority: QueueItem["priority"]; quotedValue?: number; validUntil?: string; internalNote?: string; orderId?: string; customerDecision?: string; customerDecisionNote?: string; customerAccessToken?: string; portalLinkGeneratedAt?: string; createdAt?: string; updatedAt?: string };
+type PublicQuoteStatus = Pick<QuoteRequest, "id" | "status" | "project" | "material" | "quantity" | "due" | "budget" | "quotedValue" | "validUntil" | "fileName" | "fileType" | "fileSize" | "estimatedGrams" | "estimatedMinutes" | "estimatedQuote" | "orderId" | "createdAt" | "updatedAt"> & { customerDecision?: string; customerDecisionAt?: string; customerDecisionNote?: string };
 type OrderJobGenerationResult = { order: Order; jobs: QueueItem[]; existingJobs?: QueueItem[]; missing?: Array<{ item: string; reason: string }>; skus?: SKU[]; todos?: Todo[]; dryRun?: boolean; duplicateBlocked?: boolean; stockChanges?: Array<{ sku: string; before: number; after: number; quantity: number }> };
 type CommerceConnector = { id: string; name: string; source: Order["source"] | "Generic"; url: string; enabled: boolean; hasToken?: boolean; lastStatus?: string; lastStatusCode?: number; lastError?: string; lastSyncAt?: string };
 type CommerceImport = { id: string; source: string; connectorId?: string; connectorName?: string; status: string; created: number; skipped: number; at: string; error?: string };
@@ -244,7 +247,7 @@ type SupportSnapshot = { service: string; generatedAt: string; generatedBy: stri
 type WorkspaceSettings = { organizationName: string; defaultLocation: string; units: "metric" | "imperial"; currency: string; timezone: string; theme: "system" | "light" | "dark"; requireAdmin2fa: boolean; auditLogRetention: boolean; auditLogRetentionDays: number; restrictApiByIp: boolean; allowedApiIps: string[]; storageLimitGb: number; hotDropMode: HotDropMode; plan: string; onboarding?: Record<string, { status: "pending" | "complete" | "skipped"; note?: string; updatedAt?: string; updatedBy?: string }> };
 type BillingTier = { id: string; name: string; storageLimitGb: number; monthlyPrice: number; currency: string; features: string[]; isCustom?: boolean };
 type BillingSummary = { status: string; plan: BillingTier; tiers: BillingTier[]; storage: { usedBytes: number; used: string; usedGb: number; limitGb: number; percent: number; files: number; storedFiles: number }; portalMode: "internal" | "external" | "stripe"; invoices: Array<{ id: string; provider?: string; plan: string; amount: number; currency: string; status: string; at: string; note?: string }>; sessions: Array<{ id: string; mode: string; provider?: string; status: string; url: string; createdAt: string; expiresAt: string }> };
-type RestoreSummary = { dryRun: boolean; restored?: boolean; collectionCounts: Record<string, number>; users: number; printers: number; queue: number; files: number; storagePathsStripped: number; filePayloadsRestored?: number; warnings: string[] };
+type RestoreSummary = { dryRun: boolean; restored?: boolean; collectionCounts: Record<string, number>; users: number; printers: number; queue: number; files: number; storagePathsStripped: number; filePayloadsRestored?: number; filePayloadCoverage?: { complete: boolean; expected: number; included: number; missing: Array<{ fileId: string; name: string }>; extra: Array<{ fileId: string; name: string }>; storageIncluded: boolean }; warnings: string[] };
 type CostCatalog = { currency: string; materialRates: Record<string, number>; machineHourlyRate: number; laborPerOrder: number; failureReservePercent: number; minimumQuote: number; overheadPercent: number };
 type Profile = { id: string; name: string; kind: "Machine" | "Process" | "Filament"; target: string; source: "Bambu sync" | "Orca import" | "Manual"; updated: string; settings?: Record<string, string | number | boolean | string[]> };
 type ProfileDefaults = Partial<Record<Profile["kind"], string>>;
@@ -258,6 +261,7 @@ type AnalyticsSummary = { jobs: number; active: number; queued: number; complete
 type HistoryRecord = { id: string; fileId?: string; file: string; printerId?: string; printer: string; status: JobStatus; duration: string; material: string; cost: number; date: string; note: string; issueTag?: string; issueSeverity?: string; flaggedAt?: string; failureReason?: string; failureCategory?: string; rootCause?: string; correctiveAction?: string; wasteGrams?: number; wasteCost?: number; wasteSpoolId?: string; wasteInventoryDeductedAt?: string; sourceOrderId?: string };
 type SlicerJob = { id: string; fileId: string; sourceFile: string; printerId: string; printer: string; profileId?: string; profile?: string; status: "running" | "complete" | "failed"; engine: "internal" | "external"; settings: { material: string; layerHeight: string; infill: number; supports: boolean }; outputName?: string; outputSize?: string; outputPath?: string; warning?: string; error?: string; createdAt: string; completedAt?: string };
 type AuditEvent = { id: string; type: string; message: string; at: string; data?: Record<string, unknown> };
+type AuditResponse = { total: number; matched: number; returned: number; limit: number; offset: number; hasMore: boolean; events: AuditEvent[] };
 type AutoScheduleResult = {
   strategy?: "material-color" | "load-balance" | "due-priority" | "constraint-balanced-cost" | "constraint-due-risk" | "constraint-changeover-min";
   dryRun?: boolean;
@@ -289,6 +293,7 @@ const zhTwTranslations: Record<string, string> = {
   "Profile": "個人資料",
   "Workspace": "工作區",
   "Mock printer": "模擬打印機",
+  "No audit events match the current filters": "沒有符合目前篩選條件的稽核事件",
   "Done": "完成",
   "Language": "語言",
   "Logout": "登出",
@@ -297,6 +302,7 @@ const zhTwTranslations: Record<string, string> = {
   "Run a smarter print lab from one cockpit.": "用一個控制台管理更聰明的 3D 打印工作室。",
   "Original cloud management for printers, jobs, materials, teams, and automations.": "原創的打印機、任務、材料、團隊與自動化雲端管理系統。",
   "Professional setup and technical support:": "專業安裝設定與技術支援：",
+  "Production admin access requires two-factor authentication. Set up 2FA to unlock protected workspace APIs.": "正式環境管理員存取需要雙因素驗證。請設定 2FA 以解鎖受保護的工作區 API。",
   "Dashboard": "儀表板",
   "Production cockpit": "生產控制台",
   "Printers": "打印機",
@@ -315,6 +321,7 @@ const zhTwTranslations: Record<string, string> = {
   "Add-ons": "擴充功能",
   "Notifications": "通知",
   "Settings": "設定",
+  "Set up two-factor authentication to unlock production admin access.": "請設定雙因素驗證以解鎖正式環境管理員存取。",
   "Hot Drop": "快速投放",
   "Go-live readiness": "上線準備度",
   "Drop demo files here": "投放 Demo 檔案",
@@ -453,6 +460,7 @@ const zhTwTranslations: Record<string, string> = {
   "Import Orca profile": "匯入 Orca 設定檔",
   "Sync Bambu profiles": "同步 Bambu 設定檔",
   "Export": "匯出",
+  "Hold": "暫停",
   "Complete": "完成",
   "Progress": "進度",
   "Severity": "嚴重度",
@@ -482,8 +490,10 @@ const zhTwTranslations: Record<string, string> = {
   "ready": "就緒",
   "draft": "草稿",
   "received": "已接單",
+  "on_hold": "暫停中",
   "packed": "已包裝",
   "shipped": "已出貨",
+  "completed": "已完成",
   "matched": "已匹配",
   "waiting": "等待中",
   "Rush": "急件",
@@ -764,6 +774,7 @@ const zhTwTranslations: Record<string, string> = {
   "Two-factor code": "雙因素代碼",
   "Two-factor code could not be verified": "無法驗證雙因素代碼",
   "Two-factor disable failed. Check password and code.": "停用雙因素驗證失敗，請檢查密碼與代碼。",
+  "Two-factor setup could not be verified. Check password and code.": "無法驗證雙因素設定，請檢查密碼與驗證碼。",
   "Two-factor setup requires a live signed-in session": "雙因素設定需要有效登入工作階段。",
   "Two-factor setup started": "雙因素設定已開始",
   "Units": "單位",
@@ -927,15 +938,30 @@ const zhTwTranslations: Record<string, string> = {
   "Customer portal link copied": "客戶入口連結已複製",
   "Customer portal link ready": "客戶入口連結已建立",
   "Customer portal link could not be created. Check API status.": "無法建立客戶入口連結，請檢查 API 狀態。",
+  "Customer quote intake": "客戶詢價入口",
+  "Send print requirements into the production pipeline.": "將打印需求送入生產流程。",
+  "Company": "公司",
+  "Project": "專案",
+  "Budget": "預算",
+  "Due date": "交期",
+  "File name": "檔案名稱",
+  "Quantity": "數量",
+  "Notes": "備註",
+  "Request quote": "送出詢價",
+  "Quote": "報價",
+  "model.stl / model.3mf": "model.stl / model.3mf",
+  "qr-...": "qr-...",
   "Quote intake": "詢價入口",
   "Quote requests": "詢價請求",
   "Quote request ID": "詢價單 ID",
   "Quote status lookup": "詢價狀態查詢",
   "Quote valid until": "報價有效至",
+  "Requesting quote changes...": "正在送出修改要求...",
   "Tracking token": "追蹤權杖",
   "Check status": "查詢狀態",
   "Approve quote": "接受報價",
   "Reject quote": "拒絕報價",
+  "Request changes": "要求修改",
   "Save the returned tracking token to check quote status after the operator reviews it.": "請保存回傳的追蹤權杖，操作員審核後可查詢詢價狀態。",
   "Quoting": "報價中",
   "Accept / order": "接受 / 轉訂單",
@@ -1327,10 +1353,21 @@ const materialData = [
 const roles: Role[] = ["Owner", "Admin", "Operator", "Viewer", "Student"];
 const API_BASE = import.meta.env.VITE_LAYERPILOT_API_URL ?? (import.meta.env.PROD ? "" : "http://127.0.0.1:8797");
 
-function realtimeUrl(path: string, token: string) {
+class ApiError extends Error {
+  status: number;
+  body: Record<string, unknown>;
+
+  constructor(status: number, body: Record<string, unknown>) {
+    super(`API ${status}`);
+    this.status = status;
+    this.body = body;
+  }
+}
+
+function realtimeUrl(path: string, ticket: string) {
   const base = API_BASE || window.location.origin;
   const url = new URL(path, base);
-  url.searchParams.set("token", token);
+  url.searchParams.set("ticket", ticket);
   if (url.protocol === "http:") url.protocol = "ws:";
   if (url.protocol === "https:") url.protocol = "wss:";
   return url.toString();
@@ -1348,8 +1385,21 @@ async function apiRequest<T>(path: string, init: RequestInit = {}) {
       ...(init.headers || {})
     }
   });
-  if (!response.ok) throw new Error(`API ${response.status}`);
+  if (!response.ok) {
+    let body: Record<string, unknown> = {};
+    try {
+      const parsed = await response.json();
+      if (parsed && typeof parsed === "object") body = parsed as Record<string, unknown>;
+    } catch {
+      body = {};
+    }
+    throw new ApiError(response.status, body);
+  }
   return response.json() as Promise<T>;
+}
+
+async function realtimeTicket() {
+  return apiRequest<{ token: string; expiresAt: string }>("/api/events/token", { method: "POST" });
 }
 
 function downloadJsonFile(filename: string, payload: unknown) {
@@ -1466,6 +1516,7 @@ function App() {
   const [authToken, setAuthToken] = useState(() => window.localStorage.getItem("layerpilot-token") || "");
   const [authed, setAuthed] = useState(() => Boolean(window.localStorage.getItem("layerpilot-token")));
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [twoFactorEnrollmentRequired, setTwoFactorEnrollmentRequired] = useState(false);
   const [view, setView] = useState<View>("dashboard");
   const [mobileNav, setMobileNav] = useState(false);
   const [printers, setPrinters] = useState(initialPrinters);
@@ -1499,6 +1550,21 @@ function App() {
     "Nozzle inspection is due today.",
     "Slack integration delivered 18 events today."
   ]);
+  const accountIdempotencyAttempts = useRef<Record<string, IdempotencyAttempt>>({});
+  const accountIdempotencyHeaders = (action: string, payload: unknown) => {
+    const result = idempotencyHeadersForAttempt(accountIdempotencyAttempts.current[action] || null, action, payload);
+    accountIdempotencyAttempts.current[action] = result.attempt;
+    return result.headers;
+  };
+  const operatorIdempotencyAttempts = useRef<Record<string, IdempotencyAttempt>>({});
+  const operatorIdempotencyHeaders = (action: string, payload: unknown) => {
+    const result = idempotencyHeadersForAttempt(operatorIdempotencyAttempts.current[action] || null, action, payload);
+    operatorIdempotencyAttempts.current[action] = result.attempt;
+    return result.headers;
+  };
+  const clearOperatorIdempotency = (action: string) => {
+    delete operatorIdempotencyAttempts.current[action];
+  };
 
   const addToast = (message: string, type: Toast["type"] = "success") => {
     const id = crypto.randomUUID();
@@ -1524,6 +1590,7 @@ function App() {
       window.localStorage.setItem("layerpilot-token", auth.token);
       setAuthToken(auth.token);
       setCurrentUser(auth.user);
+      setTwoFactorEnrollmentRequired(false);
       setAuthed(true);
       setBackendStatus("connected");
       return "";
@@ -1533,6 +1600,7 @@ function App() {
       window.localStorage.setItem("layerpilot-token", "local-demo");
       setAuthToken("local-demo");
       setCurrentUser({ id: "local", name: "Local Demo", email: payload.email, role: "Owner", location: "Local", lastSeen: "Now" });
+      setTwoFactorEnrollmentRequired(false);
       setAuthed(true);
       setBackendStatus("local");
       return "";
@@ -1544,6 +1612,7 @@ function App() {
     window.localStorage.removeItem("layerpilot-token");
     setAuthToken("");
     setCurrentUser(null);
+    setTwoFactorEnrollmentRequired(false);
     setAuthed(false);
     setBackendStatus("local");
   };
@@ -1591,12 +1660,16 @@ function App() {
   const updatePrinterStatus = async (id: string, status: PrinterStatus, localPatch: Partial<Printer> = {}) => {
     setPrinters((items) => items.map((printer) => printer.id === id ? { ...printer, status, ...localPatch } : printer));
     setSelectedPrinter((current) => current?.id === id ? { ...current, status, ...localPatch } : current);
+    const payload = { status, ...localPatch };
+    const attemptKey = `printer-status:${id}`;
     try {
       const printer = await apiRequest<Printer>(`/api/printers/${id}/status`, {
         method: "PATCH",
-        body: JSON.stringify({ status, ...localPatch })
+        headers: operatorIdempotencyHeaders(attemptKey, { printerId: id, ...payload }),
+        body: JSON.stringify(payload)
       });
       setPrinterState({ ...printer, ...localPatch });
+      clearOperatorIdempotency(attemptKey);
       setBackendStatus("connected");
     } catch {
       setBackendStatus("local");
@@ -1605,13 +1678,16 @@ function App() {
 
   const createQueueJob = async (job: Omit<QueueItem, "id">) => {
     const fallback: QueueItem = { ...job, id: crypto.randomUUID() };
+    const attemptKey = "queue-create";
     try {
       const created = await apiRequest<{ job: QueueItem }>("/api/queue", {
         method: "POST",
+        headers: operatorIdempotencyHeaders(attemptKey, job),
         body: JSON.stringify(job)
       });
       setQueue((items) => [...items, created.job]);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return created.job;
     } catch {
       setQueue((items) => [...items, fallback]);
@@ -1623,15 +1699,19 @@ function App() {
   const scheduleQueueJob = async (jobId: string, printer: Printer, scheduledStart = "13:00") => {
     const currentJob = queue.find((item) => item.id === jobId);
     const localWarnings = currentJob ? getScheduleWarnings(currentJob, printer) : [];
+    const payload = { printerId: printer.id, scheduledStart };
+    const attemptKey = `queue-schedule:${jobId}`;
     setQueue((items) => items.map((item) => item.id === jobId ? { ...item, printerId: printer.id, printer: printer.name, scheduledStart: item.scheduledStart || scheduledStart, scheduleWarnings: localWarnings, stage: item.stage === "needs slicing" ? "needs slicing" : "scheduled" } : item));
     try {
       const scheduled = await apiRequest<{ job: QueueItem; warnings?: string[]; spools?: Spool[] }>(`/api/queue/${jobId}/schedule`, {
         method: "PATCH",
-        body: JSON.stringify({ printerId: printer.id, scheduledStart })
+        headers: operatorIdempotencyHeaders(attemptKey, { jobId, ...payload }),
+        body: JSON.stringify(payload)
       });
       setQueue((items) => items.map((item) => item.id === jobId ? scheduled.job : item));
       if (scheduled.spools) setSpools(scheduled.spools);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return scheduled.warnings || scheduled.job.scheduleWarnings || [];
     } catch {
       setBackendStatus("local");
@@ -1640,14 +1720,18 @@ function App() {
   };
 
   const autoScheduleQueueJobs = async () => {
+    const payload = { includeBusyPrinters: true, respectMaterial: true, respectBuildVolume: true, startMinute: 8 * 60 };
+    const attemptKey = "schedule-auto";
     try {
       const result = await apiRequest<AutoScheduleResult>("/api/schedule/auto", {
         method: "POST",
-        body: JSON.stringify({ includeBusyPrinters: true, respectMaterial: true, respectBuildVolume: true, startMinute: 8 * 60 })
+        headers: operatorIdempotencyHeaders(attemptKey, payload),
+        body: JSON.stringify(payload)
       });
       setQueue((items) => items.map((item) => result.jobs.find((job) => job.id === item.id) || item));
       if (result.spools) setSpools(result.spools);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return result;
     } catch {
       const draft = queue.map((job) => ({ ...job }));
@@ -1687,14 +1771,18 @@ function App() {
   };
 
   const optimizeScheduleJobs = async (strategy: OptimizeScheduleStrategy) => {
+    const payload = { strategy, includeBusyPrinters: true, respectMaterial: true, respectBuildVolume: true, startMinute: 8 * 60 };
+    const attemptKey = `schedule-optimize:${strategy}`;
     try {
       const result = await apiRequest<AutoScheduleResult>("/api/schedule/optimize", {
         method: "POST",
-        body: JSON.stringify({ strategy, includeBusyPrinters: true, respectMaterial: true, respectBuildVolume: true, startMinute: 8 * 60 })
+        headers: operatorIdempotencyHeaders(attemptKey, payload),
+        body: JSON.stringify(payload)
       });
       setQueue((items) => items.map((item) => result.jobs.find((job) => job.id === item.id) || item));
       if (result.spools) setSpools(result.spools);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return result;
     } catch {
       const draft = queue.map((job) => ({ ...job }));
@@ -1725,14 +1813,18 @@ function App() {
   };
 
   const solveScheduleJobs = async (objective: ConstraintObjective) => {
+    const payload = { objective, includeBusyPrinters: true, respectMaterial: true, respectBuildVolume: true, startMinute: 8 * 60, maxJobs: 80 };
+    const attemptKey = `schedule-constraint:${objective}`;
     try {
       const result = await apiRequest<AutoScheduleResult>("/api/schedule/constraint", {
         method: "POST",
-        body: JSON.stringify({ objective, includeBusyPrinters: true, respectMaterial: true, respectBuildVolume: true, startMinute: 8 * 60, maxJobs: 80 })
+        headers: operatorIdempotencyHeaders(attemptKey, payload),
+        body: JSON.stringify(payload)
       });
       setQueue((items) => items.map((item) => result.jobs.find((job) => job.id === item.id) || item));
       if (result.spools) setSpools(result.spools);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return result;
     } catch {
       const fallback = await optimizeScheduleJobs(objective === "changeover-min" ? "material-color" : objective === "due-risk" ? "due-priority" : "load-balance");
@@ -1746,10 +1838,13 @@ function App() {
   };
 
   const matchQueueJobs = async (dryRun: boolean) => {
+    const payload = { dryRun, maxActiveSlots: 3, respectMaterial: true, respectBuildVolume: true };
+    const attemptKey = `queue-match:${dryRun ? "dry-run" : "commit"}`;
     try {
       const result = await apiRequest<QueueMatchResult>("/api/queue/match", {
         method: "POST",
-        body: JSON.stringify({ dryRun, maxActiveSlots: 3, respectMaterial: true, respectBuildVolume: true })
+        headers: operatorIdempotencyHeaders(attemptKey, payload),
+        body: JSON.stringify(payload)
       });
       if (!dryRun) {
         setQueue((items) => items.map((item) => result.jobs.find((job) => job.id === item.id) || item));
@@ -1757,6 +1852,7 @@ function App() {
         if (result.spools) setSpools(result.spools);
       }
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return result;
     } catch {
       const active = queue.filter((job) => job.status === "printing" || job.status === "paused").length;
@@ -1777,29 +1873,37 @@ function App() {
   };
 
   const updateQueueStatus = async (jobId: string, status: JobStatus) => {
+    const payload = { status };
+    const attemptKey = `queue-status:${jobId}`;
     setQueue((items) => items.map((job) => job.id === jobId ? { ...job, status } : job));
     try {
       const updated = await apiRequest<{ job: QueueItem; spools?: Spool[] }>(`/api/queue/${jobId}/status`, {
         method: "PATCH",
-        body: JSON.stringify({ status })
+        headers: operatorIdempotencyHeaders(attemptKey, { jobId, ...payload }),
+        body: JSON.stringify(payload)
       });
       setQueue((items) => items.map((job) => job.id === jobId ? updated.job : job));
       if (updated.spools) setSpools(updated.spools);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
     } catch {
       setBackendStatus("local");
     }
   };
 
   const updateQueuePriority = async (jobId: string, priority: QueueItem["priority"]) => {
+    const payload = { priority };
+    const attemptKey = `queue-priority:${jobId}`;
     setQueue((items) => items.map((job) => job.id === jobId ? { ...job, priority } : job));
     try {
       const updated = await apiRequest<{ job: QueueItem }>(`/api/queue/${jobId}/priority`, {
         method: "PATCH",
-        body: JSON.stringify({ priority })
+        headers: operatorIdempotencyHeaders(attemptKey, { jobId, ...payload }),
+        body: JSON.stringify(payload)
       });
       setQueue((items) => items.map((job) => job.id === jobId ? updated.job : job));
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
     } catch {
       setBackendStatus("local");
     }
@@ -1807,13 +1911,16 @@ function App() {
 
   const createOrder = async (draft: Omit<Order, "id">) => {
     const fallback: Order = { ...draft, id: `ord-${1051 + orders.length}` };
+    const attemptKey = "order-create";
     try {
       const created = await apiRequest<Order>("/api/orders", {
         method: "POST",
+        headers: operatorIdempotencyHeaders(attemptKey, draft),
         body: JSON.stringify(draft)
       });
       setOrders((items) => [...items, created]);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return created;
     } catch {
       setOrders((items) => [...items, fallback]);
@@ -1823,15 +1930,24 @@ function App() {
   };
 
   const updateOrderStatus = async (orderId: string, status: Order["status"]) => {
+    const payload = { status };
+    const attemptKey = `order-status:${orderId}`;
     setOrders((items) => items.map((order) => order.id === orderId ? { ...order, status } : order));
     try {
-      const updated = await apiRequest<Order>(`/api/orders/${orderId}/status`, {
+      const updated = await apiRequest<OrderStatusUpdateResult>(`/api/orders/${orderId}/status`, {
         method: "PATCH",
-        body: JSON.stringify({ status })
+        headers: operatorIdempotencyHeaders(attemptKey, { orderId, ...payload }),
+        body: JSON.stringify(payload)
       });
-      setOrders((items) => items.map((order) => order.id === orderId ? updated : order));
+      const nextOrder = updated.order || updated;
+      setOrders((items) => items.map((order) => order.id === orderId ? nextOrder : order));
+      if (updated.jobs?.length) {
+        setQueue((items) => items.map((job) => updated.jobs?.find((updatedJob) => updatedJob.id === job.id) || job));
+      }
+      if (updated.spools) setSpools(updated.spools);
       setBackendStatus("connected");
-      return updated;
+      clearOperatorIdempotency(attemptKey);
+      return nextOrder;
     } catch {
       setBackendStatus("local");
       return orders.find((order) => order.id === orderId);
@@ -1839,14 +1955,17 @@ function App() {
   };
 
   const updateQuoteRequest = async (quoteId: string, patch: Partial<Pick<QuoteRequest, "status" | "priority" | "quotedValue" | "validUntil" | "internalNote">>) => {
+    const attemptKey = `quote-update:${quoteId}`;
     setQuoteRequests((items) => items.map((quote) => quote.id === quoteId ? { ...quote, ...patch } : quote));
     try {
       const updated = await apiRequest<QuoteRequest>(`/api/quoteRequests/${quoteId}`, {
         method: "PATCH",
+        headers: operatorIdempotencyHeaders(attemptKey, { quoteId, patch }),
         body: JSON.stringify(patch)
       });
       setQuoteRequests((items) => items.map((quote) => quote.id === quoteId ? updated : quote));
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return updated;
     } catch {
       setBackendStatus("local");
@@ -1855,13 +1974,17 @@ function App() {
   };
 
   const createQuotePortalLink = async (quote: QuoteRequest, rotate = false) => {
+    const payload = { rotate };
+    const attemptKey = `quote-portal-link:${quote.id}`;
     try {
       const result = await apiRequest<{ quoteRequest: QuoteRequest; url: string; accessToken: string }>(`/api/quoteRequests/${quote.id}/customer-link`, {
         method: "POST",
-        body: JSON.stringify({ rotate })
+        headers: operatorIdempotencyHeaders(attemptKey, { quoteId: quote.id, ...payload }),
+        body: JSON.stringify(payload)
       });
       setQuoteRequests((items) => items.map((item) => item.id === quote.id ? result.quoteRequest : item));
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return result;
     } catch {
       setBackendStatus("local");
@@ -1870,15 +1993,19 @@ function App() {
   };
 
   const convertQuoteRequest = async (quote: QuoteRequest) => {
+    const payload = { due: quote.due, value: quote.quotedValue || quote.budget || 0, createJob: true };
+    const attemptKey = `quote-convert:${quote.id}`;
     try {
       const result = await apiRequest<{ quoteRequest: QuoteRequest; order: Order; job?: QueueItem | null; orders: Order[]; quoteRequests: QuoteRequest[]; queue?: QueueItem[]; todos?: Todo[] }>(`/api/quoteRequests/${quote.id}/convert-order`, {
         method: "POST",
-        body: JSON.stringify({ due: quote.due, value: quote.quotedValue || quote.budget || 0, createJob: true })
+        headers: operatorIdempotencyHeaders(attemptKey, { quoteId: quote.id, ...payload }),
+        body: JSON.stringify(payload)
       });
       setQuoteRequests(result.quoteRequests);
       setOrders(result.orders);
       if (result.queue) setQueue(result.queue);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return result;
     } catch {
       const order: Order = { id: `local-${crypto.randomUUID().slice(0, 8)}`, source: "Manual", externalId: quote.id, customer: quote.company ? `${quote.customer} / ${quote.company}` : quote.customer, items: [`${quote.project} x${quote.quantity}`], status: "received", due: quote.due, value: quote.quotedValue || quote.budget || 0 };
@@ -1892,13 +2019,16 @@ function App() {
 
   const createSpool = async (draft: Omit<Spool, "id">) => {
     const fallback: Spool = { ...draft, id: crypto.randomUUID() };
+    const attemptKey = "spool-create";
     try {
       const created = await apiRequest<Spool>("/api/spools", {
         method: "POST",
+        headers: operatorIdempotencyHeaders(attemptKey, draft),
         body: JSON.stringify(draft)
       });
       setSpools((items) => [...items, created]);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return created;
     } catch {
       setSpools((items) => [...items, fallback]);
@@ -1908,14 +2038,17 @@ function App() {
   };
 
   const updateSpool = async (spoolId: string, patch: Partial<Spool>) => {
+    const attemptKey = `spool-update:${spoolId}`;
     setSpools((items) => items.map((spool) => spool.id === spoolId ? { ...spool, ...patch } : spool));
     try {
       const updated = await apiRequest<Spool>(`/api/spools/${spoolId}`, {
         method: "PATCH",
+        headers: operatorIdempotencyHeaders(attemptKey, { spoolId, patch }),
         body: JSON.stringify(patch)
       });
       setSpools((items) => items.map((spool) => spool.id === spoolId ? updated : spool));
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return updated;
     } catch {
       setBackendStatus("local");
@@ -1924,14 +2057,18 @@ function App() {
   };
 
   const logSpoolUsage = async (spoolId: string, grams = 20) => {
+    const payload = { grams };
+    const attemptKey = `spool-usage:${spoolId}`;
     setSpools((items) => items.map((spool) => spool.id === spoolId ? { ...spool, remaining: Math.max(0, spool.remaining - grams) } : spool));
     try {
       const updated = await apiRequest<Spool>(`/api/spools/${spoolId}/usage`, {
         method: "PATCH",
-        body: JSON.stringify({ grams })
+        headers: operatorIdempotencyHeaders(attemptKey, { spoolId, ...payload }),
+        body: JSON.stringify(payload)
       });
       setSpools((items) => items.map((spool) => spool.id === spoolId ? updated : spool));
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return updated;
     } catch {
       setBackendStatus("local");
@@ -1940,33 +2077,44 @@ function App() {
   };
 
   const generateSpoolLabels = async (ids: string[] = []) => {
+    const payload = { ids };
+    const attemptKey = "spool-labels";
     const result = await apiRequest<SpoolLabelExport>("/api/spools/labels", {
       method: "POST",
-      body: JSON.stringify({ ids })
+      headers: operatorIdempotencyHeaders(attemptKey, payload),
+      body: JSON.stringify(payload)
     });
     setBackendStatus("connected");
+    clearOperatorIdempotency(attemptKey);
     return result;
   };
 
   const scanSpool = async (code: string, options: { grams?: number; location?: string } = {}) => {
+    const payload = { code, ...options };
+    const attemptKey = `spool-scan:${code}`;
     const result = await apiRequest<SpoolScanResult>("/api/spools/scan", {
       method: "POST",
-      body: JSON.stringify({ code, ...options })
+      headers: operatorIdempotencyHeaders(attemptKey, payload),
+      body: JSON.stringify(payload)
     });
     setSpools(result.spools || spools.map((spool) => spool.id === result.spool.id ? result.spool : spool));
     setBackendStatus("connected");
+    clearOperatorIdempotency(attemptKey);
     return result;
   };
 
   const createPurchaseRequest = async (draft: Omit<PurchaseRequest, "id">) => {
     const fallback: PurchaseRequest = { ...draft, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    const attemptKey = "purchase-request-create";
     try {
       const created = await apiRequest<PurchaseRequest>("/api/purchaseRequests", {
         method: "POST",
+        headers: operatorIdempotencyHeaders(attemptKey, draft),
         body: JSON.stringify(draft)
       });
       setPurchaseRequests((items) => [created, ...items.filter((item) => item.id !== created.id)]);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return created;
     } catch {
       setPurchaseRequests((items) => [fallback, ...items]);
@@ -1976,13 +2124,16 @@ function App() {
   };
 
   const generateReorderPlan = async (options: { thresholdGrams?: number; targetGrams?: number; quantity?: number } = {}) => {
+    const attemptKey = "purchase-reorder-plan";
     try {
       const result = await apiRequest<ReorderPlanResult>("/api/purchaseRequests/reorderPlan", {
         method: "POST",
+        headers: operatorIdempotencyHeaders(attemptKey, options),
         body: JSON.stringify(options)
       });
       setPurchaseRequests(result.purchaseRequests);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return result;
     } catch {
       const existingOpen = new Set(purchaseRequests.filter((request) => ["open", "ordered"].includes(request.status) && request.spoolId).map((request) => request.spoolId));
@@ -2012,14 +2163,17 @@ function App() {
   };
 
   const updatePurchaseRequest = async (requestId: string, patch: Partial<PurchaseRequest>) => {
+    const attemptKey = `purchase-request-update:${requestId}`;
     setPurchaseRequests((items) => items.map((request) => request.id === requestId ? { ...request, ...patch } : request));
     try {
       const updated = await apiRequest<PurchaseRequest>(`/api/purchaseRequests/${requestId}`, {
         method: "PATCH",
+        headers: operatorIdempotencyHeaders(attemptKey, { requestId, patch }),
         body: JSON.stringify(patch)
       });
       setPurchaseRequests((items) => items.map((request) => request.id === requestId ? updated : request));
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return updated;
     } catch {
       setBackendStatus("local");
@@ -2028,14 +2182,18 @@ function App() {
   };
 
   const receivePurchaseRequest = async (requestId: string, location = "Rack Receiving") => {
+    const payload = { location };
+    const attemptKey = `purchase-receive:${requestId}`;
     try {
       const result = await apiRequest<PurchaseReceiveResult>(`/api/purchaseRequests/${requestId}/receive`, {
         method: "POST",
-        body: JSON.stringify({ location })
+        headers: operatorIdempotencyHeaders(attemptKey, { requestId, ...payload }),
+        body: JSON.stringify(payload)
       });
       setPurchaseRequests(result.purchaseRequests);
       setSpools(result.inventory);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return result;
     } catch {
       const request = purchaseRequests.find((item) => item.id === requestId);
@@ -2062,13 +2220,17 @@ function App() {
 
   const actOnTodo = async (todoId: string, action: TodoAction["action"], payload: Partial<Pick<TodoAction, "owner" | "note" | "snoozeUntil">> = {}) => {
     const fallback: TodoAction = { id: crypto.randomUUID(), todoId, todoTitle: todoId, todoKind: "exception", action, owner: payload.owner || currentUser?.name || "Operator", note: payload.note || "", snoozeUntil: payload.snoozeUntil || "", createdBy: currentUser?.email || "", at: new Date().toISOString() };
+    const body = { action, ...payload };
+    const attemptKey = `todo-action:${todoId}:${action}`;
     try {
       const result = await apiRequest<{ action: TodoAction; todo: Todo | null; todos: Todo[]; todoActions: TodoAction[] }>(`/api/todos/${encodeURIComponent(todoId)}/action`, {
         method: "POST",
-        body: JSON.stringify({ action, ...payload })
+        headers: operatorIdempotencyHeaders(attemptKey, { todoId, ...body }),
+        body: JSON.stringify(body)
       });
       setTodoActions(result.todoActions);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return result;
     } catch {
       setTodoActions((items) => [fallback, ...items]);
@@ -2095,14 +2257,17 @@ function App() {
   };
 
   const updateMaintenanceJob = async (jobId: string, patch: Partial<MaintenanceJob>) => {
+    const attemptKey = `maintenance-update:${jobId}`;
     setMaintenance((items) => items.map((job) => job.id === jobId ? { ...job, ...patch } : job));
     try {
       const updated = await apiRequest<MaintenanceJob>(`/api/maintenance/${jobId}`, {
         method: "PATCH",
+        headers: operatorIdempotencyHeaders(attemptKey, { jobId, patch }),
         body: JSON.stringify(patch)
       });
       setMaintenance((items) => items.map((job) => job.id === jobId ? updated : job));
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return updated;
     } catch {
       setBackendStatus("local");
@@ -2166,13 +2331,16 @@ function App() {
 
   const createUser = async (draft: Omit<User, "id" | "lastSeen"> & { password?: string }) => {
     const fallback: User = { ...draft, id: crypto.randomUUID(), lastSeen: "Invite pending" };
+    const attemptKey = "team-user-invite";
     try {
       const result = await apiRequest<{ user: User; temporaryPassword?: string }>("/api/users", {
         method: "POST",
+        headers: accountIdempotencyHeaders(attemptKey, draft),
         body: JSON.stringify(draft)
       });
       setUsers((items) => [result.user, ...items.filter((item) => item.id !== result.user.id)]);
       setBackendStatus("connected");
+      delete accountIdempotencyAttempts.current[attemptKey];
       return result;
     } catch {
       setUsers((items) => [fallback, ...items]);
@@ -2182,14 +2350,18 @@ function App() {
   };
 
   const updateUser = async (userId: string, patch: Partial<User>) => {
+    const payload = { userId, patch };
+    const attemptKey = `team-user-update:${userId}`;
     setUsers((items) => items.map((user) => user.id === userId ? { ...user, ...patch } : user));
     try {
       const updated = await apiRequest<User>(`/api/users/${userId}`, {
         method: "PATCH",
+        headers: accountIdempotencyHeaders(attemptKey, payload),
         body: JSON.stringify(patch)
       });
       setUsers((items) => items.map((user) => user.id === userId ? updated : user));
       setBackendStatus("connected");
+      delete accountIdempotencyAttempts.current[attemptKey];
       return updated;
     } catch {
       setBackendStatus("local");
@@ -2198,10 +2370,13 @@ function App() {
   };
 
   const resetUserPassword = async (userId: string) => {
+    const payload = { userId };
+    const attemptKey = `team-password-reset:${userId}`;
     try {
-      const result = await apiRequest<{ user: User; temporaryPassword?: string }>(`/api/users/${userId}/reset-password`, { method: "POST", body: JSON.stringify({}) });
+      const result = await apiRequest<{ user: User; temporaryPassword?: string }>(`/api/users/${userId}/reset-password`, { method: "POST", headers: accountIdempotencyHeaders(attemptKey, payload), body: JSON.stringify({}) });
       setUsers((items) => items.map((user) => user.id === userId ? result.user : user));
       setBackendStatus("connected");
+      delete accountIdempotencyAttempts.current[attemptKey];
       return result;
     } catch {
       setBackendStatus("local");
@@ -2223,12 +2398,13 @@ function App() {
 
   const setupTwoFactor = async () => apiRequest<TwoFactorSetup>("/api/auth/2fa/setup", { method: "POST" });
 
-  const enableTwoFactor = async (secret: string, code: string) => {
+  const enableTwoFactor = async (secret: string, code: string, password: string) => {
     const result = await apiRequest<{ user: User; recoveryCodes: string[] }>("/api/auth/2fa/enable", {
       method: "POST",
-      body: JSON.stringify({ secret, code })
+      body: JSON.stringify({ secret, code, password })
     });
     setCurrentUser(result.user);
+    setTwoFactorEnrollmentRequired(false);
     setUsers((items) => items.map((user) => user.id === result.user.id ? result.user : user));
     setBackendStatus("connected");
     return result;
@@ -2240,6 +2416,7 @@ function App() {
       body: JSON.stringify({ password, code })
     });
     setCurrentUser(result.user);
+    setTwoFactorEnrollmentRequired(workspaceSettings.requireAdmin2fa && (result.user.role === "Owner" || result.user.role === "Admin") && !result.user.twoFactor?.enabled);
     setUsers((items) => items.map((user) => user.id === result.user.id ? result.user : user));
     setBackendStatus("connected");
     return result.user;
@@ -2281,13 +2458,16 @@ function App() {
 
   const createProductionTemplate = async (draft: Omit<ProductionTemplate, "id">) => {
     const fallback: ProductionTemplate = { ...draft, id: crypto.randomUUID(), runCount: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    const attemptKey = "production-template:create";
     try {
       const created = await apiRequest<ProductionTemplate>("/api/productionTemplates", {
         method: "POST",
+        headers: operatorIdempotencyHeaders(attemptKey, draft),
         body: JSON.stringify(draft)
       });
       setProductionTemplates((items) => [created, ...items.filter((item) => item.id !== created.id)]);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return created;
     } catch {
       setProductionTemplates((items) => [fallback, ...items]);
@@ -2297,14 +2477,18 @@ function App() {
   };
 
   const runProductionTemplate = async (template: ProductionTemplate, options: { quantity?: number; dryRun?: boolean } = {}) => {
+    const attemptKey = `production-template:${options.dryRun ? "dry-run" : "run"}:${template.id}`;
+    const attemptPayload = { templateId: template.id, ...options };
     try {
       const result = await apiRequest<ProductionTemplateRunResult>(`/api/productionTemplates/${template.id}/run`, {
         method: "POST",
+        headers: operatorIdempotencyHeaders(attemptKey, attemptPayload),
         body: JSON.stringify(options)
       });
       if (Array.isArray(result.queue)) setQueue(result.queue);
       setProductionTemplates((items) => items.map((item) => item.id === result.template.id ? result.template : item));
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return result;
     } catch {
       const jobs: QueueItem[] = Array.from({ length: options.quantity || template.quantity || 1 }, (_, index) => {
@@ -2337,9 +2521,11 @@ function App() {
   };
 
   const generateNameplate = async (draft: ParametricNameplateDraft) => {
+    const attemptKey = "parametric:nameplate";
     try {
       const result = await apiRequest<ParametricNameplateResult>("/api/parametric/nameplate", {
         method: "POST",
+        headers: operatorIdempotencyHeaders(attemptKey, draft),
         body: JSON.stringify(draft)
       });
       if (Array.isArray(result.files)) setFiles(result.files);
@@ -2347,6 +2533,7 @@ function App() {
       if (Array.isArray(result.parts)) setParts(result.parts);
       else if (result.part) setParts((items) => [result.part!, ...items.filter((item) => item.id !== result.part?.id)]);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return result;
     } catch {
       const fallbackFile: PrintFile = {
@@ -2460,10 +2647,13 @@ function App() {
   };
 
   const generateJobsForOrder = async (order: Order, dryRun = false) => {
+    const payload = { dryRun };
+    const attemptKey = `order-generate-jobs:${order.id}:${dryRun ? "dry-run" : "commit"}`;
     try {
       const result = await apiRequest<OrderJobGenerationResult>(`/api/orders/${order.id}/generate-jobs`, {
         method: "POST",
-        body: JSON.stringify({ dryRun })
+        headers: operatorIdempotencyHeaders(attemptKey, { orderId: order.id, ...payload }),
+        body: JSON.stringify(payload)
       });
       if (!dryRun && !result.duplicateBlocked) {
         setOrders((items) => items.map((item) => item.id === order.id ? result.order : item));
@@ -2471,6 +2661,7 @@ function App() {
         if (Array.isArray(result.skus)) setSkus(result.skus);
       }
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return result;
     } catch {
       const printer = printers.find((p) => p.status === "idle") || printers.find((p) => p.status !== "offline" && p.status !== "maintenance") || printers[0];
@@ -2536,14 +2727,18 @@ function App() {
     formData.append("file", fileBlob);
     formData.append("material", material);
     formData.append("folder", folder);
+    const attemptKey = `file-upload:${fileBlob.name}:${fileBlob.size}:${fileBlob.lastModified}:${material}:${folder}`;
+    const attemptPayload = { name: fileBlob.name, size: fileBlob.size, lastModified: fileBlob.lastModified, type: fileBlob.type, material, folder };
     try {
       const uploaded = await apiRequest<Partial<PrintFile>>("/api/files/upload", {
         method: "POST",
+        headers: operatorIdempotencyHeaders(attemptKey, attemptPayload),
         body: formData
       });
       const normalized = normalizeFiles([uploaded])[0];
       setFiles((items) => [...items, normalized]);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return normalized;
     } catch {
       const extension = fileBlob.name.split(".").pop()?.toUpperCase();
@@ -2573,13 +2768,16 @@ function App() {
 
   const createFileFolder = async (draft: Omit<FileFolder, "id" | "fileCount" | "createdAt" | "updatedAt">) => {
     const fallback: FileFolder = { ...draft, id: crypto.randomUUID(), fileCount: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    const attemptKey = `file-folder:${draft.parent || ""}:${draft.name}:${draft.purpose}`;
     try {
       const result = await apiRequest<{ folder: FileFolder; folders: FileFolder[]; created: boolean }>("/api/file-folders", {
         method: "POST",
+        headers: operatorIdempotencyHeaders(attemptKey, draft),
         body: JSON.stringify(draft)
       });
       setFileFolders(result.folders);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return result.folder;
     } catch {
       setFileFolders((items) => [...items, fallback]);
@@ -2589,15 +2787,18 @@ function App() {
   };
 
   const createSampleFile = async (draft: { name: string; material: string; folder: string }) => {
+    const attemptKey = "file-sample";
     try {
       const result = await apiRequest<{ file: Partial<PrintFile>; folder: FileFolder; files: Partial<PrintFile>[]; folders: FileFolder[]; stlBytes: number }>("/api/files/sample", {
         method: "POST",
+        headers: operatorIdempotencyHeaders(attemptKey, draft),
         body: JSON.stringify(draft)
       });
       const normalized = normalizeFiles([result.file])[0];
       setFiles(normalizeFiles(result.files));
       setFileFolders(result.folders);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return { file: normalized, folder: result.folder, stlBytes: result.stlBytes };
     } catch {
       const fallback: PrintFile = {
@@ -2647,15 +2848,18 @@ function App() {
 
   const runHotDrop = async () => {
     const mode = hotDropMode;
+    const payload = {
+      mode,
+      name: `Hot Drop ${new Date().toISOString().slice(11, 16).replace(":", "")}`,
+      material: mode === "Upload Only" ? "PLA" : "Any Material",
+      folder: "Hot Drops / Today"
+    };
+    const attemptKey = "hot-drop";
     try {
       const result = await apiRequest<HotDropResult>("/api/hot-drop", {
         method: "POST",
-        body: JSON.stringify({
-          mode,
-          name: `Hot Drop ${new Date().toISOString().slice(11, 16).replace(":", "")}`,
-          material: mode === "Upload Only" ? "PLA" : "Any Material",
-          folder: "Hot Drops / Today"
-        })
+        headers: operatorIdempotencyHeaders(attemptKey, payload),
+        body: JSON.stringify(payload)
       });
       const normalizedFiles = normalizeFiles(result.files);
       setFiles(normalizedFiles);
@@ -2663,6 +2867,7 @@ function App() {
       setQueue(result.queue);
       setPrinters(result.printers);
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       const normalizedFile = normalizeFiles([result.file])[0];
       if (result.mode === "Upload Only") {
         setView("files");
@@ -2714,12 +2919,14 @@ function App() {
   };
 
   const versionFile = async (fileId: string) => {
+    const attemptKey = `file-version:${fileId}`;
     setFiles((items) => items.map((item) => item.id === fileId ? { ...item, version: item.version + 1, status: "needs review" } : item));
     try {
-      const updated = await apiRequest<Partial<PrintFile>>(`/api/files/${fileId}/version`, { method: "PATCH" });
+      const updated = await apiRequest<Partial<PrintFile>>(`/api/files/${fileId}/version`, { method: "PATCH", headers: operatorIdempotencyHeaders(attemptKey, { fileId }) });
       const normalized = normalizeFiles([updated])[0];
       setFiles((items) => items.map((item) => item.id === fileId ? normalized : item));
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
     } catch {
       setBackendStatus("local");
     }
@@ -2750,10 +2957,12 @@ function App() {
   };
 
   const deleteFile = async (fileId: string) => {
+    const attemptKey = `file-delete:${fileId}`;
     try {
-      await apiRequest(`/api/files/${fileId}`, { method: "DELETE" });
+      await apiRequest(`/api/files/${fileId}`, { method: "DELETE", headers: operatorIdempotencyHeaders(attemptKey, { fileId }) });
       setFiles((items) => items.filter((file) => file.id !== fileId));
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return true;
     } catch {
       setBackendStatus("local");
@@ -2762,12 +2971,14 @@ function App() {
   };
 
   const sliceFile = async (fileId: string) => {
+    const attemptKey = `file-slice:${fileId}`;
     setFiles((items) => items.map((file) => file.id === fileId ? { ...file, sliced: true, status: "sliced", type: "GCODE" } : file));
     try {
-      const updated = await apiRequest<Partial<PrintFile>>(`/api/files/${fileId}/slice`, { method: "PATCH" });
+      const updated = await apiRequest<Partial<PrintFile>>(`/api/files/${fileId}/slice`, { method: "PATCH", headers: operatorIdempotencyHeaders(attemptKey, { fileId }) });
       const normalized = normalizeFiles([updated])[0];
       setFiles((items) => items.map((file) => file.id === fileId ? normalized : file));
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
     } catch {
       setBackendStatus("local");
     }
@@ -2776,15 +2987,18 @@ function App() {
   const runSlicerJob = async (settings: { fileId: string; printerId: string; material: string; layerHeight: string; infill: number; supports: boolean }) => {
     const sourceFile = files.find((file) => file.id === settings.fileId);
     const printer = printers.find((item) => item.id === settings.printerId) || printers[0];
+    const attemptKey = `slicer-job:${settings.fileId}`;
     try {
       const result = await apiRequest<{ job: SlicerJob; file: Partial<PrintFile>; slicerJobs: SlicerJob[] }>("/api/slicer/jobs", {
         method: "POST",
+        headers: operatorIdempotencyHeaders(attemptKey, settings),
         body: JSON.stringify(settings)
       });
       setSlicerJobs(result.slicerJobs);
       const normalized = normalizeFiles([result.file])[0];
       setFiles((items) => items.map((file) => file.id === normalized.id ? normalized : file));
       setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
       return { job: result.job, file: normalized };
     } catch {
       const fallbackJob: SlicerJob = {
@@ -2932,14 +3146,17 @@ function App() {
     controlPrinter: async (id: string, action: string) => {
       const current = printers.find((printer) => printer.id === id);
       if (!current) return;
+      const payload = { printerId: id, action };
+      const attemptKey = `printer-action:${id}:${action}`;
       try {
         const result = await apiRequest<{ printer: Printer; job?: QueueItem | null; action: string }>(
           "/api/actions",
-          { method: "POST", body: JSON.stringify({ printerId: id, action }) }
+          { method: "POST", headers: operatorIdempotencyHeaders(attemptKey, payload), body: JSON.stringify(payload) }
         );
         setPrinterState(result.printer);
         if (result.job) setQueue((items) => items.map((job) => job.id === result.job?.id ? result.job : job));
         setBackendStatus("connected");
+        clearOperatorIdempotency(attemptKey);
         addToast(`${result.action} accepted by printer bridge`, "info");
         return;
       } catch {
@@ -3043,12 +3260,25 @@ function App() {
       .then((data) => {
         applyIncomingState(data);
         setBackendStatus("connected");
+        setTwoFactorEnrollmentRequired(false);
       })
-      .catch(() => setBackendStatus("local"));
+      .catch((error) => {
+        if (error instanceof ApiError && error.body.requiresTwoFactorEnrollment === true) {
+          setTwoFactorEnrollmentRequired(true);
+          setBackendStatus("connected");
+          setView("settings");
+          addToast("Set up two-factor authentication to unlock production admin access.", "warning");
+          return;
+        }
+        setBackendStatus("local");
+      });
   }, [authed, authToken]);
 
   useEffect(() => {
-    if (!authed || !authToken || authToken === "local-demo") return;
+    if (!authed || !authToken || authToken === "local-demo" || twoFactorEnrollmentRequired) return;
+    let closed = false;
+    let socket: WebSocket | null = null;
+    let source: EventSource | null = null;
     const handleRealtimePayload = (kind: string, payload: Record<string, unknown>) => {
       if (kind === "state" && payload.state) applyIncomingState(payload.state as Record<string, unknown>);
       if (kind === "event") {
@@ -3059,22 +3289,32 @@ function App() {
       }
       if (kind !== "heartbeat") setBackendStatus("connected");
     };
-    if ("WebSocket" in window) {
-      const socket = new WebSocket(realtimeUrl("/api/events/ws", authToken));
-      socket.onmessage = (event) => {
-        const payload = JSON.parse(event.data || "{}");
-        handleRealtimePayload(payload.event || "", payload.data || {});
-      };
-      socket.onerror = () => setBackendStatus("local");
-      socket.onclose = () => setBackendStatus("local");
-      return () => socket.close();
-    }
-    const source = new EventSource(`${API_BASE}/api/events/stream?token=${encodeURIComponent(authToken)}`);
-    source.addEventListener("state", (event) => handleRealtimePayload("state", JSON.parse((event as MessageEvent).data || "{}")));
-    source.addEventListener("event", (event) => handleRealtimePayload("event", JSON.parse((event as MessageEvent).data || "{}")));
-    source.onerror = () => setBackendStatus("local");
-    return () => source.close();
-  }, [authed, authToken]);
+    realtimeTicket()
+      .then(({ token }) => {
+        if (closed) return;
+        if ("WebSocket" in window) {
+          socket = new WebSocket(realtimeUrl("/api/events/ws", token));
+          socket.onmessage = (event) => {
+            const payload = JSON.parse(event.data || "{}");
+            handleRealtimePayload(payload.event || "", payload.data || {});
+          };
+          socket.onerror = () => setBackendStatus("local");
+          socket.onclose = () => setBackendStatus("local");
+          return;
+        }
+        const query = new URLSearchParams({ ticket: token });
+        source = new EventSource(`${API_BASE}/api/events/stream?${query.toString()}`);
+        source.addEventListener("state", (event) => handleRealtimePayload("state", JSON.parse((event as MessageEvent).data || "{}")));
+        source.addEventListener("event", (event) => handleRealtimePayload("event", JSON.parse((event as MessageEvent).data || "{}")));
+        source.onerror = () => setBackendStatus("local");
+      })
+      .catch(() => setBackendStatus("local"));
+    return () => {
+      closed = true;
+      socket?.close();
+      source?.close();
+    };
+  }, [authed, authToken, twoFactorEnrollmentRequired]);
 
   if (!authed && showMarketing) return <MarketingSite onOpenApp={() => { window.location.hash = "app"; setShowMarketing(false); }} />;
 
@@ -3128,6 +3368,8 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
   const [quoteLookup, setQuoteLookup] = useState(initialQuoteLookup);
   const [quoteLookupStatus, setQuoteLookupStatus] = useState("");
   const [quoteLookupResult, setQuoteLookupResult] = useState<PublicQuoteStatus | null>(null);
+  const quoteSubmitAttempt = useRef<IdempotencyAttempt | null>(null);
+  const quoteDecisionAttempts = useRef<Record<string, IdempotencyAttempt>>({});
   const submitQuote = async () => {
     if (!quoteDraft.customer.trim() || !quoteDraft.email.trim() || !quoteDraft.project.trim()) {
       setQuoteStatus("Please add your name, email, and project.");
@@ -3136,6 +3378,11 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
     setQuoteStatus("Sending quote request...");
     try {
       const payload = { ...quoteDraft, quantity: Number(quoteDraft.quantity || 1), budget: Number(quoteDraft.budget || 0), source: "Marketing website" };
+      const fingerprint = idempotencyFingerprint({
+        ...payload,
+        file: quoteFile ? { name: quoteFile.name, size: quoteFile.size, lastModified: quoteFile.lastModified } : null
+      });
+      quoteSubmitAttempt.current = idempotencyKeyForAttempt(quoteSubmitAttempt.current, "public-quote-intake", fingerprint);
       const body = quoteFile ? new FormData() : JSON.stringify(payload);
       if (quoteFile && body instanceof FormData) {
         Object.entries(payload).forEach(([key, value]) => body.append(key, String(value ?? "")));
@@ -3143,7 +3390,10 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
       }
       const response = await fetch(`${API_BASE}/api/public/quoteRequests`, {
         method: "POST",
-        headers: quoteFile ? undefined : { "Content-Type": "application/json" },
+        headers: {
+          ...(quoteFile ? {} : { "Content-Type": "application/json" }),
+          "Idempotency-Key": quoteSubmitAttempt.current.key
+        },
         body
       });
       const result = await response.json();
@@ -3154,6 +3404,7 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
       setQuoteLookupResult(result.quoteRequest);
       setQuoteDraft({ customer: "", email: "", company: "", project: "Prototype enclosure", material: "PLA", quantity: 1, due: "Flexible", budget: 0, fileName: "", notes: "" });
       setQuoteFile(null);
+      quoteSubmitAttempt.current = null;
     } catch {
       setQuoteStatus("Quote request could not be sent. Please contact support@3dstu.com.");
     }
@@ -3175,22 +3426,30 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
       setQuoteLookupStatus("Quote status could not be loaded. Check the ID and tracking token.");
     }
   };
-  const decideQuote = async (decision: "accepted" | "rejected") => {
+  const decideQuote = async (decision: "accepted" | "rejected" | "revision") => {
     if (!quoteLookup.id.trim() || !quoteLookup.token.trim()) {
       setQuoteLookupStatus("Add the quote request ID and tracking token first.");
       return;
     }
-    setQuoteLookupStatus(decision === "accepted" ? "Approving quote..." : "Rejecting quote...");
+    setQuoteLookupStatus(decision === "accepted" ? "Approving quote..." : decision === "rejected" ? "Rejecting quote..." : "Requesting quote changes...");
     try {
+      const payload = { token: quoteLookup.token.trim(), decision, note: decision === "revision" ? "Customer requested changes from the quote portal." : "" };
+      const attemptId = `${quoteLookup.id.trim()}:${decision}`;
+      quoteDecisionAttempts.current[attemptId] = idempotencyKeyForAttempt(
+        quoteDecisionAttempts.current[attemptId] || null,
+        "public-quote-decision",
+        idempotencyFingerprint({ quoteId: quoteLookup.id.trim(), ...payload })
+      );
       const response = await fetch(`${API_BASE}/api/public/quoteRequests/${encodeURIComponent(quoteLookup.id.trim())}/decision`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: quoteLookup.token.trim(), decision })
+        headers: { "Content-Type": "application/json", "Idempotency-Key": quoteDecisionAttempts.current[attemptId].key },
+        body: JSON.stringify(payload)
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result?.error || "Quote decision failed");
       setQuoteLookupResult(result.quoteRequest);
-      setQuoteLookupStatus(decision === "accepted" ? `${result.quoteRequest.id}: approved and converted to ${result.order?.id || "an order"}.` : `${result.quoteRequest.id}: rejected.`);
+      setQuoteLookupStatus(decision === "accepted" ? `${result.quoteRequest.id}: approved and converted to ${result.order?.id || "an order"}.` : decision === "revision" ? `${result.quoteRequest.id}: changes requested. The operator will review it again.` : `${result.quoteRequest.id}: rejected.`);
+      delete quoteDecisionAttempts.current[attemptId];
     } catch {
       setQuoteLookupStatus("Quote decision could not be saved. Check the ID and tracking token.");
     }
@@ -3429,7 +3688,7 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
             <label>Tracking token<input value={quoteLookup.token} onChange={(event) => setQuoteLookup((draft) => ({ ...draft, token: event.target.value }))} /></label>
             <button className="primary" onClick={checkQuoteStatus}>Check status</button>
             {quoteLookupResult?.validUntil && <p className="quote-status wide">Quote valid until {quoteLookupResult.validUntil}</p>}
-            {quoteLookupResult?.status === "quoted" && <div className="quote-actions wide"><button className="primary" onClick={() => decideQuote("accepted")}>Approve quote</button><button onClick={() => decideQuote("rejected")}>Reject quote</button></div>}
+            {quoteLookupResult?.status === "quoted" && <div className="quote-actions wide"><button className="primary" onClick={() => decideQuote("accepted")}>Approve quote</button><button onClick={() => decideQuote("revision")}>Request changes</button><button onClick={() => decideQuote("rejected")}>Reject quote</button></div>}
             {quoteLookupStatus && <p className="quote-status wide">{quoteLookupStatus}</p>}
           </div>
         </section>
@@ -3820,6 +4079,12 @@ function OrdersPage({ orders, setOrders, quoteRequests, files, skus, commerceCon
   const [csvText, setCsvText] = useState("externalId,customer,items,due,value\nSP-1001,Demo Customer,DUCT-KIT-BLK x1,Tomorrow 17:00,680");
   const [busy, setBusy] = useState("");
   const [jobPlan, setJobPlan] = useState<OrderJobGenerationResult | null>(null);
+  const commerceIdempotencyAttempts = useRef<Record<string, IdempotencyAttempt>>({});
+  const idempotencyHeaders = (action: string, payload: unknown) => {
+    const result = idempotencyHeadersForAttempt(commerceIdempotencyAttempts.current[action] || null, action, payload);
+    commerceIdempotencyAttempts.current[action] = result.attempt;
+    return result.headers;
+  };
   const newQuotes = quoteRequests.filter((quote) => quote.status === "new" || quote.status === "reviewing");
   const saveConnector = async () => {
     setBusy("save");
@@ -3840,11 +4105,14 @@ function OrdersPage({ orders, setOrders, quoteRequests, files, skus, commerceCon
   };
   const testConnector = async (connector: CommerceConnector) => {
     setBusy(`test-${connector.id}`);
+    const attemptKey = `commerce:test:${connector.id}`;
+    const payload = { connectorId: connector.id };
     try {
-      const result = await apiRequest<{ connector: CommerceConnector; ok: boolean }>(`/api/commerceConnectors/${connector.id}/test`, { method: "POST" });
+      const result = await apiRequest<{ connector: CommerceConnector; ok: boolean }>(`/api/commerceConnectors/${connector.id}/test`, { method: "POST", headers: idempotencyHeaders(attemptKey, payload) });
       setCommerceConnectors((items) => items.map((item) => item.id === connector.id ? result.connector : item));
       setBackendStatus("connected");
       addToast(result.ok ? `${connector.name} feed reachable` : `${connector.name} feed returned an error`, result.ok ? "success" : "warning");
+      delete commerceIdempotencyAttempts.current[attemptKey];
     } catch {
       setBackendStatus("local");
       addToast(`${connector.name} test failed`, "warning");
@@ -3854,13 +4122,16 @@ function OrdersPage({ orders, setOrders, quoteRequests, files, skus, commerceCon
   };
   const importConnector = async (connector: CommerceConnector) => {
     setBusy(`import-${connector.id}`);
+    const attemptKey = `commerce:import:${connector.id}`;
+    const payload = { connectorId: connector.id };
     try {
-      const result = await apiRequest<{ created: Order[]; skipped: unknown[]; importRun: CommerceImport; orders: Order[]; connector: CommerceConnector }>(`/api/commerceConnectors/${connector.id}/import`, { method: "POST" });
+      const result = await apiRequest<{ created: Order[]; skipped: unknown[]; importRun: CommerceImport; orders: Order[]; connector: CommerceConnector }>(`/api/commerceConnectors/${connector.id}/import`, { method: "POST", headers: idempotencyHeaders(attemptKey, payload) });
       setOrders(result.orders);
       setCommerceConnectors((items) => items.map((item) => item.id === connector.id ? result.connector : item));
       setCommerceImports((items) => [result.importRun, ...items.filter((item) => item.id !== result.importRun.id)]);
       setBackendStatus("connected");
       addToast(`${result.created.length} orders imported, ${result.skipped.length} skipped`, result.created.length ? "success" : "warning");
+      delete commerceIdempotencyAttempts.current[attemptKey];
     } catch {
       setBackendStatus("local");
       addToast(`${connector.name} import failed`, "warning");
@@ -3870,15 +4141,18 @@ function OrdersPage({ orders, setOrders, quoteRequests, files, skus, commerceCon
   };
   const importCsv = async () => {
     setBusy("csv");
+    const payload = { source: connectorDraft.source, csv: csvText };
     try {
       const result = await apiRequest<{ created: Order[]; skipped: unknown[]; importRun: CommerceImport; orders: Order[] }>("/api/commerce/import-csv", {
         method: "POST",
-        body: JSON.stringify({ source: connectorDraft.source, csv: csvText })
+        headers: idempotencyHeaders("commerce:csv", payload),
+        body: JSON.stringify(payload)
       });
       setOrders(result.orders);
       setCommerceImports((items) => [result.importRun, ...items.filter((item) => item.id !== result.importRun.id)]);
       setBackendStatus("connected");
       addToast(`${result.created.length} CSV orders imported, ${result.skipped.length} skipped`, result.created.length ? "success" : "warning");
+      delete commerceIdempotencyAttempts.current["commerce:csv"];
     } catch {
       setBackendStatus("local");
       addToast("CSV import failed. Check headers or API status.", "warning");
@@ -3938,6 +4212,13 @@ function OrdersPage({ orders, setOrders, quoteRequests, files, skus, commerceCon
     setBusy("");
     addToast(result.job ? `${quote.id} converted to ${result.order.id} and queued ${result.job.id}` : `${quote.id} converted to ${result.order.id}`);
   };
+  const terminalOrder = (order: Order) => order.status === "completed" || order.status === "cancelled";
+  const setOrderLifecycleStatus = async (order: Order, status: Order["status"], label: string) => {
+    setBusy(`${status}-${order.id}`);
+    const updated = await updateOrderStatus(order.id, status);
+    setBusy("");
+    addToast(updated ? `${order.id} ${label}` : `${order.id} status saved locally`, updated ? "success" : "warning");
+  };
   return (
     <Page title="Orders" kicker="Commerce intake, SKU mapping, and production fulfillment">
       <div className="metric-grid">
@@ -3971,7 +4252,7 @@ function OrdersPage({ orders, setOrders, quoteRequests, files, skus, commerceCon
         <DataTable headers={["Request", "Customer", "Material", "Qty", "Due", "Budget", "Status", "Actions"]}>
           {quoteRequests.map((quote) => {
             const attachment = quoteAttachment(quote);
-            return <tr key={quote.id}><td><b>{quote.project}</b><small>{quote.fileName || "No file attached"}{quote.fileSize ? ` - ${quote.fileSize}` : ""}{quote.estimatedGrams ? ` - ${quote.estimatedGrams}g estimate` : ""}</small><small>{quote.notes || "No notes"}</small>{attachment && <button onClick={() => downloadFile(attachment)}><Download size={14} />Download model</button>}</td><td>{quote.customer}<small>{quote.email}{quote.company ? ` - ${quote.company}` : ""}</small></td><td>{quote.material}</td><td>{quote.quantity}</td><td>{quote.due}<small>{quote.validUntil ? `Quote valid until ${quote.validUntil}` : "No quote expiry"}</small></td><td>${quoteValue(quote)}</td><td><StatusPill status={quote.status} /></td><td><button onClick={() => copyPortalLink(quote)} disabled={busy === `portal-${quote.id}`}>{busy === `portal-${quote.id}` ? "Creating" : "Copy portal link"}</button><button onClick={() => copyPortalLink(quote, true)} disabled={busy === `rotate-${quote.id}`}>{busy === `rotate-${quote.id}` ? "Rotating" : "Rotate link"}</button><button onClick={() => markQuoted(quote)} disabled={busy === `quote-${quote.id}` || quote.status === "converted"}>{busy === `quote-${quote.id}` ? "Quoting" : "Mark quoted"}</button><button className="primary" onClick={() => acceptQuote(quote)} disabled={busy === `convert-${quote.id}` || quote.status === "converted"}>{busy === `convert-${quote.id}` ? "Converting" : "Accept / order"}</button></td></tr>;
+            return <tr key={quote.id}><td><b>{quote.project}</b><small>{quote.fileName || "No file attached"}{quote.fileSize ? ` - ${quote.fileSize}` : ""}{quote.estimatedGrams ? ` - ${quote.estimatedGrams}g estimate` : ""}</small><small>{quote.customerDecisionNote || quote.notes || "No notes"}</small>{attachment && <button onClick={() => downloadFile(attachment)}><Download size={14} />Download model</button>}</td><td>{quote.customer}<small>{quote.email}{quote.company ? ` - ${quote.company}` : ""}</small></td><td>{quote.material}</td><td>{quote.quantity}</td><td>{quote.due}<small>{quote.validUntil ? `Quote valid until ${quote.validUntil}` : "No quote expiry"}</small></td><td>${quoteValue(quote)}</td><td><StatusPill status={quote.status} /></td><td><button onClick={() => copyPortalLink(quote)} disabled={busy === `portal-${quote.id}`}>{busy === `portal-${quote.id}` ? "Creating" : "Copy portal link"}</button><button onClick={() => copyPortalLink(quote, true)} disabled={busy === `rotate-${quote.id}`}>{busy === `rotate-${quote.id}` ? "Rotating" : "Rotate link"}</button><button onClick={() => markQuoted(quote)} disabled={busy === `quote-${quote.id}` || quote.status === "converted"}>{busy === `quote-${quote.id}` ? "Quoting" : "Mark quoted"}</button><button className="primary" onClick={() => acceptQuote(quote)} disabled={busy === `convert-${quote.id}` || quote.status === "converted"}>{busy === `convert-${quote.id}` ? "Converting" : "Accept / order"}</button></td></tr>;
           })}
         </DataTable>
         {!quoteRequests.length && <p className="muted">No quote requests yet. Website submissions will appear here.</p>}
@@ -3984,7 +4265,7 @@ function OrdersPage({ orders, setOrders, quoteRequests, files, skus, commerceCon
         {!commerceConnectors.length && <p className="muted">No commerce feeds yet. Save one above or use CSV intake.</p>}
       </section>
       <DataTable headers={["Order", "Source", "Customer", "Items", "Status", "Due", "Value", "Actions"]}>
-        {orders.map((order) => <tr key={order.id}><td><b>{order.id}</b><small>{order.externalId ? `External ${order.externalId}` : "Manual record"}</small></td><td>{order.source}</td><td>{order.customer}</td><td>{order.items.join(", ")}</td><td><StatusPill status={order.status} /></td><td>{order.due}</td><td>${order.value}</td><td><button onClick={() => planOrderJobs(order)} disabled={busy === `plan-${order.id}`}>Plan jobs</button><button className="primary" onClick={() => commitOrderJobs(order)} disabled={busy === `generate-${order.id}`}>Generate jobs</button><button onClick={() => updateOrderStatus(order.id, "shipped").then(() => addToast(`${order.id} shipped`))}>Ship</button></td></tr>)}
+        {orders.map((order) => <tr key={order.id}><td><b>{order.id}</b><small>{order.externalId ? `External ${order.externalId}` : "Manual record"}</small></td><td>{order.source}</td><td>{order.customer}</td><td>{order.items.join(", ")}</td><td><StatusPill status={order.status} /></td><td>{order.due}</td><td>${order.value}</td><td><button onClick={() => planOrderJobs(order)} disabled={busy === `plan-${order.id}` || terminalOrder(order)}>Plan jobs</button><button className="primary" onClick={() => commitOrderJobs(order)} disabled={busy === `generate-${order.id}` || terminalOrder(order)}>Generate jobs</button><button onClick={() => setOrderLifecycleStatus(order, "on_hold", "placed on hold")} disabled={busy === `on_hold-${order.id}` || terminalOrder(order)}>Hold</button><button onClick={() => setOrderLifecycleStatus(order, "shipped", "shipped")} disabled={busy === `shipped-${order.id}` || terminalOrder(order)}>Ship</button><button onClick={() => setOrderLifecycleStatus(order, "completed", "completed")} disabled={busy === `completed-${order.id}` || terminalOrder(order)}>Complete</button><button onClick={() => setOrderLifecycleStatus(order, "cancelled", "cancelled")} disabled={busy === `cancelled-${order.id}` || terminalOrder(order)}>Cancel</button></td></tr>)}
       </DataTable>
       {jobPlan && (
         <section className="panel">
@@ -4674,9 +4955,13 @@ function AddonsPage({ addons, updateAddon, addToast, costCatalog, saveCostCatalo
   const [mqttDraft, setMqttDraft] = useState({ brokerUrl: "", topicPrefix: "layerpilot", events: "*", qos: 0, retain: false, username: "", password: "" });
   const fallbackAuditEvents = useMemo<AuditEvent[]>(() => auditSeed.map((message, index) => ({ id: `seed-audit-${index}`, type: "demo.audit", message, at: new Date(Date.now() - (index + 2) * 60_000).toISOString(), data: {} })), []);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>(fallbackAuditEvents);
-  const [auditTotal, setAuditTotal] = useState(1284);
+  const [auditTotal, setAuditTotal] = useState(fallbackAuditEvents.length);
+  const [auditMatched, setAuditMatched] = useState(fallbackAuditEvents.length);
+  const [auditHasMore, setAuditHasMore] = useState(false);
+  const [auditLoading, setAuditLoading] = useState(false);
   const [auditFilter, setAuditFilter] = useState("all");
   const [auditSearch, setAuditSearch] = useState("");
+  const auditPageSize = 8;
   const enabledCount = addons.filter((addon) => addon.status === "enabled" || addon.enabled).length;
   useEffect(() => setDraft(costCatalog), [costCatalog]);
   useEffect(() => {
@@ -4693,14 +4978,37 @@ function AddonsPage({ addons, updateAddon, addToast, costCatalog, saveCostCatalo
     });
   }, [mqttAddon?.config, mqttAddon?.id]);
   useEffect(() => {
-    const query = new URLSearchParams({ limit: "8" });
+    const query = new URLSearchParams({ limit: String(auditPageSize) });
     if (auditFilter !== "all") query.set("type", auditFilter);
     if (auditSearch.trim()) query.set("search", auditSearch.trim());
-    apiRequest<{ total: number; events: AuditEvent[] }>(`/api/audit?${query.toString()}`).then((result) => {
+    setAuditLoading(true);
+    apiRequest<AuditResponse>(`/api/audit?${query.toString()}`).then((result) => {
       setAuditTotal(result.total);
-      setAuditEvents(result.events.length ? result.events : fallbackAuditEvents);
-    }).catch(() => undefined);
+      setAuditMatched(result.matched ?? result.events.length);
+      setAuditHasMore(Boolean(result.hasMore));
+      setAuditEvents(result.events);
+    }).catch(() => {
+      setAuditTotal(fallbackAuditEvents.length);
+      setAuditMatched(fallbackAuditEvents.length);
+      setAuditHasMore(false);
+      setAuditEvents(fallbackAuditEvents);
+    }).finally(() => setAuditLoading(false));
   }, [auditFilter, auditSearch, fallbackAuditEvents]);
+  const loadMoreAudit = async () => {
+    const query = new URLSearchParams({ limit: String(auditPageSize), offset: String(auditEvents.length) });
+    if (auditFilter !== "all") query.set("type", auditFilter);
+    if (auditSearch.trim()) query.set("search", auditSearch.trim());
+    setAuditLoading(true);
+    try {
+      const result = await apiRequest<AuditResponse>(`/api/audit?${query.toString()}`);
+      setAuditTotal(result.total);
+      setAuditMatched(result.matched ?? auditMatched);
+      setAuditHasMore(Boolean(result.hasMore));
+      setAuditEvents((current) => [...current, ...result.events]);
+    } finally {
+      setAuditLoading(false);
+    }
+  };
   const toggle = async (addon: Addon) => {
     const isEnabled = addon.status === "enabled" || addon.enabled;
     setBusyAddon(addon.id);
@@ -4823,9 +5131,12 @@ function AddonsPage({ addons, updateAddon, addToast, costCatalog, saveCostCatalo
             </select>
             <label className="search-box"><Search size={15} /><input value={auditSearch} onChange={(event) => setAuditSearch(event.target.value)} placeholder="Search audit" /></label>
           </div>
+          <p className="muted">{auditMatched.toLocaleString()} matching event{auditMatched === 1 ? "" : "s"}{auditMatched !== auditTotal ? ` of ${auditTotal.toLocaleString()} total` : ""}</p>
           <div className="event-feed">
             {auditEvents.map((event, index) => <div key={event.id}><StatusDot status={index === 0 ? "queued" : "complete"} /><span><b>{event.type}</b> - {event.message}</span><em>{auditAge(event.at)}</em></div>)}
+            {!auditEvents.length && <div><StatusDot status="queued" /><span>No audit events match the current filters</span><em>0 records</em></div>}
           </div>
+          {auditHasMore && <button className="wide-action" onClick={loadMoreAudit} disabled={auditLoading}>{auditLoading ? "Loading" : "Load more audit events"}</button>}
         </section>
       </div>
     </Page>
@@ -5030,6 +5341,12 @@ function IntegrationsPage({ apiKeys, setApiKeys, webhooks, setWebhooks, webhookD
   const [apiKeyDraft, setApiKeyDraft] = useState({ name: "Farm scheduler", scopes: "queue:write,files:write,orders:write" });
   const [newApiSecret, setNewApiSecret] = useState("");
   const [bridgeDiagnostic, setBridgeDiagnostic] = useState<BridgeDiagnostic | null>(bridges.find((bridge) => bridge.lastDiagnostics)?.lastDiagnostics || null);
+  const adminIdempotencyAttempts = useRef<Record<string, IdempotencyAttempt>>({});
+  const idempotencyHeaders = (action: string, payload: unknown) => {
+    const result = idempotencyHeadersForAttempt(adminIdempotencyAttempts.current[action] || null, action, payload);
+    adminIdempotencyAttempts.current[action] = result.attempt;
+    return result.headers;
+  };
   const saveBridge = async () => {
     try {
       const saved = await apiRequest<Bridge>("/api/bridges", {
@@ -5098,26 +5415,33 @@ function IntegrationsPage({ apiKeys, setApiKeys, webhooks, setWebhooks, webhookD
     }
   };
   const createApiKey = async () => {
+    const payload = { name: apiKeyDraft.name, scopes: apiKeyDraft.scopes.split(",").map((scope) => scope.trim()).filter(Boolean), enabled: true };
+    const attemptKey = "admin-api-key-create";
     try {
       const result = await apiRequest<{ apiKey: ApiKey; secret: string }>("/api/apiKeys", {
         method: "POST",
-        body: JSON.stringify({ name: apiKeyDraft.name, scopes: apiKeyDraft.scopes.split(",").map((scope) => scope.trim()).filter(Boolean), enabled: true })
+        headers: idempotencyHeaders(attemptKey, payload),
+        body: JSON.stringify(payload)
       });
       setApiKeys((items) => [result.apiKey, ...items.filter((item) => item.id !== result.apiKey.id)]);
       setNewApiSecret(result.secret);
       setBackendStatus("connected");
       addToast(`${result.apiKey.name} API key created`);
+      delete adminIdempotencyAttempts.current[attemptKey];
     } catch {
       setBackendStatus("local");
       addToast("API key creation failed. Check role or API status.", "warning");
     }
   };
   const toggleApiKey = async (key: ApiKey, enabled: boolean) => {
+    const payload = { id: key.id, enabled };
+    const attemptKey = `admin-api-key-update:${key.id}`;
     setApiKeys((items) => items.map((item) => item.id === key.id ? { ...item, enabled } : item));
     try {
-      const updated = await apiRequest<ApiKey>(`/api/apiKeys/${key.id}`, { method: "PATCH", body: JSON.stringify({ enabled }) });
+      const updated = await apiRequest<ApiKey>(`/api/apiKeys/${key.id}`, { method: "PATCH", headers: idempotencyHeaders(attemptKey, payload), body: JSON.stringify({ enabled }) });
       setApiKeys((items) => items.map((item) => item.id === key.id ? updated : item));
       setBackendStatus("connected");
+      delete adminIdempotencyAttempts.current[attemptKey];
     } catch {
       setBackendStatus("local");
       addToast("API key update failed. Reverting on next refresh.", "warning");
@@ -5247,12 +5571,13 @@ function NotificationsPage({ notifications, setNotifications, channels, setChann
   );
 }
 
-function SettingsPage({ settings, setSettings, addToast, setBackendStatus, currentUser, changeOwnPassword, setupTwoFactor, enableTwoFactor, disableTwoFactor }: { settings: WorkspaceSettings; setSettings: React.Dispatch<React.SetStateAction<WorkspaceSettings>>; addToast: (message: string, type?: Toast["type"]) => void; setBackendStatus: React.Dispatch<React.SetStateAction<"local" | "connected">>; currentUser: User | null; changeOwnPassword: (currentPassword: string, newPassword: string) => Promise<User>; setupTwoFactor: () => Promise<TwoFactorSetup>; enableTwoFactor: (secret: string, code: string) => Promise<{ user: User; recoveryCodes: string[] }>; disableTwoFactor: (password: string, code: string) => Promise<User> }) {
+function SettingsPage({ settings, setSettings, addToast, setBackendStatus, currentUser, changeOwnPassword, setupTwoFactor, enableTwoFactor, disableTwoFactor }: { settings: WorkspaceSettings; setSettings: React.Dispatch<React.SetStateAction<WorkspaceSettings>>; addToast: (message: string, type?: Toast["type"]) => void; setBackendStatus: React.Dispatch<React.SetStateAction<"local" | "connected">>; currentUser: User | null; changeOwnPassword: (currentPassword: string, newPassword: string) => Promise<User>; setupTwoFactor: () => Promise<TwoFactorSetup>; enableTwoFactor: (secret: string, code: string, password: string) => Promise<{ user: User; recoveryCodes: string[] }>; disableTwoFactor: (password: string, code: string) => Promise<User> }) {
   const [billing, setBilling] = useState<BillingSummary | null>(null);
   const [allowedApiIpsText, setAllowedApiIpsText] = useState(settings.allowedApiIps.join(", "));
   const [passwordDraft, setPasswordDraft] = useState({ current: "", next: "", confirm: "" });
   const [twoFactorSetup, setTwoFactorSetup] = useState<TwoFactorSetup | null>(null);
   const [twoFactorCode, setTwoFactorCode] = useState("");
+  const [twoFactorEnablePassword, setTwoFactorEnablePassword] = useState("");
   const [twoFactorDisableDraft, setTwoFactorDisableDraft] = useState({ password: "", code: "" });
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
   const [restoreBackup, setRestoreBackup] = useState<Record<string, unknown> | null>(null);
@@ -5261,6 +5586,12 @@ function SettingsPage({ settings, setSettings, addToast, setBackendStatus, curre
   const [onboarding, setOnboarding] = useState<OnboardingStatus | null>(null);
   const [supportSnapshot, setSupportSnapshot] = useState<SupportSnapshot | null>(null);
   const [supportBusy, setSupportBusy] = useState(false);
+  const governanceIdempotencyAttempts = useRef<Record<string, IdempotencyAttempt>>({});
+  const idempotencyHeaders = (action: string, payload: unknown) => {
+    const result = idempotencyHeadersForAttempt(governanceIdempotencyAttempts.current[action] || null, action, payload);
+    governanceIdempotencyAttempts.current[action] = result.attempt;
+    return result.headers;
+  };
   const refreshBilling = async () => {
     try {
       const summary = await apiRequest<BillingSummary>("/api/billing");
@@ -5283,15 +5614,19 @@ function SettingsPage({ settings, setSettings, addToast, setBackendStatus, curre
     }).catch(() => setBackendStatus("local"));
   }, []);
   const saveSettings = async (patch: Partial<WorkspaceSettings>, label = "Settings") => {
+    const payload = { label, patch };
+    const attemptKey = `settings:${label}`;
     setSettings((current) => ({ ...current, ...patch }));
     try {
       const updated = await apiRequest<WorkspaceSettings>("/api/workspaceSettings", {
         method: "PATCH",
+        headers: idempotencyHeaders(attemptKey, payload),
         body: JSON.stringify(patch)
       });
       setSettings(updated);
       setBackendStatus("connected");
       addToast(`${label} saved`);
+      delete governanceIdempotencyAttempts.current[attemptKey];
     } catch {
       setBackendStatus("local");
       addToast(`${label} saved locally only`, "warning");
@@ -5335,13 +5670,16 @@ function SettingsPage({ settings, setSettings, addToast, setBackendStatus, curre
     if (!window.confirm(`Restore ${restoreSummary.printers} printers, ${restoreSummary.queue} jobs, and ${restoreSummary.files} files?`)) return;
     setRestoreBusy(true);
     try {
+      const payload = { backup: restoreBackup, dryRun: false, confirm: "RESTORE" };
       const result = await apiRequest<RestoreSummary>("/api/admin/restore", {
         method: "POST",
-        body: JSON.stringify({ backup: restoreBackup, dryRun: false, confirm: "RESTORE" })
+        headers: idempotencyHeaders("restore:commit", payload),
+        body: JSON.stringify(payload)
       });
       setRestoreSummary(result);
       setBackendStatus("connected");
       addToast("Workspace restored. Reloading state.", "success");
+      delete governanceIdempotencyAttempts.current["restore:commit"];
       window.setTimeout(() => window.location.reload(), 900);
     } catch {
       setBackendStatus("local");
@@ -5380,15 +5718,16 @@ function SettingsPage({ settings, setSettings, addToast, setBackendStatus, curre
   const confirmTwoFactor = async () => {
     if (!twoFactorSetup) return;
     try {
-      const result = await enableTwoFactor(twoFactorSetup.secret, twoFactorCode);
+      const result = await enableTwoFactor(twoFactorSetup.secret, twoFactorCode, twoFactorEnablePassword);
       setRecoveryCodes(result.recoveryCodes);
       setTwoFactorSetup(null);
       setTwoFactorCode("");
+      setTwoFactorEnablePassword("");
       setBackendStatus("connected");
       addToast("Two-factor authentication enabled", "success");
     } catch {
       setBackendStatus("local");
-      addToast("Two-factor code could not be verified", "warning");
+      addToast("Two-factor setup could not be verified. Check password and code.", "warning");
     }
   };
   const turnOffTwoFactor = async () => {
@@ -5404,45 +5743,57 @@ function SettingsPage({ settings, setSettings, addToast, setBackendStatus, curre
     }
   };
   const changePlan = async (planId: string) => {
+    const payload = { planId };
+    const attemptKey = "billing-plan";
     try {
       const result = await apiRequest<{ settings: WorkspaceSettings; billing: BillingSummary }>("/api/billing/plan", {
         method: "PATCH",
-        body: JSON.stringify({ planId })
+        headers: idempotencyHeaders(attemptKey, payload),
+        body: JSON.stringify(payload)
       });
       setSettings(result.settings);
       setBilling(result.billing);
       setBackendStatus("connected");
       addToast(`${result.billing.plan.name} plan activated`, "success");
+      delete governanceIdempotencyAttempts.current[attemptKey];
     } catch {
       setBackendStatus("local");
       addToast("Plan change requires owner/admin access and live API", "warning");
     }
   };
   const managePlan = async () => {
+    const payload = { returnUrl: window.location.href };
+    const attemptKey = "billing-portal";
     try {
       const result = await apiRequest<{ session: { mode: string; url: string }; billing: BillingSummary }>("/api/billing/portal", {
         method: "POST",
-        body: JSON.stringify({ returnUrl: window.location.href })
+        headers: idempotencyHeaders(attemptKey, payload),
+        body: JSON.stringify(payload)
       });
       setBilling(result.billing);
       setBackendStatus("connected");
       if (result.session.url.startsWith("http")) window.open(result.session.url, "_blank", "noopener,noreferrer");
       addToast(result.session.mode === "stripe" ? "Stripe billing opened" : result.session.mode === "external" ? "Billing portal opened" : "Billing session created", "success");
+      delete governanceIdempotencyAttempts.current[attemptKey];
     } catch {
       setBackendStatus("local");
       addToast("Billing session could not be created", "warning");
     }
   };
   const updateOnboardingStep = async (step: OnboardingStep, status: OnboardingStep["status"]) => {
+    const payload = { id: step.id, status, note: step.note || "" };
+    const attemptKey = `onboarding:${step.id}`;
     try {
       const result = await apiRequest<{ settings: WorkspaceSettings; onboarding: OnboardingStatus }>(`/api/onboarding/${step.id}`, {
         method: "PATCH",
+        headers: idempotencyHeaders(attemptKey, payload),
         body: JSON.stringify({ status, note: step.note || "" })
       });
       setSettings(result.settings);
       setOnboarding(result.onboarding);
       setBackendStatus("connected");
       addToast(`${step.title} marked ${status}`, status === "complete" ? "success" : "info");
+      delete governanceIdempotencyAttempts.current[attemptKey];
     } catch {
       setBackendStatus("local");
       addToast("Go-live checklist update failed. Check role or API status.", "warning");
@@ -5450,13 +5801,16 @@ function SettingsPage({ settings, setSettings, addToast, setBackendStatus, curre
   };
   const generateSupportSnapshot = async () => {
     setSupportBusy(true);
+    const payload = { action: "support-snapshot" };
+    const attemptKey = "support-snapshot";
     try {
-      const snapshot = await apiRequest<SupportSnapshot>("/api/support/snapshot", { method: "POST" });
+      const snapshot = await apiRequest<SupportSnapshot>("/api/support/snapshot", { method: "POST", headers: idempotencyHeaders(attemptKey, payload) });
       setSupportSnapshot(snapshot);
       setOnboarding(snapshot.onboarding);
       downloadTextFile(`3dstu-farmflow-support-${Date.now()}.json`, JSON.stringify(snapshot, null, 2), "application/json");
       setBackendStatus("connected");
       addToast("Support snapshot generated", "success");
+      delete governanceIdempotencyAttempts.current[attemptKey];
     } catch {
       setBackendStatus("local");
       addToast("Support snapshot failed. Owner/admin export access is required.", "warning");
@@ -5466,8 +5820,10 @@ function SettingsPage({ settings, setSettings, addToast, setBackendStatus, curre
   };
   const storage = billing?.storage || { used: "0 B", usedGb: 0, limitGb: settings.storageLimitGb, percent: 0, files: 0, storedFiles: 0, usedBytes: 0 };
   const currentPlanId = billing?.plan.id || "";
+  const adminTwoFactorRequired = settings.requireAdmin2fa && (currentUser?.role === "Owner" || currentUser?.role === "Admin") && !currentUser?.twoFactor?.enabled;
   return (
     <Page title="Settings" kicker="Organization, billing, storage, units and security">
+      {adminTwoFactorRequired && <div className="notice warning"><Shield size={18} /><span>Production admin access requires two-factor authentication. Set up 2FA to unlock protected workspace APIs.</span></div>}
       <div className="settings-grid">
         <section className="panel"><PanelTitle title="Organization" /><label>Name<input value={settings.organizationName} onChange={(event) => setSettings({ ...settings, organizationName: event.target.value })} /></label><label>Default location<input value={settings.defaultLocation} onChange={(event) => setSettings({ ...settings, defaultLocation: event.target.value })} /></label><button onClick={() => saveSettings({ organizationName: settings.organizationName, defaultLocation: settings.defaultLocation }, "Organization settings")}>Save</button></section>
         <section className="panel">
@@ -5504,6 +5860,7 @@ function SettingsPage({ settings, setSettings, addToast, setBackendStatus, curre
           {restoreSummary ? <div className="event-feed billing-feed">
             <div><StatusDot status="complete" /><span>{restoreSummary.printers} printers / {restoreSummary.queue} jobs / {restoreSummary.files} files</span><em>{restoreSummary.dryRun ? "preview" : "restored"}</em></div>
             <div><StatusDot status={restoreSummary.storagePathsStripped ? "queued" : "complete"} /><span>{restoreSummary.storagePathsStripped} storage paths stripped</span><em>{restoreSummary.filePayloadsRestored ?? 0} files restored</em></div>
+            {restoreSummary.filePayloadCoverage && <div><StatusDot status={restoreSummary.filePayloadCoverage.complete ? "complete" : "queued"} /><span>{restoreSummary.filePayloadCoverage.included} / {restoreSummary.filePayloadCoverage.expected} stored file payloads included</span><em>{restoreSummary.filePayloadCoverage.missing.length ? `${restoreSummary.filePayloadCoverage.missing.length} missing` : "complete"}</em></div>}
             {restoreSummary.warnings.slice(0, 3).map((warning) => <div key={warning}><StatusDot status="queued" /><span>{warning}</span><em>restore</em></div>)}
           </div> : <p className="muted">No restore preview loaded.</p>}
           <div className="quickbar"><button onClick={commitRestore} disabled={!restoreBackup || restoreBusy}><RefreshCw size={16} />Commit restore</button></div>
@@ -5518,6 +5875,7 @@ function SettingsPage({ settings, setSettings, addToast, setBackendStatus, curre
             <div><StatusDot status="queued" /><span>Authenticator secret</span><em><code>{twoFactorSetup.secret}</code></em></div>
             <div><StatusDot status="queued" /><span>otpauth URI</span><em><code>{twoFactorSetup.otpauthUrl}</code></em></div>
           </div>}
+          {twoFactorSetup && <label>Current password<input type="password" value={twoFactorEnablePassword} onChange={(event) => setTwoFactorEnablePassword(event.target.value)} /></label>}
           {twoFactorSetup && <label>Authenticator code<input inputMode="numeric" value={twoFactorCode} onChange={(event) => setTwoFactorCode(event.target.value)} placeholder="123456" /></label>}
           {twoFactorSetup && <button onClick={confirmTwoFactor}><Shield size={16} />Enable 2FA</button>}
           {currentUser?.twoFactor?.enabled && <label>Current password<input type="password" value={twoFactorDisableDraft.password} onChange={(event) => setTwoFactorDisableDraft({ ...twoFactorDisableDraft, password: event.target.value })} /></label>}

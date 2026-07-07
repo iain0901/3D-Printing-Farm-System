@@ -20,6 +20,9 @@ load_env
 RUN_DEPLOY="${LAYERPILOT_GO_LIVE_DEPLOY:-false}"
 RUN_LOCAL_QC="${LAYERPILOT_GO_LIVE_QC:-true}"
 SUPPORT_ON_FAILURE="${LAYERPILOT_GO_LIVE_SUPPORT_ON_FAILURE:-true}"
+REPORT_PATH="${LAYERPILOT_GO_LIVE_REPORT:-}"
+REPORT_DIR="${LAYERPILOT_GO_LIVE_REPORT_DIR:-release}"
+STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 usage() {
   cat <<'EOF'
@@ -32,6 +35,9 @@ Environment:
   LAYERPILOT_GO_LIVE_QC      Set false to skip host npm QC; default true
   LAYERPILOT_GO_LIVE_SUPPORT_ON_FAILURE
                              Set false to skip automatic support bundle creation on failure; default true
+  LAYERPILOT_GO_LIVE_REPORT  Optional exact path for the sanitized evidence report
+  LAYERPILOT_GO_LIVE_REPORT_DIR
+                             Directory for the default timestamped evidence report; default release
 
 This command is intended for an Ubuntu host after `.env` has been created. It verifies
 deployment assets, optional host QC, live smoke checks, backups, restore-drill, and
@@ -61,6 +67,94 @@ need_command() {
 latest_backup() {
   local backup_dir="${LAYERPILOT_BACKUP_DIR:-$HOME/layerpilot-backups}"
   find "$backup_dir" -maxdepth 1 -type f -name 'layerpilot-data-*.tgz' -printf '%T@ %p\n' 2>/dev/null | sort -nr | sed -n '1{s/^[^ ]* //;p;}'
+}
+
+git_value() {
+  local fallback="$1"
+  shift
+  if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    git "$@" 2>/dev/null || printf "%s" "$fallback"
+  else
+    printf "%s" "$fallback"
+  fi
+}
+
+go_live_report_path() {
+  if [ -n "$REPORT_PATH" ]; then
+    printf "%s" "$REPORT_PATH"
+    return 0
+  fi
+  mkdir -p "$REPORT_DIR"
+  printf "%s/go-live-evidence-%s.md" "${REPORT_DIR%/}" "$(date -u +%Y%m%dT%H%M%SZ)"
+}
+
+report_public_origin() {
+  local raw="${LAYERPILOT_PUBLIC_URL:-http://127.0.0.1:8797}"
+  printf "%s" "$raw" | sed -E 's#^([A-Za-z][A-Za-z0-9+.-]*://)([^/@]+@)?([^/?#]*).*#\1\3#'
+}
+
+write_go_live_report() {
+  local archive="$1"
+  local report
+  report="$(go_live_report_path)"
+  mkdir -p "$(dirname "$report")"
+  local finished_at branch commit deploy_result qc_result public_url env_label
+  finished_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  branch="$(git_value "unknown" rev-parse --abbrev-ref HEAD)"
+  commit="$(git_value "unknown" rev-parse --short HEAD)"
+  public_url="$(report_public_origin)"
+  env_label="${ENV_FILE##*/}"
+  if [ -z "$env_label" ]; then
+    env_label=".env"
+  fi
+  if [ "$RUN_DEPLOY" = "true" ]; then
+    deploy_result="passed"
+  else
+    deploy_result="skipped (not requested)"
+  fi
+  if [ "$RUN_LOCAL_QC" = "true" ] && command -v npm >/dev/null 2>&1 && [ -f package-lock.json ]; then
+    qc_result="passed"
+  elif [ "$RUN_LOCAL_QC" = "true" ]; then
+    qc_result="skipped (npm or package-lock.json unavailable)"
+  else
+    qc_result="skipped (disabled)"
+  fi
+  cat > "$report" <<EOF
+# 3DSTU FarmFlow Go-Live Evidence
+
+- Generated UTC: $finished_at
+- Started UTC: $STARTED_AT
+- Branch: $branch
+- Commit: $commit
+- Environment file: loaded ($env_label; path omitted)
+- Public URL: $public_url
+- Result: passed
+
+## Checks
+
+- Bash syntax: passed
+- Setup preflight: passed
+- Deployment doctor: passed
+- Host QC: $qc_result
+- Deploy: $deploy_result
+- Smoke: passed
+- Backup: passed
+- Backup verify: passed
+- Restore drill: passed
+- Ops check: passed
+
+## Backup
+
+- Backup archive: $archive
+
+## Notes
+
+- This report intentionally excludes passwords, tokens, API keys, and full environment values.
+- Environment file paths are omitted from this report; rerun from the deployment host to inspect private host paths.
+- A skipped deploy means the script validated the already-running deployment. A skipped host QC must be intentional for minimal hosts without Node/npm.
+- Attach this file to the release handoff with the release commit and deployment notes.
+EOF
+  echo "Go-live evidence report written: $report"
 }
 
 on_failure() {
@@ -148,5 +242,7 @@ bash scripts/ubuntu-backup.sh restore-drill "$archive"
 
 echo "== Ops check =="
 bash scripts/ubuntu-deploy.sh ops-check
+
+write_go_live_report "$archive"
 
 echo "3DSTU FarmFlow go-live check passed."

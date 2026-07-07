@@ -188,6 +188,28 @@ check_optional_url_env() {
   fi
 }
 
+check_cors_origins_env() {
+  local value="${1:-}"
+  local origin
+  if [ -z "$value" ]; then
+    return 0
+  fi
+  while IFS= read -r origin; do
+    origin="$(printf "%s" "$origin" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+    [ -z "$origin" ] && continue
+    if [ "$origin" = "*" ]; then
+      echo "LAYERPILOT_CORS_ORIGINS must not include wildcard origins in production." >&2
+      return 1
+    fi
+    if ! printf "%s" "$origin" | grep -Eq '^https?://'; then
+      echo "LAYERPILOT_CORS_ORIGINS entries must start with http:// or https://: $origin" >&2
+      return 1
+    fi
+  done <<EOF
+$(printf "%s" "$value" | tr ',' '\n')
+EOF
+}
+
 check_optional_mqtt_url_env() {
   local name="$1"
   local value="${2:-}"
@@ -325,11 +347,13 @@ doctor() {
   check_number_env "LAYERPILOT_BACKUP_RETENTION_DAYS" "${LAYERPILOT_BACKUP_RETENTION_DAYS:-30}"
   check_boolean_env "LAYERPILOT_AUTO_BACKUP_ON_MIGRATE" "${LAYERPILOT_AUTO_BACKUP_ON_MIGRATE:-true}"
   check_boolean_env "LAYERPILOT_PRE_RESTORE_BACKUP" "${LAYERPILOT_PRE_RESTORE_BACKUP:-true}"
+  check_boolean_env "LAYERPILOT_ENABLE_PUBLIC_SIGNUP" "${LAYERPILOT_ENABLE_PUBLIC_SIGNUP:-false}"
   check_boolean_env "LAYERPILOT_WORKER_TELEMETRY" "${LAYERPILOT_WORKER_TELEMETRY:-true}"
   check_boolean_env "LAYERPILOT_WORKER_BRIDGE_POLLING" "${LAYERPILOT_WORKER_BRIDGE_POLLING:-true}"
   check_number_env "LAYERPILOT_WORKER_TELEMETRY_INTERVAL_MS" "${LAYERPILOT_WORKER_TELEMETRY_INTERVAL_MS:-5000}"
   check_number_env "LAYERPILOT_WORKER_BRIDGE_POLL_INTERVAL_MS" "${LAYERPILOT_WORKER_BRIDGE_POLL_INTERVAL_MS:-10000}"
   check_optional_url_env "LAYERPILOT_PUBLIC_URL" "${LAYERPILOT_PUBLIC_URL:-}"
+  check_cors_origins_env "${LAYERPILOT_CORS_ORIGINS:-}"
   check_optional_url_env "LAYERPILOT_BILLING_PORTAL_URL" "${LAYERPILOT_BILLING_PORTAL_URL:-}"
   check_integration_env
   docker compose config >/dev/null
@@ -353,10 +377,14 @@ write_env() {
     write_env_line "LAYERPILOT_ADMIN_NAME" "${LAYERPILOT_ADMIN_NAME:-Production Owner}"
     write_env_line "LAYERPILOT_WORKSPACE_NAME" "${LAYERPILOT_WORKSPACE_NAME:-3DSTU FarmFlow Production}"
     write_env_line "LAYERPILOT_PUBLIC_URL" "${LAYERPILOT_PUBLIC_URL:-http://127.0.0.1:8797}"
+    write_env_line "LAYERPILOT_CORS_ORIGINS" "${LAYERPILOT_CORS_ORIGINS:-}"
     write_env_line "LAYERPILOT_BIND_ADDRESS" "${LAYERPILOT_BIND_ADDRESS:-127.0.0.1}"
     write_env_line "LAYERPILOT_DISABLE_DEFAULT_USERS" "true"
     write_env_line "LAYERPILOT_DISABLE_DEMO_LOGIN" "true"
+    write_env_line "LAYERPILOT_ENABLE_PUBLIC_SIGNUP" "${LAYERPILOT_ENABLE_PUBLIC_SIGNUP:-false}"
     write_env_line "LAYERPILOT_METRICS_TOKEN" "$metrics_token"
+    write_env_line "LAYERPILOT_OPS_EMAIL" "${LAYERPILOT_OPS_EMAIL:-}"
+    write_env_line "LAYERPILOT_OPS_PASSWORD" "${LAYERPILOT_OPS_PASSWORD:-}"
     write_env_line "LAYERPILOT_AUTO_BACKUP_ON_MIGRATE" "true"
     write_env_line "LAYERPILOT_DB_ADAPTER" "${LAYERPILOT_DB_ADAPTER:-json}"
     write_env_line "LAYERPILOT_BACKUP_RETENTION_DAYS" "${LAYERPILOT_BACKUP_RETENTION_DAYS:-30}"

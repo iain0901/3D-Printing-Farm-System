@@ -1,6 +1,7 @@
 import { access, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import Stripe from "stripe";
 import { describe, expect, it } from "vitest";
 import { buildServer, generateTotpCode, openDatabase } from "./server.mjs";
 
@@ -186,6 +187,65 @@ describe("3DSTU FarmFlow API", () => {
     });
   });
 
+  it("issues one-time realtime tickets without accepting production bearer query auth", async () => {
+    await withEnv({
+      NODE_ENV: "production",
+      LAYERPILOT_ADMIN_EMAIL: "owner@example.com",
+      LAYERPILOT_ADMIN_PASSWORD: "production-owner-password",
+      LAYERPILOT_WORKER_TOKEN: "worker-token-32-characters-minimum",
+      LAYERPILOT_METRICS_TOKEN: "metrics-token-32-characters-minimum",
+      LAYERPILOT_DISABLE_DEFAULT_USERS: "true",
+      LAYERPILOT_DISABLE_DEMO_LOGIN: "true"
+    }, async () => {
+      await withApp(async ({ app, db }) => {
+        const loginResponse = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "owner@example.com", password: "production-owner-password" } });
+        expect(loginResponse.statusCode).toBe(200);
+        const token = loginResponse.json().token;
+
+        const setup = await app.inject({ method: "POST", url: "/api/auth/2fa/setup", headers: auth(token) });
+        expect(setup.statusCode).toBe(200);
+        const enable = await app.inject({
+          method: "POST",
+          url: "/api/auth/2fa/enable",
+          headers: auth(token),
+          payload: { secret: setup.json().secret, code: generateTotpCode(setup.json().secret), password: "production-owner-password" }
+        });
+        expect(enable.statusCode).toBe(200);
+
+        const stateByQueryToken = await app.inject({ method: "GET", url: `/api/state?token=${encodeURIComponent(token)}` });
+        expect(stateByQueryToken.statusCode).toBe(401);
+
+        const ticket = await app.inject({ method: "POST", url: "/api/events/token", headers: auth(token) });
+        expect(ticket.statusCode).toBe(200);
+        expect(ticket.json()).toMatchObject({ token: expect.any(String), expiresAt: expect.any(String) });
+        expect(ticket.json().token).not.toBe(token);
+        expect(JSON.stringify(db.data)).not.toContain(ticket.json().token);
+
+        await app.ready();
+        const collector = createWebSocketCollector();
+        const socket = await app.injectWS(`/api/events/ws?ticket=${encodeURIComponent(ticket.json().token)}`, {}, { onInit: (ws) => collector.attach(ws) });
+        try {
+          const initial = await collector.waitFor((message) => message.event === "state");
+          expect(initial.data).toMatchObject({ reason: "ws.open" });
+        } finally {
+          socket.close();
+        }
+
+        const replayCollector = createWebSocketCollector();
+        const replayedSocket = await app.injectWS(`/api/events/ws?ticket=${encodeURIComponent(ticket.json().token)}`, {}, { onInit: (ws) => replayCollector.attach(ws) });
+        try {
+          const replayError = await replayCollector.waitFor((message) => message.event === "error");
+          expect(replayError.data).toMatchObject({ error: "Authentication required" });
+        } finally {
+          replayedSocket.close();
+        }
+
+        const streamByQueryToken = await app.inject({ method: "GET", url: `/api/events/stream?token=${encodeURIComponent(token)}` });
+        expect(streamByQueryToken.statusCode).toBe(401);
+      });
+    });
+  });
+
   it("reports readiness and protects operational metrics", async () => {
     await withEnv({ LAYERPILOT_METRICS_TOKEN: "metrics-secret" }, async () => {
       await withApp(async ({ app }) => {
@@ -203,7 +263,12 @@ describe("3DSTU FarmFlow API", () => {
         const anonymousMetrics = await app.inject({ method: "GET", url: "/api/metrics" });
         expect(anonymousMetrics.statusCode).toBe(401);
 
-        const tokenMetrics = await app.inject({ method: "GET", url: "/api/metrics?metricsToken=metrics-secret" });
+        const queryTokenMetrics = await app.inject({ method: "GET", url: "/api/metrics?metricsToken=metrics-secret" });
+        expect(queryTokenMetrics.statusCode).toBe(200);
+        expect(queryTokenMetrics.headers["content-type"]).toContain("text/plain");
+        expect(queryTokenMetrics.body).toContain("layerpilot_up 1");
+
+        const tokenMetrics = await app.inject({ method: "GET", url: "/api/metrics", headers: { "x-layerpilot-metrics-token": "metrics-secret" } });
         expect(tokenMetrics.statusCode).toBe(200);
         expect(tokenMetrics.headers["content-type"]).toContain("text/plain");
         expect(tokenMetrics.body).toContain("layerpilot_up 1");
@@ -221,7 +286,416 @@ describe("3DSTU FarmFlow API", () => {
         const keyMetrics = await app.inject({ method: "GET", url: "/api/metrics", headers: auth(created.json().secret) });
         expect(keyMetrics.statusCode).toBe(200);
         expect(keyMetrics.body).toContain("layerpilot_printers_total");
+
+        const metricsKeyQueue = await app.inject({ method: "GET", url: "/api/queue", headers: auth(created.json().secret) });
+        expect(metricsKeyQueue.statusCode).toBe(403);
+        expect(metricsKeyQueue.json()).toMatchObject({ error: "API key scope does not allow reading this resource" });
       });
+    });
+  });
+
+  it("fails production readiness when default access or weak ops tokens are configured", async () => {
+    await withEnv({
+      NODE_ENV: "production",
+      LAYERPILOT_ADMIN_EMAIL: "owner@example.com",
+      LAYERPILOT_ADMIN_PASSWORD: "change-this-password",
+      LAYERPILOT_WORKER_TOKEN: "change-this-worker-token",
+      LAYERPILOT_METRICS_TOKEN: "change-this-metrics-token",
+      LAYERPILOT_DISABLE_DEFAULT_USERS: "",
+      LAYERPILOT_DISABLE_DEMO_LOGIN: ""
+    }, async () => {
+      await withApp(async ({ app }) => {
+        const readiness = await app.inject({ method: "GET", url: "/api/readiness" });
+        expect(readiness.statusCode).toBe(503);
+        expect(readiness.json()).toMatchObject({ ok: false });
+        expect(readiness.json().checks).toEqual(expect.arrayContaining([
+          expect.objectContaining({ name: "production-env-required", ok: true }),
+          expect.objectContaining({ name: "production-secrets", ok: false }),
+          expect.objectContaining({ name: "production-default-access", ok: false })
+        ]));
+        expect(readiness.json().checks.find((check) => check.name === "production-secrets").detail).toContain("uses documented default");
+        expect(readiness.json().checks.find((check) => check.name === "production-default-access").detail).toContain("LAYERPILOT_DISABLE_DEFAULT_USERS is not true");
+        expect(readiness.json().checks.find((check) => check.name === "production-default-access").detail).toContain("demo@layerpilot.test");
+      });
+    });
+  });
+
+  it("passes production readiness when deployment gates are satisfied", async () => {
+    await withEnv({
+      NODE_ENV: "production",
+      LAYERPILOT_ADMIN_EMAIL: "owner@example.com",
+      LAYERPILOT_ADMIN_PASSWORD: "production-owner-password",
+      LAYERPILOT_WORKER_TOKEN: "worker-token-32-characters-minimum",
+      LAYERPILOT_METRICS_TOKEN: "metrics-token-32-characters-minimum",
+      LAYERPILOT_DISABLE_DEFAULT_USERS: "true",
+      LAYERPILOT_DISABLE_DEMO_LOGIN: "true",
+      LAYERPILOT_WORKER_TELEMETRY: "false",
+      LAYERPILOT_WORKER_BRIDGE_POLLING: "false"
+    }, async () => {
+      await withApp(async ({ app }) => {
+        const readiness = await app.inject({ method: "GET", url: "/api/readiness" });
+        expect(readiness.statusCode).toBe(200);
+        expect(readiness.json()).toMatchObject({ ok: true });
+        expect(readiness.json().checks).toEqual(expect.arrayContaining([
+          expect.objectContaining({ name: "production-env-required", ok: true }),
+          expect.objectContaining({ name: "production-secrets", ok: true }),
+          expect.objectContaining({ name: "production-default-access", ok: true }),
+          expect.objectContaining({ name: "production-public-signup", ok: true, enabled: false })
+        ]));
+      });
+    });
+  });
+
+  it("restricts production CORS to configured trusted browser origins", async () => {
+    await withEnv({
+      NODE_ENV: "production",
+      LAYERPILOT_ADMIN_EMAIL: "owner@example.com",
+      LAYERPILOT_ADMIN_PASSWORD: "production-owner-password",
+      LAYERPILOT_WORKER_TOKEN: "worker-token-32-characters-minimum",
+      LAYERPILOT_METRICS_TOKEN: "metrics-token-32-characters-minimum",
+      LAYERPILOT_DISABLE_DEFAULT_USERS: "true",
+      LAYERPILOT_DISABLE_DEMO_LOGIN: "true",
+      LAYERPILOT_WORKER_TELEMETRY: "false",
+      LAYERPILOT_WORKER_BRIDGE_POLLING: "false",
+      LAYERPILOT_PUBLIC_URL: "https://farm.example.com/app",
+      LAYERPILOT_CORS_ORIGINS: "https://quotes.example.com, https://ops.example.com/path"
+    }, async () => {
+      await withApp(async ({ app }) => {
+        const readiness = await app.inject({ method: "GET", url: "/api/readiness" });
+        expect(readiness.statusCode).toBe(200);
+        expect(readiness.json().checks).toEqual(expect.arrayContaining([
+          expect.objectContaining({ name: "production-cors-origins", ok: true })
+        ]));
+
+        const appOrigin = await app.inject({ method: "GET", url: "/api/health", headers: { origin: "https://farm.example.com" } });
+        expect(appOrigin.headers["access-control-allow-origin"]).toBe("https://farm.example.com");
+
+        const portalOrigin = await app.inject({ method: "GET", url: "/api/health", headers: { origin: "https://quotes.example.com" } });
+        expect(portalOrigin.headers["access-control-allow-origin"]).toBe("https://quotes.example.com");
+
+        const normalizedOrigin = await app.inject({ method: "GET", url: "/api/health", headers: { origin: "https://ops.example.com" } });
+        expect(normalizedOrigin.headers["access-control-allow-origin"]).toBe("https://ops.example.com");
+
+        const blockedOrigin = await app.inject({ method: "GET", url: "/api/health", headers: { origin: "https://evil.example.com" } });
+        expect(blockedOrigin.statusCode).toBe(200);
+        expect(blockedOrigin.headers["access-control-allow-origin"]).toBeUndefined();
+      });
+    });
+  });
+
+  it("fails production readiness when configured CORS origins are invalid", async () => {
+    await withEnv({
+      NODE_ENV: "production",
+      LAYERPILOT_ADMIN_EMAIL: "owner@example.com",
+      LAYERPILOT_ADMIN_PASSWORD: "production-owner-password",
+      LAYERPILOT_WORKER_TOKEN: "worker-token-32-characters-minimum",
+      LAYERPILOT_METRICS_TOKEN: "metrics-token-32-characters-minimum",
+      LAYERPILOT_DISABLE_DEFAULT_USERS: "true",
+      LAYERPILOT_DISABLE_DEMO_LOGIN: "true",
+      LAYERPILOT_WORKER_TELEMETRY: "false",
+      LAYERPILOT_WORKER_BRIDGE_POLLING: "false",
+      LAYERPILOT_PUBLIC_URL: "not-a-url",
+      LAYERPILOT_CORS_ORIGINS: "https://quotes.example.com, *, ftp://legacy.example.com"
+    }, async () => {
+      await withApp(async ({ app }) => {
+        const readiness = await app.inject({ method: "GET", url: "/api/readiness" });
+        expect(readiness.statusCode).toBe(503);
+        expect(readiness.json().checks).toEqual(expect.arrayContaining([
+          expect.objectContaining({ name: "production-cors-origins", ok: false })
+        ]));
+        const detail = readiness.json().checks.find((check) => check.name === "production-cors-origins").detail;
+        expect(detail).toContain("LAYERPILOT_PUBLIC_URL: not-a-url is not a valid http(s) URL");
+        expect(detail).toContain("wildcard origins are not allowed in production");
+        expect(detail).toContain("ftp://legacy.example.com");
+      });
+    });
+  });
+
+  it("blocks public signup in production unless explicitly enabled", async () => {
+    const productionEnv = {
+      NODE_ENV: "production",
+      LAYERPILOT_ADMIN_EMAIL: "owner@example.com",
+      LAYERPILOT_ADMIN_PASSWORD: "production-owner-password",
+      LAYERPILOT_WORKER_TOKEN: "worker-token-32-characters-minimum",
+      LAYERPILOT_METRICS_TOKEN: "metrics-token-32-characters-minimum",
+      LAYERPILOT_DISABLE_DEFAULT_USERS: "true",
+      LAYERPILOT_DISABLE_DEMO_LOGIN: "true",
+      LAYERPILOT_WORKER_TELEMETRY: "false",
+      LAYERPILOT_WORKER_BRIDGE_POLLING: "false",
+      LAYERPILOT_ENABLE_PUBLIC_SIGNUP: ""
+    };
+    await withEnv(productionEnv, async () => {
+      await withApp(async ({ app, db }) => {
+        const readiness = await app.inject({ method: "GET", url: "/api/readiness" });
+        expect(readiness.statusCode).toBe(200);
+        expect(readiness.json().checks).toEqual(expect.arrayContaining([
+          expect.objectContaining({ name: "production-public-signup", ok: true, enabled: false })
+        ]));
+
+        const blocked = await app.inject({
+          method: "POST",
+          url: "/api/auth/signup",
+          payload: {
+            name: "Customer Owner",
+            email: "customer@example.com",
+            password: "customer-owner-password",
+            workspace: "Customer Farm"
+          }
+        });
+        expect(blocked.statusCode).toBe(403);
+        expect(blocked.json()).toMatchObject({ error: "Public signup is disabled in production" });
+        expect(db.data.users.some((user) => user.email === "customer@example.com")).toBe(false);
+      });
+    });
+
+    await withEnv({ ...productionEnv, LAYERPILOT_ENABLE_PUBLIC_SIGNUP: "true" }, async () => {
+      await withApp(async ({ app, db }) => {
+        const readiness = await app.inject({ method: "GET", url: "/api/readiness" });
+        expect(readiness.statusCode).toBe(200);
+        expect(readiness.json().checks).toEqual(expect.arrayContaining([
+          expect.objectContaining({ name: "production-public-signup", ok: true, enabled: true })
+        ]));
+
+        const created = await app.inject({
+          method: "POST",
+          url: "/api/auth/signup",
+          payload: {
+            name: "Customer Owner",
+            email: "customer@example.com",
+            password: "customer-owner-password",
+            workspace: "Customer Farm"
+          }
+        });
+        expect(created.statusCode).toBe(201);
+        expect(created.json().user).toMatchObject({ email: "customer@example.com", role: "Owner" });
+        expect(db.data.users.some((user) => user.email === "customer@example.com" && user.role === "Owner")).toBe(true);
+      });
+    });
+  });
+
+  it("fails production readiness when API key IP allowlist rules are invalid", async () => {
+    await withEnv({
+      NODE_ENV: "production",
+      LAYERPILOT_ADMIN_EMAIL: "owner@example.com",
+      LAYERPILOT_ADMIN_PASSWORD: "production-owner-password",
+      LAYERPILOT_WORKER_TOKEN: "worker-token-32-characters-minimum",
+      LAYERPILOT_METRICS_TOKEN: "metrics-token-32-characters-minimum",
+      LAYERPILOT_DISABLE_DEFAULT_USERS: "true",
+      LAYERPILOT_DISABLE_DEMO_LOGIN: "true",
+      LAYERPILOT_WORKER_TELEMETRY: "false",
+      LAYERPILOT_WORKER_BRIDGE_POLLING: "false"
+    }, async () => {
+      await withApp(async ({ app, db }) => {
+        db.data.workspaceSettings.restrictApiByIp = true;
+        db.data.workspaceSettings.allowedApiIps = ["203.0.113.0/24", "not-an-ip", "10.0.0.1/99"];
+        db.data.workspaces[0].settings.restrictApiByIp = true;
+        db.data.workspaces[0].settings.allowedApiIps = db.data.workspaceSettings.allowedApiIps;
+        await db.write();
+
+        const readiness = await app.inject({ method: "GET", url: "/api/readiness" });
+        expect(readiness.statusCode).toBe(503);
+        expect(readiness.json().checks).toEqual(expect.arrayContaining([
+          expect.objectContaining({ name: "production-api-ip-allowlist", ok: false })
+        ]));
+        const detail = readiness.json().checks.find((check) => check.name === "production-api-ip-allowlist").detail;
+        expect(detail).toContain("not-an-ip");
+        expect(detail).toContain("10.0.0.1/99");
+      });
+    });
+  });
+
+  it("fails production readiness when enabled worker jobs have no fresh heartbeat", async () => {
+    const productionEnv = {
+      NODE_ENV: "production",
+      LAYERPILOT_ADMIN_EMAIL: "owner@example.com",
+      LAYERPILOT_ADMIN_PASSWORD: "production-owner-password",
+      LAYERPILOT_WORKER_TOKEN: "worker-token-32-characters-minimum",
+      LAYERPILOT_METRICS_TOKEN: "metrics-token-32-characters-minimum",
+      LAYERPILOT_DISABLE_DEFAULT_USERS: "true",
+      LAYERPILOT_DISABLE_DEMO_LOGIN: "true",
+      LAYERPILOT_WORKER_TELEMETRY: "true",
+      LAYERPILOT_WORKER_BRIDGE_POLLING: "true",
+      LAYERPILOT_WORKER_TELEMETRY_INTERVAL_MS: "1000",
+      LAYERPILOT_WORKER_BRIDGE_POLL_INTERVAL_MS: "1000"
+    };
+    await withEnv(productionEnv, async () => {
+      await withApp(async ({ app, db }) => {
+        const missing = await app.inject({ method: "GET", url: "/api/readiness" });
+        expect(missing.statusCode).toBe(503);
+        expect(missing.json().checks).toEqual(expect.arrayContaining([
+          expect.objectContaining({ name: "worker", ok: false })
+        ]));
+        expect(missing.json().checks.find((check) => check.name === "worker").detail).toContain("no worker heartbeat");
+
+        db.data.dataMeta.worker = {
+          id: "stale-worker",
+          lastRunAt: new Date(Date.now() - 120_000).toISOString(),
+          telemetryEnabled: true,
+          bridgePollingEnabled: true,
+          telemetryIntervalMs: 1000,
+          bridgePollingIntervalMs: 1000
+        };
+        await db.write();
+        const stale = await app.inject({ method: "GET", url: "/api/readiness" });
+        expect(stale.statusCode).toBe(503);
+        expect(stale.json().checks.find((check) => check.name === "worker")).toMatchObject({ ok: false, id: "stale-worker" });
+        expect(stale.json().checks.find((check) => check.name === "worker").detail).toContain("stale");
+
+        db.data.dataMeta.worker.lastRunAt = new Date().toISOString();
+        await db.write();
+        const fresh = await app.inject({ method: "GET", url: "/api/readiness" });
+        expect(fresh.statusCode).toBe(200);
+        expect(fresh.json().checks.find((check) => check.name === "worker")).toMatchObject({ ok: true, id: "stale-worker" });
+      });
+    });
+  });
+
+  it("fails production readiness for incomplete optional dependency configuration", async () => {
+    const productionEnv = {
+      NODE_ENV: "production",
+      LAYERPILOT_ADMIN_EMAIL: "owner@example.com",
+      LAYERPILOT_ADMIN_PASSWORD: "production-owner-password",
+      LAYERPILOT_WORKER_TOKEN: "worker-token-32-characters-minimum",
+      LAYERPILOT_METRICS_TOKEN: "metrics-token-32-characters-minimum",
+      LAYERPILOT_DISABLE_DEFAULT_USERS: "true",
+      LAYERPILOT_DISABLE_DEMO_LOGIN: "true",
+      LAYERPILOT_OBJECT_STORAGE_PROVIDER: "s3",
+      LAYERPILOT_S3_BUCKET: "layerpilot-production",
+      LAYERPILOT_S3_REGION: "",
+      LAYERPILOT_S3_ACCESS_KEY_ID: "s3-access-key",
+      LAYERPILOT_S3_SECRET_ACCESS_KEY: "",
+      LAYERPILOT_STRIPE_SECRET_KEY: "sk_test_configured",
+      LAYERPILOT_STRIPE_WEBHOOK_SECRET: "",
+      LAYERPILOT_STRIPE_PRICE_STUDIO: "price_studio",
+      LAYERPILOT_STRIPE_PRICE_FARM: "",
+      LAYERPILOT_STRIPE_PRICE_ENTERPRISE: "price_enterprise",
+      LAYERPILOT_MQTT_URL: "http://broker.example.com",
+      LAYERPILOT_MQTT_QOS: "9",
+      LAYERPILOT_MQTT_RETAIN: "maybe"
+    };
+    await withEnv(productionEnv, async () => {
+      await withApp(async ({ app }) => {
+        const readiness = await app.inject({ method: "GET", url: "/api/readiness" });
+        expect(readiness.statusCode).toBe(503);
+        const checks = readiness.json().checks;
+        expect(checks).toEqual(expect.arrayContaining([
+          expect.objectContaining({ name: "production-dependencies", ok: false })
+        ]));
+        const detail = checks.find((check) => check.name === "production-dependencies").detail;
+        expect(detail).toContain("Missing LAYERPILOT_S3_REGION");
+        expect(detail).toContain("Missing LAYERPILOT_S3_SECRET_ACCESS_KEY");
+        expect(detail).toContain("Missing LAYERPILOT_STRIPE_WEBHOOK_SECRET");
+        expect(detail).toContain("Missing LAYERPILOT_STRIPE_PRICE_FARM");
+        expect(detail).toContain("LAYERPILOT_MQTT_URL must start with mqtt:// or mqtts://");
+        expect(detail).toContain("LAYERPILOT_MQTT_QOS must be 0, 1, or 2");
+        expect(detail).toContain("LAYERPILOT_MQTT_RETAIN must be true or false");
+      }, { objectStorageAdapter: createFakeS3Storage() });
+    });
+  });
+
+  it("replays idempotent mutating requests and rejects key reuse with a different body", async () => {
+    await withApp(async ({ app, db }) => {
+      const token = await login(app);
+      const payload = {
+        source: "Manual",
+        customer: "Retry Safe Customer",
+        items: ["PLA spacer"],
+        due: "Friday 12:00",
+        value: 42
+      };
+      const headers = { ...auth(token), "idempotency-key": "order-create-retry-001" };
+
+      const first = await app.inject({ method: "POST", url: "/api/orders", headers, payload });
+      expect(first.statusCode).toBe(201);
+      const firstOrder = first.json();
+
+      const replay = await app.inject({ method: "POST", url: "/api/orders", headers, payload });
+      expect(replay.statusCode).toBe(201);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(firstOrder);
+      expect(db.data.orders.filter((order) => order.customer === payload.customer)).toHaveLength(1);
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/orders",
+        headers,
+        payload: { ...payload, value: 99 }
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+      expect(db.data.dataMeta.idempotencyKeys).toHaveLength(1);
+      expect(db.data.dataMeta.idempotencyKeys[0]).toMatchObject({
+        key: "order-create-retry-001",
+        method: "POST",
+        path: "/api/orders",
+        statusCode: 201,
+        replayCount: 1
+      });
+    });
+  });
+
+  it("replays public quote intake retries without creating duplicate requests", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const payload = {
+        customer: "Retry Intake Buyer",
+        email: "retry-intake@example.com",
+        company: "Retry Intake Studio",
+        project: "PETG bracket run",
+        material: "PETG",
+        quantity: 8,
+        due: "2026-08-04",
+        budget: 480,
+        notes: "Browser submit retry",
+        fileName: "petg-bracket.3mf"
+      };
+      const headers = { "idempotency-key": "public-quote-intake-001" };
+
+      const first = await app.inject({ method: "POST", url: "/api/public/quoteRequests", headers, payload });
+      expect(first.statusCode).toBe(201);
+
+      const replay = await app.inject({ method: "POST", url: "/api/public/quoteRequests", headers, payload });
+      expect(replay.statusCode).toBe(201);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toMatchObject({
+        ok: true,
+        quoteRequest: {
+          ...first.json().quoteRequest,
+          accessToken: "REDACTED"
+        }
+      });
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        headers,
+        payload: { ...payload, quantity: 9 }
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.quoteRequests.filter((quote) => quote.email === payload.email)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "quote_request.created" && event.data?.quoteRequestId === first.json().quoteRequest.id)).toHaveLength(1);
+      const ledgerRecord = persisted.dataMeta.idempotencyKeys.find((record) => record.key === "public-quote-intake-001");
+      expect(ledgerRecord).toMatchObject({
+        actorId: "public:quote-intake",
+        method: "POST",
+        path: "/api/public/quoteRequests",
+        replayCount: 1,
+        statusCode: 201
+      });
+      expect(ledgerRecord).toMatchObject({ responseBodyRedacted: true });
+      expect(ledgerRecord.responseBody).toContain("REDACTED");
+      expect(ledgerRecord.responseBody).not.toContain(first.json().quoteRequest.accessToken);
+
+      const token = await login(app);
+      for (const url of ["/api/state", "/api/admin/export"]) {
+        const sanitized = await app.inject({ method: "GET", url, headers: auth(token) });
+        expect(sanitized.statusCode).toBe(200);
+        expect(sanitized.body).not.toContain("idempotencyKeys");
+        expect(sanitized.body).not.toContain("responseBody");
+        expect(sanitized.body).not.toContain(first.json().quoteRequest.accessToken);
+      }
     });
   });
 
@@ -252,6 +726,46 @@ describe("3DSTU FarmFlow API", () => {
 
         const readiness = await app.inject({ method: "GET", url: "/api/readiness" });
         expect(readiness.json().checks).toEqual(expect.arrayContaining([expect.objectContaining({ name: "worker", ok: true })]));
+      });
+    });
+  });
+
+  it("requires ops tokens in headers in production", async () => {
+    await withEnv({
+      NODE_ENV: "production",
+      LAYERPILOT_METRICS_TOKEN: "metrics-token-32-characters-minimum",
+      LAYERPILOT_WORKER_TOKEN: "worker-token-32-characters-minimum"
+    }, async () => {
+      await withApp(async ({ app, db }) => {
+        db.data.dataMeta.worker = { id: "qc-worker", lastRunAt: new Date().toISOString() };
+        await db.write();
+
+        const queryMetrics = await app.inject({ method: "GET", url: "/api/metrics?metricsToken=metrics-token-32-characters-minimum" });
+        expect(queryMetrics.statusCode).toBe(401);
+
+        const headerMetrics = await app.inject({
+          method: "GET",
+          url: "/api/metrics",
+          headers: { "x-layerpilot-metrics-token": "metrics-token-32-characters-minimum" }
+        });
+        expect(headerMetrics.statusCode).toBe(200);
+        expect(headerMetrics.body).toContain("layerpilot_up 1");
+
+        const queryWorker = await app.inject({
+          method: "POST",
+          url: "/api/internal/worker-broadcast?workerToken=worker-token-32-characters-minimum",
+          payload: { reason: "worker.test" }
+        });
+        expect(queryWorker.statusCode).toBe(401);
+
+        const headerWorker = await app.inject({
+          method: "POST",
+          url: "/api/internal/worker-broadcast",
+          headers: { "x-layerpilot-worker-token": "worker-token-32-characters-minimum" },
+          payload: { reason: "worker.test" }
+        });
+        expect(headerWorker.statusCode).toBe(200);
+        expect(headerWorker.json()).toMatchObject({ ok: true, worker: { id: "qc-worker" } });
       });
     });
   });
@@ -343,6 +857,42 @@ describe("3DSTU FarmFlow API", () => {
     });
   });
 
+  it("reports storage payload coverage during admin integrity checks", async () => {
+    await withApp(async ({ app, db }) => {
+      const token = await login(app);
+      const sample = await app.inject({
+        method: "POST",
+        url: "/api/files/sample",
+        headers: auth(token),
+        payload: { name: "Integrity Coverage Bracket", material: "PETG", folder: "Backups" }
+      });
+      expect(sample.statusCode).toBe(201);
+      const sampleFile = sample.json().file;
+      await access(sampleFile.storagePath);
+      await rm(sampleFile.storagePath, { force: true });
+
+      const checked = await app.inject({ method: "GET", url: "/api/admin/integrity?checkStorage=true", headers: auth(token) });
+      expect(checked.statusCode).toBe(200);
+      expect(checked.json().storage).toMatchObject({
+        checked: true,
+        complete: false,
+        expected: expect.any(Number),
+        present: expect.any(Number),
+        missing: expect.arrayContaining([expect.objectContaining({ fileId: sampleFile.id, name: sampleFile.name })])
+      });
+      expect(checked.json().storage.expected).toBeGreaterThan(checked.json().storage.present);
+      expect(checked.json().warnings.map((warning) => warning.code)).toEqual(expect.arrayContaining(["file.storage_missing"]));
+      const auditEvent = db.data.events.find((event) => event.type === "admin.integrity_checked");
+      expect(auditEvent?.data).toMatchObject({
+        checkStorage: true,
+        storageComplete: false,
+        storageExpected: checked.json().storage.expected,
+        storagePresent: checked.json().storage.present,
+        storageMissingFiles: checked.json().storage.missing.length
+      });
+    });
+  });
+
   it("sets production security headers and rate limits sensitive auth routes", async () => {
     await withApp(async ({ app }) => {
       const health = await app.inject({ method: "GET", url: "/api/health" });
@@ -364,11 +914,29 @@ describe("3DSTU FarmFlow API", () => {
   });
 
   it("authenticates users and supports logout", async () => {
-    await withApp(async ({ app }) => {
+    await withApp(async ({ app, db }) => {
       const bad = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "demo@layerpilot.test", password: "wrong-password" } });
       expect(bad.statusCode).toBe(401);
+      const failedLoginEvent = db.data.events.find((event) => event.type === "auth.login_failed" && event.data?.email === "demo@layerpilot.test");
+      expect(failedLoginEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          userId: "u0",
+          email: "demo@layerpilot.test",
+          reason: "invalid_password"
+        }
+      });
+      expect(JSON.stringify(failedLoginEvent)).not.toContain("wrong-password");
 
       const token = await login(app, "owner@layerpilot.test", "layerpilot");
+      const session = db.data.sessions.find((item) => item.userId === "u1");
+      expect(session).toBeTruthy();
+      expect(session.token).toBeUndefined();
+      expect(session.tokenHash).toMatch(/^scrypt\$/);
+      expect(session.expiresAt).toBeTruthy();
+      expect(session.idleExpiresAt).toBeTruthy();
+
       const me = await app.inject({ method: "GET", url: "/api/auth/me", headers: auth(token) });
       expect(me.statusCode).toBe(200);
       expect(me.json().user).toMatchObject({ email: "owner@layerpilot.test", role: "Owner" });
@@ -379,6 +947,122 @@ describe("3DSTU FarmFlow API", () => {
 
       const locked = await app.inject({ method: "GET", url: "/api/state", headers: auth(token) });
       expect(locked.statusCode).toBe(401);
+
+      const loginEvent = db.data.events.find((event) => event.type === "auth.login" && event.data?.userId === "u1");
+      expect(loginEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          userId: "u1",
+          actorId: "u1",
+          actorEmail: "owner@layerpilot.test",
+          actorRole: "Owner",
+          actorType: "user",
+          sessionId: session.id
+        }
+      });
+      const logoutEvent = db.data.events.find((event) => event.type === "auth.logout" && event.data?.userId === "u1");
+      expect(logoutEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          userId: "u1",
+          actorId: "u1",
+          actorEmail: "owner@layerpilot.test",
+          actorRole: "Owner",
+          actorType: "user",
+          sessionId: session.id,
+          revokedSessions: 1
+        }
+      });
+      expect(JSON.stringify([loginEvent, logoutEvent])).not.toContain(token);
+    });
+  });
+
+  it("locks known accounts after repeated password failures and clears lock on password reset", async () => {
+    await withEnv({ LAYERPILOT_AUTH_LOCK_THRESHOLD: "3", LAYERPILOT_AUTH_LOCK_MINUTES: "10" }, async () => {
+      await withApp(async ({ app, db }) => {
+        const payload = { email: "owner@layerpilot.test", password: "wrong-password" };
+        const first = await app.inject({ method: "POST", url: "/api/auth/login", payload });
+        const second = await app.inject({ method: "POST", url: "/api/auth/login", payload });
+        const locked = await app.inject({ method: "POST", url: "/api/auth/login", payload });
+        expect(first.statusCode).toBe(401);
+        expect(second.statusCode).toBe(401);
+        expect(locked.statusCode).toBe(423);
+        expect(locked.json()).toMatchObject({ error: "Account temporarily locked", reason: "invalid_password", retryAfterSeconds: expect.any(Number) });
+
+        const correctDuringLock = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "owner@layerpilot.test", password: "layerpilot" } });
+        expect(correctDuringLock.statusCode).toBe(423);
+
+        const user = db.data.users.find((item) => item.email === "owner@layerpilot.test");
+        expect(user).toMatchObject({ authFailedAttempts: 3, authLockedReason: "invalid_password" });
+        expect(Date.parse(user.authLockedUntil)).toBeGreaterThan(Date.now());
+
+        const lockEvent = db.data.events.find((event) => event.type === "auth.account_locked" && event.data?.userId === "u1");
+        expect(lockEvent).toMatchObject({
+          workspaceId: "ws-default",
+          data: {
+            workspaceId: "ws-default",
+            userId: "u1",
+            email: "owner@layerpilot.test",
+            reason: "invalid_password",
+            failedAttempts: 3,
+            lockMinutes: 10
+          }
+        });
+        const lockedAttemptEvent = db.data.events.find((event) => event.type === "auth.login_locked" && event.data?.userId === "u1");
+        expect(lockedAttemptEvent).toMatchObject({
+          data: {
+            email: "owner@layerpilot.test",
+            reason: "account_locked",
+            lockedReason: "invalid_password"
+          }
+        });
+        expect(JSON.stringify([lockEvent, lockedAttemptEvent])).not.toContain("wrong-password");
+
+        const demoToken = await login(app);
+        const reset = await app.inject({
+          method: "POST",
+          url: "/api/users/u1/reset-password",
+          headers: auth(demoToken),
+          payload: { password: "reset-owner-password", requireChange: false }
+        });
+        expect(reset.statusCode).toBe(200);
+        expect(db.data.users.find((item) => item.id === "u1")).toMatchObject({ authFailedAttempts: 0, authLockedUntil: "" });
+
+        const afterReset = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "owner@layerpilot.test", password: "reset-owner-password" } });
+        expect(afterReset.statusCode).toBe(200);
+      });
+    });
+  });
+
+  it("expires stale user sessions and migrates legacy plaintext session tokens on use", async () => {
+    await withApp(async ({ app, db }) => {
+      const token = await login(app, "owner@layerpilot.test", "layerpilot");
+      const session = db.data.sessions.find((item) => item.userId === "u1");
+      session.lastSeenAt = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      session.idleExpiresAt = new Date(Date.now() - 60_000).toISOString();
+
+      const expired = await app.inject({ method: "GET", url: "/api/state", headers: auth(token) });
+      expect(expired.statusCode).toBe(401);
+      expect(db.data.sessions.some((item) => item.id === session.id)).toBe(false);
+
+      const legacyToken = "legacy-session-token";
+      db.data.sessions.push({
+        id: "legacy-session",
+        token: legacyToken,
+        userId: "u1",
+        workspaceId: "ws-default",
+        createdAt: new Date().toISOString(),
+        lastSeenAt: new Date().toISOString()
+      });
+      const migrated = await app.inject({ method: "GET", url: "/api/state", headers: auth(legacyToken) });
+      expect(migrated.statusCode).toBe(200);
+      const migratedSession = db.data.sessions.find((item) => item.id === "legacy-session");
+      expect(migratedSession.token).toBeUndefined();
+      expect(migratedSession.tokenHash).toMatch(/^scrypt\$/);
+      expect(migratedSession.expiresAt).toBeTruthy();
+      expect(migratedSession.idleExpiresAt).toBeTruthy();
     });
   });
 
@@ -431,14 +1115,28 @@ describe("3DSTU FarmFlow API", () => {
       await login(app, "password.qc@layerpilot.test", reset.json().temporaryPassword);
 
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
-      expect(persisted.events.some((event) => event.type === "auth.password_changed")).toBe(true);
+      const passwordEvent = persisted.events.find((event) => event.type === "auth.password_changed" && event.data?.userId === invited.json().user.id);
+      expect(passwordEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          userId: invited.json().user.id,
+          actorId: invited.json().user.id,
+          actorEmail: "password.qc@layerpilot.test",
+          actorRole: "Operator",
+          actorType: "user",
+          sessionsRevoked: 0
+        }
+      });
       expect(persisted.events.some((event) => event.type === "user.password_reset")).toBe(true);
       expect(persisted.users.find((user) => user.email === "password.qc@layerpilot.test")).toMatchObject({ passwordResetRequired: true });
+      expect(JSON.stringify(passwordEvent)).not.toContain("operator-secret-1");
+      expect(JSON.stringify(passwordEvent)).not.toContain(operatorPassword);
     });
   });
 
   it("enables TOTP two-factor auth, challenges login, and consumes recovery codes", async () => {
-    await withApp(async ({ app, dbPath }) => {
+    await withApp(async ({ app, db, dbPath }) => {
       const token = await login(app);
       const setup = await app.inject({ method: "POST", url: "/api/auth/2fa/setup", headers: auth(token) });
       expect(setup.statusCode).toBe(200);
@@ -449,15 +1147,54 @@ describe("3DSTU FarmFlow API", () => {
         method: "POST",
         url: "/api/auth/2fa/enable",
         headers: auth(token),
-        payload: { secret: setup.json().secret, code: "000000" }
+        payload: { secret: setup.json().secret, code: "000000", password: "layerpilot" }
       });
       expect(wrongEnable.statusCode).toBe(401);
+
+      const wrongPassword = await app.inject({
+        method: "POST",
+        url: "/api/auth/2fa/enable",
+        headers: auth(token),
+        payload: { secret: setup.json().secret, code: generateTotpCode(setup.json().secret), password: "wrong-password" }
+      });
+      expect(wrongPassword.statusCode).toBe(401);
+      expect(db.data.users.find((user) => user.id === "u0").twoFactorEnabled).not.toBe(true);
+      const enableFailedEvent = db.data.events.find((event) => event.type === "auth.2fa_enable_failed" && event.data?.userId === "u0");
+      expect(enableFailedEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          userId: "u0",
+          actorId: "u0",
+          actorEmail: "demo@layerpilot.test",
+          actorRole: "Admin",
+          actorType: "user",
+          reason: "invalid_password"
+        }
+      });
+      expect(JSON.stringify(enableFailedEvent)).not.toContain("wrong-password");
+
+      const invalidCodeEvent = db.data.events.find((event) => event.type === "auth.2fa_enable_failed" && event.data?.reason === "invalid_code");
+      expect(invalidCodeEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          userId: "u0",
+          actorId: "u0",
+          actorEmail: "demo@layerpilot.test",
+          actorRole: "Admin",
+          actorType: "user",
+          reason: "invalid_code"
+        }
+      });
+      expect(JSON.stringify(invalidCodeEvent)).not.toContain("000000");
+      expect(JSON.stringify(invalidCodeEvent)).not.toContain(setup.json().secret);
 
       const enable = await app.inject({
         method: "POST",
         url: "/api/auth/2fa/enable",
         headers: auth(token),
-        payload: { secret: setup.json().secret, code: generateTotpCode(setup.json().secret) }
+        payload: { secret: setup.json().secret, code: generateTotpCode(setup.json().secret), password: "layerpilot" }
       });
       expect(enable.statusCode).toBe(200);
       expect(enable.json().user).toMatchObject({ email: "demo@layerpilot.test", twoFactorEnabled: true });
@@ -470,6 +1207,17 @@ describe("3DSTU FarmFlow API", () => {
 
       const badCode = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "demo@layerpilot.test", password: "layerpilot", twoFactorCode: "123123" } });
       expect(badCode.statusCode).toBe(401);
+      const failedTwoFactorEvent = db.data.events.find((event) => event.type === "auth.2fa_failed" && event.data?.userId === "u0");
+      expect(failedTwoFactorEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          userId: "u0",
+          email: "demo@layerpilot.test",
+          reason: "invalid_two_factor"
+        }
+      });
+      expect(JSON.stringify(failedTwoFactorEvent)).not.toContain("123123");
 
       const totpLogin = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "demo@layerpilot.test", password: "layerpilot", twoFactorCode: generateTotpCode(setup.json().secret) } });
       expect(totpLogin.statusCode).toBe(200);
@@ -499,9 +1247,161 @@ describe("3DSTU FarmFlow API", () => {
       expect(plainLogin.statusCode).toBe(200);
 
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
-      expect(persisted.events.some((event) => event.type === "auth.2fa_enabled")).toBe(true);
-      expect(persisted.events.some((event) => event.type === "auth.2fa_verified")).toBe(true);
-      expect(persisted.events.some((event) => event.type === "auth.2fa_disabled")).toBe(true);
+      const setupEvent = persisted.events.find((event) => event.type === "auth.2fa_setup_started");
+      const enabledEvent = persisted.events.find((event) => event.type === "auth.2fa_enabled");
+      const verifiedEvent = persisted.events.find((event) => event.type === "auth.2fa_verified" && event.data?.method === "totp");
+      const disabledEvent = persisted.events.find((event) => event.type === "auth.2fa_disabled");
+      for (const event of [setupEvent, enabledEvent, verifiedEvent, disabledEvent]) {
+        expect(event).toMatchObject({
+          workspaceId: "ws-default",
+          data: {
+            workspaceId: "ws-default",
+            userId: "u0",
+            actorId: "u0",
+            actorEmail: "demo@layerpilot.test",
+            actorRole: "Admin",
+            actorType: "user"
+          }
+        });
+      }
+      expect(verifiedEvent.data).toMatchObject({ method: "totp" });
+      const serializedEvents = JSON.stringify([setupEvent, enabledEvent, verifiedEvent, disabledEvent]);
+      expect(serializedEvents).not.toContain(setup.json().secret);
+      expect(serializedEvents).not.toContain(recoveryCode);
+    });
+  });
+
+  it("locks known accounts after repeated two-factor failures and clears lock on successful 2FA", async () => {
+    await withEnv({ LAYERPILOT_AUTH_LOCK_THRESHOLD: "2", LAYERPILOT_AUTH_LOCK_MINUTES: "10" }, async () => {
+      await withApp(async ({ app, db }) => {
+        const token = await login(app);
+        const setup = await app.inject({ method: "POST", url: "/api/auth/2fa/setup", headers: auth(token) });
+        expect(setup.statusCode).toBe(200);
+        const enable = await app.inject({
+          method: "POST",
+          url: "/api/auth/2fa/enable",
+          headers: auth(token),
+          payload: { secret: setup.json().secret, code: generateTotpCode(setup.json().secret), password: "layerpilot" }
+        });
+        expect(enable.statusCode).toBe(200);
+
+        const badPayload = { email: "demo@layerpilot.test", password: "layerpilot", twoFactorCode: "111111" };
+        const first = await app.inject({ method: "POST", url: "/api/auth/login", payload: badPayload });
+        const locked = await app.inject({ method: "POST", url: "/api/auth/login", payload: badPayload });
+        expect(first.statusCode).toBe(401);
+        expect(locked.statusCode).toBe(423);
+        expect(locked.json()).toMatchObject({ error: "Account temporarily locked", reason: "invalid_two_factor" });
+
+        const correctDuringLock = await app.inject({
+          method: "POST",
+          url: "/api/auth/login",
+          payload: { email: "demo@layerpilot.test", password: "layerpilot", twoFactorCode: generateTotpCode(setup.json().secret) }
+        });
+        expect(correctDuringLock.statusCode).toBe(423);
+
+        const user = db.data.users.find((item) => item.email === "demo@layerpilot.test");
+        expect(user).toMatchObject({ authFailedAttempts: 2, authLockedReason: "invalid_two_factor" });
+        const lockEvent = db.data.events.find((event) => event.type === "auth.account_locked" && event.data?.userId === "u0");
+        expect(lockEvent).toMatchObject({ data: { reason: "invalid_two_factor", failedAttempts: 2 } });
+        expect(JSON.stringify(lockEvent)).not.toContain("111111");
+
+        user.authLockedUntil = new Date(Date.now() - 60_000).toISOString();
+        await db.write();
+        const success = await app.inject({
+          method: "POST",
+          url: "/api/auth/login",
+          payload: { email: "demo@layerpilot.test", password: "layerpilot", twoFactorCode: generateTotpCode(setup.json().secret) }
+        });
+        expect(success.statusCode).toBe(200);
+        expect(db.data.users.find((item) => item.id === "u0")).toMatchObject({ authFailedAttempts: 0, authLockedUntil: "" });
+      });
+    });
+  });
+
+  it("requires production Owner and Admin sessions to enroll 2FA before protected API access", async () => {
+    await withEnv({
+      NODE_ENV: "production",
+      LAYERPILOT_ADMIN_EMAIL: "owner@example.com",
+      LAYERPILOT_ADMIN_PASSWORD: "production-owner-password",
+      LAYERPILOT_WORKER_TOKEN: "worker-token-32-characters-minimum",
+      LAYERPILOT_METRICS_TOKEN: "metrics-token-32-characters-minimum",
+      LAYERPILOT_DISABLE_DEFAULT_USERS: "true",
+      LAYERPILOT_DISABLE_DEMO_LOGIN: "true"
+    }, async () => {
+      await withApp(async ({ app }) => {
+        const loginResponse = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "owner@example.com", password: "production-owner-password" } });
+        expect(loginResponse.statusCode).toBe(200);
+        expect(loginResponse.json().user).toMatchObject({ email: "owner@example.com", role: "Owner", twoFactorEnabled: false });
+        const token = loginResponse.json().token;
+
+        const blockedState = await app.inject({ method: "GET", url: "/api/state", headers: auth(token) });
+        expect(blockedState.statusCode).toBe(403);
+        expect(blockedState.json()).toMatchObject({ error: "Two-factor enrollment required", requiresTwoFactorEnrollment: true });
+        const blockedStream = await app.inject({ method: "GET", url: "/api/events/stream", headers: auth(token) });
+        expect(blockedStream.statusCode).toBe(403);
+        expect(blockedStream.json()).toMatchObject({ requiresTwoFactorEnrollment: true });
+
+        const me = await app.inject({ method: "GET", url: "/api/auth/me", headers: auth(token) });
+        expect(me.statusCode).toBe(200);
+        expect(me.json().user).toMatchObject({ email: "owner@example.com", twoFactorEnabled: false });
+
+        const setup = await app.inject({ method: "POST", url: "/api/auth/2fa/setup", headers: auth(token) });
+        expect(setup.statusCode).toBe(200);
+        const enable = await app.inject({
+          method: "POST",
+          url: "/api/auth/2fa/enable",
+          headers: auth(token),
+          payload: { secret: setup.json().secret, code: generateTotpCode(setup.json().secret), password: "production-owner-password" }
+        });
+        expect(enable.statusCode).toBe(200);
+
+        const allowedState = await app.inject({ method: "GET", url: "/api/state", headers: auth(token) });
+        expect(allowedState.statusCode).toBe(200);
+      });
+    });
+  });
+
+  it("prevents production Owner and Admin users from disabling required 2FA", async () => {
+    await withEnv({
+      NODE_ENV: "production",
+      LAYERPILOT_ADMIN_EMAIL: "owner@example.com",
+      LAYERPILOT_ADMIN_PASSWORD: "production-owner-password",
+      LAYERPILOT_WORKER_TOKEN: "worker-token-32-characters-minimum",
+      LAYERPILOT_METRICS_TOKEN: "metrics-token-32-characters-minimum",
+      LAYERPILOT_DISABLE_DEFAULT_USERS: "true",
+      LAYERPILOT_DISABLE_DEMO_LOGIN: "true"
+    }, async () => {
+      await withApp(async ({ app }) => {
+        const loginResponse = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "owner@example.com", password: "production-owner-password" } });
+        expect(loginResponse.statusCode).toBe(200);
+        const token = loginResponse.json().token;
+
+        const setup = await app.inject({ method: "POST", url: "/api/auth/2fa/setup", headers: auth(token) });
+        expect(setup.statusCode).toBe(200);
+        const enable = await app.inject({
+          method: "POST",
+          url: "/api/auth/2fa/enable",
+          headers: auth(token),
+          payload: { secret: setup.json().secret, code: generateTotpCode(setup.json().secret), password: "production-owner-password" }
+        });
+        expect(enable.statusCode).toBe(200);
+
+        const denied = await app.inject({
+          method: "POST",
+          url: "/api/auth/2fa/disable",
+          headers: auth(token),
+          payload: { password: "production-owner-password", code: generateTotpCode(setup.json().secret) }
+        });
+        expect(denied.statusCode).toBe(409);
+        expect(denied.json()).toMatchObject({
+          error: "Two-factor authentication is required for production Owner/Admin accounts",
+          requiresTwoFactorEnrollment: true
+        });
+
+        const me = await app.inject({ method: "GET", url: "/api/auth/me", headers: auth(token) });
+        expect(me.statusCode).toBe(200);
+        expect(me.json().user).toMatchObject({ email: "owner@example.com", twoFactorEnabled: true });
+      });
     });
   });
 
@@ -552,9 +1452,29 @@ describe("3DSTU FarmFlow API", () => {
       const tenantState = await app.inject({ method: "GET", url: "/api/state", headers: auth(tenantToken) });
       expect(tenantState.statusCode).toBe(200);
       expect(tenantState.json().workspaceSettings).toMatchObject({ organizationName: "Tenant Print Farm", workspaceId: tenantWorkspaceId });
+      expect(tenantState.json().costCatalog).toMatchObject({ currency: "USD", materialRates: { PETG: 1.05 }, machineHourlyRate: 18 });
+      expect(tenantState.json().costCatalogs).toBeUndefined();
       expect(tenantState.json().printers).toHaveLength(0);
       expect(tenantState.json().files).toHaveLength(0);
       expect(tenantState.json().users.map((user) => user.email)).toEqual(["tenant.owner@layerpilot.test"]);
+
+      const tenantPricing = await app.inject({
+        method: "PATCH",
+        url: "/api/costCatalog",
+        headers: auth(tenantToken),
+        payload: { materialRates: { PETG: 3 }, machineHourlyRate: 60, failureReservePercent: 0, overheadPercent: 0, minimumQuote: 5 }
+      });
+      expect(tenantPricing.statusCode).toBe(200);
+      expect(tenantPricing.json()).toMatchObject({ materialRates: { PETG: 3 }, machineHourlyRate: 60 });
+
+      const tenantQuote = await app.inject({
+        method: "POST",
+        url: "/api/quotes",
+        headers: auth(tenantToken),
+        payload: { material: "PETG", grams: 100, minutes: 60, includeLabor: false, quantity: 1 }
+      });
+      expect(tenantQuote.statusCode).toBe(200);
+      expect(tenantQuote.json()).toMatchObject({ currency: "USD", materialCost: 3, machineCost: 60, total: 63 });
 
       const invited = await app.inject({
         method: "POST",
@@ -603,9 +1523,51 @@ describe("3DSTU FarmFlow API", () => {
       expect(tenantPrinter.statusCode).toBe(201);
       expect(tenantPrinter.json()).toMatchObject({ name: "Tenant CoreXY", workspaceId: tenantWorkspaceId });
 
+      const tenantFile = await app.inject({
+        method: "POST",
+        url: "/api/files",
+        headers: auth(tenantToken),
+        payload: { name: "Tenant priced fixture.stl", type: "STL", material: "PETG", dimensions: [80, 80, 20], estimateGrams: 100, estimateMinutes: 60 }
+      });
+      expect(tenantFile.statusCode).toBe(201);
+      expect(tenantFile.json()).toMatchObject({ workspaceId: tenantWorkspaceId, quote: 63, quoteBreakdown: { materialCost: 3, machineCost: 60, total: 63 } });
+
+      const tenantOrder = await app.inject({
+        method: "POST",
+        url: "/api/orders",
+        headers: auth(tenantToken),
+        payload: { source: "Manual", customer: "Tenant Customer", items: ["TENANT-PART x1"], status: "received", due: "Tomorrow 12:00", value: 120 }
+      });
+      expect(tenantOrder.statusCode).toBe(201);
+      expect(tenantOrder.json()).toMatchObject({ customer: "Tenant Customer", workspaceId: tenantWorkspaceId });
+
+      const tenantAudit = await app.inject({ method: "GET", url: "/api/audit?type=order.created&limit=5", headers: auth(tenantToken) });
+      expect(tenantAudit.statusCode).toBe(200);
+      expect(tenantAudit.json()).toMatchObject({ returned: 1 });
+      expect(tenantAudit.json().events[0]).toMatchObject({
+        workspaceId: tenantWorkspaceId,
+        type: "order.created",
+        data: {
+          workspaceId: tenantWorkspaceId,
+          actorEmail: "tenant.owner@layerpilot.test",
+          actorRole: "Owner",
+          orderId: tenantOrder.json().id
+        }
+      });
+
       const defaultToken = await login(app, "owner@layerpilot.test", "layerpilot");
       const defaultState = await app.inject({ method: "GET", url: "/api/state", headers: auth(defaultToken) });
       expect(defaultState.statusCode).toBe(200);
+      expect(defaultState.json().costCatalog).toMatchObject({ materialRates: { PETG: 1.05 }, machineHourlyRate: 18 });
+      expect(defaultState.json().costCatalogs).toBeUndefined();
+      const defaultQuote = await app.inject({
+        method: "POST",
+        url: "/api/quotes",
+        headers: auth(defaultToken),
+        payload: { material: "PETG", grams: 100, minutes: 60, includeLabor: false, quantity: 1 }
+      });
+      expect(defaultQuote.statusCode).toBe(200);
+      expect(defaultQuote.json()).toMatchObject({ materialCost: 1.05, machineCost: 18, total: 21.72 });
       expect(defaultState.json().workspaceSettings.workspaceId).not.toBe(tenantWorkspaceId);
       expect(defaultState.json().printers.length).toBeGreaterThan(0);
       expect(defaultState.json().printers.map((printer) => printer.id)).not.toContain(tenantPrinter.json().id);
@@ -623,6 +1585,7 @@ describe("3DSTU FarmFlow API", () => {
       expect(persisted.workspaces.some((workspace) => workspace.id === tenantWorkspaceId && workspace.name === "Tenant Print Farm")).toBe(true);
       expect(persisted.users.find((user) => user.email === "tenant.scheduler@layerpilot.test")).toMatchObject({ workspaceId: tenantWorkspaceId });
       expect(persisted.apiKeys.find((key) => key.name === "Tenant automation")).toMatchObject({ workspaceId: tenantWorkspaceId });
+      expect(persisted.events.find((event) => event.type === "order.created" && event.data?.orderId === tenantOrder.json().id)).toMatchObject({ workspaceId: tenantWorkspaceId, data: { actorEmail: "tenant.owner@layerpilot.test" } });
     });
   });
 
@@ -695,6 +1658,16 @@ describe("3DSTU FarmFlow API", () => {
       });
       expect(allowedByCidr.statusCode).toBe(201);
 
+      const queueRead = await app.inject({ method: "GET", url: "/api/queue", headers: auth(created.json().secret) });
+      expect(queueRead.statusCode).toBe(200);
+      expect(queueRead.json().some((job) => job.file === "Allowed IP key.gcode")).toBe(true);
+
+      for (const url of ["/api/users", "/api/apiKeys", "/api/workspaceSettings", "/api/audit"]) {
+        const scopedReadDenied = await app.inject({ method: "GET", url, headers: auth(created.json().secret) });
+        expect(scopedReadDenied.statusCode).toBe(403);
+        expect(scopedReadDenied.json()).toMatchObject({ error: "API key scope does not allow reading this resource" });
+      }
+
       const disabled = await app.inject({ method: "PATCH", url: `/api/apiKeys/${created.json().apiKey.id}`, headers: auth(token), payload: { enabled: false } });
       expect(disabled.statusCode).toBe(200);
       expect(disabled.json()).toMatchObject({ enabled: false });
@@ -710,6 +1683,93 @@ describe("3DSTU FarmFlow API", () => {
       expect(persisted.queue.some((item) => item.file === "Allowed IP key.gcode")).toBe(true);
       expect(persisted.queue.some((item) => item.file === "Blocked IP key.gcode")).toBe(false);
       expect(persisted.workspaceSettings).toMatchObject({ restrictApiByIp: true, allowedApiIps: ["127.0.0.0/8"] });
+    });
+  });
+
+  it("rejects over-scoped API keys and blocks API-key credential chaining", async () => {
+    await withApp(async ({ app, db }) => {
+      const token = await login(app);
+      for (const scopes of [["*"], ["queue:write", "unknown:write"], ["apiKeys:write"]]) {
+        const rejected = await app.inject({
+          method: "POST",
+          url: "/api/apiKeys",
+          headers: auth(token),
+          payload: { name: `Rejected ${scopes.join(",")}`, scopes, enabled: true }
+        });
+        expect(rejected.statusCode).toBe(400);
+        expect(rejected.json()).toMatchObject({ error: "Invalid API key payload" });
+      }
+
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/apiKeys",
+        headers: auth(token),
+        payload: { name: "Legacy chained key", scopes: ["queue:write"], enabled: true }
+      });
+      expect(created.statusCode).toBe(201);
+      const secret = created.json().secret;
+      const key = db.data.apiKeys.find((item) => item.id === created.json().apiKey.id);
+      key.scopes = ["apiKeys:write"];
+      await db.write();
+
+      const chained = await app.inject({
+        method: "POST",
+        url: "/api/apiKeys",
+        headers: auth(secret),
+        payload: { name: "Chained key", scopes: ["queue:write"], enabled: true }
+      });
+      expect(chained.statusCode).toBe(403);
+      expect(chained.json()).toMatchObject({ error: "API key management requires a user session" });
+    });
+  });
+
+  it("records operator context for production scheduling, bridge, and file-version audit events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const headers = auth(token);
+
+      const queued = await app.inject({
+        method: "POST",
+        url: "/api/queue",
+        headers,
+        payload: { fileId: "f2", file: "Audit actor fixture.3mf", material: "PETG", dimensions: [80, 60, 30], time: "1h 00m", cost: 20 }
+      });
+      expect(queued.statusCode).toBe(201);
+      const jobId = queued.json().job.id;
+
+      const scheduled = await app.inject({ method: "PATCH", url: `/api/queue/${jobId}/schedule`, headers, payload: { printerId: "p2", scheduledStart: "15:00" } });
+      expect(scheduled.statusCode).toBe(200);
+
+      const priority = await app.inject({ method: "PATCH", url: `/api/queue/${jobId}/priority`, headers, payload: { priority: "Rush" } });
+      expect(priority.statusCode).toBe(200);
+
+      const auto = await app.inject({ method: "POST", url: "/api/schedule/auto", headers, payload: { includeBusyPrinters: true, respectMaterial: true, respectBuildVolume: true, startMinute: 600 } });
+      expect(auto.statusCode).toBe(200);
+
+      const bridge = await app.inject({
+        method: "POST",
+        url: "/api/bridges",
+        headers,
+        payload: { printerId: "p1", kind: "manual", name: "Audit Manual Bridge", baseUrl: "manual://audit", enabled: true }
+      });
+      expect([200, 201]).toContain(bridge.statusCode);
+
+      const versioned = await app.inject({ method: "PATCH", url: "/api/files/f2/version", headers });
+      expect(versioned.statusCode).toBe(200);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      for (const type of ["queue.created", "queue.scheduled", "queue.priority", "queue.auto_scheduled", "bridge.saved", "file.versioned"]) {
+        const event = persisted.events.find((item) => item.type === type);
+        expect(event, `missing ${type}`).toBeTruthy();
+        expect(event).toMatchObject({
+          workspaceId: "ws-default",
+          data: {
+            workspaceId: "ws-default",
+            actorEmail: "demo@layerpilot.test",
+            actorType: "user"
+          }
+        });
+      }
     });
   });
 
@@ -763,6 +1823,89 @@ describe("3DSTU FarmFlow API", () => {
     });
   });
 
+  it("replays idempotent admin account writes without rotating generated secrets", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+
+      const apiKeyHeaders = { ...auth(token), "idempotency-key": "admin-api-key-create-retry-001" };
+      const apiKeyPayload = { name: "Retry admin automation", scopes: ["queue:write"], enabled: true };
+      const apiKey = await app.inject({ method: "POST", url: "/api/apiKeys", headers: apiKeyHeaders, payload: apiKeyPayload });
+      expect(apiKey.statusCode).toBe(201);
+      const apiKeyReplay = await app.inject({ method: "POST", url: "/api/apiKeys", headers: apiKeyHeaders, payload: apiKeyPayload });
+      expect(apiKeyReplay.statusCode).toBe(201);
+      expect(apiKeyReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(apiKeyReplay.json()).toEqual({ ...apiKey.json(), secret: "REDACTED" });
+
+      const apiKeyUpdateHeaders = { ...auth(token), "idempotency-key": "admin-api-key-update-retry-001" };
+      const apiKeyUpdatePayload = { enabled: false, scopes: ["orders:write"] };
+      const apiKeyUpdated = await app.inject({ method: "PATCH", url: `/api/apiKeys/${apiKey.json().apiKey.id}`, headers: apiKeyUpdateHeaders, payload: apiKeyUpdatePayload });
+      expect(apiKeyUpdated.statusCode).toBe(200);
+      const apiKeyUpdatedReplay = await app.inject({ method: "PATCH", url: `/api/apiKeys/${apiKey.json().apiKey.id}`, headers: apiKeyUpdateHeaders, payload: apiKeyUpdatePayload });
+      expect(apiKeyUpdatedReplay.statusCode).toBe(200);
+      expect(apiKeyUpdatedReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(apiKeyUpdatedReplay.json()).toEqual(apiKeyUpdated.json());
+
+      const inviteHeaders = { ...auth(token), "idempotency-key": "admin-user-invite-retry-001" };
+      const invitePayload = { name: "Retry Invite", email: "retry.invite@layerpilot.test", role: "Operator", location: "QC Lab" };
+      const invited = await app.inject({ method: "POST", url: "/api/users", headers: inviteHeaders, payload: invitePayload });
+      expect(invited.statusCode).toBe(201);
+      expect(invited.json().temporaryPassword).toBeTruthy();
+      const invitedReplay = await app.inject({ method: "POST", url: "/api/users", headers: inviteHeaders, payload: invitePayload });
+      expect(invitedReplay.statusCode).toBe(201);
+      expect(invitedReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(invitedReplay.json()).toEqual({ ...invited.json(), temporaryPassword: "REDACTED" });
+
+      const userUpdateHeaders = { ...auth(token), "idempotency-key": "admin-user-update-retry-001" };
+      const userUpdatePayload = { role: "Admin", location: "Studio South" };
+      const userUpdated = await app.inject({ method: "PATCH", url: `/api/users/${invited.json().user.id}`, headers: userUpdateHeaders, payload: userUpdatePayload });
+      expect(userUpdated.statusCode).toBe(200);
+      const userUpdatedReplay = await app.inject({ method: "PATCH", url: `/api/users/${invited.json().user.id}`, headers: userUpdateHeaders, payload: userUpdatePayload });
+      expect(userUpdatedReplay.statusCode).toBe(200);
+      expect(userUpdatedReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(userUpdatedReplay.json()).toEqual(userUpdated.json());
+
+      const resetHeaders = { ...auth(token), "idempotency-key": "admin-user-reset-retry-001" };
+      const resetPayload = { requireChange: true };
+      const reset = await app.inject({ method: "POST", url: `/api/users/${invited.json().user.id}/reset-password`, headers: resetHeaders, payload: resetPayload });
+      expect(reset.statusCode).toBe(200);
+      expect(reset.json().temporaryPassword).toBeTruthy();
+      const resetReplay = await app.inject({ method: "POST", url: `/api/users/${invited.json().user.id}/reset-password`, headers: resetHeaders, payload: resetPayload });
+      expect(resetReplay.statusCode).toBe(200);
+      expect(resetReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(resetReplay.json()).toEqual({ ...reset.json(), temporaryPassword: "REDACTED" });
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: `/api/users/${invited.json().user.id}/reset-password`,
+        headers: resetHeaders,
+        payload: { requireChange: false }
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.apiKeys.filter((key) => key.name === "Retry admin automation")).toHaveLength(1);
+      expect(persisted.users.filter((user) => user.email === "retry.invite@layerpilot.test")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "api_key.created" && event.data?.apiKeyId === apiKey.json().apiKey.id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "api_key.updated" && event.data?.apiKeyId === apiKey.json().apiKey.id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "user.invited" && event.data?.userId === invited.json().user.id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "user.updated" && event.data?.userId === invited.json().user.id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "user.password_reset" && event.data?.userId === invited.json().user.id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "admin-user-reset-retry-001")).toMatchObject({
+        method: "POST",
+        path: `/api/users/${invited.json().user.id}/reset-password`,
+        replayCount: 1,
+        statusCode: 200,
+        responseBodyRedacted: true
+      });
+      const persistedReplayBodies = JSON.stringify(persisted.dataMeta.idempotencyKeys);
+      expect(persistedReplayBodies).not.toContain(apiKey.json().secret);
+      expect(persistedReplayBodies).not.toContain(invited.json().temporaryPassword);
+      expect(persistedReplayBodies).not.toContain(reset.json().temporaryPassword);
+      expect(persistedReplayBodies).toContain("REDACTED");
+    });
+  });
+
   it("persists workspace settings with role protection", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);
@@ -774,10 +1917,10 @@ describe("3DSTU FarmFlow API", () => {
         method: "PATCH",
         url: "/api/workspaceSettings",
         headers: auth(token),
-        payload: { organizationName: "QC Print Farm", defaultLocation: "QC Bay", currency: "TWD", restrictApiByIp: true, hotDropMode: "Auto-Queue" }
+        payload: { organizationName: "QC Print Farm", defaultLocation: "QC Bay", currency: "TWD", restrictApiByIp: true, allowedApiIps: ["127.0.0.0/8"], hotDropMode: "Auto-Queue" }
       });
       expect(updated.statusCode).toBe(200);
-      expect(updated.json()).toMatchObject({ organizationName: "QC Print Farm", defaultLocation: "QC Bay", currency: "TWD", restrictApiByIp: true, hotDropMode: "Auto-Queue" });
+      expect(updated.json()).toMatchObject({ organizationName: "QC Print Farm", defaultLocation: "QC Bay", currency: "TWD", restrictApiByIp: true, allowedApiIps: ["127.0.0.0/8"], hotDropMode: "Auto-Queue" });
 
       const invalidMode = await app.inject({
         method: "PATCH",
@@ -786,6 +1929,16 @@ describe("3DSTU FarmFlow API", () => {
         payload: { hotDropMode: "Fire and forget" }
       });
       expect(invalidMode.statusCode).toBe(400);
+
+      const invalidAllowlist = await app.inject({
+        method: "PATCH",
+        url: "/api/workspaceSettings",
+        headers: auth(token),
+        payload: { restrictApiByIp: true, allowedApiIps: ["127.0.0.1", "bad-rule", "10.0.0.1/99", "::1"] }
+      });
+      expect(invalidAllowlist.statusCode).toBe(400);
+      expect(invalidAllowlist.json()).toMatchObject({ error: "Invalid workspace settings payload" });
+      expect(invalidAllowlist.json().issues.map((issue) => issue.path[0])).toContain("allowedApiIps");
 
       const apiKey = await app.inject({
         method: "POST",
@@ -797,13 +1950,13 @@ describe("3DSTU FarmFlow API", () => {
       expect(denied.statusCode).toBe(403);
 
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
-      expect(persisted.workspaceSettings).toMatchObject({ organizationName: "QC Print Farm", defaultLocation: "QC Bay", currency: "TWD", restrictApiByIp: true, hotDropMode: "Auto-Queue" });
+      expect(persisted.workspaceSettings).toMatchObject({ organizationName: "QC Print Farm", defaultLocation: "QC Bay", currency: "TWD", restrictApiByIp: true, allowedApiIps: ["127.0.0.0/8"], hotDropMode: "Auto-Queue" });
       expect(persisted.events.some((event) => event.type === "settings.updated")).toBe(true);
     });
   });
 
   it("tracks onboarding readiness and generates redacted support snapshots", async () => {
-    await withApp(async ({ app, dbPath }) => {
+    await withApp(async ({ app, db, dbPath }) => {
       const token = await login(app);
       const apiKey = await app.inject({
         method: "POST",
@@ -829,6 +1982,20 @@ describe("3DSTU FarmFlow API", () => {
       expect(backup.statusCode).toBe(200);
       expect(backup.json().onboarding.steps.find((step) => step.id === "backup")).toMatchObject({ status: "complete", note: "Export verified by owner" });
 
+      db.data.events.unshift({
+        id: "support-url-event",
+        workspaceId: "ws-default",
+        type: "bridge.saved",
+        message: "Bridge endpoint updated",
+        at: new Date().toISOString(),
+        data: {
+          url: "https://hooks.slack.com/services/T000/B000/SUPPORT_SECRET?token=support-query-secret",
+          baseUrl: "http://octoprint.local/api?apikey=support-bridge-secret",
+          publicUrl: "https://farm.example.test/portal"
+        }
+      });
+      await db.write();
+
       const snapshot = await app.inject({ method: "POST", url: "/api/support/snapshot", headers: auth(token) });
       expect(snapshot.statusCode).toBe(200);
       expect(snapshot.json()).toMatchObject({
@@ -840,10 +2007,395 @@ describe("3DSTU FarmFlow API", () => {
       const snapshotText = JSON.stringify(snapshot.json());
       expect(snapshotText).not.toContain(apiKey.json().secret);
       expect(snapshotText).not.toContain("scrypt$");
+      expect(snapshotText).not.toContain("SUPPORT_SECRET");
+      expect(snapshotText).not.toContain("support-query-secret");
+      expect(snapshotText).not.toContain("support-bridge-secret");
+      const endpointEvent = snapshot.json().recentEvents.find((event) => event.type === "bridge.saved");
+      expect(endpointEvent.data).toMatchObject({
+        url: "https://hooks.slack.com (redacted)",
+        baseUrl: "http://octoprint.local (redacted)",
+        publicUrl: "https://farm.example.test (redacted)"
+      });
 
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
       expect(persisted.workspaceSettings.onboarding.backup).toMatchObject({ status: "complete", note: "Export verified by owner" });
       expect(persisted.events.some((event) => event.type === "support.snapshot")).toBe(true);
+    });
+  });
+
+  it("records operator context for governance and go-live audit events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const actorEmail = "demo@layerpilot.test";
+
+      const settings = await app.inject({
+        method: "PATCH",
+        url: "/api/workspaceSettings",
+        headers: auth(token),
+        payload: { organizationName: "Governance Farm", auditLogRetentionDays: 120 }
+      });
+      expect(settings.statusCode).toBe(200);
+
+      const onboarding = await app.inject({
+        method: "PATCH",
+        url: "/api/onboarding/security",
+        headers: auth(token),
+        payload: { status: "complete", note: "2FA policy reviewed" }
+      });
+      expect(onboarding.statusCode).toBe(200);
+
+      const snapshot = await app.inject({ method: "POST", url: "/api/support/snapshot", headers: auth(token) });
+      expect(snapshot.statusCode).toBe(200);
+
+      const apiKey = await app.inject({
+        method: "POST",
+        url: "/api/apiKeys",
+        headers: auth(token),
+        payload: { name: "Governance automation", scopes: ["admin:export"], enabled: true }
+      });
+      expect(apiKey.statusCode).toBe(201);
+      const apiKeyUpdate = await app.inject({
+        method: "PATCH",
+        url: `/api/apiKeys/${apiKey.json().apiKey.id}`,
+        headers: auth(token),
+        payload: { enabled: false }
+      });
+      expect(apiKeyUpdate.statusCode).toBe(200);
+
+      const user = await app.inject({
+        method: "POST",
+        url: "/api/users",
+        headers: auth(token),
+        payload: { name: "Governance Viewer", email: "governance.viewer@layerpilot.test", role: "Viewer", location: "HQ" }
+      });
+      expect(user.statusCode).toBe(201);
+      const userUpdate = await app.inject({
+        method: "PATCH",
+        url: `/api/users/${user.json().user.id}`,
+        headers: auth(token),
+        payload: { role: "Operator", location: "Line 2" }
+      });
+      expect(userUpdate.statusCode).toBe(200);
+      const reset = await app.inject({
+        method: "POST",
+        url: `/api/users/${user.json().user.id}/reset-password`,
+        headers: auth(token),
+        payload: { requireChange: true }
+      });
+      expect(reset.statusCode).toBe(200);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      for (const type of [
+        "settings.updated",
+        "onboarding.updated",
+        "support.snapshot",
+        "api_key.created",
+        "api_key.updated",
+        "user.invited",
+        "user.updated",
+        "user.password_reset"
+      ]) {
+        const event = persisted.events.find((item) => item.type === type);
+        expect(event, type).toBeTruthy();
+        expect(event).toMatchObject({
+          workspaceId: "ws-default",
+          data: expect.objectContaining({
+            workspaceId: "ws-default",
+            actorEmail,
+            actorType: "user"
+          })
+        });
+      }
+    });
+  });
+
+  it("replays idempotent governance setup writes without duplicate audit events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+
+      const settingsHeaders = { ...auth(token), "idempotency-key": "governance-settings-retry-001" };
+      const settingsPayload = { organizationName: "Retry Safe Farm", auditLogRetentionDays: 180 };
+      const settings = await app.inject({
+        method: "PATCH",
+        url: "/api/workspaceSettings",
+        headers: settingsHeaders,
+        payload: settingsPayload
+      });
+      expect(settings.statusCode).toBe(200);
+      const settingsReplay = await app.inject({
+        method: "PATCH",
+        url: "/api/workspaceSettings",
+        headers: settingsHeaders,
+        payload: settingsPayload
+      });
+      expect(settingsReplay.statusCode).toBe(200);
+      expect(settingsReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(settingsReplay.json()).toEqual(settings.json());
+
+      const onboardingHeaders = { ...auth(token), "idempotency-key": "governance-onboarding-retry-001" };
+      const onboardingPayload = { status: "complete", note: "Restore drill verified" };
+      const onboarding = await app.inject({
+        method: "PATCH",
+        url: "/api/onboarding/backup",
+        headers: onboardingHeaders,
+        payload: onboardingPayload
+      });
+      expect(onboarding.statusCode).toBe(200);
+      const onboardingReplay = await app.inject({
+        method: "PATCH",
+        url: "/api/onboarding/backup",
+        headers: onboardingHeaders,
+        payload: onboardingPayload
+      });
+      expect(onboardingReplay.statusCode).toBe(200);
+      expect(onboardingReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(onboardingReplay.json()).toEqual(onboarding.json());
+
+      const snapshotHeaders = { ...auth(token), "idempotency-key": "governance-snapshot-retry-001" };
+      const snapshot = await app.inject({ method: "POST", url: "/api/support/snapshot", headers: snapshotHeaders });
+      expect(snapshot.statusCode).toBe(200);
+      const snapshotReplay = await app.inject({ method: "POST", url: "/api/support/snapshot", headers: snapshotHeaders });
+      expect(snapshotReplay.statusCode).toBe(200);
+      expect(snapshotReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(snapshotReplay.json()).toEqual(snapshot.json());
+
+      const conflict = await app.inject({
+        method: "PATCH",
+        url: "/api/workspaceSettings",
+        headers: settingsHeaders,
+        payload: { organizationName: "Different Farm" }
+      });
+      expect(conflict.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.events.filter((event) => event.type === "settings.updated" && event.data?.settings?.organizationName === "Retry Safe Farm")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "onboarding.updated" && event.data?.stepId === "backup")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "support.snapshot")).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "governance-settings-retry-001")).toMatchObject({ method: "PATCH", path: "/api/workspaceSettings", replayCount: 1, statusCode: 200 });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "governance-onboarding-retry-001")).toMatchObject({ method: "PATCH", path: "/api/onboarding/backup", replayCount: 1, statusCode: 200 });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "governance-snapshot-retry-001")).toMatchObject({ method: "POST", path: "/api/support/snapshot", replayCount: 1, statusCode: 200 });
+    });
+  });
+
+  it("redacts credential-bearing integration endpoints from state, lists, delivery logs, and exports", async () => {
+    await withApp(async ({ app, db, dbPath }) => {
+      const token = await login(app);
+      const webhookUrl = "https://hooks.slack.com/services/T000/B000/WEBHOOK_SECRET?token=webhook-query-secret";
+      const notificationUrl = "https://discord.com/api/webhooks/NOTIFICATION_SECRET?wait=true";
+      const commerceUrl = "https://commerce.example.test/orders.json?access_token=commerce-query-secret";
+      const bridgeBaseUrl = "http://octoprint.local/api?apikey=bridge-query-secret";
+
+      const webhook = await app.inject({
+        method: "POST",
+        url: "/api/webhooks",
+        headers: auth(token),
+        payload: { name: "Secret webhook", url: webhookUrl, events: ["queue.created"], enabled: true }
+      });
+      expect(webhook.statusCode).toBe(201);
+      expect(JSON.stringify(webhook.json())).not.toContain("WEBHOOK_SECRET");
+      expect(webhook.json()).toMatchObject({ hasUrl: true, urlHost: "https://hooks.slack.com" });
+
+      const notification = await app.inject({
+        method: "POST",
+        url: "/api/notificationChannels",
+        headers: auth(token),
+        payload: { name: "Secret notification", type: "discord", url: notificationUrl, token: "notification-token-secret", events: ["queue.created"], enabled: true }
+      });
+      expect(notification.statusCode).toBe(201);
+      expect(JSON.stringify(notification.json())).not.toContain("NOTIFICATION_SECRET");
+      expect(notification.json()).toMatchObject({ hasUrl: true, urlHost: "https://discord.com", hasToken: true });
+
+      const commerce = await app.inject({
+        method: "POST",
+        url: "/api/commerceConnectors",
+        headers: auth(token),
+        payload: { name: "Secret commerce", source: "Generic", url: commerceUrl, token: "commerce-token-secret", enabled: true, mapping: {} }
+      });
+      expect(commerce.statusCode).toBe(201);
+      expect(JSON.stringify(commerce.json())).not.toContain("commerce-query-secret");
+      expect(commerce.json()).toMatchObject({ hasUrl: true, urlHost: "https://commerce.example.test", hasToken: true });
+
+      const bridge = await app.inject({
+        method: "POST",
+        url: "/api/bridges",
+        headers: auth(token),
+        payload: { printerId: "p1", kind: "octoprint", name: "Secret bridge", baseUrl: bridgeBaseUrl, apiKey: "octo-api-secret", enabled: true }
+      });
+      expect([200, 201]).toContain(bridge.statusCode);
+      expect(JSON.stringify(bridge.json())).not.toContain("bridge-query-secret");
+      expect(bridge.json()).toMatchObject({ hasBaseUrl: true, baseUrlHost: "http://octoprint.local", hasApiKey: true });
+
+      db.data.webhookDeliveries.unshift({ id: "wd-secret", webhookId: webhook.json().id, webhookName: "Secret webhook", eventId: "event-secret", eventType: "queue.created", url: webhookUrl, status: "failed", statusCode: 500, at: new Date().toISOString() });
+      db.data.notificationDeliveries.unshift({ id: "nd-secret", channelId: notification.json().id, channelName: "Secret notification", channelType: "discord", eventId: "event-secret", eventType: "queue.created", url: notificationUrl, status: "failed", statusCode: 500, at: new Date().toISOString() });
+      await db.write();
+
+      const rawDb = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(rawDb.webhooks.find((item) => item.id === webhook.json().id).url).toBe(webhookUrl);
+      expect(rawDb.notificationChannels.find((item) => item.id === notification.json().id).url).toBe(notificationUrl);
+      expect(rawDb.commerceConnectors.find((item) => item.id === commerce.json().id).url).toBe(commerceUrl);
+      expect(rawDb.bridges.find((item) => item.id === bridge.json().id).baseUrl).toBe(bridgeBaseUrl);
+
+      for (const url of ["/api/state", "/api/webhooks", "/api/webhookDeliveries", "/api/notificationChannels", "/api/notificationDeliveries", "/api/commerceConnectors", "/api/bridges", "/api/admin/export"]) {
+        const response = await app.inject({ method: "GET", url, headers: auth(token) });
+        expect(response.statusCode).toBe(200);
+        const text = response.body;
+        expect(text).not.toContain("WEBHOOK_SECRET");
+        expect(text).not.toContain("webhook-query-secret");
+        expect(text).not.toContain("NOTIFICATION_SECRET");
+        expect(text).not.toContain("notification-token-secret");
+        expect(text).not.toContain("commerce-query-secret");
+        expect(text).not.toContain("commerce-token-secret");
+        expect(text).not.toContain("bridge-query-secret");
+        expect(text).not.toContain("octo-api-secret");
+      }
+    });
+  });
+
+  it("replays idempotent integration configuration writes without duplicate records or audit events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+
+      const webhookHeaders = { ...auth(token), "idempotency-key": "webhook-config-retry-001" };
+      const webhookPayload = { name: "Retry webhook config", url: "https://hooks.example.test/config", events: ["queue.created"], enabled: true };
+      const webhook = await app.inject({ method: "POST", url: "/api/webhooks", headers: webhookHeaders, payload: webhookPayload });
+      expect(webhook.statusCode).toBe(201);
+      const webhookReplay = await app.inject({ method: "POST", url: "/api/webhooks", headers: webhookHeaders, payload: webhookPayload });
+      expect(webhookReplay.statusCode).toBe(201);
+      expect(webhookReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(webhookReplay.json()).toEqual(webhook.json());
+
+      const webhookPatchHeaders = { ...auth(token), "idempotency-key": "webhook-update-retry-001" };
+      const webhookPatch = await app.inject({
+        method: "PATCH",
+        url: `/api/webhooks/${webhook.json().id}`,
+        headers: webhookPatchHeaders,
+        payload: { enabled: false, events: ["order.status"] }
+      });
+      expect(webhookPatch.statusCode).toBe(200);
+      const webhookPatchReplay = await app.inject({
+        method: "PATCH",
+        url: `/api/webhooks/${webhook.json().id}`,
+        headers: webhookPatchHeaders,
+        payload: { enabled: false, events: ["order.status"] }
+      });
+      expect(webhookPatchReplay.statusCode).toBe(200);
+      expect(webhookPatchReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(webhookPatchReplay.json()).toEqual(webhookPatch.json());
+
+      const channelHeaders = { ...auth(token), "idempotency-key": "notification-config-retry-001" };
+      const channelPayload = { name: "Retry notification config", type: "slack", url: "https://hooks.slack.test/config", token: "secret-token", events: ["queue.created"], enabled: true, recipients: [] };
+      const channel = await app.inject({ method: "POST", url: "/api/notificationChannels", headers: channelHeaders, payload: channelPayload });
+      expect(channel.statusCode).toBe(201);
+      const channelReplay = await app.inject({ method: "POST", url: "/api/notificationChannels", headers: channelHeaders, payload: channelPayload });
+      expect(channelReplay.statusCode).toBe(201);
+      expect(channelReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(channelReplay.json()).toEqual(channel.json());
+
+      const channelPatchHeaders = { ...auth(token), "idempotency-key": "notification-update-retry-001" };
+      const channelPatch = await app.inject({
+        method: "PATCH",
+        url: `/api/notificationChannels/${channel.json().id}`,
+        headers: channelPatchHeaders,
+        payload: { enabled: false, events: ["order.status"] }
+      });
+      expect(channelPatch.statusCode).toBe(200);
+      const channelPatchReplay = await app.inject({
+        method: "PATCH",
+        url: `/api/notificationChannels/${channel.json().id}`,
+        headers: channelPatchHeaders,
+        payload: { enabled: false, events: ["order.status"] }
+      });
+      expect(channelPatchReplay.statusCode).toBe(200);
+      expect(channelPatchReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(channelPatchReplay.json()).toEqual(channelPatch.json());
+
+      const connectorHeaders = { ...auth(token), "idempotency-key": "commerce-config-retry-001" };
+      const connectorPayload = { name: "Retry commerce config", source: "Generic", url: "https://commerce.example.test/feed.json", token: "commerce-secret", enabled: true, mapping: {} };
+      const connector = await app.inject({ method: "POST", url: "/api/commerceConnectors", headers: connectorHeaders, payload: connectorPayload });
+      expect(connector.statusCode).toBe(201);
+      const connectorReplay = await app.inject({ method: "POST", url: "/api/commerceConnectors", headers: connectorHeaders, payload: connectorPayload });
+      expect(connectorReplay.statusCode).toBe(201);
+      expect(connectorReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(connectorReplay.json()).toEqual(connector.json());
+
+      const connectorPatchHeaders = { ...auth(token), "idempotency-key": "commerce-update-retry-001" };
+      const connectorPatch = await app.inject({
+        method: "PATCH",
+        url: `/api/commerceConnectors/${connector.json().id}`,
+        headers: connectorPatchHeaders,
+        payload: { enabled: false, mapping: { externalOrderId: "id" } }
+      });
+      expect(connectorPatch.statusCode).toBe(200);
+      const connectorPatchReplay = await app.inject({
+        method: "PATCH",
+        url: `/api/commerceConnectors/${connector.json().id}`,
+        headers: connectorPatchHeaders,
+        payload: { enabled: false, mapping: { externalOrderId: "id" } }
+      });
+      expect(connectorPatchReplay.statusCode).toBe(200);
+      expect(connectorPatchReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(connectorPatchReplay.json()).toEqual(connectorPatch.json());
+
+      const addonHeaders = { ...auth(token), "idempotency-key": "addon-config-retry-001" };
+      const addonPayload = { enabled: true, config: { topicPrefix: "layerpilot/retry", password: "mqtt-secret" }, note: "Retry-safe add-on config" };
+      const addon = await app.inject({ method: "PATCH", url: "/api/addons/mqtt", headers: addonHeaders, payload: addonPayload });
+      expect(addon.statusCode).toBe(200);
+      const addonReplay = await app.inject({ method: "PATCH", url: "/api/addons/mqtt", headers: addonHeaders, payload: addonPayload });
+      expect(addonReplay.statusCode).toBe(200);
+      expect(addonReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(addonReplay.json()).toEqual(addon.json());
+
+      const bridgeHeaders = { ...auth(token), "idempotency-key": "bridge-config-retry-001" };
+      const bridgePayload = { printerId: "p1", kind: "manual", name: "Retry bridge config", baseUrl: "manual://retry", enabled: true };
+      const bridge = await app.inject({ method: "POST", url: "/api/bridges", headers: bridgeHeaders, payload: bridgePayload });
+      expect(bridge.statusCode).toBe(200);
+      const bridgeReplay = await app.inject({ method: "POST", url: "/api/bridges", headers: bridgeHeaders, payload: bridgePayload });
+      expect(bridgeReplay.statusCode).toBe(200);
+      expect(bridgeReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(bridgeReplay.json()).toEqual(bridge.json());
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/webhooks",
+        headers: webhookHeaders,
+        payload: { ...webhookPayload, name: "Different webhook config" }
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.webhooks.filter((item) => item.name === "Retry webhook config")).toHaveLength(1);
+      expect(persisted.notificationChannels.filter((item) => item.name === "Retry notification config")).toHaveLength(1);
+      expect(persisted.commerceConnectors.filter((item) => item.name === "Retry commerce config")).toHaveLength(1);
+      expect(persisted.bridges.filter((item) => item.name === "Retry bridge config")).toHaveLength(1);
+      for (const [type, idKey, idValue] of [
+        ["webhook.created", "webhookId", webhook.json().id],
+        ["webhook.updated", "webhookId", webhook.json().id],
+        ["notification.channel_created", "channelId", channel.json().id],
+        ["notification.channel_updated", "channelId", channel.json().id],
+        ["commerce.connector_created", "connectorId", connector.json().id],
+        ["commerce.connector_updated", "connectorId", connector.json().id]
+      ]) {
+        const event = persisted.events.find((item) => item.type === type && item.data?.[idKey] === idValue);
+        expect(event).toMatchObject({
+          workspaceId: "ws-default",
+          data: {
+            workspaceId: "ws-default",
+            [idKey]: idValue,
+            actorEmail: "demo@layerpilot.test",
+            actorType: "user"
+          }
+        });
+        expect(JSON.stringify(event)).not.toContain("secret-token");
+        expect(JSON.stringify(event)).not.toContain("commerce-secret");
+        expect(JSON.stringify(event)).not.toContain("https://hooks.example.test/config");
+        expect(JSON.stringify(event)).not.toContain("https://hooks.slack.test/config");
+        expect(JSON.stringify(event)).not.toContain("https://commerce.example.test/feed.json");
+      }
+      expect(persisted.events.filter((event) => event.type === "addon.updated" && event.data?.addonId === "mqtt")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "bridge.saved" && event.data?.bridgeId === bridge.json().id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "webhook-config-retry-001")).toMatchObject({ method: "POST", path: "/api/webhooks", replayCount: 1, statusCode: 201 });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "bridge-config-retry-001")).toMatchObject({ method: "POST", path: "/api/bridges", replayCount: 1, statusCode: 200 });
     });
   });
 
@@ -859,9 +2411,19 @@ describe("3DSTU FarmFlow API", () => {
       expect(updated.statusCode).toBe(200);
       expect(updated.json()).toMatchObject({ auditLogRetention: true, auditLogRetentionDays: 30 });
 
+      db.data.workspaces.push({
+        id: "ws-retention-other",
+        name: "Other Farm",
+        slug: "other-farm",
+        ownerEmail: "other@example.com",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        settings: { ...db.data.workspaceSettings, workspaceId: "ws-retention-other", organizationName: "Other Farm", auditLogRetention: true, auditLogRetentionDays: 30 }
+      });
       db.data.events.unshift(
-        { id: "old-queue-event", type: "queue.status", message: "Old queue event", data: {}, at: "2020-01-01T00:00:00.000Z" },
-        { id: "old-admin-event", type: "admin.restore", message: "Old restore event", data: {}, at: "2020-01-01T00:00:00.000Z" }
+        { id: "old-queue-event", workspaceId: "ws-default", type: "queue.status", message: "Old queue event", data: {}, at: "2020-01-01T00:00:00.000Z" },
+        { id: "old-admin-event", workspaceId: "ws-default", type: "admin.restore", message: "Old restore event", data: {}, at: "2020-01-01T00:00:00.000Z" },
+        { id: "other-workspace-event", workspaceId: "ws-retention-other", type: "queue.status", message: "Other workspace event", data: {}, at: "2020-01-01T00:00:00.000Z" }
       );
       await db.write();
 
@@ -870,6 +2432,7 @@ describe("3DSTU FarmFlow API", () => {
       expect(run.json().retention).toMatchObject({ enabled: true, days: 30, pruned: 1 });
       expect(db.data.events.some((event) => event.id === "old-queue-event")).toBe(false);
       expect(db.data.events.some((event) => event.id === "old-admin-event")).toBe(true);
+      expect(db.data.events.some((event) => event.id === "other-workspace-event")).toBe(true);
       expect(db.data.events.some((event) => event.type === "admin.audit_retention_run")).toBe(true);
 
       const disabled = await app.inject({
@@ -930,6 +2493,69 @@ describe("3DSTU FarmFlow API", () => {
     });
   });
 
+  it("replays idempotent billing plan changes and portal sessions without duplicate billing records", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const planHeaders = { ...auth(token), "idempotency-key": "billing-plan-retry-001" };
+
+      const firstPlan = await app.inject({
+        method: "PATCH",
+        url: "/api/billing/plan",
+        headers: planHeaders,
+        payload: { planId: "farm" }
+      });
+      expect(firstPlan.statusCode).toBe(200);
+      const firstPlanBody = firstPlan.json();
+      expect(firstPlanBody.invoice).toMatchObject({ planId: "farm", amount: 149, status: "open" });
+
+      const replayPlan = await app.inject({
+        method: "PATCH",
+        url: "/api/billing/plan",
+        headers: planHeaders,
+        payload: { planId: "farm" }
+      });
+      expect(replayPlan.statusCode).toBe(200);
+      expect(replayPlan.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replayPlan.json().invoice.id).toBe(firstPlanBody.invoice.id);
+
+      const portalHeaders = { ...auth(token), "idempotency-key": "billing-portal-retry-001" };
+      const firstPortal = await app.inject({
+        method: "POST",
+        url: "/api/billing/portal",
+        headers: portalHeaders,
+        payload: { returnUrl: "http://127.0.0.1:8797/settings", planId: "studio" }
+      });
+      expect(firstPortal.statusCode).toBe(200);
+      const firstPortalBody = firstPortal.json();
+      expect(firstPortalBody.session).toMatchObject({ mode: "internal", status: "created", planId: "studio" });
+
+      const replayPortal = await app.inject({
+        method: "POST",
+        url: "/api/billing/portal",
+        headers: portalHeaders,
+        payload: { returnUrl: "http://127.0.0.1:8797/settings", planId: "studio" }
+      });
+      expect(replayPortal.statusCode).toBe(200);
+      expect(replayPortal.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replayPortal.json().session.id).toBe(firstPortalBody.session.id);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.invoices.filter((invoice) => invoice.planId === "farm")).toHaveLength(1);
+      expect(persisted.billingSessions.filter((session) => session.planId === "studio")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "billing.plan_changed")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "billing.portal_session")).toHaveLength(1);
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/billing/portal",
+        headers: portalHeaders,
+        payload: { returnUrl: "http://127.0.0.1:8797/settings?changed=1", planId: "studio" }
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+    });
+  });
+
   it("creates Stripe billing sessions and applies Stripe webhook updates", async () => {
     const calls = [];
     const fakeStripe = {
@@ -964,13 +2590,24 @@ describe("3DSTU FarmFlow API", () => {
         const portal = await app.inject({
           method: "POST",
           url: "/api/billing/portal",
-          headers: auth(token),
+          headers: { ...auth(token), "idempotency-key": "stripe-billing-portal-retry-001" },
           payload: { returnUrl: "http://127.0.0.1:8797/settings", planId: "farm" }
         });
         expect(portal.statusCode).toBe(200);
         expect(portal.json().session).toMatchObject({ mode: "stripe", provider: "stripe", id: "cs_test_layerpilot", stripePriceId: "price_farm_test" });
         expect(portal.json().session.url).toBe("https://checkout.stripe.test/session");
         expect(calls[0].params).toMatchObject({ mode: "subscription", line_items: [{ price: "price_farm_test", quantity: 1 }] });
+
+        const replayPortal = await app.inject({
+          method: "POST",
+          url: "/api/billing/portal",
+          headers: { ...auth(token), "idempotency-key": "stripe-billing-portal-retry-001" },
+          payload: { returnUrl: "http://127.0.0.1:8797/settings", planId: "farm" }
+        });
+        expect(replayPortal.statusCode).toBe(200);
+        expect(replayPortal.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+        expect(replayPortal.json().session.id).toBe("cs_test_layerpilot");
+        expect(calls.filter((call) => call.kind === "checkout")).toHaveLength(1);
 
         const denied = await app.inject({
           method: "POST",
@@ -979,34 +2616,82 @@ describe("3DSTU FarmFlow API", () => {
         });
         expect(denied.statusCode).toBe(401);
 
+        const stripeEvent = {
+          id: "evt_paid",
+          type: "checkout.session.completed",
+          data: {
+            object: {
+              id: "cs_test_layerpilot",
+              customer: "cus_layerpilot",
+              subscription: "sub_layerpilot",
+              amount_total: 14900,
+              currency: "usd",
+              status: "paid",
+              created: 1781430000,
+              lines: { data: [{ price: { id: "price_farm_test" } }] }
+            }
+          }
+        };
+        const rawStripeEvent = JSON.stringify(stripeEvent);
+        const badSignature = await app.inject({
+          method: "POST",
+          url: "/api/billing/webhook/stripe",
+          headers: {
+            "content-type": "application/json",
+            "stripe-signature": Stripe.webhooks.generateTestHeaderString({
+              payload: rawStripeEvent,
+              secret: "wrong_webhook_secret"
+            })
+          },
+          payload: rawStripeEvent
+        });
+        expect(badSignature.statusCode).toBe(401);
+        expect(badSignature.json()).toMatchObject({ error: "Invalid Stripe webhook signature" });
+
         const webhook = await app.inject({
           method: "POST",
           url: "/api/billing/webhook/stripe",
-          headers: { "x-layerpilot-billing-webhook-secret": "whsec_test" },
-          payload: {
-            id: "evt_paid",
-            type: "checkout.session.completed",
-            data: {
-              object: {
-                id: "cs_test_layerpilot",
-                customer: "cus_layerpilot",
-                subscription: "sub_layerpilot",
-                amount_total: 14900,
-                currency: "usd",
-                status: "paid",
-                created: 1781430000,
-                lines: { data: [{ price: { id: "price_farm_test" } }] }
-              }
-            }
-          }
+          headers: {
+            "content-type": "application/json",
+            "stripe-signature": Stripe.webhooks.generateTestHeaderString({
+              payload: rawStripeEvent,
+              secret: "whsec_test"
+            })
+          },
+          payload: rawStripeEvent
         });
         expect(webhook.statusCode).toBe(200);
         expect(webhook.json().plan).toMatchObject({ id: "farm", name: "Print Farm" });
         expect(webhook.json().invoice).toMatchObject({ id: "cs_test_layerpilot", provider: "stripe", planId: "farm", amount: 149, status: "paid" });
 
+        const replayWebhook = await app.inject({
+          method: "POST",
+          url: "/api/billing/webhook/stripe",
+          headers: {
+            "content-type": "application/json",
+            "stripe-signature": Stripe.webhooks.generateTestHeaderString({
+              payload: rawStripeEvent,
+              secret: "whsec_test"
+            })
+          },
+          payload: rawStripeEvent
+        });
+        expect(replayWebhook.statusCode).toBe(200);
+        expect(replayWebhook.headers["x-layerpilot-stripe-webhook-replay"]).toBe("true");
+        expect(replayWebhook.json()).toMatchObject({ received: true, replayed: true, eventType: "checkout.session.completed" });
+        expect(replayWebhook.json().invoice).toMatchObject({ id: "cs_test_layerpilot", provider: "stripe", planId: "farm" });
+
         const persisted = JSON.parse(await readFile(dbPath, "utf8"));
         expect(persisted.workspaceSettings).toMatchObject({ plan: "Print Farm", stripeCustomerId: "cus_layerpilot", stripeSubscriptionId: "sub_layerpilot" });
-        expect(persisted.events.some((event) => event.type === "billing.stripe_webhook" && event.data.planId === "farm")).toBe(true);
+        const stripeEvents = persisted.events.filter((event) => event.type === "billing.stripe_webhook" && event.data.eventId === "evt_paid");
+        expect(stripeEvents).toHaveLength(1);
+        expect(stripeEvents[0].data).toMatchObject({ eventType: "checkout.session.completed", planId: "farm", invoiceId: "cs_test_layerpilot" });
+        expect(persisted.dataMeta.stripeWebhookEvents.find((event) => event.eventId === "evt_paid")).toMatchObject({
+          eventId: "evt_paid",
+          eventType: "checkout.session.completed",
+          invoiceId: "cs_test_layerpilot",
+          replayCount: 1
+        });
       }, { stripeClient: fakeStripe });
     });
   });
@@ -1049,6 +2734,72 @@ describe("3DSTU FarmFlow API", () => {
       expect(persisted.costCatalog).toMatchObject({ machineHourlyRate: 30, materialRates: { PETG: 2 } });
       expect(persisted.files.find((file) => file.name === "Quoted fixture.stl")).toMatchObject({ quote: 35.2 });
       expect(persisted.events.some((event) => event.type === "cost_catalog.updated")).toBe(true);
+    });
+  });
+
+  it("replays idempotent catalog governance writes without duplicate pricing or material-map events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+
+      const costHeaders = { ...auth(token), "idempotency-key": "catalog-cost-governance-retry-001" };
+      const costPayload = { materialRates: { PETG: 2.4 }, machineHourlyRate: 42, failureReservePercent: 12, overheadPercent: 4, minimumQuote: 8 };
+      const cost = await app.inject({ method: "PATCH", url: "/api/costCatalog", headers: costHeaders, payload: costPayload });
+      expect(cost.statusCode).toBe(200);
+      const costReplay = await app.inject({ method: "PATCH", url: "/api/costCatalog", headers: costHeaders, payload: costPayload });
+      expect(costReplay.statusCode).toBe(200);
+      expect(costReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(costReplay.json()).toEqual(cost.json());
+
+      const part = await app.inject({
+        method: "POST",
+        url: "/api/parts",
+        headers: auth(token),
+        payload: { name: "Governance material alias", fileId: "f2", material: "Any PETG", process: "0.20mm Production", plates: 1, variants: ["Black"], status: "ready" }
+      });
+      expect(part.statusCode).toBe(201);
+
+      const mapHeaders = { ...auth(token), "idempotency-key": "catalog-material-map-retry-001" };
+      const mapPayload = { apply: true };
+      const mapped = await app.inject({ method: "POST", url: "/api/catalog/material-map", headers: mapHeaders, payload: mapPayload });
+      expect(mapped.statusCode).toBe(200);
+      expect(mapped.json()).toMatchObject({ applied: true });
+      expect(mapped.json().changed).toBeGreaterThanOrEqual(1);
+      const mappedReplay = await app.inject({ method: "POST", url: "/api/catalog/material-map", headers: mapHeaders, payload: mapPayload });
+      expect(mappedReplay.statusCode).toBe(200);
+      expect(mappedReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(mappedReplay.json()).toEqual(mapped.json());
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/catalog/material-map",
+        headers: mapHeaders,
+        payload: { apply: false }
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.costCatalog).toMatchObject({ machineHourlyRate: 42, materialRates: { PETG: 2.4 } });
+      expect(persisted.materialMapRuns).toHaveLength(1);
+      expect(persisted.materialMapRuns[0]).toMatchObject({ applied: true });
+      expect(persisted.parts.find((item) => item.id === part.json().id)).toMatchObject({ material: "PETG" });
+
+      const costEvents = persisted.events.filter((event) => event.type === "cost_catalog.updated" && event.data?.costCatalog?.machineHourlyRate === 42);
+      const mapEvents = persisted.events.filter((event) => event.type === "catalog.material_mapped");
+      expect(costEvents).toHaveLength(1);
+      expect(mapEvents).toHaveLength(1);
+      expect(mapEvents[0]).toMatchObject({
+        workspaceId: "ws-default",
+        data: expect.objectContaining({
+          workspaceId: "ws-default",
+          actorEmail: "demo@layerpilot.test",
+          actorRole: "Admin",
+          actorType: "user",
+          applied: true
+        })
+      });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "catalog-cost-governance-retry-001")).toMatchObject({ method: "PATCH", path: "/api/costCatalog", replayCount: 1, statusCode: 200 });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "catalog-material-map-retry-001")).toMatchObject({ method: "POST", path: "/api/catalog/material-map", replayCount: 1, statusCode: 200 });
     });
   });
 
@@ -1149,7 +2900,7 @@ describe("3DSTU FarmFlow API", () => {
   });
 
   it("queries audit events with filters and exports CSV with admin permissions", async () => {
-    await withApp(async ({ app }) => {
+    await withApp(async ({ app, db }) => {
       const token = await login(app);
       await app.inject({
         method: "PATCH",
@@ -1157,23 +2908,50 @@ describe("3DSTU FarmFlow API", () => {
         headers: auth(token),
         payload: { machineHourlyRate: 42 }
       });
+      await app.inject({
+        method: "PATCH",
+        url: "/api/costCatalog",
+        headers: auth(token),
+        payload: { laborPerOrder: 18 }
+      });
 
-      const audit = await app.inject({ method: "GET", url: "/api/audit?type=cost_catalog.updated&limit=5", headers: auth(token) });
+      const audit = await app.inject({ method: "GET", url: "/api/audit?type=cost_catalog.updated&limit=1", headers: auth(token) });
       expect(audit.statusCode).toBe(200);
-      expect(audit.json()).toMatchObject({ total: expect.any(Number), returned: 1 });
+      expect(audit.json()).toMatchObject({ total: expect.any(Number), matched: 2, returned: 1, offset: 0, limit: 1, hasMore: true });
       expect(audit.json().events[0]).toMatchObject({ type: "cost_catalog.updated", message: "Cost catalog updated" });
-      expect(audit.json().events[0].data.costCatalog.machineHourlyRate).toBe(42);
+      expect(audit.json().events[0].data.costCatalog.laborPerOrder).toBe(18);
+
+      const secondPage = await app.inject({ method: "GET", url: "/api/audit?type=cost_catalog.updated&limit=1&offset=1", headers: auth(token) });
+      expect(secondPage.statusCode).toBe(200);
+      expect(secondPage.json()).toMatchObject({ matched: 2, returned: 1, offset: 1, limit: 1, hasMore: false });
+      expect(secondPage.json().events[0].data.costCatalog.machineHourlyRate).toBe(42);
 
       const searched = await app.inject({ method: "GET", url: "/api/audit?search=Cost%20catalog", headers: auth(token) });
       expect(searched.statusCode).toBe(200);
       expect(searched.json().events.some((event) => event.type === "cost_catalog.updated")).toBe(true);
+      expect(searched.json().matched).toBeGreaterThanOrEqual(2);
 
-      const csv = await app.inject({ method: "GET", url: "/api/audit/export?type=cost_catalog.updated&limit=5", headers: auth(token) });
+      const csv = await app.inject({ method: "GET", url: "/api/audit/export?type=cost_catalog.updated&limit=1&offset=1", headers: auth(token) });
       expect(csv.statusCode).toBe(200);
       expect(csv.headers["content-type"]).toContain("text/csv");
       expect(csv.headers["content-disposition"]).toContain("layerpilot-audit");
       expect(csv.body).toContain("id,type,message,at,data");
       expect(csv.body).toContain("cost_catalog.updated");
+      expect(csv.body).toContain("machineHourlyRate");
+      expect(csv.body).not.toContain("\"\"laborPerOrder\"\":18");
+      const auditExportEvent = db.data.events.find((event) => event.type === "admin.audit_exported");
+      expect(auditExportEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: expect.objectContaining({
+          workspaceId: "ws-default",
+          type: "cost_catalog.updated",
+          limit: 1,
+          offset: 1,
+          exportedEvents: 1
+        })
+      });
+      expect(auditExportEvent.data).toMatchObject({ actorEmail: "demo@layerpilot.test", actorType: "user" });
+      expect(JSON.stringify(auditExportEvent.data)).not.toContain("machineHourlyRate");
 
       const apiKey = await app.inject({
         method: "POST",
@@ -1183,6 +2961,69 @@ describe("3DSTU FarmFlow API", () => {
       });
       const denied = await app.inject({ method: "GET", url: "/api/audit/export", headers: auth(apiKey.json().secret) });
       expect(denied.statusCode).toBe(403);
+
+      const exportKey = await app.inject({
+        method: "POST",
+        url: "/api/apiKeys",
+        headers: auth(token),
+        payload: { name: "Audit export automation", scopes: ["admin:export"], enabled: true }
+      });
+      expect(exportKey.statusCode).toBe(201);
+
+      const keyAudit = await app.inject({ method: "GET", url: "/api/audit?type=cost_catalog.updated", headers: auth(exportKey.json().secret) });
+      expect(keyAudit.statusCode).toBe(200);
+      expect(keyAudit.json().events[0]).toMatchObject({ type: "cost_catalog.updated" });
+
+      const keyExport = await app.inject({ method: "GET", url: "/api/audit/export?type=cost_catalog.updated", headers: auth(exportKey.json().secret) });
+      expect(keyExport.statusCode).toBe(200);
+      expect(keyExport.body).toContain("cost_catalog.updated");
+
+      const keyListDenied = await app.inject({ method: "GET", url: "/api/apiKeys", headers: auth(exportKey.json().secret) });
+      expect(keyListDenied.statusCode).toBe(403);
+    });
+  });
+
+  it("replays idempotent audit retention runs without duplicate audit events", async () => {
+    await withApp(async ({ app, db }) => {
+      const token = await login(app);
+      db.data.workspaceSettings.auditLogRetention = true;
+      db.data.workspaceSettings.auditLogRetentionDays = 7;
+      db.data.events.push(
+        { id: "stale-queue-event", workspaceId: "ws-default", type: "queue.created", message: "Old queued job", at: "2020-01-01T00:00:00.000Z", data: {} },
+        { id: "protected-restore-event", workspaceId: "ws-default", type: "admin.restore", message: "Old restore", at: "2020-01-01T00:00:00.000Z", data: {} }
+      );
+      await db.write();
+      const headers = { ...auth(token), "idempotency-key": "audit-retention-retry-001" };
+
+      const first = await app.inject({ method: "POST", url: "/api/admin/audit-retention/run", headers, payload: {} });
+      expect(first.statusCode).toBe(200);
+      const firstBody = first.json();
+      expect(firstBody.retention.pruned).toBeGreaterThanOrEqual(1);
+
+      const replay = await app.inject({ method: "POST", url: "/api/admin/audit-retention/run", headers, payload: {} });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(firstBody);
+
+      const runEvents = db.data.events.filter((event) => event.type === "admin.audit_retention_run");
+      expect(runEvents).toHaveLength(1);
+      expect(db.data.events.some((event) => event.id === "stale-queue-event")).toBe(false);
+      expect(db.data.events.some((event) => event.id === "protected-restore-event")).toBe(true);
+      expect(db.data.dataMeta.idempotencyKeys.find((record) => record.key === "audit-retention-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/admin/audit-retention/run",
+        statusCode: 200,
+        replayCount: 1
+      });
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/admin/audit-retention/run",
+        headers,
+        payload: { reason: "different retry body" }
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
     });
   });
 
@@ -1203,6 +3044,23 @@ describe("3DSTU FarmFlow API", () => {
 
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
       expect(persisted.files.some((file) => file.name === "Production fixture.stl")).toBe(true);
+      const event = persisted.events.find((item) => item.type === "file.created" && item.data?.fileId === created.json().id);
+      expect(event).toMatchObject({
+        workspaceId: "ws-default",
+        data: expect.objectContaining({
+          workspaceId: "ws-default",
+          actorEmail: "demo@layerpilot.test",
+          actorId: expect.any(String),
+          actorRole: expect.any(String),
+          actorType: "user",
+          fileId: created.json().id,
+          name: "Production fixture.stl",
+          type: "STL",
+          material: "PETG",
+          storageBacked: false
+        })
+      });
+      expect(JSON.stringify(event)).not.toContain("storagePath");
     });
   });
 
@@ -1235,6 +3093,64 @@ endsolid bracket`;
     });
   });
 
+  it("replays idempotent model uploads without duplicate stored files or upload events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const headers = { ...auth(token), "idempotency-key": "file-upload-retry-001" };
+      const stl = `solid retry
+facet normal 0 0 0
+outer loop
+vertex 0 0 0
+vertex 60 0 0
+vertex 0 30 12
+endloop
+endfacet
+endsolid retry`;
+      const uploadPayload = (content = stl) => multipartPayload({
+        boundary: "layerpilot-upload-retry",
+        filename: "retry-upload.stl",
+        content,
+        fields: { material: "PETG", folder: "Retry Uploads" }
+      });
+      const upload = await app.inject({
+        method: "POST",
+        url: "/api/files/upload",
+        headers: { ...headers, "content-type": "multipart/form-data; boundary=layerpilot-upload-retry" },
+        payload: uploadPayload()
+      });
+      expect(upload.statusCode).toBe(201);
+
+      const replay = await app.inject({
+        method: "POST",
+        url: "/api/files/upload",
+        headers: { ...headers, "content-type": "multipart/form-data; boundary=layerpilot-upload-retry" },
+        payload: uploadPayload()
+      });
+      expect(replay.statusCode).toBe(201);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toMatchObject({ id: upload.json().id, name: "retry-upload.stl", folder: "Retry Uploads", material: "PETG" });
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/files/upload",
+        headers: { ...headers, "content-type": "multipart/form-data; boundary=layerpilot-upload-retry" },
+        payload: uploadPayload(`${stl}\nsolid changed\nendsolid changed`)
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.files.filter((file) => file.name === "retry-upload.stl")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "file.uploaded" && event.data?.fileId === upload.json().id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "file-upload-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/files/upload",
+        replayCount: 1,
+        statusCode: 201
+      });
+    });
+  });
+
   it("creates file folders and generated sample STL files with stored bytes", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);
@@ -1256,6 +3172,30 @@ endsolid bracket`;
       expect(reused.statusCode).toBe(200);
       expect(reused.json()).toMatchObject({ created: false });
 
+      const retryHeaders = { ...auth(token), "idempotency-key": "file-folder-retry-001" };
+      const firstRetrySafe = await app.inject({
+        method: "POST",
+        url: "/api/file-folders",
+        headers: retryHeaders,
+        payload: { name: "QC Intake", parent: "Inbox", purpose: "review" }
+      });
+      expect(firstRetrySafe.statusCode).toBe(201);
+      expect(firstRetrySafe.json()).toMatchObject({ created: true, folder: expect.objectContaining({ name: "Inbox / QC Intake" }) });
+
+      const replayRetrySafe = await app.inject({
+        method: "POST",
+        url: "/api/file-folders",
+        headers: retryHeaders,
+        payload: { name: "QC Intake", parent: "Inbox", purpose: "review" }
+      });
+      expect(replayRetrySafe.statusCode).toBe(201);
+      expect(replayRetrySafe.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replayRetrySafe.json().folder.id).toBe(firstRetrySafe.json().folder.id);
+
+      const persistedAfterRetry = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persistedAfterRetry.events.filter((event) => event.type === "file_folder.created" && event.data?.name === "Inbox / QC Intake")).toHaveLength(1);
+      expect(persistedAfterRetry.events.filter((event) => event.type === "file_folder.reused" && event.data?.name === "Inbox / QC Intake")).toHaveLength(0);
+
       const sample = await app.inject({
         method: "POST",
         url: "/api/files/sample",
@@ -1274,7 +3214,25 @@ endsolid bracket`;
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
       expect(persisted.fileFolders.find((item) => item.name === "Inbox / QC Review")).toMatchObject({ fileCount: 1 });
       expect(persisted.files.find((item) => item.id === sample.json().file.id)).toMatchObject({ storagePath: sample.json().file.storagePath });
-      expect(persisted.events.some((event) => event.type === "file.sample_generated")).toBe(true);
+      const sampleEvent = persisted.events.find((event) => event.type === "file.sample_generated" && event.data?.fileId === sample.json().file.id);
+      expect(sampleEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          actorEmail: "demo@layerpilot.test",
+          actorType: "user",
+          fileId: sample.json().file.id,
+          fileName: sample.json().file.name,
+          fileType: "STL",
+          material: "PETG",
+          folderId: sample.json().folder.id,
+          folderName: "Inbox / QC Review",
+          storageBacked: true,
+          stlBytes: expect.any(Number)
+        }
+      });
+      expect(JSON.stringify(sampleEvent.data)).not.toContain(sample.json().file.storagePath);
+      expect(JSON.stringify(sampleEvent.data)).not.toContain("solid layerpilot_sample_qc-sample-bracket");
     });
   });
 
@@ -1315,7 +3273,90 @@ endsolid bracket`;
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
       expect(persisted.files.filter((file) => file.tags.includes("hot-drop"))).toHaveLength(3);
       expect(persisted.queue.filter((job) => job.added === "Hot Drop")).toHaveLength(2);
-      expect(persisted.events.some((event) => event.type === "hot_drop.handled")).toBe(true);
+      const hotDropEvent = persisted.events.find((event) => event.type === "hot_drop.handled" && event.data?.fileId === autoQueue.json().file.id);
+      expect(hotDropEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          actorEmail: "demo@layerpilot.test",
+          actorType: "user",
+          mode: "Auto-Queue",
+          fileId: autoQueue.json().file.id,
+          fileName: autoQueue.json().file.name,
+          material: "PETG",
+          jobId: autoQueue.json().job.id,
+          directMatched: false
+        }
+      });
+      expect(JSON.stringify(hotDropEvent.data)).not.toContain(autoQueue.json().file.storagePath);
+    });
+  });
+
+  it("replays idempotent file artifact writes without duplicate files, queue jobs, or version events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+
+      const samplePayload = { name: "Retry sample bracket", folder: "Inbox / Retry", material: "PETG" };
+      const sampleHeaders = { ...auth(token), "idempotency-key": "file-sample-retry-001" };
+      const sample = await app.inject({ method: "POST", url: "/api/files/sample", headers: sampleHeaders, payload: samplePayload });
+      expect(sample.statusCode).toBe(201);
+      const sampleReplay = await app.inject({ method: "POST", url: "/api/files/sample", headers: sampleHeaders, payload: samplePayload });
+      expect(sampleReplay.statusCode).toBe(201);
+      expect(sampleReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(sampleReplay.json()).toEqual(sample.json());
+
+      const hotDropPayload = { mode: "Auto-Queue", name: "Retry hot queue", folder: "Hot Drops / Retry", material: "PETG" };
+      const hotDropHeaders = { ...auth(token), "idempotency-key": "hot-drop-retry-001" };
+      const hotDrop = await app.inject({ method: "POST", url: "/api/hot-drop", headers: hotDropHeaders, payload: hotDropPayload });
+      expect(hotDrop.statusCode).toBe(201);
+      const hotDropReplay = await app.inject({ method: "POST", url: "/api/hot-drop", headers: hotDropHeaders, payload: hotDropPayload });
+      expect(hotDropReplay.statusCode).toBe(201);
+      expect(hotDropReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(hotDropReplay.json()).toEqual(hotDrop.json());
+
+      const versionHeaders = { ...auth(token), "idempotency-key": "file-version-retry-001" };
+      const versioned = await app.inject({ method: "PATCH", url: "/api/files/f2/version", headers: versionHeaders });
+      expect(versioned.statusCode).toBe(200);
+      const versionReplay = await app.inject({ method: "PATCH", url: "/api/files/f2/version", headers: versionHeaders });
+      expect(versionReplay.statusCode).toBe(200);
+      expect(versionReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(versionReplay.json()).toEqual(versioned.json());
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/files/sample",
+        headers: sampleHeaders,
+        payload: { ...samplePayload, material: "PLA" }
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.files.filter((file) => file.name === "retry-sample-bracket.stl")).toHaveLength(1);
+      expect(persisted.files.filter((file) => file.name === "retry-hot-queue.stl")).toHaveLength(1);
+      expect(persisted.queue.filter((job) => job.file === "retry-hot-queue.stl" && job.added === "Hot Drop")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "file.sample_generated" && event.data?.fileId === sample.json().file.id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "hot_drop.handled" && event.data?.fileId === hotDrop.json().file.id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "file.versioned" && event.data?.fileId === "f2")).toHaveLength(1);
+      expect(persisted.files.find((file) => file.id === "f2")).toMatchObject({ version: versioned.json().version });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "file-sample-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/files/sample",
+        replayCount: 1,
+        statusCode: 201
+      });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "hot-drop-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/hot-drop",
+        replayCount: 1,
+        statusCode: 201
+      });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "file-version-retry-001")).toMatchObject({
+        method: "PATCH",
+        path: "/api/files/f2/version",
+        replayCount: 1,
+        statusCode: 200
+      });
     });
   });
 
@@ -1346,6 +3387,20 @@ endsolid delete_me`;
       expect(downloaded.headers["content-disposition"]).toContain("delete-me.stl");
       expect(downloaded.body).toContain("solid delete_me");
 
+      const persistedAfterDownload = JSON.parse(await readFile(dbPath, "utf8"));
+      const downloadEvents = persistedAfterDownload.events.filter((event) => event.type === "file.downloaded" && event.data?.fileId === uploaded.json().id);
+      expect(downloadEvents).toHaveLength(1);
+      expect(downloadEvents[0].data).toMatchObject({
+        workspaceId: "ws-default",
+        fileId: uploaded.json().id,
+        fileName: "delete-me.stl",
+        fileType: "STL",
+        storageBacked: true,
+        fallbackManifest: false
+      });
+      expect(JSON.stringify(downloadEvents[0])).not.toContain("solid delete_me");
+      expect(JSON.stringify(downloadEvents[0])).not.toContain(storagePath);
+
       const blocked = await app.inject({ method: "DELETE", url: "/api/files/f1", headers: auth(token) });
       expect(blocked.statusCode).toBe(409);
       expect(blocked.json().references.parts.length).toBeGreaterThan(0);
@@ -1357,12 +3412,38 @@ endsolid delete_me`;
 
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
       expect(persisted.files.some((file) => file.id === uploaded.json().id)).toBe(false);
-      expect(persisted.events.some((event) => event.type === "file.deleted" && event.data.fileId === uploaded.json().id)).toBe(true);
+      const deleteEvents = persisted.events.filter((event) => event.type === "file.deleted" && event.data?.fileId === uploaded.json().id);
+      expect(deleteEvents).toHaveLength(1);
+      expect(deleteEvents[0]).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          actorEmail: "demo@layerpilot.test",
+          actorType: "user",
+          fileId: uploaded.json().id,
+          fileName: "delete-me.stl",
+          fileType: "STL",
+          material: "PLA",
+          folder: "QC Uploads",
+          storageBacked: true,
+          removedStorage: true,
+          force: false,
+          referenceCounts: {
+            activeQueue: 0,
+            parts: 0,
+            quoteRequests: 0,
+            slicerJobs: 0
+          }
+        }
+      });
+      expect(deleteEvents[0].data.references).toBeUndefined();
+      expect(JSON.stringify(deleteEvents[0])).not.toContain(storagePath);
+      expect(JSON.stringify(deleteEvents[0])).not.toContain("solid delete_me");
     });
   });
 
   it("builds safe file previews with G-code toolpath summaries", async () => {
-    await withApp(async ({ app }) => {
+    await withApp(async ({ app, dbPath }) => {
       const token = await login(app);
       const boundary = "layerpilot-preview-boundary";
       const gcode = [
@@ -1383,6 +3464,7 @@ endsolid delete_me`;
         payload: multipartPayload({ boundary, filename: "preview-job.gcode", content: gcode, fields: { material: "PLA", folder: "Production" } })
       });
       expect(uploaded.statusCode).toBe(201);
+      const storagePath = uploaded.json().storagePath;
 
       const preview = await app.inject({ method: "GET", url: `/api/files/${uploaded.json().id}/preview`, headers: auth(token) });
       expect(preview.statusCode).toBe(200);
@@ -1398,6 +3480,21 @@ endsolid delete_me`;
       });
       expect(preview.json().visualization.layers.length).toBeGreaterThan(0);
       expect(JSON.stringify(preview.json())).not.toContain("customer secret note");
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      const previewEvents = persisted.events.filter((event) => event.type === "file.previewed" && event.data?.fileId === uploaded.json().id);
+      expect(previewEvents).toHaveLength(1);
+      expect(previewEvents[0].data).toMatchObject({
+        workspaceId: "ws-default",
+        fileId: uploaded.json().id,
+        fileName: "preview-job.gcode",
+        fileType: "GCODE",
+        storageBacked: true,
+        bytes: Buffer.byteLength(gcode),
+        previewKind: "toolpath"
+      });
+      expect(JSON.stringify(previewEvents[0])).not.toContain("customer secret note");
+      expect(JSON.stringify(previewEvents[0])).not.toContain(storagePath);
     });
   });
 
@@ -1475,7 +3572,114 @@ endsolid s3_store`;
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
       expect(persisted.slicerJobs.some((job) => job.id === sliced.json().job.id && job.outputPath)).toBe(true);
       expect(persisted.files.find((file) => file.id === "f2")).toMatchObject({ type: "GCODE", sliced: true, status: "sliced" });
-      expect(persisted.events.some((event) => event.type === "slicer.completed" && event.data.slicerJobId === sliced.json().job.id)).toBe(true);
+      const slicerEvent = persisted.events.find((event) => event.type === "slicer.completed" && event.data.slicerJobId === sliced.json().job.id);
+      expect(slicerEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          actorId: "u0",
+          actorEmail: "demo@layerpilot.test",
+          actorRole: "Admin",
+          actorType: "user",
+          slicerJobId: sliced.json().job.id,
+          fileId: "f2",
+          status: "complete",
+          engine: "internal",
+          profileId: "prof-2",
+          material: "PETG",
+          layerHeight: "0.16",
+          infill: 22,
+          supports: true,
+          outputSize: sliced.json().job.outputSize
+        }
+      });
+      const serializedSlicerEvent = JSON.stringify(slicerEvent);
+      expect(serializedSlicerEvent).not.toContain("Generated by 3DSTU FarmFlow internal slicer adapter");
+      expect(serializedSlicerEvent).not.toContain(sliced.json().job.outputPath);
+      expect(serializedSlicerEvent).not.toContain(sliced.json().file.storagePath);
+      expect(serializedSlicerEvent).not.toContain("layerpilot-slicer-settings.json");
+    });
+  });
+
+  it("replays idempotent slicer job retries without duplicate artifacts or version increments", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const payload = { fileId: "f2", printerId: "p1", material: "PETG", layerHeight: "0.16", infill: 22, supports: true };
+      const headers = { ...auth(token), "idempotency-key": "slicer-job-retry-001" };
+
+      const first = await app.inject({ method: "POST", url: "/api/slicer/jobs", headers, payload });
+      expect(first.statusCode).toBe(201);
+      const replay = await app.inject({ method: "POST", url: "/api/slicer/jobs", headers, payload });
+      expect(replay.statusCode).toBe(201);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json().job.id).toBe(first.json().job.id);
+      expect(replay.json().job.outputPath).toBe(first.json().job.outputPath);
+      expect(replay.json().file.version).toBe(first.json().file.version);
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/slicer/jobs",
+        headers,
+        payload: { ...payload, infill: 35 }
+      });
+      expect(conflict.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.slicerJobs.filter((job) => job.fileId === "f2")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "slicer.completed" && event.data?.fileId === "f2")).toHaveLength(1);
+      expect(persisted.files.find((file) => file.id === "f2")).toMatchObject({ version: 3, storagePath: first.json().file.storagePath });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "slicer-job-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/slicer/jobs",
+        replayCount: 1,
+        statusCode: 201
+      });
+    });
+  });
+
+  it("replays idempotent quick file-slice retries without duplicate slicer events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const headers = { ...auth(token), "idempotency-key": "file-slice-retry-001" };
+
+      const first = await app.inject({ method: "PATCH", url: "/api/files/f3/slice", headers });
+      expect(first.statusCode).toBe(200);
+      const replay = await app.inject({ method: "PATCH", url: "/api/files/f3/slice", headers });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json().version).toBe(first.json().version);
+      expect(replay.json().storagePath).toBe(first.json().storagePath);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      const quickSliceJobs = persisted.slicerJobs.filter((job) => job.fileId === "f3");
+      expect(quickSliceJobs).toHaveLength(1);
+      const sliceEvents = persisted.events.filter((event) => event.type === "file.sliced" && event.data?.fileId === "f3");
+      expect(sliceEvents).toHaveLength(1);
+      expect(sliceEvents[0]).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          actorId: "u0",
+          actorEmail: "demo@layerpilot.test",
+          actorRole: "Admin",
+          actorType: "user",
+          slicerJobId: quickSliceJobs[0].id,
+          fileId: "f3",
+          status: "complete",
+          engine: "internal",
+          material: "PLA"
+        }
+      });
+      const serializedSliceEvent = JSON.stringify(sliceEvents[0]);
+      expect(serializedSliceEvent).not.toContain(first.json().storagePath);
+      expect(serializedSliceEvent).not.toContain("layerpilot-slicer-settings.json");
+      expect(persisted.files.find((file) => file.id === "f3")).toMatchObject({ version: 2, storagePath: first.json().storagePath });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "file-slice-retry-001")).toMatchObject({
+        method: "PATCH",
+        path: "/api/files/f3/slice",
+        replayCount: 1,
+        statusCode: 200
+      });
     });
   });
 
@@ -1509,6 +3713,72 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent queue lifecycle updates without duplicate reservations or audit events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+
+      const scheduleHeaders = { ...auth(token), "idempotency-key": "queue-schedule-retry-001" };
+      const scheduled = await app.inject({ method: "PATCH", url: "/api/queue/q2/schedule", headers: scheduleHeaders, payload: { printerId: "p2", scheduledStart: "13:00" } });
+      const scheduleReplay = await app.inject({ method: "PATCH", url: "/api/queue/q2/schedule", headers: scheduleHeaders, payload: { printerId: "p2", scheduledStart: "13:00" } });
+      expect(scheduled.statusCode).toBe(200);
+      expect(scheduleReplay.statusCode).toBe(200);
+      expect(scheduleReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(scheduleReplay.json().job).toMatchObject({ id: "q2", reservedSpoolId: "s2", reservedGrams: 42 });
+
+      let persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.spools.find((spool) => spool.id === "s2")).toMatchObject({ remaining: 318, reserved: 42 });
+      expect(persisted.events.filter((event) => event.type === "queue.scheduled" && event.data?.jobId === "q2")).toHaveLength(1);
+
+      const priorityHeaders = { ...auth(token), "idempotency-key": "queue-priority-retry-001" };
+      const priority = await app.inject({ method: "PATCH", url: "/api/queue/q2/priority", headers: priorityHeaders, payload: { priority: "Rush" } });
+      const priorityReplay = await app.inject({ method: "PATCH", url: "/api/queue/q2/priority", headers: priorityHeaders, payload: { priority: "Rush" } });
+      expect(priority.statusCode).toBe(200);
+      expect(priorityReplay.statusCode).toBe(200);
+      expect(priorityReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(priorityReplay.json().job).toMatchObject({ id: "q2", priority: "Rush" });
+
+      const completeHeaders = { ...auth(token), "idempotency-key": "queue-status-complete-retry-001" };
+      const completed = await app.inject({ method: "PATCH", url: "/api/queue/q2/status", headers: completeHeaders, payload: { status: "complete" } });
+      const completedReplay = await app.inject({ method: "PATCH", url: "/api/queue/q2/status", headers: completeHeaders, payload: { status: "complete" } });
+      expect(completed.statusCode).toBe(200);
+      expect(completedReplay.statusCode).toBe(200);
+      expect(completedReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(completedReplay.json().materialChange).toMatchObject({ spoolId: "s2", grams: 42, remaining: 276 });
+
+      persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.spools.find((spool) => spool.id === "s2")).toMatchObject({ remaining: 276, reserved: 0 });
+      expect(persisted.events.filter((event) => event.type === "queue.priority" && event.data?.jobId === "q2")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "queue.status" && event.data?.jobId === "q2" && event.data?.status === "complete")).toHaveLength(1);
+
+      const cancelJob = await app.inject({
+        method: "POST",
+        url: "/api/queue",
+        headers: auth(token),
+        payload: { fileId: "f3", file: "Retry cancel fixture.stl", material: "PLA", dimensions: [60, 40, 20], time: "1h 10m", cost: 24 }
+      });
+      expect(cancelJob.statusCode).toBe(201);
+      const cancelJobId = cancelJob.json().job.id;
+      const cancelSchedule = await app.inject({ method: "PATCH", url: `/api/queue/${cancelJobId}/schedule`, headers: auth(token), payload: { printerId: "p1", scheduledStart: "15:30" } });
+      expect(cancelSchedule.statusCode).toBe(200);
+      expect(cancelSchedule.json().materialReservation).toMatchObject({ spoolId: "s1", status: "reserved" });
+
+      const cancelHeaders = { ...auth(token), "idempotency-key": "queue-status-cancel-retry-001" };
+      const cancelled = await app.inject({ method: "PATCH", url: `/api/queue/${cancelJobId}/status`, headers: cancelHeaders, payload: { status: "cancelled" } });
+      const cancelledReplay = await app.inject({ method: "PATCH", url: `/api/queue/${cancelJobId}/status`, headers: cancelHeaders, payload: { status: "cancelled" } });
+      expect(cancelled.statusCode).toBe(200);
+      expect(cancelledReplay.statusCode).toBe(200);
+      expect(cancelledReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(cancelledReplay.json().materialChange).toMatchObject({ spoolId: "s1", grams: 50 });
+
+      persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.spools.find((spool) => spool.id === "s1")).toMatchObject({ reserved: 0 });
+      expect(persisted.events.filter((event) => event.type === "queue.status" && event.data?.jobId === cancelJobId && event.data?.status === "cancelled")).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "queue-schedule-retry-001")).toMatchObject({ method: "PATCH", path: "/api/queue/q2/schedule", replayCount: 1, statusCode: 200 });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "queue-status-complete-retry-001")).toMatchObject({ method: "PATCH", path: "/api/queue/q2/status", replayCount: 1, statusCode: 200 });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "queue-status-cancel-retry-001")).toMatchObject({ method: "PATCH", path: `/api/queue/${cancelJobId}/status`, replayCount: 1, statusCode: 200 });
+    });
+  });
+
   it("auto schedules queued work by material, volume, due risk, and load", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);
@@ -1530,6 +3800,78 @@ endsolid s3_store`;
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
       expect(persisted.queue.find((job) => job.id === "q2")).toMatchObject({ stage: "scheduled", printerId: "p3", scheduledStart: "08:45" });
       expect(persisted.spools.find((spool) => spool.id === "s2")).toMatchObject({ reserved: 42 });
+    });
+  });
+
+  it("replays idempotent scheduler writes without duplicating scheduling events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const headers = { ...auth(token), "idempotency-key": "schedule-auto-retry-001" };
+      const payload = { includeBusyPrinters: true, respectMaterial: true, respectBuildVolume: true, startMinute: 480 };
+      const first = await app.inject({ method: "POST", url: "/api/schedule/auto", headers, payload });
+      const replay = await app.inject({ method: "POST", url: "/api/schedule/auto", headers, payload });
+      const conflict = await app.inject({ method: "POST", url: "/api/schedule/auto", headers, payload: { ...payload, startMinute: 540 } });
+      expect(first.statusCode).toBe(200);
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(first.json());
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.events.filter((event) => event.type === "queue.auto_scheduled")).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "schedule-auto-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/schedule/auto",
+        statusCode: 200,
+        replayCount: 1
+      });
+    });
+
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/queue",
+        headers: auth(token),
+        payload: { fileId: "f2", file: "Batch PETG retry.3mf", material: "PETG", color: "Orange", due: "Today 17:00", dimensions: [80, 60, 30], time: "1h 20m", cost: 28 }
+      });
+      expect(created.statusCode).toBe(201);
+      const headers = { ...auth(token), "idempotency-key": "schedule-optimize-retry-001" };
+      const payload = { strategy: "material-color", includeBusyPrinters: true, respectMaterial: true, respectBuildVolume: true, startMinute: 8 * 60 };
+      const first = await app.inject({ method: "POST", url: "/api/schedule/optimize", headers, payload });
+      const replay = await app.inject({ method: "POST", url: "/api/schedule/optimize", headers, payload });
+      expect(first.statusCode).toBe(200);
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(first.json());
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.events.filter((event) => event.type === "queue.optimized" && event.data?.strategy === "material-color")).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "schedule-optimize-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/schedule/optimize",
+        statusCode: 200,
+        replayCount: 1
+      });
+    });
+
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const headers = { ...auth(token), "idempotency-key": "schedule-constraint-retry-001" };
+      const payload = { objective: "changeover-min", includeBusyPrinters: true, respectMaterial: true, respectBuildVolume: true, startMinute: 8 * 60 };
+      const first = await app.inject({ method: "POST", url: "/api/schedule/constraint", headers, payload });
+      const replay = await app.inject({ method: "POST", url: "/api/schedule/constraint", headers, payload });
+      expect(first.statusCode).toBe(200);
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(first.json());
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.events.filter((event) => event.type === "queue.constraint_scheduled" && event.data?.objective === "changeover-min")).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "schedule-constraint-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/schedule/constraint",
+        statusCode: 200,
+        replayCount: 1
+      });
     });
   });
 
@@ -1696,6 +4038,60 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent queue matching commits without duplicating assignment events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const queued = await app.inject({
+        method: "POST",
+        url: "/api/queue",
+        headers: auth(token),
+        payload: {
+          fileId: "f2",
+          file: "Queue match retry fixture.3mf",
+          material: "Resin",
+          color: "Gray",
+          due: "Today 18:00",
+          dimensions: [90, 60, 40],
+          time: "1h 20m",
+          cost: 34,
+          priority: "Rush"
+        }
+      });
+      expect(queued.statusCode).toBe(201);
+      const jobId = queued.json().job.id;
+      const headers = { ...auth(token), "idempotency-key": "queue-match-retry-001" };
+      const payload = { dryRun: false, maxActiveSlots: 3, respectMaterial: true, respectBuildVolume: true };
+
+      const committed = await app.inject({ method: "POST", url: "/api/queue/match", headers, payload });
+      expect(committed.statusCode).toBe(200);
+      expect(committed.json().matches.some((match) => match.jobId === jobId)).toBe(true);
+
+      const replay = await app.inject({ method: "POST", url: "/api/queue/match", headers, payload });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json().matches).toEqual(committed.json().matches);
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/queue/match",
+        headers,
+        payload: { ...payload, maxActiveSlots: 1 }
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.queue.find((job) => job.id === jobId)).toMatchObject({ status: "printing", stage: "printing" });
+      expect(persisted.events.filter((event) => event.type === "queue.matched")).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "queue-match-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/queue/match",
+        replayCount: 1,
+        statusCode: 200
+      });
+    });
+  });
+
   it("executes printer actions through persisted API state transitions", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);
@@ -1746,6 +4142,241 @@ endsolid s3_store`;
       expect(persisted.printers.find((printer) => printer.id === idlePrinter.id)).toMatchObject({ status: "idle", targetNozzle: 230, targetBed: 70 });
       expect(persisted.events.some((event) => event.type === "printer.action")).toBe(true);
       expect(persisted.events.some((event) => event.type === "mock.action")).toBe(false);
+    });
+  });
+
+  it("replays idempotent printer actions without sending duplicate bridge commands", async () => {
+    await withApp(async ({ app, db, dbPath }) => {
+      const printer = db.data.printers.find((item) => item.id === "p2");
+      printer.status = "printing";
+      printer.job = "Bridge retry fixture.gcode";
+      printer.progress = 44;
+      db.data.queue.push({
+        id: "action-retry-job",
+        workspaceId: "ws-default",
+        fileId: "f2",
+        file: "Bridge retry fixture.gcode",
+        printerId: printer.id,
+        printer: printer.name,
+        material: "Resin",
+        color: "Any",
+        due: "Today 17:00",
+        dimensions: [80, 60, 30],
+        status: "printing",
+        stage: "printing",
+        priority: "Normal",
+        time: "1h 05m",
+        cost: 24
+      });
+      db.data.bridges.push({
+        id: "bridge-action-retry",
+        workspaceId: "ws-default",
+        printerId: printer.id,
+        kind: "octoprint",
+        name: "Action Retry Octo",
+        baseUrl: "http://octopi.action.test",
+        apiKey: "secret",
+        enabled: true,
+        lastStatus: "connected"
+      });
+      await db.write();
+
+      const originalFetch = global.fetch;
+      const commandCalls = [];
+      global.fetch = async (url, init = {}) => {
+        commandCalls.push({ url: String(url), body: init.body ? JSON.parse(init.body) : null });
+        return { ok: true, status: 204, text: async () => "" };
+      };
+      try {
+        const token = await login(app);
+        const headers = { ...auth(token), "idempotency-key": "printer-action-retry-001" };
+        const payload = { printerId: printer.id, action: "pause" };
+
+        const first = await app.inject({ method: "POST", url: "/api/actions", headers, payload });
+        expect(first.statusCode).toBe(200);
+        expect(first.json().printer).toMatchObject({ id: printer.id, status: "paused" });
+        expect(first.json().job).toMatchObject({ id: "action-retry-job", status: "paused", stage: "printing" });
+
+        const replay = await app.inject({ method: "POST", url: "/api/actions", headers, payload });
+        expect(replay.statusCode).toBe(200);
+        expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+        expect(replay.json()).toEqual(first.json());
+        expect(commandCalls).toHaveLength(1);
+        expect(commandCalls[0]).toMatchObject({
+          url: "http://octopi.action.test/api/job",
+          body: { command: "pause", action: "pause" }
+        });
+
+        const conflict = await app.inject({
+          method: "POST",
+          url: "/api/actions",
+          headers,
+          payload: { printerId: printer.id, action: "resume" }
+        });
+        expect(conflict.statusCode).toBe(409);
+        expect(commandCalls).toHaveLength(1);
+
+        const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+        const actionEvents = persisted.events.filter((event) => event.type === "printer.action" && event.data?.action === "pause" && event.data?.bridgeId === "bridge-action-retry");
+        expect(actionEvents).toHaveLength(1);
+        expect(actionEvents[0]).toMatchObject({
+          workspaceId: "ws-default",
+          data: {
+            workspaceId: "ws-default",
+            actorEmail: "demo@layerpilot.test",
+            actorType: "user",
+            printerId: printer.id,
+            bridgeId: "bridge-action-retry",
+            action: "pause"
+          }
+        });
+        expect(JSON.stringify(actionEvents[0].data)).not.toContain("secret");
+        expect(JSON.stringify(actionEvents[0].data)).not.toContain("octopi.action.test");
+        expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "printer-action-retry-001")).toMatchObject({
+          method: "POST",
+          path: "/api/actions",
+          replayCount: 1,
+          statusCode: 200
+        });
+      } finally {
+        global.fetch = originalFetch;
+      }
+    });
+  });
+
+  it("replays idempotent bridge diagnostics and syncs without duplicate hardware polling", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const originalFetch = global.fetch;
+      const hardwareCalls = [];
+      global.fetch = async (url) => {
+        hardwareCalls.push(String(url));
+        if (String(url).endsWith("/api/printer")) return { ok: true, status: 200, text: async () => JSON.stringify({ state: { text: "Operational" }, temperature: { tool0: { actual: 27, target: 0 }, bed: { actual: 24, target: 0 } } }) };
+        if (String(url).endsWith("/api/job")) return { ok: true, status: 200, text: async () => JSON.stringify({ progress: { completion: 0 }, job: { file: { display: "" } } }) };
+        return { ok: false, status: 404, text: async () => "{}" };
+      };
+      try {
+        const token = await login(app);
+        const saved = await app.inject({
+          method: "POST",
+          url: "/api/bridges",
+          headers: auth(token),
+          payload: { printerId: "p2", kind: "octoprint", name: "Retry Safe Octo", baseUrl: "http://octopi.retry.test/api?apikey=bridge-audit-secret", apiKey: "bridge-api-secret", enabled: true }
+        });
+        expect(saved.statusCode).toBe(201);
+        const bridgeId = saved.json().id;
+
+        const testHeaders = { ...auth(token), "idempotency-key": "bridge-test-retry-001" };
+        const firstTest = await app.inject({ method: "POST", url: `/api/bridges/${bridgeId}/test`, headers: testHeaders, payload: { mode: "diagnostic" } });
+        expect(firstTest.statusCode).toBe(200);
+        expect(firstTest.json()).toMatchObject({ ok: true, printer: expect.objectContaining({ id: "p2", status: "idle", nozzle: 27, bed: 24 }) });
+
+        const replayTest = await app.inject({ method: "POST", url: `/api/bridges/${bridgeId}/test`, headers: testHeaders, payload: { mode: "diagnostic" } });
+        expect(replayTest.statusCode).toBe(200);
+        expect(replayTest.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+        expect(replayTest.json()).toEqual(firstTest.json());
+        expect(hardwareCalls).toHaveLength(2);
+
+        const conflictTest = await app.inject({ method: "POST", url: `/api/bridges/${bridgeId}/test`, headers: testHeaders, payload: { mode: "changed" } });
+        expect(conflictTest.statusCode).toBe(409);
+        expect(hardwareCalls).toHaveLength(2);
+
+        const syncHeaders = { ...auth(token), "idempotency-key": "bridge-sync-retry-001" };
+        const firstSync = await app.inject({ method: "POST", url: "/api/bridges/sync", headers: syncHeaders });
+        expect(firstSync.statusCode).toBe(200);
+        expect(firstSync.json().synced).toEqual(expect.arrayContaining([expect.objectContaining({ bridgeId, printerId: "p2", status: "idle" })]));
+
+        const replaySync = await app.inject({ method: "POST", url: "/api/bridges/sync", headers: syncHeaders });
+        expect(replaySync.statusCode).toBe(200);
+        expect(replaySync.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+        expect(replaySync.json()).toEqual(firstSync.json());
+        expect(hardwareCalls).toHaveLength(4);
+
+        const printerSyncHeaders = { ...auth(token), "idempotency-key": "printer-sync-retry-001" };
+        const firstPrinterSync = await app.inject({ method: "POST", url: "/api/printers/p2/sync", headers: printerSyncHeaders });
+        expect(firstPrinterSync.statusCode).toBe(200);
+        expect(firstPrinterSync.json()).toMatchObject({ printer: expect.objectContaining({ id: "p2", status: "idle" }) });
+
+        const replayPrinterSync = await app.inject({ method: "POST", url: "/api/printers/p2/sync", headers: printerSyncHeaders });
+        expect(replayPrinterSync.statusCode).toBe(200);
+        expect(replayPrinterSync.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+        expect(replayPrinterSync.json()).toEqual(firstPrinterSync.json());
+        expect(hardwareCalls).toHaveLength(6);
+
+        const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+        const bridgeAuditText = JSON.stringify(persisted.events.filter((event) => String(event.type || "").startsWith("bridge.")));
+        expect(bridgeAuditText).not.toContain("bridge-audit-secret");
+        expect(bridgeAuditText).not.toContain("bridge-api-secret");
+        expect(bridgeAuditText).not.toContain("/api?apikey=");
+        const savedEvents = persisted.events.filter((event) => event.type === "bridge.saved" && event.data?.bridgeId === bridgeId);
+        expect(savedEvents).toHaveLength(1);
+        expect(savedEvents[0]).toMatchObject({
+          workspaceId: "ws-default",
+          data: {
+            workspaceId: "ws-default",
+            actorEmail: "demo@layerpilot.test",
+            actorType: "user",
+            bridgeId,
+            printerId: "p2",
+            kind: "octoprint",
+            enabled: true,
+            hasBaseUrl: true,
+            baseUrlHost: "http://octopi.retry.test",
+            hasApiKey: true
+          }
+        });
+        const connectedEvents = persisted.events.filter((event) => event.type === "bridge.connected" && event.data?.bridgeId === bridgeId);
+        expect(connectedEvents).toHaveLength(1);
+        expect(connectedEvents[0]).toMatchObject({
+          data: {
+            actorEmail: "demo@layerpilot.test",
+            bridgeId,
+            printerId: "p2",
+            kind: "octoprint",
+            hasBaseUrl: true,
+            baseUrlHost: "http://octopi.retry.test",
+            hasApiKey: true,
+            diagnostic: { ok: true, latencyMs: expect.any(Number) }
+          }
+        });
+        const pollEvents = persisted.events.filter((event) => event.type === "bridge.poll" && event.data?.synced?.some((item) => item.bridgeId === bridgeId));
+        expect(pollEvents).toHaveLength(1);
+        expect(pollEvents[0]).toMatchObject({
+          data: {
+            actorEmail: "demo@layerpilot.test",
+            bridgeCount: 1,
+            syncedCount: 1,
+            failedCount: 0,
+            synced: [expect.objectContaining({
+              bridgeId,
+              printerId: "p2",
+              kind: "octoprint",
+              hasBaseUrl: true,
+              baseUrlHost: "http://octopi.retry.test",
+              hasApiKey: true
+            })]
+          }
+        });
+        expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "bridge-test-retry-001")).toMatchObject({
+          method: "POST",
+          path: `/api/bridges/${bridgeId}/test`,
+          replayCount: 1,
+          statusCode: 200
+        });
+        expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "bridge-sync-retry-001")).toMatchObject({
+          method: "POST",
+          path: "/api/bridges/sync",
+          replayCount: 1,
+          statusCode: 200
+        });
+        expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "printer-sync-retry-001")).toMatchObject({
+          method: "POST",
+          path: "/api/printers/p2/sync",
+          replayCount: 1,
+          statusCode: 200
+        });
+      } finally {
+        global.fetch = originalFetch;
+      }
     });
   });
 
@@ -1864,16 +4495,653 @@ endsolid s3_store`;
       expect(persisted.events.some((event) => event.type === "spool.labels_generated")).toBe(true);
       expect(persisted.events.some((event) => event.type === "spool.scanned_usage")).toBe(true);
       expect(persisted.events.some((event) => event.type === "purchase_request.received")).toBe(true);
+      const spoolCreatedEvent = persisted.events.find((event) => event.type === "spool.created" && event.data?.spoolId === spool.json().id);
+      expect(spoolCreatedEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          actorEmail: "demo@layerpilot.test",
+          actorRole: "Admin",
+          spoolId: spool.json().id,
+          material: "PLA",
+          location: "Rack QC"
+        }
+      });
+      const spoolUpdatedEvent = persisted.events.find((event) => event.type === "spool.updated" && event.data?.spoolId === spool.json().id);
+      expect(spoolUpdatedEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          actorEmail: "demo@layerpilot.test",
+          actorRole: "Admin",
+          spoolId: spool.json().id,
+          remaining: 425,
+          dry: false
+        }
+      });
       expect(persisted.maintenance.find((item) => item.id === maintenance.json().id)).toMatchObject({ status: "done" });
       expect(persisted.maintenanceTemplates.find((item) => item.id === template.json().template.id)).toMatchObject({ title: "QC motion service" });
       expect(persisted.maintenanceReports.find((item) => item.id === report.json().report.id)).toMatchObject({ linkedJobId: report.json().job.id });
       expect(persisted.events.some((event) => event.type === "maintenance_report.created")).toBe(true);
+      const maintenanceCreatedEvent = persisted.events.find((event) => event.type === "maintenance.created" && event.data?.maintenanceId === maintenance.json().id);
+      expect(maintenanceCreatedEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          actorEmail: "demo@layerpilot.test",
+          actorRole: "Admin",
+          maintenanceId: maintenance.json().id,
+          printer: "Forge A1",
+          status: "scheduled",
+          severity: "High"
+        }
+      });
+      const maintenanceUpdatedEvent = persisted.events.find((event) => event.type === "maintenance.updated" && event.data?.maintenanceId === maintenance.json().id);
+      expect(maintenanceUpdatedEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          actorEmail: "demo@layerpilot.test",
+          actorRole: "Admin",
+          maintenanceId: maintenance.json().id,
+          status: "done",
+          progress: "Complete"
+        }
+      });
       expect(persisted.orders.find((item) => item.id === order.json().id)).toMatchObject({ status: "shipped" });
     });
   });
 
-  it("persists catalog records and generates order jobs from SKU-linked parts", async () => {
+  it("replays idempotent spool label exports without duplicating inventory audit events", async () => {
     await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const spool = await app.inject({
+        method: "POST",
+        url: "/api/spools",
+        headers: auth(token),
+        payload: { material: "PLA", color: "#22c55e", brand: "Label Retry", remaining: 640, weight: 1000, location: "Rack Label", dry: true, nfc: "LP-LABEL-RETRY" }
+      });
+      expect(spool.statusCode).toBe(201);
+
+      const headers = { ...auth(token), "idempotency-key": "spool-labels-retry-001" };
+      const payload = { ids: [spool.json().id] };
+      const first = await app.inject({ method: "POST", url: "/api/spools/labels", headers, payload });
+      expect(first.statusCode).toBe(200);
+      expect(first.json()).toMatchObject({ count: 1 });
+      expect(first.json().csv).toContain("LP-LABEL-RETRY");
+
+      const replay = await app.inject({ method: "POST", url: "/api/spools/labels", headers, payload });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(first.json());
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/spools/labels",
+        headers,
+        payload: { ids: [spool.json().id], includeEmpty: true }
+      });
+      expect(conflict.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.events.filter((event) => event.type === "spool.labels_generated" && event.data?.spoolIds?.includes(spool.json().id))).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "spool-labels-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/spools/labels",
+        replayCount: 1,
+        statusCode: 200
+      });
+    });
+  });
+
+  it("replays idempotent spool metadata updates without duplicate inventory audit events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const spool = await app.inject({
+        method: "POST",
+        url: "/api/spools",
+        headers: auth(token),
+        payload: { material: "PETG", color: "#14b8a6", brand: "Metadata Retry", remaining: 700, weight: 1000, location: "Rack Old", dry: true, nfc: "LP-SPOOL-PATCH-RETRY" }
+      });
+      expect(spool.statusCode).toBe(201);
+
+      const headers = { ...auth(token), "idempotency-key": "spool-patch-retry-001" };
+      const payload = { location: "Rack Retry", dry: false, remaining: 680 };
+      const first = await app.inject({ method: "PATCH", url: `/api/spools/${spool.json().id}`, headers, payload });
+      expect(first.statusCode).toBe(200);
+      expect(first.json()).toMatchObject({ id: spool.json().id, location: "Rack Retry", dry: false, remaining: 680 });
+
+      const replay = await app.inject({ method: "PATCH", url: `/api/spools/${spool.json().id}`, headers, payload });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(first.json());
+
+      const conflict = await app.inject({
+        method: "PATCH",
+        url: `/api/spools/${spool.json().id}`,
+        headers,
+        payload: { ...payload, remaining: 650 }
+      });
+      expect(conflict.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.events.filter((event) => event.type === "spool.updated" && event.message.includes("Metadata Retry"))).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "spool-patch-retry-001")).toMatchObject({
+        method: "PATCH",
+        path: `/api/spools/${spool.json().id}`,
+        replayCount: 1,
+        statusCode: 200
+      });
+    });
+  });
+
+  it("replays idempotent maintenance job updates without duplicate maintenance audit events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const maintenance = await app.inject({
+        method: "POST",
+        url: "/api/maintenance",
+        headers: auth(token),
+        payload: { title: "Retry nozzle service", printer: "Forge Retry", status: "scheduled", due: "Monday", progress: "0/2", severity: "Medium" }
+      });
+      expect(maintenance.statusCode).toBe(201);
+
+      const headers = { ...auth(token), "idempotency-key": "maintenance-patch-retry-001" };
+      const payload = { status: "in progress", progress: "1/2" };
+      const first = await app.inject({ method: "PATCH", url: `/api/maintenance/${maintenance.json().id}`, headers, payload });
+      expect(first.statusCode).toBe(200);
+      expect(first.json()).toMatchObject({ id: maintenance.json().id, status: "in progress", progress: "1/2" });
+
+      const replay = await app.inject({ method: "PATCH", url: `/api/maintenance/${maintenance.json().id}`, headers, payload });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(first.json());
+
+      const conflict = await app.inject({
+        method: "PATCH",
+        url: `/api/maintenance/${maintenance.json().id}`,
+        headers,
+        payload: { ...payload, progress: "2/2" }
+      });
+      expect(conflict.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.events.filter((event) => event.type === "maintenance.updated" && event.message.includes("Retry nozzle service"))).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "maintenance-patch-retry-001")).toMatchObject({
+        method: "PATCH",
+        path: `/api/maintenance/${maintenance.json().id}`,
+        replayCount: 1,
+        statusCode: 200
+      });
+    });
+  });
+
+  it("replays idempotent purchase reorder plans without creating duplicate requests", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const spool = await app.inject({
+        method: "POST",
+        url: "/api/spools",
+        headers: auth(token),
+        payload: { material: "PETG", color: "#f97316", brand: "Retry", remaining: 120, weight: 1000, location: "Rack Retry", dry: true, nfc: "LP-REORDER" }
+      });
+      expect(spool.statusCode).toBe(201);
+      const headers = { ...auth(token), "idempotency-key": "purchase-reorder-retry-001" };
+      const payload = { thresholdGrams: 250, targetGrams: 1200, quantity: 3, supplier: "Retry Supplier" };
+
+      const planned = await app.inject({
+        method: "POST",
+        url: "/api/purchaseRequests/reorderPlan",
+        headers,
+        payload
+      });
+      expect(planned.statusCode).toBe(200);
+      expect(planned.json().created).toHaveLength(1);
+
+      const replay = await app.inject({
+        method: "POST",
+        url: "/api/purchaseRequests/reorderPlan",
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(planned.json());
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/purchaseRequests/reorderPlan",
+        headers,
+        payload: { ...payload, quantity: 1 }
+      });
+      expect(conflict.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.purchaseRequests.filter((request) => request.spoolId === spool.json().id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "purchase_request.reorder_plan")).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "purchase-reorder-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/purchaseRequests/reorderPlan",
+        replayCount: 1,
+        statusCode: 200
+      });
+    });
+  });
+
+  it("replays idempotent purchase request writes without duplicate records or update events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const createHeaders = { ...auth(token), "idempotency-key": "purchase-request-create-retry-001" };
+      const createPayload = { material: "ASA", color: "Black", brand: "Retry", quantity: 2, targetGrams: 1000, supplier: "Retry Supplier", status: "open", due: "Friday" };
+
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/purchaseRequests",
+        headers: createHeaders,
+        payload: createPayload
+      });
+      expect(created.statusCode).toBe(201);
+
+      const createReplay = await app.inject({
+        method: "POST",
+        url: "/api/purchaseRequests",
+        headers: createHeaders,
+        payload: createPayload
+      });
+      expect(createReplay.statusCode).toBe(201);
+      expect(createReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(createReplay.json()).toEqual(created.json());
+
+      const createConflict = await app.inject({
+        method: "POST",
+        url: "/api/purchaseRequests",
+        headers: createHeaders,
+        payload: { ...createPayload, quantity: 3 }
+      });
+      expect(createConflict.statusCode).toBe(409);
+
+      const updateHeaders = { ...auth(token), "idempotency-key": "purchase-request-update-retry-001" };
+      const updatePayload = { status: "ordered", due: "Next week" };
+      const updated = await app.inject({
+        method: "PATCH",
+        url: `/api/purchaseRequests/${created.json().id}`,
+        headers: updateHeaders,
+        payload: updatePayload
+      });
+      expect(updated.statusCode).toBe(200);
+      expect(updated.json()).toMatchObject(updatePayload);
+
+      const updateReplay = await app.inject({
+        method: "PATCH",
+        url: `/api/purchaseRequests/${created.json().id}`,
+        headers: updateHeaders,
+        payload: updatePayload
+      });
+      expect(updateReplay.statusCode).toBe(200);
+      expect(updateReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(updateReplay.json()).toEqual(updated.json());
+
+      const updateConflict = await app.inject({
+        method: "PATCH",
+        url: `/api/purchaseRequests/${created.json().id}`,
+        headers: updateHeaders,
+        payload: { status: "cancelled" }
+      });
+      expect(updateConflict.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.purchaseRequests.filter((request) => request.supplier === "Retry Supplier")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "purchase_request.created" && event.data?.purchaseRequestId === created.json().id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "purchase_request.updated" && event.data?.purchaseRequestId === created.json().id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "purchase-request-create-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/purchaseRequests",
+        replayCount: 1,
+        statusCode: 201
+      });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "purchase-request-update-retry-001")).toMatchObject({
+        method: "PATCH",
+        path: `/api/purchaseRequests/${created.json().id}`,
+        replayCount: 1,
+        statusCode: 200
+      });
+    });
+  });
+
+  it("replays idempotent spool creation without adding duplicate inventory", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const headers = { ...auth(token), "idempotency-key": "spool-create-retry-001" };
+      const payload = { material: "PLA", color: "#22c55e", brand: "Retry", remaining: 750, weight: 1000, location: "Rack Retry", dry: true, nfc: "LP-SPOOL-RETRY" };
+
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/spools",
+        headers,
+        payload
+      });
+      expect(created.statusCode).toBe(201);
+
+      const replay = await app.inject({
+        method: "POST",
+        url: "/api/spools",
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(201);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(created.json());
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/spools",
+        headers,
+        payload: { ...payload, nfc: "LP-SPOOL-RETRY-CHANGED" }
+      });
+      expect(conflict.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.spools.filter((spool) => spool.nfc === "LP-SPOOL-RETRY")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "spool.created" && event.message.includes("Retry"))).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "spool-create-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/spools",
+        replayCount: 1,
+        statusCode: 201
+      });
+    });
+  });
+
+  it("replays idempotent spool usage writes without double-consuming filament", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const spool = await app.inject({
+        method: "POST",
+        url: "/api/spools",
+        headers: auth(token),
+        payload: { material: "PETG", color: "#0ea5e9", brand: "Retry", remaining: 600, weight: 1000, location: "Rack Usage", dry: true, nfc: "LP-USAGE-RETRY" }
+      });
+      expect(spool.statusCode).toBe(201);
+      const headers = { ...auth(token), "idempotency-key": "spool-usage-retry-001" };
+      const payload = { grams: 80 };
+
+      const usage = await app.inject({
+        method: "PATCH",
+        url: `/api/spools/${spool.json().id}/usage`,
+        headers,
+        payload
+      });
+      expect(usage.statusCode).toBe(200);
+      expect(usage.json()).toMatchObject({ remaining: 520 });
+
+      const replay = await app.inject({
+        method: "PATCH",
+        url: `/api/spools/${spool.json().id}/usage`,
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(usage.json());
+
+      const conflict = await app.inject({
+        method: "PATCH",
+        url: `/api/spools/${spool.json().id}/usage`,
+        headers,
+        payload: { grams: 120 }
+      });
+      expect(conflict.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.spools.find((item) => item.id === spool.json().id)).toMatchObject({ remaining: 520 });
+      expect(persisted.events.filter((event) => event.type === "spool.usage" && event.data?.spoolId === spool.json().id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "spool-usage-retry-001")).toMatchObject({
+        method: "PATCH",
+        path: `/api/spools/${spool.json().id}/usage`,
+        replayCount: 1,
+        statusCode: 200
+      });
+    });
+  });
+
+  it("replays idempotent spool scan usage without double-consuming filament", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const spool = await app.inject({
+        method: "POST",
+        url: "/api/spools",
+        headers: auth(token),
+        payload: { material: "ASA", color: "Black", brand: "Retry", remaining: 900, weight: 1000, location: "Rack Scan", dry: true, nfc: "LP-SCAN-RETRY" }
+      });
+      expect(spool.statusCode).toBe(201);
+      const headers = { ...auth(token), "idempotency-key": "spool-scan-retry-001" };
+      const payload = { code: "LP-SCAN-RETRY", grams: 150, location: "Printer Bay Retry" };
+
+      const scanned = await app.inject({
+        method: "POST",
+        url: "/api/spools/scan",
+        headers,
+        payload
+      });
+      expect(scanned.statusCode).toBe(200);
+      expect(scanned.json()).toMatchObject({ usageLogged: 150, spool: { id: spool.json().id, remaining: 750, location: "Printer Bay Retry" } });
+
+      const replay = await app.inject({
+        method: "POST",
+        url: "/api/spools/scan",
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(scanned.json());
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/spools/scan",
+        headers,
+        payload: { ...payload, grams: 50 }
+      });
+      expect(conflict.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.spools.find((item) => item.id === spool.json().id)).toMatchObject({ remaining: 750, location: "Printer Bay Retry" });
+      expect(persisted.events.filter((event) => event.type === "spool.scanned_usage" && event.data?.spoolId === spool.json().id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "spool-scan-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/spools/scan",
+        replayCount: 1,
+        statusCode: 200
+      });
+    });
+  });
+
+  it("replays idempotent purchase receives without creating duplicate spools", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/purchaseRequests",
+        headers: auth(token),
+        payload: { material: "ASA", color: "Black", brand: "Retry", quantity: 2, targetGrams: 1000, supplier: "Retry Supplier", status: "ordered", due: "This week" }
+      });
+      expect(created.statusCode).toBe(201);
+      const headers = { ...auth(token), "idempotency-key": "purchase-receive-retry-001" };
+      const payload = { location: "Rack Receive Retry", nfcPrefix: "LP-ASA-RETRY" };
+
+      const received = await app.inject({
+        method: "POST",
+        url: `/api/purchaseRequests/${created.json().id}/receive`,
+        headers,
+        payload
+      });
+      expect(received.statusCode).toBe(200);
+      expect(received.json().spools).toHaveLength(2);
+
+      const replay = await app.inject({
+        method: "POST",
+        url: `/api/purchaseRequests/${created.json().id}/receive`,
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(received.json());
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: `/api/purchaseRequests/${created.json().id}/receive`,
+        headers,
+        payload: { ...payload, location: "Different Rack" }
+      });
+      expect(conflict.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.spools.filter((spool) => spool.purchaseRequestId === created.json().id)).toHaveLength(2);
+      expect(persisted.purchaseRequests.find((request) => request.id === created.json().id)).toMatchObject({
+        status: "received",
+        receivedSpoolIds: received.json().spools.map((spool) => spool.id)
+      });
+      expect(persisted.events.filter((event) => event.type === "purchase_request.received" && event.data?.purchaseRequestId === created.json().id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "purchase-receive-retry-001")).toMatchObject({
+        method: "POST",
+        path: `/api/purchaseRequests/${created.json().id}/receive`,
+        replayCount: 1,
+        statusCode: 200
+      });
+    });
+  });
+
+  it("replays idempotent maintenance job creation without adding duplicate jobs", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const headers = { ...auth(token), "idempotency-key": "maintenance-job-retry-001" };
+      const payload = { title: "Retry rail service", printer: "Forge R1", status: "scheduled", due: "Monday", progress: "0/3", severity: "High" };
+
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/maintenance",
+        headers,
+        payload
+      });
+      expect(created.statusCode).toBe(201);
+
+      const replay = await app.inject({
+        method: "POST",
+        url: "/api/maintenance",
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(201);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(created.json());
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/maintenance",
+        headers,
+        payload: { ...payload, printer: "Forge R2" }
+      });
+      expect(conflict.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.maintenance.filter((item) => item.title === "Retry rail service")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "maintenance.created" && event.message.includes("Retry rail service"))).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "maintenance-job-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/maintenance",
+        statusCode: 201,
+        replayCount: 1
+      });
+    });
+  });
+
+  it("replays idempotent maintenance template saves without duplicate update events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const headers = { ...auth(token), "idempotency-key": "maintenance-template-retry-001" };
+      const payload = { title: "Retry motion service", printerModel: "FDM fleet", intervalDays: 30, tasks: ["Inspect belts", "Lubricate rails"], severity: "Medium" };
+
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/maintenance/templates",
+        headers,
+        payload
+      });
+      expect(created.statusCode).toBe(201);
+      expect(created.json()).toMatchObject({ created: true, template: { title: "Retry motion service" } });
+
+      const replay = await app.inject({
+        method: "POST",
+        url: "/api/maintenance/templates",
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(201);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(created.json());
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.maintenanceTemplates.filter((item) => item.title === "Retry motion service")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "maintenance_template.created" && event.message.includes("Retry motion service"))).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "maintenance_template.updated" && event.message.includes("Retry motion service"))).toHaveLength(0);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "maintenance-template-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/maintenance/templates",
+        statusCode: 201,
+        replayCount: 1
+      });
+    });
+  });
+
+  it("replays idempotent maintenance reports without duplicate linked jobs", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const headers = { ...auth(token), "idempotency-key": "maintenance-report-retry-001" };
+      const payload = { title: "Retry hotend clog", printer: "Forge R3", description: "No extrusion during startup", severity: "High", createJob: true };
+
+      const reported = await app.inject({
+        method: "POST",
+        url: "/api/maintenance/reports",
+        headers,
+        payload
+      });
+      expect(reported.statusCode).toBe(201);
+      expect(reported.json().report).toMatchObject({ title: "Retry hotend clog", linkedJobId: reported.json().job.id });
+
+      const replay = await app.inject({
+        method: "POST",
+        url: "/api/maintenance/reports",
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(201);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(reported.json());
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/maintenance/reports",
+        headers,
+        payload: { ...payload, createJob: false }
+      });
+      expect(conflict.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.maintenanceReports.filter((item) => item.title === "Retry hotend clog")).toHaveLength(1);
+      expect(persisted.maintenance.filter((item) => item.title === "Retry hotend clog")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "maintenance_report.created" && event.message.includes("Retry hotend clog"))).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "maintenance-report-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/maintenance/reports",
+        statusCode: 201,
+        replayCount: 1
+      });
+    });
+  });
+
+  it("persists catalog records and generates order jobs from SKU-linked parts", async () => {
+    await withApp(async ({ app, db, dbPath }) => {
       const token = await login(app);
       const part = await app.inject({
         method: "POST",
@@ -1899,6 +5167,8 @@ endsolid s3_store`;
         payload: { sku: "QC-BRACKET", title: "QC Bracket", parts: ["QC linked bracket"], variants: ["Orange"], price: 180, stock: 3, channel: "Manual" }
       });
       expect(sku.statusCode).toBe(201);
+      db.data.parts.push({ id: "other-workspace-part", workspaceId: "ws-other", name: "Other workspace part", fileId: "f2", material: "PLA", process: "0.2mm", plates: 1, variants: [], status: "ready" });
+      db.data.skus.push({ id: "other-workspace-sku", workspaceId: "ws-other", sku: "OTHER-TENANT", title: "Other Tenant SKU", parts: ["Other workspace part"], variants: [], price: 99, stock: 1, channel: "Manual" });
 
       const materialMap = await app.inject({ method: "POST", url: "/api/catalog/material-map", headers: auth(token), payload: { apply: true } });
       expect(materialMap.statusCode).toBe(200);
@@ -1922,6 +5192,21 @@ endsolid s3_store`;
       ]));
       expect(catalogExport.json().csv).toContain('"QC-BRACKET"');
       expect(catalogExport.json().csv).toContain('"QC linked bracket"');
+      expect(catalogExport.json().csv).not.toContain("OTHER-TENANT");
+      expect(catalogExport.json().rows.some((row) => row.sku === "OTHER-TENANT")).toBe(false);
+      const catalogExportEvent = db.data.events.find((event) => event.type === "catalog.exported");
+      expect(catalogExportEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: expect.objectContaining({
+          workspaceId: "ws-default",
+          rows: catalogExport.json().rows.length,
+          skus: expect.any(Number),
+          parts: expect.any(Number),
+          files: expect.any(Number)
+        })
+      });
+      expect(catalogExportEvent.data).toMatchObject({ actorEmail: "demo@layerpilot.test", actorType: "user" });
+      expect(JSON.stringify(catalogExportEvent.data)).not.toContain("QC-BRACKET");
 
       const order = await app.inject({
         method: "POST",
@@ -1968,6 +5253,135 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent catalog configuration writes without duplicate setup records", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const partHeaders = { ...auth(token), "idempotency-key": "catalog-part-retry-001" };
+      const partPayload = { name: "Retry setup bracket", fileId: "f2", material: "PETG", process: "0.20mm Production", plates: 1, variants: ["Black"], status: "ready" };
+
+      const part = await app.inject({ method: "POST", url: "/api/parts", headers: partHeaders, payload: partPayload });
+      expect(part.statusCode).toBe(201);
+      const partReplay = await app.inject({ method: "POST", url: "/api/parts", headers: partHeaders, payload: partPayload });
+      expect(partReplay.statusCode).toBe(201);
+      expect(partReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(partReplay.json()).toEqual(part.json());
+
+      const skuHeaders = { ...auth(token), "idempotency-key": "catalog-sku-retry-001" };
+      const skuPayload = { sku: "RETRY-BRACKET", title: "Retry Bracket", parts: ["Retry setup bracket"], variants: ["Black"], price: 42, stock: 8, channel: "Manual" };
+      const sku = await app.inject({ method: "POST", url: "/api/skus", headers: skuHeaders, payload: skuPayload });
+      expect(sku.statusCode).toBe(201);
+      const skuReplay = await app.inject({ method: "POST", url: "/api/skus", headers: skuHeaders, payload: skuPayload });
+      expect(skuReplay.statusCode).toBe(201);
+      expect(skuReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(skuReplay.json()).toEqual(sku.json());
+
+      const templateHeaders = { ...auth(token), "idempotency-key": "production-template-create-retry-001" };
+      const templatePayload = { name: "Retry replenishment recipe", sku: "RETRY-BRACKET", fileId: "f1", material: "PETG", color: "Black", priority: "High", printerId: "p1", dueOffsetDays: 2, quantity: 2, time: "1h 45m", cost: 24, notes: "Retry safe setup" };
+      const template = await app.inject({ method: "POST", url: "/api/productionTemplates", headers: templateHeaders, payload: templatePayload });
+      expect(template.statusCode).toBe(201);
+      const templateReplay = await app.inject({ method: "POST", url: "/api/productionTemplates", headers: templateHeaders, payload: templatePayload });
+      expect(templateReplay.statusCode).toBe(201);
+      expect(templateReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(templateReplay.json()).toEqual(template.json());
+
+      const templatePatchHeaders = { ...auth(token), "idempotency-key": "production-template-update-retry-001" };
+      const templatePatchPayload = { priority: "Rush", quantity: 4, notes: "Retry safe update" };
+      const templateUpdated = await app.inject({ method: "PATCH", url: `/api/productionTemplates/${template.json().id}`, headers: templatePatchHeaders, payload: templatePatchPayload });
+      expect(templateUpdated.statusCode).toBe(200);
+      const templateUpdatedReplay = await app.inject({ method: "PATCH", url: `/api/productionTemplates/${template.json().id}`, headers: templatePatchHeaders, payload: templatePatchPayload });
+      expect(templateUpdatedReplay.statusCode).toBe(200);
+      expect(templateUpdatedReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(templateUpdatedReplay.json()).toEqual(templateUpdated.json());
+
+      const conflict = await app.inject({ method: "POST", url: "/api/skus", headers: skuHeaders, payload: { ...skuPayload, price: 45 } });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.parts.filter((item) => item.name === "Retry setup bracket")).toHaveLength(1);
+      expect(persisted.skus.filter((item) => item.sku === "RETRY-BRACKET")).toHaveLength(1);
+      expect(persisted.productionTemplates.filter((item) => item.name === "Retry replenishment recipe")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "part.created" && event.data?.partId === part.json().id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "sku.created" && event.data?.skuId === sku.json().id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "production_template.created" && event.data?.templateId === template.json().id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "production_template.updated" && event.data?.templateId === template.json().id)).toHaveLength(1);
+      for (const eventType of ["production_template.created", "production_template.updated"]) {
+        const event = persisted.events.find((item) => item.type === eventType && item.data?.templateId === template.json().id);
+        expect(event).toMatchObject({
+          workspaceId: "ws-default",
+          data: expect.objectContaining({
+            workspaceId: "ws-default",
+            actorEmail: "demo@layerpilot.test",
+            actorType: "user",
+            templateId: template.json().id,
+            fileId: "f1",
+            sku: expect.any(String),
+            quantity: expect.any(Number)
+          })
+        });
+        expect(JSON.stringify(event.data)).not.toContain("Retry safe");
+      }
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "catalog-part-retry-001")).toMatchObject({ method: "POST", path: "/api/parts", replayCount: 1, statusCode: 201 });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "production-template-update-retry-001")).toMatchObject({ method: "PATCH", path: `/api/productionTemplates/${template.json().id}`, replayCount: 1, statusCode: 200 });
+    });
+  });
+
+  it("replays idempotent order lifecycle cancellation without duplicate material release", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const order = await app.inject({
+        method: "POST",
+        url: "/api/orders",
+        headers: auth(token),
+        payload: { source: "Manual", customer: "Lifecycle Customer", items: ["CAM-MOUNT-ORG x1"], status: "received", due: "Tomorrow 17:00", value: 420 }
+      });
+      expect(order.statusCode).toBe(201);
+
+      const generated = await app.inject({ method: "POST", url: `/api/orders/${order.json().id}/generate-jobs`, headers: auth(token) });
+      expect(generated.statusCode).toBe(200);
+      const jobId = generated.json().jobs[0].id;
+
+      const scheduled = await app.inject({
+        method: "PATCH",
+        url: `/api/queue/${jobId}/schedule`,
+        headers: auth(token),
+        payload: { printerId: "p3", scheduledStart: "14:00" }
+      });
+      expect(scheduled.statusCode).toBe(200);
+      expect(scheduled.json().job).toMatchObject({ id: jobId, status: "queued", stage: "needs slicing", reservedSpoolId: "s2" });
+      expect(scheduled.json().spools.find((item) => item.id === "s2")).toMatchObject({ reserved: expect.any(Number) });
+
+      const cancelHeaders = { ...auth(token), "idempotency-key": "order-status-cancel-retry-001" };
+      const cancelPayload = { status: "cancelled" };
+      const cancelled = await app.inject({ method: "PATCH", url: `/api/orders/${order.json().id}/status`, headers: cancelHeaders, payload: cancelPayload });
+      const cancelledReplay = await app.inject({ method: "PATCH", url: `/api/orders/${order.json().id}/status`, headers: cancelHeaders, payload: cancelPayload });
+      expect(cancelled.statusCode).toBe(200);
+      expect(cancelledReplay.statusCode).toBe(200);
+      expect(cancelledReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(cancelledReplay.json()).toEqual(cancelled.json());
+      expect(cancelled.json().order).toMatchObject({ id: order.json().id, status: "cancelled" });
+      expect(cancelled.json().jobs).toEqual([expect.objectContaining({ id: jobId, status: "cancelled", stage: "blocked" })]);
+      expect(cancelled.json().materialChanges).toEqual([expect.objectContaining({ spoolId: "s2" })]);
+      expect(cancelled.json().spools.find((item) => item.id === "s2")).toMatchObject({ reserved: 0, reservations: [] });
+
+      const duplicate = await app.inject({ method: "POST", url: `/api/orders/${order.json().id}/generate-jobs`, headers: auth(token) });
+      expect(duplicate.statusCode).toBe(409);
+      expect(duplicate.json()).toMatchObject({ error: "Cannot generate jobs for a terminal order" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.orders.find((item) => item.id === order.json().id)).toMatchObject({ status: "cancelled" });
+      expect(persisted.queue.find((item) => item.id === jobId)).toMatchObject({ status: "cancelled", stage: "blocked" });
+      expect(persisted.spools.find((item) => item.id === "s2")).toMatchObject({ reserved: 0, reservations: [] });
+      expect(persisted.events.filter((event) => event.type === "order.status" && event.data?.orderId === order.json().id && event.data?.status === "cancelled")).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "order-status-cancel-retry-001")).toMatchObject({
+        method: "PATCH",
+        path: `/api/orders/${order.json().id}/status`,
+        statusCode: 200,
+        replayCount: 1
+      });
+    });
+  });
+
   it("accepts public quote requests and converts accepted quotes into orders", async () => {
     await withApp(async ({ app, dbPath }) => {
       const quote = await app.inject({
@@ -2003,6 +5417,27 @@ endsolid s3_store`;
       });
       expect(quoted.statusCode).toBe(200);
       expect(quoted.json()).toMatchObject({ status: "quoted", priority: "High", quotedValue: 720, validUntil: "2026-07-15" });
+
+      const listedQuotes = await app.inject({ method: "GET", url: "/api/quoteRequests", headers: auth(token) });
+      expect(listedQuotes.statusCode).toBe(200);
+      const listedQuote = listedQuotes.json().find((item) => item.id === id);
+      expect(listedQuote).toMatchObject({ id, hasCustomerAccessToken: true });
+      expect(listedQuote.customerAccessToken).toBeUndefined();
+      expect(JSON.stringify(listedQuotes.json())).not.toContain(quote.json().quoteRequest.accessToken);
+
+      const state = await app.inject({ method: "GET", url: "/api/state", headers: auth(token) });
+      expect(state.statusCode).toBe(200);
+      const stateQuote = state.json().quoteRequests.find((item) => item.id === id);
+      expect(stateQuote).toMatchObject({ id, hasCustomerAccessToken: true });
+      expect(stateQuote.customerAccessToken).toBeUndefined();
+      expect(JSON.stringify(state.json())).not.toContain(quote.json().quoteRequest.accessToken);
+
+      const exported = await app.inject({ method: "GET", url: "/api/admin/export", headers: auth(token) });
+      expect(exported.statusCode).toBe(200);
+      const exportedQuote = exported.json().data.quoteRequests.find((item) => item.id === id);
+      expect(exportedQuote).toMatchObject({ id, hasCustomerAccessToken: true });
+      expect(exportedQuote.customerAccessToken).toBeUndefined();
+      expect(JSON.stringify(exported.json())).not.toContain(quote.json().quoteRequest.accessToken);
 
       const portalLink = await app.inject({
         method: "POST",
@@ -2057,6 +5492,367 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent quote conversions without creating duplicate orders", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const quote = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        payload: {
+          customer: "Retry Quote Buyer",
+          email: "retry-quote@example.com",
+          company: "Retry Studio",
+          project: "Nylon latch batch",
+          material: "Nylon",
+          quantity: 4,
+          due: "2026-07-22",
+          budget: 360,
+          notes: "Retry conversion test",
+          fileName: "nylon-latch.3mf"
+        }
+      });
+      expect(quote.statusCode).toBe(201);
+      const id = quote.json().quoteRequest.id;
+      const headers = { ...auth(token), "idempotency-key": "quote-convert-retry-001" };
+      const payload = { due: "2026-07-25", value: 390 };
+
+      const converted = await app.inject({
+        method: "POST",
+        url: `/api/quoteRequests/${id}/convert-order`,
+        headers,
+        payload
+      });
+      expect(converted.statusCode).toBe(201);
+
+      const replay = await app.inject({
+        method: "POST",
+        url: `/api/quoteRequests/${id}/convert-order`,
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(201);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toMatchObject({
+        quoteRequest: {
+          ...converted.json().quoteRequest,
+          customerAccessToken: "REDACTED"
+        },
+        order: converted.json().order,
+        job: converted.json().job
+      });
+      expect(JSON.stringify(replay.json())).not.toContain(quote.json().quoteRequest.accessToken);
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: `/api/quoteRequests/${id}/convert-order`,
+        headers,
+        payload: { ...payload, value: 410 }
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.orders.filter((order) => order.quoteRequestId === id)).toHaveLength(1);
+      expect(persisted.quoteRequests.find((item) => item.id === id)).toMatchObject({ status: "converted", orderId: converted.json().order.id });
+      expect(persisted.events.filter((event) => event.type === "quote_request.converted" && event.data?.quoteRequestId === id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "quote-convert-retry-001")).toMatchObject({
+        method: "POST",
+        path: `/api/quoteRequests/${id}/convert-order`,
+        replayCount: 1,
+        statusCode: 201,
+        responseBodyRedacted: true
+      });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "quote-convert-retry-001").responseBody).not.toContain(quote.json().quoteRequest.accessToken);
+    });
+  });
+
+  it("replays idempotent quote request updates without duplicating audit events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const quote = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        payload: {
+          customer: "Retry Update Buyer",
+          email: "retry-update@example.com",
+          company: "Quote Update Studio",
+          project: "Quote update retry",
+          material: "PETG",
+          quantity: 6,
+          due: "2026-08-16",
+          budget: 640,
+          notes: "Operator quote update retry"
+        }
+      });
+      expect(quote.statusCode).toBe(201);
+      const id = quote.json().quoteRequest.id;
+      const token = await login(app);
+      const headers = { ...auth(token), "idempotency-key": "quote-update-retry-001" };
+      const payload = { status: "quoted", priority: "High", quotedValue: 625, validUntil: "2026-08-30", internalNote: "Retry-safe update" };
+
+      const updated = await app.inject({
+        method: "PATCH",
+        url: `/api/quoteRequests/${id}`,
+        headers,
+        payload
+      });
+      expect(updated.statusCode).toBe(200);
+
+      const replay = await app.inject({
+        method: "PATCH",
+        url: `/api/quoteRequests/${id}`,
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual({ ...updated.json(), customerAccessToken: "REDACTED" });
+
+      const conflict = await app.inject({
+        method: "PATCH",
+        url: `/api/quoteRequests/${id}`,
+        headers,
+        payload: { ...payload, quotedValue: 650 }
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.quoteRequests.find((item) => item.id === id)).toMatchObject({
+        status: "quoted",
+        quotedValue: 625,
+        reviewedBy: "demo@layerpilot.test"
+      });
+      expect(persisted.events.filter((event) => event.type === "quote_request.updated" && event.data?.quoteRequestId === id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "quote-update-retry-001")).toMatchObject({
+        method: "PATCH",
+        path: `/api/quoteRequests/${id}`,
+        replayCount: 1,
+        statusCode: 200,
+        responseBodyRedacted: true
+      });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "quote-update-retry-001").responseBody).not.toContain(quote.json().quoteRequest.accessToken);
+    });
+  });
+
+  it("replays idempotent quote portal link rotations without invalidating the original response", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const quote = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        payload: {
+          customer: "Retry Link Buyer",
+          email: "retry-link@example.com",
+          company: "Portal Link Studio",
+          project: "Customer portal link retry",
+          material: "ASA",
+          quantity: 5,
+          due: "2026-08-12",
+          budget: 450,
+          notes: "Portal link rotation retry"
+        }
+      });
+      expect(quote.statusCode).toBe(201);
+      const { id, accessToken: originalToken } = quote.json().quoteRequest;
+      const token = await login(app);
+      const headers = { ...auth(token), "idempotency-key": "quote-link-rotate-retry-001" };
+      const payload = { rotate: true };
+
+      const rotated = await app.inject({
+        method: "POST",
+        url: `/api/quoteRequests/${id}/customer-link`,
+        headers,
+        payload
+      });
+      expect(rotated.statusCode).toBe(200);
+      expect(rotated.json().accessToken).not.toBe(originalToken);
+
+      const replay = await app.inject({
+        method: "POST",
+        url: `/api/quoteRequests/${id}/customer-link`,
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toMatchObject({
+        quoteRequest: {
+          ...rotated.json().quoteRequest,
+          customerAccessToken: "REDACTED"
+        },
+        url: expect.stringContaining("(redacted)"),
+        accessToken: "REDACTED"
+      });
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: `/api/quoteRequests/${id}/customer-link`,
+        headers,
+        payload: { rotate: false }
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+
+      const oldTokenStatus = await app.inject({ method: "GET", url: `/api/public/quoteRequests/${id}?token=${originalToken}` });
+      expect(oldTokenStatus.statusCode).toBe(404);
+      const rotatedStatus = await app.inject({ method: "GET", url: `/api/public/quoteRequests/${id}?token=${rotated.json().accessToken}` });
+      expect(rotatedStatus.statusCode).toBe(200);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.quoteRequests.find((item) => item.id === id)).toMatchObject({
+        customerAccessToken: rotated.json().accessToken,
+        portalLinkGeneratedBy: "demo@layerpilot.test"
+      });
+      expect(persisted.events.filter((event) => event.type === "quote_request.portal_link_rotated" && event.data?.quoteRequestId === id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "quote-link-rotate-retry-001")).toMatchObject({
+        method: "POST",
+        path: `/api/quoteRequests/${id}/customer-link`,
+        replayCount: 1,
+        statusCode: 200,
+        responseBodyRedacted: true
+      });
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "quote-link-rotate-retry-001").responseBody).not.toContain(rotated.json().accessToken);
+    });
+  });
+
+  it("records operator context for quote, order, and catalog audit events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const quote = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        payload: {
+          customer: "Audit Buyer",
+          email: "quote-audit@example.com",
+          company: "Audit Studio",
+          project: "Operator quote audit",
+          material: "PETG",
+          quantity: 4,
+          due: "2026-08-18",
+          budget: 440,
+          notes: "Customer note that should not be copied into operator audit metadata"
+        }
+      });
+      expect(quote.statusCode).toBe(201);
+      const quoteId = quote.json().quoteRequest.id;
+
+      const reviewed = await app.inject({
+        method: "PATCH",
+        url: `/api/quoteRequests/${quoteId}`,
+        headers: auth(token),
+        payload: {
+          status: "quoted",
+          priority: "High",
+          quotedValue: 410,
+          validUntil: "2026-08-30",
+          internalNote: "Internal quote note that should stay out of audit metadata"
+        }
+      });
+      expect(reviewed.statusCode).toBe(200);
+
+      const linked = await app.inject({
+        method: "POST",
+        url: `/api/quoteRequests/${quoteId}/customer-link`,
+        headers: auth(token),
+        payload: { rotate: true }
+      });
+      expect(linked.statusCode).toBe(200);
+      expect(linked.json().accessToken).toBeTruthy();
+
+      const converted = await app.inject({
+        method: "POST",
+        url: `/api/quoteRequests/${quoteId}/convert-order`,
+        headers: auth(token),
+        payload: { due: "2026-08-20", value: 410 }
+      });
+      expect(converted.statusCode).toBe(201);
+
+      const order = await app.inject({
+        method: "POST",
+        url: "/api/orders",
+        headers: auth(token),
+        payload: { source: "Manual", customer: "Audit Order Customer", items: ["CAM-MOUNT-ORG x1"], status: "received", due: "Tomorrow 10:00", value: 180 }
+      });
+      expect(order.statusCode).toBe(201);
+
+      const generated = await app.inject({
+        method: "POST",
+        url: `/api/orders/${order.json().id}/generate-jobs`,
+        headers: auth(token)
+      });
+      expect(generated.statusCode).toBe(200);
+
+      const held = await app.inject({
+        method: "PATCH",
+        url: `/api/orders/${order.json().id}/status`,
+        headers: auth(token),
+        payload: { status: "on_hold" }
+      });
+      expect(held.statusCode).toBe(200);
+
+      const part = await app.inject({
+        method: "POST",
+        url: "/api/parts",
+        headers: auth(token),
+        payload: { name: "Audit setup bracket", fileId: "f2", material: "PETG", process: "0.20mm Production", plates: 1, variants: ["Black"], status: "ready" }
+      });
+      expect(part.statusCode).toBe(201);
+
+      const sku = await app.inject({
+        method: "POST",
+        url: "/api/skus",
+        headers: auth(token),
+        payload: { sku: "AUDIT-BRACKET", title: "Audit Bracket", parts: ["Audit setup bracket"], variants: ["Black"], price: 52, stock: 6, channel: "Manual" }
+      });
+      expect(sku.statusCode).toBe(201);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      const eventFor = (type, predicate = () => true) => persisted.events.find((event) => event.type === type && predicate(event));
+      const expectedEvents = [
+        eventFor("quote_request.updated", (event) => event.data?.quoteRequestId === quoteId),
+        eventFor("quote_request.portal_link_rotated", (event) => event.data?.quoteRequestId === quoteId),
+        eventFor("quote_request.converted", (event) => event.data?.quoteRequestId === quoteId && event.data?.orderId === converted.json().order.id),
+        eventFor("order.created", (event) => event.data?.orderId === order.json().id),
+        eventFor("order.jobs_generated", (event) => event.data?.orderId === order.json().id),
+        eventFor("order.status", (event) => event.data?.orderId === order.json().id && event.data?.status === "on_hold"),
+        eventFor("part.created", (event) => event.data?.partId === part.json().id),
+        eventFor("sku.created", (event) => event.data?.skuId === sku.json().id)
+      ];
+      for (const event of expectedEvents) {
+        expect(event).toMatchObject({
+          workspaceId: "ws-default",
+          data: expect.objectContaining({
+            workspaceId: "ws-default",
+            actorEmail: "demo@layerpilot.test",
+            actorType: "user"
+          })
+        });
+      }
+      for (const event of expectedEvents) {
+        const data = JSON.stringify(event.data);
+        expect(data).not.toContain(linked.json().accessToken);
+        expect(data).not.toContain("Customer note that should not be copied");
+        expect(data).not.toContain("Internal quote note that should stay out");
+      }
+      expect(eventFor("quote_request.updated", (event) => event.data?.quoteRequestId === quoteId).data).toMatchObject({
+        quoteRequestId: quoteId,
+        status: "quoted",
+        priority: "High",
+        quotedValue: 410,
+        validUntil: "2026-08-30"
+      });
+      expect(eventFor("quote_request.portal_link_rotated", (event) => event.data?.quoteRequestId === quoteId).data).toMatchObject({
+        quoteRequestId: quoteId,
+        rotated: true,
+        hasCustomerAccessToken: true
+      });
+      expect(eventFor("order.jobs_generated", (event) => event.data?.orderId === order.json().id).data).toMatchObject({
+        orderId: order.json().id,
+        jobCount: generated.json().jobs.length,
+        jobs: generated.json().jobs.map((job) => job.id)
+      });
+    });
+  });
+
   it("lets customers accept quoted requests through the public quote portal", async () => {
     await withApp(async ({ app, dbPath }) => {
       const quote = await app.inject({
@@ -2106,6 +5902,143 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent public quote approvals without creating duplicate orders", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const quote = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        payload: {
+          customer: "Retry Portal Buyer",
+          email: "retry-portal@example.com",
+          company: "Portal Studio",
+          project: "Carbon fiber quote approval",
+          material: "Nylon-CF",
+          quantity: 2,
+          due: "2026-08-06",
+          budget: 520,
+          notes: "Customer approval retry"
+        }
+      });
+      expect(quote.statusCode).toBe(201);
+      const { id, accessToken } = quote.json().quoteRequest;
+      const token = await login(app);
+      const quoted = await app.inject({
+        method: "PATCH",
+        url: `/api/quoteRequests/${id}`,
+        headers: auth(token),
+        payload: { status: "quoted", quotedValue: 500, validUntil: "2026-08-15" }
+      });
+      expect(quoted.statusCode).toBe(200);
+      const headers = { "idempotency-key": "public-quote-decision-001" };
+      const payload = { token: accessToken, decision: "accepted", note: "Customer approved with retry" };
+
+      const accepted = await app.inject({
+        method: "POST",
+        url: `/api/public/quoteRequests/${id}/decision`,
+        headers,
+        payload
+      });
+      expect(accepted.statusCode).toBe(201);
+
+      const replay = await app.inject({
+        method: "POST",
+        url: `/api/public/quoteRequests/${id}/decision`,
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(201);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(accepted.json());
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: `/api/public/quoteRequests/${id}/decision`,
+        headers,
+        payload: { ...payload, note: "Different approval note" }
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.orders.filter((order) => order.quoteRequestId === id)).toHaveLength(1);
+      expect(persisted.quoteRequests.find((item) => item.id === id)).toMatchObject({ status: "converted", orderId: accepted.json().order.id, customerDecisionNote: "Customer approved with retry" });
+      expect(persisted.events.filter((event) => event.type === "quote_request.customer_accepted" && event.data?.quoteRequestId === id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "quote_request.converted" && event.data?.quoteRequestId === id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "public-quote-decision-001")).toMatchObject({
+        actorId: `public:quote-decision:${id}`,
+        method: "POST",
+        path: `/api/public/quoteRequests/${id}/decision`,
+        replayCount: 1,
+        statusCode: 201
+      });
+    });
+  });
+
+  it("replays idempotent public quote revision requests without duplicating audit events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const quote = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        payload: {
+          customer: "Retry Revision Buyer",
+          email: "retry-revision@example.com",
+          company: "Revision Studio",
+          project: "Quote revision retry",
+          material: "PETG",
+          quantity: 4,
+          due: "2026-08-08",
+          budget: 300,
+          notes: "Customer revision retry"
+        }
+      });
+      expect(quote.statusCode).toBe(201);
+      const { id, accessToken } = quote.json().quoteRequest;
+      const token = await login(app);
+      const quoted = await app.inject({
+        method: "PATCH",
+        url: `/api/quoteRequests/${id}`,
+        headers: auth(token),
+        payload: { status: "quoted", quotedValue: 275, validUntil: "2026-08-20" }
+      });
+      expect(quoted.statusCode).toBe(200);
+      const headers = { "idempotency-key": "public-quote-revision-001" };
+      const payload = { token: accessToken, decision: "revision", note: "Please quote ASA instead" };
+
+      const revision = await app.inject({
+        method: "POST",
+        url: `/api/public/quoteRequests/${id}/decision`,
+        headers,
+        payload
+      });
+      expect(revision.statusCode).toBe(200);
+
+      const replay = await app.inject({
+        method: "POST",
+        url: `/api/public/quoteRequests/${id}/decision`,
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(revision.json());
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.quoteRequests.find((item) => item.id === id)).toMatchObject({
+        status: "reviewing",
+        customerDecision: "revision",
+        customerDecisionNote: "Please quote ASA instead"
+      });
+      expect(persisted.events.filter((event) => event.type === "quote_request.revision_requested" && event.data?.quoteRequestId === id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "public-quote-revision-001")).toMatchObject({
+        actorId: `public:quote-decision:${id}`,
+        method: "POST",
+        path: `/api/public/quoteRequests/${id}/decision`,
+        replayCount: 1,
+        statusCode: 200
+      });
+    });
+  });
+
   it("blocks customer approval after a quote expires", async () => {
     await withApp(async ({ app }) => {
       const quote = await app.inject({
@@ -2140,6 +6073,48 @@ endsolid s3_store`;
       });
       expect(accepted.statusCode).toBe(409);
       expect(accepted.json()).toMatchObject({ error: "Quote request has expired", validUntil: "2000-01-01" });
+    });
+  });
+
+  it("lets customers request quote changes without converting the order", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const quote = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        payload: {
+          customer: "Revision Buyer",
+          email: "revision@example.com",
+          project: "Fixture revision",
+          material: "PETG",
+          quantity: 2,
+          due: "2026-07-24",
+          budget: 140,
+          notes: "Needs operator review"
+        }
+      });
+      expect(quote.statusCode).toBe(201);
+      const { id, accessToken } = quote.json().quoteRequest;
+      const token = await login(app);
+      const quoted = await app.inject({
+        method: "PATCH",
+        url: `/api/quoteRequests/${id}`,
+        headers: auth(token),
+        payload: { status: "quoted", quotedValue: 128, validUntil: "2026-08-01" }
+      });
+      expect(quoted.statusCode).toBe(200);
+
+      const revision = await app.inject({
+        method: "POST",
+        url: `/api/public/quoteRequests/${id}/decision`,
+        payload: { token: accessToken, decision: "revision", note: "Please quote a black PETG version instead." }
+      });
+      expect(revision.statusCode).toBe(200);
+      expect(revision.json().quoteRequest).toMatchObject({ id, status: "reviewing", customerDecision: "revision", customerDecisionNote: "Please quote a black PETG version instead.", orderId: "" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.quoteRequests.find((item) => item.id === id)).toMatchObject({ status: "reviewing", customerDecision: "revision" });
+      expect(persisted.orders.some((order) => order.quoteRequestId === id)).toBe(false);
+      expect(persisted.events.some((event) => event.type === "quote_request.revision_requested" && event.data.quoteRequestId === id)).toBe(true);
     });
   });
 
@@ -2224,7 +6199,24 @@ endsolid s3_store`;
 
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
       expect(persisted.productionTemplates.find((item) => item.id === created.json().id)).toMatchObject({ runCount: 3 });
-      expect(persisted.events.some((event) => event.type === "production_template.run")).toBe(true);
+      const runEvent = persisted.events.find((event) => event.type === "production_template.run" && event.data?.templateId === created.json().id);
+      expect(runEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: expect.objectContaining({
+          workspaceId: "ws-default",
+          actorEmail: "demo@layerpilot.test",
+          actorType: "user",
+          templateId: created.json().id,
+          fileId: "f1",
+          printerId: "p1",
+          quantity: 2,
+          jobCount: 3,
+          jobs: expect.any(Array)
+        })
+      });
+      expect(runEvent.data.jobs).toHaveLength(3);
+      expect(JSON.stringify(runEvent.data)).not.toContain("Run before weekend pickup");
+      expect(JSON.stringify(runEvent.data)).not.toContain("Template: QC replenishment recipe");
     });
   });
 
@@ -2250,7 +6242,70 @@ endsolid s3_store`;
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
       expect(persisted.files.find((file) => file.id === generated.json().file.id)).toMatchObject({ storagePath: generated.json().file.storagePath, status: "uploaded" });
       expect(persisted.parts.find((part) => part.id === generated.json().part.id)).toMatchObject({ fileId: generated.json().file.id });
-      expect(persisted.events.some((event) => event.type === "parametric.generated")).toBe(true);
+      const parametricEvent = persisted.events.find((event) => event.type === "parametric.generated" && event.data?.fileId === generated.json().file.id);
+      expect(parametricEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          actorEmail: "demo@layerpilot.test",
+          actorType: "user",
+          fileId: generated.json().file.id,
+          fileName: generated.json().file.name,
+          fileType: "STL",
+          material: "PLA",
+          partId: generated.json().part.id,
+          generator: "nameplate-box-stl",
+          storageBacked: true,
+          stlBytes: generated.json().stlBytes
+        }
+      });
+      expect(JSON.stringify(parametricEvent.data)).not.toContain(generated.json().file.storagePath);
+      expect(JSON.stringify(parametricEvent.data)).not.toContain("solid layerpilot_nameplate_qc-badge");
+    });
+  });
+
+  it("replays idempotent parametric nameplates without duplicate files or parts", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const headers = { ...auth(token), "idempotency-key": "parametric-nameplate-retry-001" };
+      const payload = { text: "Retry Badge", width: 96, height: 36, thickness: 3, material: "PETG", feature: "magnet pockets", createPart: true };
+
+      const generated = await app.inject({
+        method: "POST",
+        url: "/api/parametric/nameplate",
+        headers,
+        payload
+      });
+      expect(generated.statusCode).toBe(201);
+      const replay = await app.inject({
+        method: "POST",
+        url: "/api/parametric/nameplate",
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(201);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(generated.json());
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/parametric/nameplate",
+        headers,
+        payload: { ...payload, text: "Changed Badge" }
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.files.filter((item) => item.parametric?.generator === "nameplate-box-stl" && item.thumbnail === "Retry Badge")).toHaveLength(1);
+      expect(persisted.parts.filter((item) => item.name === "Parametric nameplate - Retry Badge")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "parametric.generated" && event.data?.fileId === generated.json().file.id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "parametric-nameplate-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/parametric/nameplate",
+        replayCount: 1,
+        statusCode: 201
+      });
     });
   });
 
@@ -2345,6 +6400,117 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent profile configuration writes without duplicate profile events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const createHeaders = { ...auth(token), "idempotency-key": "profile-create-retry-001" };
+      const createPayload = { name: "Retry 0.20 Process", kind: "Process", target: "FDM fleet", source: "Manual", settings: { layer_height: 0.2, infill: 20 } };
+      const created = await app.inject({ method: "POST", url: "/api/profiles", headers: createHeaders, payload: createPayload });
+      expect(created.statusCode).toBe(201);
+      const createdReplay = await app.inject({ method: "POST", url: "/api/profiles", headers: createHeaders, payload: createPayload });
+      expect(createdReplay.statusCode).toBe(201);
+      expect(createdReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(createdReplay.json()).toEqual(created.json());
+
+      const importHeaders = { ...auth(token), "idempotency-key": "profile-import-retry-001" };
+      const importPayload = {
+        source: "Orca import",
+        content: ["[printer]", "name = Retry Voron 300", "printer_model = Voron", "", "[filament]", "name = Retry PETG Black", "filament_type = PETG"].join("\n")
+      };
+      const imported = await app.inject({ method: "POST", url: "/api/profiles/import", headers: importHeaders, payload: importPayload });
+      expect(imported.statusCode).toBe(200);
+      const importedReplay = await app.inject({ method: "POST", url: "/api/profiles/import", headers: importHeaders, payload: importPayload });
+      expect(importedReplay.statusCode).toBe(200);
+      expect(importedReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(importedReplay.json()).toEqual(imported.json());
+
+      const updateHeaders = { ...auth(token), "idempotency-key": "profile-update-retry-001" };
+      const updatePayload = { target: "Production farm", settings: { layer_height: 0.2, infill: 24 } };
+      const updated = await app.inject({ method: "PATCH", url: `/api/profiles/${created.json().id}`, headers: updateHeaders, payload: updatePayload });
+      expect(updated.statusCode).toBe(200);
+      const updatedReplay = await app.inject({ method: "PATCH", url: `/api/profiles/${created.json().id}`, headers: updateHeaders, payload: updatePayload });
+      expect(updatedReplay.statusCode).toBe(200);
+      expect(updatedReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(updatedReplay.json()).toEqual(updated.json());
+
+      const defaultHeaders = { ...auth(token), "idempotency-key": "profile-default-retry-001" };
+      const defaulted = await app.inject({ method: "PATCH", url: `/api/profiles/${created.json().id}/default`, headers: defaultHeaders });
+      expect(defaulted.statusCode).toBe(200);
+      const defaultedReplay = await app.inject({ method: "PATCH", url: `/api/profiles/${created.json().id}/default`, headers: defaultHeaders });
+      expect(defaultedReplay.statusCode).toBe(200);
+      expect(defaultedReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(defaultedReplay.json()).toEqual(defaulted.json());
+
+      const policyHeaders = { ...auth(token), "idempotency-key": "profile-policy-retry-001" };
+      const policyPayload = { dueWindowHours: 8, warnBeforeFallback: false };
+      const policy = await app.inject({ method: "PATCH", url: "/api/profile-policy", headers: policyHeaders, payload: policyPayload });
+      expect(policy.statusCode).toBe(200);
+      const policyReplay = await app.inject({ method: "PATCH", url: "/api/profile-policy", headers: policyHeaders, payload: policyPayload });
+      expect(policyReplay.statusCode).toBe(200);
+      expect(policyReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(policyReplay.json()).toEqual(policy.json());
+
+      const archiveHeaders = { ...auth(token), "idempotency-key": "profile-archive-retry-001" };
+      const archived = await app.inject({ method: "DELETE", url: `/api/profiles/${created.json().id}`, headers: archiveHeaders });
+      expect(archived.statusCode).toBe(200);
+      const archivedReplay = await app.inject({ method: "DELETE", url: `/api/profiles/${created.json().id}`, headers: archiveHeaders });
+      expect(archivedReplay.statusCode).toBe(200);
+      expect(archivedReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(archivedReplay.json()).toEqual(archived.json());
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.profiles.filter((profile) => profile.name === "Retry Voron 300" && profile.kind === "Machine")).toHaveLength(1);
+      expect(persisted.profiles.filter((profile) => profile.name === "Retry PETG Black" && profile.kind === "Filament")).toHaveLength(1);
+      expect(persisted.profiles.some((profile) => profile.id === created.json().id)).toBe(false);
+      expect(persisted.events.filter((event) => event.type === "profile.created" && event.data?.profileId === created.json().id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "profile.imported" && event.data?.source === "Orca import")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "profile.updated" && event.data?.profileId === created.json().id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "profile.default_set" && event.data?.profileId === created.json().id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "profile.policy_updated")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "profile.archived" && event.data?.profileId === created.json().id)).toHaveLength(1);
+      for (const eventType of ["profile.created", "profile.updated", "profile.default_set", "profile.archived"]) {
+        const event = persisted.events.find((item) => item.type === eventType && item.data?.profileId === created.json().id);
+        expect(event).toMatchObject({
+          workspaceId: "ws-default",
+          data: expect.objectContaining({
+            workspaceId: "ws-default",
+            actorEmail: "demo@layerpilot.test",
+            actorType: "user",
+            profileId: created.json().id,
+            kind: "Process"
+          })
+        });
+        expect(JSON.stringify(event.data)).not.toContain("layer_height");
+        expect(JSON.stringify(event.data)).not.toContain("infill");
+      }
+      const importEvent = persisted.events.find((event) => event.type === "profile.imported" && event.data?.source === "Orca import");
+      expect(importEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: expect.objectContaining({
+          workspaceId: "ws-default",
+          actorEmail: "demo@layerpilot.test",
+          actorType: "user",
+          imported: expect.any(Array),
+          skipped: expect.any(Array)
+        })
+      });
+      const policyEvent = persisted.events.find((event) => event.type === "profile.policy_updated");
+      expect(policyEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: expect.objectContaining({
+          workspaceId: "ws-default",
+          actorEmail: "demo@layerpilot.test",
+          actorType: "user",
+          materialCompatibility: expect.any(Boolean),
+          dueWindowHours: 8,
+          warnBeforeFallback: false
+        })
+      });
+      expect(policyEvent.data.policy).toBeUndefined();
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "profile-archive-retry-001")).toMatchObject({ method: "DELETE", path: `/api/profiles/${created.json().id}`, replayCount: 1, statusCode: 200 });
+    });
+  });
+
   it("imports commerce connector JSON feeds and skips duplicate external orders", async () => {
     await withApp(async ({ app, dbPath }) => {
       const originalFetch = global.fetch;
@@ -2400,6 +6566,107 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent commerce connector imports without refetching the feed", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const originalFetch = global.fetch;
+      let fetchCount = 0;
+      global.fetch = async () => {
+        fetchCount += 1;
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({
+            orders: [
+              {
+                id: "SP-RETRY-1",
+                customer: { name: "Retry Feed Customer" },
+                line_items: [{ sku: "RETRY-BRACKET", quantity: 1 }],
+                due_at: "Tomorrow 16:00",
+                total_price: "240"
+              }
+            ]
+          })
+        };
+      };
+      try {
+        const token = await login(app);
+        const connector = await app.inject({
+          method: "POST",
+          url: "/api/commerceConnectors",
+          headers: auth(token),
+          payload: { name: "Retry Shopify feed", source: "Shopify", url: "https://commerce.test/retry.json", enabled: true }
+        });
+        expect(connector.statusCode).toBe(201);
+        const headers = { ...auth(token), "idempotency-key": "commerce-feed-retry-001" };
+
+        const imported = await app.inject({ method: "POST", url: `/api/commerceConnectors/${connector.json().id}/import`, headers });
+        expect(imported.statusCode).toBe(200);
+        expect(imported.json().created).toHaveLength(1);
+
+        const replay = await app.inject({ method: "POST", url: `/api/commerceConnectors/${connector.json().id}/import`, headers });
+        expect(replay.statusCode).toBe(200);
+        expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+        expect(replay.json()).toEqual(imported.json());
+        expect(fetchCount).toBe(1);
+
+        const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+        expect(persisted.orders.filter((item) => item.externalId === "SP-RETRY-1")).toHaveLength(1);
+        expect(persisted.commerceImports).toHaveLength(1);
+      } finally {
+        global.fetch = originalFetch;
+      }
+    });
+  });
+
+  it("replays idempotent commerce connector tests without refetching the feed", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const originalFetch = global.fetch;
+      let fetchCount = 0;
+      global.fetch = async () => {
+        fetchCount += 1;
+        return {
+          ok: true,
+          status: 204,
+          text: async () => ""
+        };
+      };
+      try {
+        const token = await login(app);
+        const connector = await app.inject({
+          method: "POST",
+          url: "/api/commerceConnectors",
+          headers: auth(token),
+          payload: { name: "Retry test feed", source: "Generic", url: "https://commerce.test/test-feed.json", token: "test-token-secret", enabled: true }
+        });
+        expect(connector.statusCode).toBe(201);
+        const headers = { ...auth(token), "idempotency-key": "commerce-test-retry-001" };
+
+        const tested = await app.inject({ method: "POST", url: `/api/commerceConnectors/${connector.json().id}/test`, headers });
+        expect(tested.statusCode).toBe(200);
+        expect(tested.json()).toMatchObject({ ok: true, statusCode: 204 });
+        expect(tested.json().connector).toMatchObject({ id: connector.json().id, lastStatus: "connected", hasToken: true });
+        expect(JSON.stringify(tested.json())).not.toContain("test-token-secret");
+
+        const replay = await app.inject({ method: "POST", url: `/api/commerceConnectors/${connector.json().id}/test`, headers });
+        expect(replay.statusCode).toBe(200);
+        expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+        expect(replay.json()).toEqual(tested.json());
+        expect(fetchCount).toBe(1);
+
+        const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+        expect(persisted.commerceConnectors.find((item) => item.id === connector.json().id)).toMatchObject({ lastStatus: "connected", lastStatusCode: 204, token: "test-token-secret" });
+        expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "commerce-test-retry-001")).toMatchObject({
+          method: "POST",
+          path: `/api/commerceConnectors/${connector.json().id}/test`,
+          replayCount: 1,
+          statusCode: 200
+        });
+      } finally {
+        global.fetch = originalFetch;
+      }
+    });
+  });
+
   it("imports commerce CSV rows into orders", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);
@@ -2418,6 +6685,37 @@ endsolid s3_store`;
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
       expect(persisted.orders.some((order) => order.externalId === "CSV-1001")).toBe(true);
       expect(persisted.commerceImports[0]).toMatchObject({ connectorName: "CSV import", created: 1 });
+    });
+  });
+
+  it("replays idempotent commerce CSV imports without adding duplicate import runs", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const csv = "externalId,customer,items,due,value\nCSV-RETRY-1,CSV Retry Customer,QC-RETRY x1,Today 18:00,220";
+      const headers = { ...auth(token), "idempotency-key": "commerce-csv-retry-001" };
+
+      const imported = await app.inject({
+        method: "POST",
+        url: "/api/commerce/import-csv",
+        headers,
+        payload: { source: "Generic", csv }
+      });
+      expect(imported.statusCode).toBe(200);
+      expect(imported.json().created).toHaveLength(1);
+
+      const replay = await app.inject({
+        method: "POST",
+        url: "/api/commerce/import-csv",
+        headers,
+        payload: { source: "Generic", csv }
+      });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(imported.json());
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.orders.filter((order) => order.externalId === "CSV-RETRY-1")).toHaveLength(1);
+      expect(persisted.commerceImports.filter((run) => run.connectorName === "CSV import")).toHaveLength(1);
     });
   });
 
@@ -2462,6 +6760,18 @@ endsolid s3_store`;
         expect(testDelivery.statusCode).toBe(200);
         expect(testDelivery.json().delivery).toMatchObject({ eventType: "webhook.test", status: "delivered" });
         expect(calls).toHaveLength(2);
+        const persistedAfterTest = JSON.parse(await readFile(dbPath, "utf8"));
+        const testEvent = persistedAfterTest.events.find((event) => event.type === "webhook.test" && event.data?.webhookId === hook.json().id);
+        expect(testEvent).toMatchObject({
+          workspaceId: "ws-default",
+          data: {
+            workspaceId: "ws-default",
+            webhookId: hook.json().id,
+            actorEmail: "demo@layerpilot.test",
+            actorType: "user"
+          }
+        });
+        expect(JSON.stringify(testEvent)).not.toContain("https://automation.test/layerpilot");
       } finally {
         global.fetch = originalFetch;
       }
@@ -2512,9 +6822,106 @@ endsolid s3_store`;
         const persisted = JSON.parse(await readFile(dbPath, "utf8"));
         expect(persisted.notificationChannels.find((item) => item.id === channel.json().id)).toMatchObject({ token: "secret-token", lastStatus: "delivered" });
         expect(persisted.notificationDeliveries.some((item) => item.channelId === channel.json().id && item.eventType === "order.status" && item.status === "delivered")).toBe(true);
+        const testEvent = persisted.events.find((event) => event.type === "notification.test" && event.data?.channelId === channel.json().id);
+        expect(testEvent).toMatchObject({
+          workspaceId: "ws-default",
+          data: {
+            workspaceId: "ws-default",
+            channelId: channel.json().id,
+            actorEmail: "demo@layerpilot.test",
+            actorType: "user"
+          }
+        });
+        expect(JSON.stringify(testEvent)).not.toContain("https://hooks.slack.test/qc");
+        expect(JSON.stringify(testEvent)).not.toContain("secret-token");
 
         const channels = await app.inject({ method: "GET", url: "/api/notificationChannels", headers: auth(token) });
         expect(channels.json().some((item) => item.token)).toBe(false);
+      } finally {
+        global.fetch = originalFetch;
+      }
+    });
+  });
+
+  it("replays idempotent integration test deliveries without duplicate outbound calls", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const originalFetch = global.fetch;
+      const calls = [];
+      global.fetch = async (url, init) => {
+        calls.push({ url: String(url), init, body: JSON.parse(init.body) });
+        return { ok: true, status: 202, text: async () => "accepted" };
+      };
+      try {
+        const token = await login(app);
+        const hook = await app.inject({
+          method: "POST",
+          url: "/api/webhooks",
+          headers: auth(token),
+          payload: { name: "Retry webhook", url: "https://automation.test/retry-webhook", events: ["order.status"], enabled: true }
+        });
+        expect(hook.statusCode).toBe(201);
+
+        const webhookHeaders = { ...auth(token), "idempotency-key": "webhook-test-retry-001" };
+        const firstWebhookTest = await app.inject({
+          method: "POST",
+          url: `/api/webhooks/${hook.json().id}/test`,
+          headers: webhookHeaders,
+          payload: {}
+        });
+        expect(firstWebhookTest.statusCode).toBe(200);
+
+        const replayWebhookTest = await app.inject({
+          method: "POST",
+          url: `/api/webhooks/${hook.json().id}/test`,
+          headers: webhookHeaders,
+          payload: {}
+        });
+        expect(replayWebhookTest.statusCode).toBe(200);
+        expect(replayWebhookTest.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+        expect(replayWebhookTest.json()).toEqual(firstWebhookTest.json());
+
+        const channel = await app.inject({
+          method: "POST",
+          url: "/api/notificationChannels",
+          headers: auth(token),
+          payload: { name: "Retry notification", type: "slack", url: "https://hooks.slack.test/retry", token: "secret-token", events: ["order.status"], enabled: true, recipients: [] }
+        });
+        expect(channel.statusCode).toBe(201);
+
+        const notificationHeaders = { ...auth(token), "idempotency-key": "notification-test-retry-001" };
+        const firstNotificationTest = await app.inject({
+          method: "POST",
+          url: `/api/notificationChannels/${channel.json().id}/test`,
+          headers: notificationHeaders,
+          payload: {}
+        });
+        expect(firstNotificationTest.statusCode).toBe(200);
+
+        const replayNotificationTest = await app.inject({
+          method: "POST",
+          url: `/api/notificationChannels/${channel.json().id}/test`,
+          headers: notificationHeaders,
+          payload: {}
+        });
+        expect(replayNotificationTest.statusCode).toBe(200);
+        expect(replayNotificationTest.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+        expect(replayNotificationTest.json()).toEqual(firstNotificationTest.json());
+
+        const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+        expect(calls.map((call) => call.url)).toEqual(["https://automation.test/retry-webhook", "https://hooks.slack.test/retry"]);
+        expect(persisted.events.filter((event) => event.type === "webhook.test")).toHaveLength(1);
+        expect(persisted.events.filter((event) => event.type === "notification.test")).toHaveLength(1);
+        expect(persisted.webhookDeliveries.filter((delivery) => delivery.webhookId === hook.json().id && delivery.eventType === "webhook.test")).toHaveLength(1);
+        expect(persisted.notificationDeliveries.filter((delivery) => delivery.channelId === channel.json().id && delivery.eventType === "notification.test")).toHaveLength(1);
+
+        const conflict = await app.inject({
+          method: "POST",
+          url: `/api/webhooks/${hook.json().id}/test`,
+          headers: webhookHeaders,
+          payload: { note: "different payload" }
+        });
+        expect(conflict.statusCode).toBe(409);
+        expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
       } finally {
         global.fetch = originalFetch;
       }
@@ -2530,6 +6937,41 @@ endsolid s3_store`;
       const updated = await app.inject({ method: "PATCH", url: "/api/printers/p2/status", headers: auth(token), payload: { status: "maintenance", progress: 0, job: null } });
       expect(updated.statusCode).toBe(200);
       expect(updated.json()).toMatchObject({ id: "p2", status: "maintenance", progress: 0 });
+    });
+  });
+
+  it("replays idempotent direct printer status updates without duplicate audit events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const headers = { ...auth(token), "idempotency-key": "printer-status-retry-001" };
+      const payload = { status: "maintenance", progress: 0, job: null };
+
+      const updated = await app.inject({ method: "PATCH", url: "/api/printers/p2/status", headers, payload });
+      expect(updated.statusCode).toBe(200);
+      expect(updated.json()).toMatchObject({ id: "p2", status: "maintenance", progress: 0 });
+
+      const replay = await app.inject({ method: "PATCH", url: "/api/printers/p2/status", headers, payload });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(updated.json());
+
+      const conflict = await app.inject({
+        method: "PATCH",
+        url: "/api/printers/p2/status",
+        headers,
+        payload: { status: "offline", progress: 0, job: null }
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.events.filter((event) => event.type === "printer.status" && event.data?.printerId === "p2" && event.data?.status === "maintenance")).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "printer-status-retry-001")).toMatchObject({
+        method: "PATCH",
+        path: "/api/printers/p2/status",
+        replayCount: 1,
+        statusCode: 200
+      });
     });
   });
 
@@ -2577,6 +7019,55 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent todo actions without duplicating operator records", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const listed = await app.inject({ method: "GET", url: "/api/todos", headers: auth(token) });
+      expect(listed.statusCode).toBe(200);
+      expect(listed.json().length).toBeGreaterThan(0);
+      const todo = listed.json()[0];
+      const headers = { ...auth(token), "idempotency-key": "todo-action-retry-001" };
+      const payload = { action: "claim", owner: "QC Lead", note: "Taking this before lunch" };
+
+      const first = await app.inject({
+        method: "POST",
+        url: `/api/todos/${todo.id}/action`,
+        headers,
+        payload
+      });
+      expect(first.statusCode).toBe(200);
+      expect(first.json().todo).toMatchObject({ id: todo.id, status: "claimed", owner: "QC Lead" });
+
+      const replay = await app.inject({
+        method: "POST",
+        url: `/api/todos/${todo.id}/action`,
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(first.json());
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: `/api/todos/${todo.id}/action`,
+        headers,
+        payload: { ...payload, note: "Different operator note" }
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.todoActions.filter((action) => action.todoId === todo.id && action.action === "claim")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "todo.claim" && event.data?.todoId === todo.id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "todo-action-retry-001")).toMatchObject({
+        method: "POST",
+        path: `/api/todos/${todo.id}/action`,
+        replayCount: 1
+      });
+    });
+  });
+
   it("creates and updates printer capability records", async () => {
     await withApp(async ({ app, dbPath }) => {
       const token = await login(app);
@@ -2613,7 +7104,74 @@ endsolid s3_store`;
 
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
       expect(persisted.printers.find((printer) => printer.id === created.json().id)).toMatchObject({ name: "QC CoreXY", buildVolume: [350, 350, 420], filament: "PETG Black" });
-      expect(persisted.events.some((event) => event.type === "printer.created" && event.data.printerId === created.json().id)).toBe(true);
+      const createdEvent = persisted.events.find((event) => event.type === "printer.created" && event.data.printerId === created.json().id);
+      expect(createdEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          actorEmail: "demo@layerpilot.test",
+          actorType: "user",
+          printerId: created.json().id,
+          printerName: "QC CoreXY",
+          connection: "Klipper / Moonraker",
+          buildVolume: [500, 500, 500],
+          compatibleMaterials: ["ASA", "PETG"]
+        }
+      });
+      const updatedEvent = persisted.events.find((event) => event.type === "printer.updated" && event.data.printerId === created.json().id);
+      expect(updatedEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: {
+          workspaceId: "ws-default",
+          actorEmail: "demo@layerpilot.test",
+          actorType: "user",
+          printerId: created.json().id,
+          printerName: "QC CoreXY",
+          connection: updated.json().connection,
+          buildVolume: [350, 350, 420],
+          compatibleMaterials: ["PLA", "PETG", "TPU"]
+        }
+      });
+    });
+  });
+
+  it("replays idempotent printer capability writes without duplicate printer events", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const createHeaders = { ...auth(token), "idempotency-key": "printer-create-retry-001" };
+      const createPayload = {
+        name: "Retry CoreXY",
+        model: "CoreXY 400",
+        location: "Retry Farm",
+        status: "idle",
+        connection: "Klipper / Moonraker",
+        filament: "PETG Black",
+        compatibleMaterials: ["PLA", "PETG"],
+        buildVolume: [400, 400, 400],
+        camera: "Setup pending"
+      };
+      const created = await app.inject({ method: "POST", url: "/api/printers", headers: createHeaders, payload: createPayload });
+      expect(created.statusCode).toBe(201);
+      const createdReplay = await app.inject({ method: "POST", url: "/api/printers", headers: createHeaders, payload: createPayload });
+      expect(createdReplay.statusCode).toBe(201);
+      expect(createdReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(createdReplay.json()).toEqual(created.json());
+
+      const updateHeaders = { ...auth(token), "idempotency-key": "printer-update-retry-001" };
+      const updatePayload = { compatibleMaterials: ["PLA", "PETG", "ASA"], buildVolume: [420, 420, 440], filament: "ASA Black" };
+      const updated = await app.inject({ method: "PATCH", url: `/api/printers/${created.json().id}`, headers: updateHeaders, payload: updatePayload });
+      expect(updated.statusCode).toBe(200);
+      const updatedReplay = await app.inject({ method: "PATCH", url: `/api/printers/${created.json().id}`, headers: updateHeaders, payload: updatePayload });
+      expect(updatedReplay.statusCode).toBe(200);
+      expect(updatedReplay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(updatedReplay.json()).toEqual(updated.json());
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.printers.filter((printer) => printer.name === "Retry CoreXY")).toHaveLength(1);
+      expect(persisted.printers.find((printer) => printer.id === created.json().id)).toMatchObject({ filament: "ASA Black", buildVolume: [420, 420, 440] });
+      expect(persisted.events.filter((event) => event.type === "printer.created" && event.data?.printerId === created.json().id)).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "printer.updated" && event.data?.printerId === created.json().id)).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "printer-update-retry-001")).toMatchObject({ method: "PATCH", path: `/api/printers/${created.json().id}`, replayCount: 1, statusCode: 200 });
     });
   });
 
@@ -2630,6 +7188,41 @@ endsolid s3_store`;
       expect(persisted.printers.find((printer) => printer.id === "p1")).toMatchObject({ status: "idle", progress: 0 });
       expect(persisted.queue.find((job) => job.id === "q1")).toMatchObject({ status: "complete", stage: "post processing" });
       expect(persisted.events.some((event) => event.type === "print.completed" && event.data.jobId === "q1")).toBe(true);
+    });
+  });
+
+  it("replays idempotent telemetry ticks without double advancing progress", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      const headers = { ...auth(token), "idempotency-key": "telemetry-tick-retry-001" };
+      const payload = { increment: 10 };
+
+      const first = await app.inject({ method: "POST", url: "/api/telemetry/tick", headers, payload });
+      expect(first.statusCode).toBe(200);
+      expect(first.json()).toMatchObject({ changed: true });
+      const afterFirst = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(afterFirst.printers.find((printer) => printer.id === "p1")).toMatchObject({ status: "printing", progress: 72 });
+      expect(afterFirst.queue.find((job) => job.id === "q1")).toMatchObject({ status: "printing", stage: "printing" });
+
+      const replay = await app.inject({ method: "POST", url: "/api/telemetry/tick", headers, payload });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(first.json());
+
+      const conflict = await app.inject({ method: "POST", url: "/api/telemetry/tick", headers, payload: { increment: 20 } });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: "Idempotency key already used with a different request" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.printers.find((printer) => printer.id === "p1")).toMatchObject({ status: "printing", progress: 72 });
+      expect(persisted.queue.find((job) => job.id === "q1")).toMatchObject({ status: "printing", stage: "printing" });
+      expect(persisted.events.filter((event) => event.type === "print.completed" && event.data?.jobId === "q1")).toHaveLength(0);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "telemetry-tick-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/telemetry/tick",
+        replayCount: 1,
+        statusCode: 200
+      });
     });
   });
 
@@ -2721,6 +7314,109 @@ endsolid s3_store`;
     });
   });
 
+  it("replays idempotent history reprints without creating duplicate queue jobs", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      await app.inject({ method: "POST", url: "/api/telemetry/tick", headers: auth(token), payload: { increment: 100 } });
+
+      const headers = { ...auth(token), "idempotency-key": "history-reprint-retry-001" };
+      const payload = { due: "Tomorrow 09:00", priority: "High", printerId: "p2" };
+      const first = await app.inject({
+        method: "POST",
+        url: "/api/history/q1/reprint",
+        headers,
+        payload
+      });
+      expect(first.statusCode).toBe(201);
+      const firstJobId = first.json().job.id;
+
+      const replay = await app.inject({
+        method: "POST",
+        url: "/api/history/q1/reprint",
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(201);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json().job.id).toBe(firstJobId);
+      expect(replay.json().todos.some((todo) => todo.id === `${firstJobId}-schedule`)).toBe(true);
+
+      const conflict = await app.inject({
+        method: "POST",
+        url: "/api/history/q1/reprint",
+        headers,
+        payload: { ...payload, printerId: "p1" }
+      });
+      expect(conflict.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.queue.filter((job) => job.sourceJobId === "q1")).toHaveLength(1);
+      expect(persisted.events.filter((event) => event.type === "queue.reprint" && event.data.sourceJobId === "q1")).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "history-reprint-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/history/q1/reprint",
+        statusCode: 201,
+        replayCount: 1
+      });
+    });
+  });
+
+  it("replays idempotent history annotations without double-deducting waste inventory", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const token = await login(app);
+      await app.inject({ method: "POST", url: "/api/telemetry/tick", headers: auth(token), payload: { increment: 100 } });
+
+      const headers = { ...auth(token), "idempotency-key": "history-annotation-retry-001" };
+      const payload = {
+        note: "Retry-safe waste deduction",
+        issueTag: "Retry validation",
+        issueSeverity: "High",
+        failureReason: "Support scar",
+        failureCategory: "Surface finish",
+        wasteGrams: 24,
+        wasteSpoolId: "s1",
+        deductWasteFromInventory: true
+      };
+      const first = await app.inject({
+        method: "PATCH",
+        url: "/api/history/q1",
+        headers,
+        payload
+      });
+      expect(first.statusCode).toBe(200);
+      expect(first.json().wasteInventory).toMatchObject({ spoolId: "s1", before: 742, after: 718, grams: 24 });
+
+      const replay = await app.inject({
+        method: "PATCH",
+        url: "/api/history/q1",
+        headers,
+        payload
+      });
+      expect(replay.statusCode).toBe(200);
+      expect(replay.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replay.json()).toEqual(first.json());
+
+      const conflict = await app.inject({
+        method: "PATCH",
+        url: "/api/history/q1",
+        headers,
+        payload: { ...payload, wasteGrams: 30 }
+      });
+      expect(conflict.statusCode).toBe(409);
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.spools.find((spool) => spool.id === "s1")).toMatchObject({ remaining: 718 });
+      expect(persisted.queue.find((job) => job.id === "q1")).toMatchObject({ wasteInventoryDeductedGrams: 24, wasteSpoolId: "s1" });
+      expect(persisted.events.filter((event) => event.type === "history.annotated" && event.data?.jobId === "q1")).toHaveLength(1);
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "history-annotation-retry-001")).toMatchObject({
+        method: "PATCH",
+        path: "/api/history/q1",
+        statusCode: 200,
+        replayCount: 1
+      });
+    });
+  });
+
   it("previews and commits sanitized workspace restores", async () => {
     await withApp(async ({ app, db, dbPath }) => {
       const token = await login(app);
@@ -2747,6 +7443,31 @@ endsolid s3_store`;
       ]));
       expect(db.data.printers[0].name).not.toBe("Restored Forge");
 
+      const restoreKey = await app.inject({
+        method: "POST",
+        url: "/api/apiKeys",
+        headers: auth(token),
+        payload: { name: "Restore drill automation", scopes: ["admin:restore"], enabled: true }
+      });
+      expect(restoreKey.statusCode).toBe(201);
+      const apiKeyPreview = await app.inject({
+        method: "POST",
+        url: "/api/admin/restore",
+        headers: auth(restoreKey.json().secret),
+        payload: { backup, dryRun: true }
+      });
+      expect(apiKeyPreview.statusCode).toBe(200);
+      expect(apiKeyPreview.json()).toMatchObject({ dryRun: true, printers: backup.data.printers.length, storagePathsStripped: 1 });
+      const apiKeyCommitDenied = await app.inject({
+        method: "POST",
+        url: "/api/admin/restore",
+        headers: auth(restoreKey.json().secret),
+        payload: { backup, dryRun: false, confirm: "RESTORE" }
+      });
+      expect(apiKeyCommitDenied.statusCode).toBe(403);
+      expect(apiKeyCommitDenied.json()).toMatchObject({ error: "Restore commit requires a user session" });
+      expect(db.data.printers[0].name).not.toBe("Restored Forge");
+
       const exportOnlyKey = await app.inject({
         method: "POST",
         url: "/api/apiKeys",
@@ -2769,17 +7490,29 @@ endsolid s3_store`;
       });
       expect(missingConfirm.statusCode).toBe(409);
 
+      const restoreCommitPayload = { backup, dryRun: false, confirm: "RESTORE" };
+      const restoreCommitHeaders = { ...auth(token), "idempotency-key": "restore-commit-retry-001" };
       const committed = await app.inject({
         method: "POST",
         url: "/api/admin/restore",
-        headers: auth(token),
-        payload: { backup, dryRun: false, confirm: "RESTORE" }
+        headers: restoreCommitHeaders,
+        payload: restoreCommitPayload
       });
       expect(committed.statusCode).toBe(200);
       expect(committed.json()).toMatchObject({ dryRun: false, restored: true, printers: backup.data.printers.length, storagePathsStripped: 1 });
 
       const oldTokenLocked = await app.inject({ method: "GET", url: "/api/state", headers: auth(token) });
       expect(oldTokenLocked.statusCode).toBe(401);
+
+      const replayedCommit = await app.inject({
+        method: "POST",
+        url: "/api/admin/restore",
+        headers: restoreCommitHeaders,
+        payload: restoreCommitPayload
+      });
+      expect(replayedCommit.statusCode).toBe(200);
+      expect(replayedCommit.headers["x-layerpilot-idempotent-replay"]).toBe("true");
+      expect(replayedCommit.json()).toEqual(committed.json());
 
       const freshToken = await login(app);
       const state = await app.inject({ method: "GET", url: "/api/state", headers: auth(freshToken) });
@@ -2796,7 +7529,36 @@ endsolid s3_store`;
       expect(persisted.printers[0].name).toBe("Restored Forge");
       expect(persisted.users.find((user) => user.email === "restored@example.com")).toMatchObject({ passwordResetRequired: true });
       expect(persisted.apiKeys.find((key) => key.id === "restored-key")).toMatchObject({ enabled: false });
-      expect(persisted.events.some((event) => event.type === "admin.restore")).toBe(true);
+      expect(persisted.events.filter((event) => event.type === "admin.restore")).toHaveLength(1);
+      const preparedEvent = persisted.events.find((event) => event.type === "admin.restore_prepared");
+      expect(preparedEvent).toMatchObject({
+        workspaceId: "ws-default",
+        data: expect.objectContaining({
+          workspaceId: "ws-default",
+          actorId: "u0",
+          actorEmail: "demo@layerpilot.test",
+          collectionCounts: expect.objectContaining({ printers: backup.data.printers.length }),
+          users: expect.any(Number),
+          files: expect.any(Number),
+          storagePathsStripped: 1,
+          filePayloadCoverage: expect.objectContaining({
+            complete: false,
+            expected: expect.any(Number),
+            missing: expect.any(Number),
+            extra: expect.any(Number),
+            storageIncluded: false
+          })
+        })
+      });
+      expect(JSON.stringify(preparedEvent)).not.toContain("Restored Forge");
+      expect(JSON.stringify(preparedEvent)).not.toContain("C:\\old-layerpilot");
+      expect(JSON.stringify(preparedEvent)).not.toContain("restored@example.com");
+      expect(persisted.dataMeta.idempotencyKeys.find((record) => record.key === "restore-commit-retry-001")).toMatchObject({
+        method: "POST",
+        path: "/api/admin/restore",
+        statusCode: 200,
+        replayCount: 1
+      });
     });
   });
 
@@ -2844,6 +7606,114 @@ endsolid s3_store`;
       const downloaded = await app.inject({ method: "GET", url: `/api/files/${sampleFile.id}/download`, headers: auth(freshToken) });
       expect(downloaded.statusCode).toBe(200);
       expect(downloaded.body).toContain("solid layerpilot_sample_full-backup-bracket");
+    });
+  });
+
+  it("reports missing file payload coverage during restore preview", async () => {
+    await withApp(async ({ app }) => {
+      const token = await login(app);
+      const sample = await app.inject({
+        method: "POST",
+        url: "/api/files/sample",
+        headers: auth(token),
+        payload: { name: "Partial Backup Bracket", material: "PETG", folder: "Backups" }
+      });
+      expect(sample.statusCode).toBe(201);
+      const sampleFile = sample.json().file;
+
+      const exported = await app.inject({ method: "GET", url: "/api/admin/export?includeFiles=true", headers: auth(token) });
+      expect(exported.statusCode).toBe(200);
+      const backup = exported.json();
+      backup.filePayloads = backup.filePayloads.filter((payload) => payload.fileId !== sampleFile.id);
+
+      const preview = await app.inject({
+        method: "POST",
+        url: "/api/admin/restore",
+        headers: auth(token),
+        payload: { backup, dryRun: true }
+      });
+      expect(preview.statusCode).toBe(200);
+      expect(preview.json().filePayloadCoverage).toMatchObject({
+        complete: false,
+        expected: expect.any(Number),
+        included: expect.any(Number),
+        missing: expect.arrayContaining([expect.objectContaining({ fileId: sampleFile.id, name: sampleFile.name })])
+      });
+      expect(preview.json().filePayloadCoverage.expected).toBeGreaterThan(preview.json().filePayloadCoverage.included);
+      expect(preview.json().warnings).toEqual(expect.arrayContaining([expect.stringContaining("missing file payloads")]));
+    });
+  });
+
+  it("blocks full backup exports when stored file payloads are missing", async () => {
+    await withApp(async ({ app }) => {
+      const token = await login(app);
+      const sample = await app.inject({
+        method: "POST",
+        url: "/api/files/sample",
+        headers: auth(token),
+        payload: { name: "Missing Payload Bracket", material: "PETG", folder: "Backups" }
+      });
+      expect(sample.statusCode).toBe(201);
+      await rm(sample.json().file.storagePath, { force: true });
+
+      const blocked = await app.inject({ method: "GET", url: "/api/admin/export?includeFiles=true", headers: auth(token) });
+      expect(blocked.statusCode).toBe(409);
+      expect(blocked.json()).toMatchObject({
+        error: "Full backup export is missing stored file payloads",
+        storage: {
+          included: false,
+          missing: expect.arrayContaining([expect.objectContaining({ fileId: sample.json().file.id, name: sample.json().file.name })])
+        }
+      });
+      expect(blocked.json().storage.missing[0].reason).toBeTruthy();
+
+      const partial = await app.inject({ method: "GET", url: "/api/admin/export?includeFiles=true&allowMissingFiles=true", headers: auth(token) });
+      expect(partial.statusCode).toBe(200);
+      expect(partial.json().storage).toMatchObject({
+        included: true,
+        missing: expect.arrayContaining([expect.objectContaining({ fileId: sample.json().file.id })])
+      });
+      expect(partial.json().filePayloads.some((payload) => payload.fileId === sample.json().file.id)).toBe(false);
+
+      const audit = await app.inject({ method: "GET", url: "/api/audit?type=admin.export", headers: auth(token) });
+      expect(audit.statusCode).toBe(200);
+      expect(audit.json().events.find((event) => event.data?.blocked === true && event.data?.missingFiles === 1)).toMatchObject({
+        data: expect.objectContaining({ blocked: true, includeFiles: true })
+      });
+    });
+  });
+
+  it("rejects full backup exports that exceed the configured byte limit", async () => {
+    await withApp(async ({ app }) => {
+      const token = await login(app);
+      const sample = await app.inject({
+        method: "POST",
+        url: "/api/files/sample",
+        headers: auth(token),
+        payload: { name: "Oversized Backup Bracket", material: "PETG", folder: "Backups" }
+      });
+      expect(sample.statusCode).toBe(201);
+
+      const limited = await app.inject({ method: "GET", url: "/api/admin/export?includeFiles=true&maxBytes=1", headers: auth(token) });
+      expect(limited.statusCode).toBe(413);
+      expect(limited.json()).toMatchObject({
+        error: "Full backup export exceeds the configured byte limit",
+        storage: {
+          included: false,
+          limitBytes: 1,
+          oversized: true,
+          count: expect.any(Number),
+          bytes: expect.any(Number)
+        }
+      });
+      expect(limited.json().storage.bytes).toBeGreaterThan(1);
+      expect(limited.json().storage.files[0]).toMatchObject({ fileId: sample.json().file.id, size: expect.any(Number) });
+
+      const audit = await app.inject({ method: "GET", url: "/api/audit?type=admin.export", headers: auth(token) });
+      expect(audit.statusCode).toBe(200);
+      expect(audit.json().events.find((event) => event.data?.includeFiles === true)).toMatchObject({
+        data: expect.objectContaining({ blocked: true, limitBytes: 1 })
+      });
     });
   });
 

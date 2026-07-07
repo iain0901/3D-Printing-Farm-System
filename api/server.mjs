@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import { execFile } from "node:child_process";
 import { mkdir, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
 import net from "node:net";
@@ -26,7 +26,7 @@ import { seedData } from "./seed.mjs";
 const execFileAsync = promisify(execFile);
 
 const COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "orders", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns"];
-const RESTORABLE_EXTRA_KEYS = ["users", "workspaces", "workspaceSettings", "costCatalog", "profileDefaults", "profileMatchingPolicy", "billingSessions", "invoices", "dataMeta"];
+const RESTORABLE_EXTRA_KEYS = ["users", "workspaces", "workspaceSettings", "costCatalog", "costCatalogs", "profileDefaults", "profileMatchingPolicy", "billingSessions", "invoices", "dataMeta"];
 const RESTORABLE_KEYS = [...COLLECTIONS, ...RESTORABLE_EXTRA_KEYS];
 const defaultCostCatalog = {
   currency: "USD",
@@ -57,6 +57,35 @@ const defaultAuthRateLimit = { max: 8, timeWindow: "1 minute", groupId: "auth" }
 const defaultSensitiveRateLimit = { max: 30, timeWindow: "1 minute" };
 const CURRENT_SCHEMA_VERSION = 4;
 const DEFAULT_WORKSPACE_ID = "ws-default";
+const IDEMPOTENCY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+const IDEMPOTENCY_MAX_RECORDS = 500;
+const IDEMPOTENCY_MAX_RESPONSE_BYTES = 256 * 1024;
+const STRIPE_WEBHOOK_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+const STRIPE_WEBHOOK_MAX_RECORDS = 500;
+const DEFAULT_FULL_BACKUP_MAX_BYTES = 512 * 1024 * 1024;
+const DEFAULT_SESSION_TTL_HOURS = 7 * 24;
+const DEFAULT_SESSION_IDLE_TIMEOUT_HOURS = 24;
+const DEFAULT_AUTH_LOCK_THRESHOLD = 5;
+const DEFAULT_AUTH_LOCK_MINUTES = 15;
+const REALTIME_TICKET_TTL_MS = 60 * 1000;
+const REALTIME_TICKET_MAX_RECORDS = 1000;
+const API_KEY_GRANTABLE_SCOPES = [
+  "actions:write",
+  "admin:export",
+  "admin:restore",
+  "catalog:write",
+  "commerce:write",
+  "files:write",
+  "inventory:write",
+  "maintenance:write",
+  "metrics:read",
+  "notifications:write",
+  "orders:write",
+  "printers:control",
+  "queue:write",
+  "webhooks:write"
+];
+const apiKeyGrantableScopeSet = new Set(API_KEY_GRANTABLE_SCOPES);
 const TENANT_COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "orders", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns", "billingSessions", "invoices"];
 const printerStatusSchema = z.enum(["idle", "printing", "paused", "offline", "error", "maintenance"]);
 const jobStatusSchema = z.enum(["queued", "printing", "paused", "complete", "failed", "cancelled"]);
@@ -65,7 +94,8 @@ const taskStageSchema = z.enum(["needs slicing", "needs scheduling", "scheduled"
 const roleSchema = z.enum(["Owner", "Admin", "Operator", "Viewer", "Student"]);
 const maintenanceStatusSchema = z.enum(["scheduled", "in progress", "done", "blocked"]);
 const severitySchema = z.enum(["Low", "Medium", "High", "Urgent"]);
-const orderStatusSchema = z.enum(["received", "queued", "printing", "packed", "shipped"]);
+const orderStatusSchema = z.enum(["received", "queued", "printing", "on_hold", "packed", "shipped", "completed", "cancelled"]);
+const terminalOrderStatuses = new Set(["completed", "cancelled"]);
 const commerceSourceSchema = z.enum(["Shopify", "Etsy", "Manual", "eBay", "Generic"]);
 const authSchema = z.object({
   email: z.string().email(),
@@ -83,7 +113,8 @@ const passwordResetSchema = z.object({
 const twoFactorCodeSchema = z.string().trim().min(6).max(32);
 const twoFactorEnableSchema = z.object({
   secret: z.string().min(16),
-  code: twoFactorCodeSchema
+  code: twoFactorCodeSchema,
+  password: z.string().min(8)
 });
 const twoFactorDisableSchema = z.object({
   password: z.string().min(8),
@@ -274,7 +305,7 @@ const quoteCustomerLinkSchema = z.object({
 }).default({});
 const publicQuoteDecisionSchema = z.object({
   token: z.string().min(12),
-  decision: z.enum(["accepted", "rejected"]),
+  decision: z.enum(["accepted", "rejected", "revision"]),
   note: z.string().max(1000).optional().default("")
 });
 const commerceConnectorSchema = z.object({
@@ -513,12 +544,12 @@ const printerActionSchema = bridgeActionSchema.extend({
 });
 const apiKeySchema = z.object({
   name: z.string().min(1),
-  scopes: z.array(z.string().min(1)).min(1).default(["queue:write"]),
+  scopes: z.array(z.enum(API_KEY_GRANTABLE_SCOPES)).min(1).default(["queue:write"]).transform((scopes) => [...new Set(scopes)]),
   enabled: z.boolean().default(true),
   expiresAt: z.string().optional().default("")
 });
 const apiKeyPatchSchema = apiKeySchema.partial();
-const workspaceSettingsSchema = z.object({
+const workspaceSettingsBaseSchema = z.object({
   workspaceId: z.string().min(1).default(DEFAULT_WORKSPACE_ID),
   organizationName: z.string().min(1).default("North Campus Lab"),
   defaultLocation: z.string().min(1).default("Studio North"),
@@ -530,7 +561,7 @@ const workspaceSettingsSchema = z.object({
   auditLogRetention: z.boolean().default(true),
   auditLogRetentionDays: z.number().int().min(7).max(3650).default(365),
   restrictApiByIp: z.boolean().default(false),
-  allowedApiIps: z.array(z.string().min(1)).default([]),
+  allowedApiIps: z.array(z.string().trim().min(1).refine(isValidIpAllowlistRule, { message: "Must be an IPv4 address or IPv4 CIDR range" })).default([]),
   storageLimitGb: z.number().positive().default(10),
   hotDropMode: z.enum(["Upload Only", "Direct Print", "Auto-Queue"]).default("Direct Print"),
   plan: z.string().min(1).default("Print Farm Trial"),
@@ -543,6 +574,15 @@ const workspaceSettingsSchema = z.object({
   stripeCustomerId: z.string().min(1).optional(),
   stripeSubscriptionId: z.string().min(1).optional()
 });
+const workspaceSettingsSchema = workspaceSettingsBaseSchema.superRefine((value, ctx) => {
+  if (value.restrictApiByIp && !value.allowedApiIps.length) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["allowedApiIps"],
+      message: "At least one IPv4 address or CIDR range is required when API key IP restrictions are enabled"
+    });
+  }
+});
 const workspaceRecordSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -552,7 +592,7 @@ const workspaceRecordSchema = z.object({
   updatedAt: z.string().min(1),
   settings: workspaceSettingsSchema
 });
-const workspaceSettingsPatchSchema = workspaceSettingsSchema.partial();
+const workspaceSettingsPatchSchema = workspaceSettingsBaseSchema.partial();
 const onboardingStepPatchSchema = z.object({
   status: z.enum(["pending", "complete", "skipped"]).default("complete"),
   note: z.string().max(500).optional().default("")
@@ -738,6 +778,20 @@ function matchesIpRule(ip, rule) {
   return (client & mask) === (range & mask);
 }
 
+function isValidIpAllowlistRule(rule) {
+  const candidate = String(rule || "").trim();
+  if (!candidate) return false;
+  if (!candidate.includes("/")) return net.isIP(normalizeClientIp(candidate)) === 4;
+  const [rangeIp, prefixText, ...rest] = candidate.split("/");
+  if (rest.length) return false;
+  const prefix = Number(prefixText);
+  return net.isIP(normalizeClientIp(rangeIp)) === 4 && Number.isInteger(prefix) && prefix >= 0 && prefix <= 32;
+}
+
+function invalidIpAllowlistRules(rules = []) {
+  return (Array.isArray(rules) ? rules : []).map((rule) => String(rule || "").trim()).filter((rule) => !isValidIpAllowlistRule(rule));
+}
+
 function isApiKeyIpAllowed(settings, request) {
   if (!settings?.restrictApiByIp) return true;
   const allowed = Array.isArray(settings.allowedApiIps) ? settings.allowedApiIps : [];
@@ -745,14 +799,196 @@ function isApiKeyIpAllowed(settings, request) {
   return allowed.some((rule) => matchesIpRule(request.ip, rule));
 }
 
-function envFlag(name) {
-  return ["1", "true", "yes", "on"].includes(String(process.env[name] || "").trim().toLowerCase());
+function envFlag(name, env = process.env) {
+  return ["1", "true", "yes", "on"].includes(String(env[name] || "").trim().toLowerCase());
+}
+
+function envFlagWithDefault(name, fallback, env = process.env) {
+  const value = String(env[name] ?? "").trim();
+  if (!value) return fallback;
+  return ["1", "true", "yes", "on"].includes(value.toLowerCase());
+}
+
+function publicSignupEnabled(env = process.env) {
+  if (env.NODE_ENV !== "production") return true;
+  return envFlag("LAYERPILOT_ENABLE_PUBLIC_SIGNUP", env);
 }
 
 function envFlagDefault(name, fallback = true) {
   const value = String(process.env[name] || "").trim();
   if (!value) return fallback;
   return ["1", "true", "yes", "on"].includes(value.toLowerCase());
+}
+
+function httpOriginFromUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return { origin: "", error: "" };
+  if (raw === "*") return { origin: "", error: "wildcard origins are not allowed in production" };
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return { origin: "", error: `${raw} is not a valid http(s) URL` };
+    }
+    return { origin: parsed.origin, error: "" };
+  } catch {
+    return { origin: "", error: `${raw} is not a valid http(s) URL` };
+  }
+}
+
+function configuredCorsOriginEntries(env = process.env) {
+  const entries = [];
+  if (String(env.LAYERPILOT_PUBLIC_URL || "").trim()) {
+    entries.push({ source: "LAYERPILOT_PUBLIC_URL", value: env.LAYERPILOT_PUBLIC_URL });
+  }
+  for (const value of String(env.LAYERPILOT_CORS_ORIGINS || "").split(",")) {
+    const trimmed = value.trim();
+    if (trimmed) entries.push({ source: "LAYERPILOT_CORS_ORIGINS", value: trimmed });
+  }
+  return entries;
+}
+
+function productionCorsOriginConfig(env = process.env) {
+  const origins = new Set();
+  const issues = [];
+  for (const entry of configuredCorsOriginEntries(env)) {
+    const resolved = httpOriginFromUrl(entry.value);
+    if (resolved.error) issues.push(`${entry.source}: ${resolved.error}`);
+    else if (resolved.origin) origins.add(resolved.origin);
+  }
+  return { origins, issues };
+}
+
+function corsOriginOption(env = process.env) {
+  if (env.NODE_ENV !== "production") return true;
+  const { origins } = productionCorsOriginConfig(env);
+  return (origin, callback) => {
+    if (!origin) return callback(null, false);
+    const resolved = httpOriginFromUrl(origin);
+    if (resolved.origin && origins.has(resolved.origin)) return callback(null, resolved.origin);
+    return callback(null, false);
+  };
+}
+
+function envPositiveNumber(name, fallback, env = process.env) {
+  const value = Number(env[name]);
+  if (!Number.isFinite(value) || value <= 0) return fallback;
+  return value;
+}
+
+function authLockoutPolicy(env = process.env) {
+  return {
+    threshold: Math.max(1, Math.trunc(envPositiveNumber("LAYERPILOT_AUTH_LOCK_THRESHOLD", DEFAULT_AUTH_LOCK_THRESHOLD, env))),
+    lockMinutes: envPositiveNumber("LAYERPILOT_AUTH_LOCK_MINUTES", DEFAULT_AUTH_LOCK_MINUTES, env)
+  };
+}
+
+function activeAuthLock(user, now = new Date()) {
+  const lockedUntilMs = Date.parse(user?.authLockedUntil || "");
+  if (!Number.isFinite(lockedUntilMs) || lockedUntilMs <= now.getTime()) return null;
+  return {
+    lockedUntil: new Date(lockedUntilMs).toISOString(),
+    retryAfterSeconds: Math.max(1, Math.ceil((lockedUntilMs - now.getTime()) / 1000)),
+    reason: user.authLockedReason || "authentication_failed",
+    failedAttempts: Number(user.authFailedAttempts || 0)
+  };
+}
+
+function clearAuthFailureState(user) {
+  if (!user) return;
+  user.authFailedAttempts = 0;
+  user.authFailedAt = "";
+  user.authLockedUntil = "";
+  user.authLockedReason = "";
+}
+
+function recordAuthFailureState(user, reason, now = new Date()) {
+  if (!user) return null;
+  const policy = authLockoutPolicy();
+  const attempts = Number(user.authFailedAttempts || 0) + 1;
+  user.authFailedAttempts = attempts;
+  user.authFailedAt = now.toISOString();
+  if (attempts < policy.threshold) {
+    user.authLockedUntil ||= "";
+    user.authLockedReason ||= "";
+    return { failedAttempts: attempts, locked: false, policy };
+  }
+  const lockedUntil = new Date(now.getTime() + policy.lockMinutes * 60 * 1000).toISOString();
+  user.authLockedUntil = lockedUntil;
+  user.authLockedReason = reason;
+  return { failedAttempts: attempts, locked: true, lockedUntil, policy };
+}
+
+function sessionPolicy() {
+  return {
+    ttlMs: Math.round(envPositiveNumber("LAYERPILOT_SESSION_TTL_HOURS", DEFAULT_SESSION_TTL_HOURS) * 60 * 60 * 1000),
+    idleMs: Math.round(envPositiveNumber("LAYERPILOT_SESSION_IDLE_TIMEOUT_HOURS", DEFAULT_SESSION_IDLE_TIMEOUT_HOURS) * 60 * 60 * 1000)
+  };
+}
+
+function sessionExpiryFields(now = new Date()) {
+  const policy = sessionPolicy();
+  const nowMs = now.getTime();
+  return {
+    expiresAt: new Date(nowMs + policy.ttlMs).toISOString(),
+    idleExpiresAt: new Date(nowMs + policy.idleMs).toISOString()
+  };
+}
+
+function markSessionStoreDirty(data) {
+  if (!data) return;
+  Object.defineProperty(data, "__sessionStoreDirty", { value: true, writable: true, configurable: true, enumerable: false });
+}
+
+function clearSessionStoreDirty(data) {
+  if (data?.__sessionStoreDirty) data.__sessionStoreDirty = false;
+}
+
+function createSession({ token, user, workspaceId, now = new Date() }) {
+  const at = now.toISOString();
+  return {
+    id: randomUUID(),
+    tokenHash: createPasswordHash(token),
+    userId: user.id,
+    workspaceId: workspaceId || user.workspaceId || DEFAULT_WORKSPACE_ID,
+    createdAt: at,
+    lastSeenAt: at,
+    ...sessionExpiryFields(now)
+  };
+}
+
+function sessionExpired(session, nowMs = Date.now()) {
+  const expiresAt = Date.parse(session.expiresAt || "");
+  const idleExpiresAt = Date.parse(session.idleExpiresAt || "");
+  return Number.isFinite(expiresAt) && expiresAt <= nowMs || Number.isFinite(idleExpiresAt) && idleExpiresAt <= nowMs;
+}
+
+function pruneExpiredSessions(data, now = new Date()) {
+  const sessions = ensureArray(data, "sessions");
+  const retained = sessions.filter((session) => !sessionExpired(session, now.getTime()));
+  if (retained.length !== sessions.length) {
+    data.sessions = retained;
+    markSessionStoreDirty(data);
+  }
+  return data.sessions;
+}
+
+function sessionMatchesToken(session, token) {
+  if (!session || !token || sessionExpired(session)) return false;
+  if (session.tokenHash && verifyPassword(token, session.tokenHash)) return true;
+  return Boolean(session.token && session.token === token);
+}
+
+function touchSession(data, session, token, now = new Date()) {
+  if (!session) return;
+  if (session.token && !session.tokenHash && token) {
+    session.tokenHash = createPasswordHash(token);
+    delete session.token;
+    markSessionStoreDirty(data);
+  }
+  session.lastSeenAt = now.toISOString();
+  session.idleExpiresAt = new Date(now.getTime() + sessionPolicy().idleMs).toISOString();
+  session.expiresAt ||= sessionExpiryFields(new Date(Date.parse(session.createdAt || now.toISOString()) || now.getTime())).expiresAt;
+  markSessionStoreDirty(data);
 }
 
 function ensureArray(data, key) {
@@ -805,6 +1041,44 @@ function workspaceForId(data, workspaceId = DEFAULT_WORKSPACE_ID) {
   return data.workspaces.find((workspace) => workspace.id === workspaceId) || data.workspaces[0];
 }
 
+function normalizeCostCatalog(catalog = {}) {
+  return costCatalogSchema.parse({
+    ...defaultCostCatalog,
+    ...(catalog || {}),
+    materialRates: {
+      ...defaultCostCatalog.materialRates,
+      ...((catalog || {}).materialRates || {})
+    }
+  });
+}
+
+function costCatalogForWorkspace(data, workspaceId = DEFAULT_WORKSPACE_ID) {
+  const normalizedWorkspaceId = workspaceForId(data, workspaceId)?.id || DEFAULT_WORKSPACE_ID;
+  const catalogs = ensureRecord(data, "costCatalogs");
+  const catalog = normalizedWorkspaceId === DEFAULT_WORKSPACE_ID ? data.costCatalog : catalogs[normalizedWorkspaceId];
+  return normalizeCostCatalog(catalog || defaultCostCatalog);
+}
+
+function updateCostCatalogForWorkspace(data, workspaceId = DEFAULT_WORKSPACE_ID, patch = {}) {
+  const normalizedWorkspaceId = workspaceForId(data, workspaceId)?.id || DEFAULT_WORKSPACE_ID;
+  const current = costCatalogForWorkspace(data, normalizedWorkspaceId);
+  const next = normalizeCostCatalog({
+    ...current,
+    ...patch,
+    materialRates: {
+      ...current.materialRates,
+      ...(patch.materialRates || {})
+    }
+  });
+  if (normalizedWorkspaceId === DEFAULT_WORKSPACE_ID) {
+    data.costCatalog = next;
+  } else {
+    const catalogs = ensureRecord(data, "costCatalogs");
+    catalogs[normalizedWorkspaceId] = next;
+  }
+  return next;
+}
+
 function markWorkspaceDefaults(data, workspaceId = DEFAULT_WORKSPACE_ID) {
   for (const user of ensureArray(data, "users")) user.workspaceId ||= workspaceId;
   for (const session of ensureArray(data, "sessions")) {
@@ -832,6 +1106,8 @@ function scopedWorkspaceData(data, workspaceId) {
   scoped.sessions = [];
   scoped.workspaces = [workspace];
   scoped.workspaceSettings = workspace.settings || data.workspaceSettings;
+  scoped.costCatalog = costCatalogForWorkspace(data, workspace.id);
+  delete scoped.costCatalogs;
   return scoped;
 }
 
@@ -865,6 +1141,7 @@ function applyDataMigrations(data) {
     }
     ensureRecord(data, "workspaceSettings");
     ensureRecord(data, "costCatalog");
+    ensureRecord(data, "costCatalogs");
     ensureRecord(data, "profileDefaults");
     ensureRecord(data, "profileMatchingPolicy");
     applied.push({ version: 1, name: "core collection defaults", appliedAt: now });
@@ -936,6 +1213,7 @@ async function writePreMigrationBackup(file, data, migration) {
 async function buildDataIntegrityReport(data, options = {}) {
   const errors = [];
   const warnings = [];
+  let storage = { checked: false, complete: true, expected: 0, present: 0, bytes: 0, missing: [] };
   const ids = (items = []) => new Set(items.map((item) => item.id).filter(Boolean));
   const printerIds = ids(data.printers);
   const fileIds = ids(data.files);
@@ -954,13 +1232,18 @@ async function buildDataIntegrityReport(data, options = {}) {
   for (const session of data.sessions || []) {
     if (!userIds.has(session.userId)) warnings.push({ code: "session.user_missing", message: `Session ${session.id || session.token || "unknown"} points to a missing user` });
   }
-  for (const file of data.files || []) {
-    if (options.checkStorage && file.storagePath) {
-      try {
-        await statStoredObject(file);
-      } catch {
-        warnings.push({ code: "file.storage_missing", message: `${file.name || file.id} has a missing storage object` });
-      }
+  if (options.checkStorage) {
+    const manifest = await buildBackupStorageManifest(data, Number.MAX_SAFE_INTEGER);
+    storage = {
+      checked: true,
+      complete: manifest.missing.length === 0,
+      expected: manifest.files.length + manifest.missing.length,
+      present: manifest.files.length,
+      bytes: manifest.bytes,
+      missing: manifest.missing
+    };
+    for (const file of manifest.missing) {
+      warnings.push({ code: "file.storage_missing", message: `${file.name || file.fileId} has a missing storage object`, fileId: file.fileId });
     }
   }
   for (const job of data.queue || []) {
@@ -994,6 +1277,7 @@ async function buildDataIntegrityReport(data, options = {}) {
     checkedAt: now,
     schemaVersion: Number(data.dataMeta?.schemaVersion || 0),
     counts: Object.fromEntries([...COLLECTIONS, "users", "sessions"].map((key) => [key, Array.isArray(data[key]) ? data[key].length : 0])),
+    storage,
     auditRetention: {
       enabled: data.workspaceSettings?.auditLogRetention !== false,
       days: auditRetentionDays(data.workspaceSettings || {}),
@@ -1006,7 +1290,10 @@ async function buildDataIntegrityReport(data, options = {}) {
 }
 
 function metricsTokenFromRequest(request) {
-  return String(request.headers["x-layerpilot-metrics-token"] || request.query?.metricsToken || request.query?.token || "").trim();
+  const headerToken = String(request.headers["x-layerpilot-metrics-token"] || "").trim();
+  if (headerToken) return headerToken;
+  if (process.env.NODE_ENV === "production") return "";
+  return String(request.query?.metricsToken || request.query?.token || "").trim();
 }
 
 function hasValidMetricsToken(request) {
@@ -1020,7 +1307,10 @@ function hasValidMetricsToken(request) {
 }
 
 function workerTokenFromRequest(request) {
-  return String(request.headers["x-layerpilot-worker-token"] || request.query?.workerToken || request.query?.token || "").trim();
+  const headerToken = String(request.headers["x-layerpilot-worker-token"] || "").trim();
+  if (headerToken) return headerToken;
+  if (process.env.NODE_ENV === "production") return "";
+  return String(request.query?.workerToken || request.query?.token || "").trim();
 }
 
 function hasValidWorkerToken(request) {
@@ -1071,6 +1361,28 @@ function sanitizeUser(user) {
   if (!user) return null;
   const { passwordHash, twoFactorSecret, twoFactorRecoveryCodeHashes, ...safeUser } = user;
   return { ...safeUser, twoFactor: twoFactorStatus(user), twoFactorEnabled: twoFactorStatus(user).enabled };
+}
+
+function sanitizeDataMeta(meta = {}) {
+  const { idempotencyKeys, stripeWebhookEvents, ...safeMeta } = meta || {};
+  return safeMeta;
+}
+
+function endpointHost(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const parsed = new URL(raw);
+    return `${parsed.protocol}//${parsed.host}`;
+  } catch {
+    return "";
+  }
+}
+
+function redactEndpointUrl(value) {
+  if (!String(value || "").trim()) return "";
+  const host = endpointHost(value);
+  return host ? `${host} (redacted)` : "redacted endpoint";
 }
 
 function normalizeAddonStatus(status) {
@@ -1127,9 +1439,12 @@ async function ensureAuthData(database, options = {}) {
   database.data.workspaces ||= [];
   database.data.materialMappings ||= [];
   database.data.materialMapRuns ||= [];
+  database.data.dataMeta ||= {};
+  database.data.dataMeta.idempotencyKeys ||= [];
   database.data.addons = ensureAddonCatalog(database.data.addons || []);
   database.data.workspaceSettings = workspaceSettingsSchema.parse(database.data.workspaceSettings || {});
-  database.data.costCatalog = costCatalogSchema.parse({ ...defaultCostCatalog, ...(database.data.costCatalog || {}) });
+  database.data.costCatalog = normalizeCostCatalog(database.data.costCatalog || defaultCostCatalog);
+  ensureRecord(database.data, "costCatalogs");
   database.data.profileDefaults = profileDefaultsSchema.parse(database.data.profileDefaults || {});
   database.data.profileMatchingPolicy = profileMatchingPolicySchema.parse(database.data.profileMatchingPolicy || {});
   const now = new Date().toISOString();
@@ -1292,7 +1607,16 @@ async function ensureAuthData(database, options = {}) {
   for (const key of database.data.apiKeys || []) {
     key.name ||= "Automation key";
     key.prefix ||= "lp_live_legacy";
-    key.scopes = Array.isArray(key.scopes) && key.scopes.length ? key.scopes : ["queue:write"];
+    const restoredScopes = normalizeApiKeyScopes(key.scopes);
+    if (restoredScopes.length) {
+      key.scopes = restoredScopes;
+    } else if (Array.isArray(key.scopes) && key.scopes.length) {
+      key.scopes = ["queue:write"];
+      key.enabled = false;
+      key.scopeMigrationWarning = "Disabled because restored scopes were not grantable automation scopes";
+    } else {
+      key.scopes = ["queue:write"];
+    }
     key.enabled = key.enabled !== false;
     key.createdAt ||= now;
     key.lastUsedAt ||= "";
@@ -1307,14 +1631,379 @@ function hasPermission(user, permission) {
   return permissions.has("*") || permissions.has(permission);
 }
 
+function isAdminRole(user) {
+  return user?.role === "Owner" || user?.role === "Admin";
+}
+
+function isTwoFactorEnrollmentRoute(method, routePath) {
+  if (method === "GET" && routePath === "/api/auth/me") return true;
+  if (method === "POST" && routePath === "/api/auth/logout") return true;
+  if (method === "POST" && routePath === "/api/auth/change-password") return true;
+  if (method === "POST" && routePath === "/api/auth/2fa/setup") return true;
+  if (method === "POST" && routePath === "/api/auth/2fa/enable") return true;
+  return false;
+}
+
+function requiresProductionAdminTwoFactor(data, user, method, routePath) {
+  if (process.env.NODE_ENV !== "production") return false;
+  if (!isAdminRole(user)) return false;
+  if (twoFactorStatus(user).enabled) return false;
+  const settings = workspaceScopeForUser(data, user).workspaceSettings || {};
+  if (settings.requireAdmin2fa !== true) return false;
+  return !isTwoFactorEnrollmentRoute(method, routePath);
+}
+
+function productionRequiresAdminTwoFactor(data, user) {
+  if (process.env.NODE_ENV !== "production") return false;
+  if (!isAdminRole(user)) return false;
+  const settings = workspaceScopeForUser(data, user).workspaceSettings || {};
+  return settings.requireAdmin2fa === true;
+}
+
+const apiKeyReadScopeRules = [
+  { pattern: /^\/api\/metrics$/, scopes: ["metrics:read"] },
+  { pattern: /^\/api\/audit(?:\/export)?$/, scopes: ["admin:export"] },
+  { pattern: /^\/api\/admin\/(?:export|integrity)$/, scopes: ["admin:export"] },
+  { pattern: /^\/api\/catalog\/export$/, scopes: ["catalog:write"] },
+  { pattern: /^\/api\/costCatalog$/, scopes: ["catalog:write"] },
+  { pattern: /^\/api\/(?:parts|skus|profiles|productionTemplates|materialMappings|materialMapRuns)$/, scopes: ["catalog:write", "orders:write", "queue:write"] },
+  { pattern: /^\/api\/(?:orders|quoteRequests)$/, scopes: ["orders:write", "commerce:write", "queue:write"] },
+  { pattern: /^\/api\/(?:queue|todos|history|schedule\/diagnostics|slicer\/jobs)$/, scopes: ["queue:write", "actions:write"] },
+  { pattern: /^\/api\/(?:printers|bridges)$/, scopes: ["printers:control", "queue:write", "maintenance:write"] },
+  { pattern: /^\/api\/(?:files|fileFolders)$/, scopes: ["files:write", "queue:write", "orders:write"] },
+  { pattern: /^\/api\/files\/[^/]+\/(?:download|preview)$/, scopes: ["files:write"] },
+  { pattern: /^\/api\/(?:spools|purchaseRequests)$/, scopes: ["inventory:write", "queue:write"] },
+  { pattern: /^\/api\/(?:maintenance|maintenanceTemplates|maintenanceReports)$/, scopes: ["maintenance:write"] },
+  { pattern: /^\/api\/(?:webhooks|webhookDeliveries)$/, scopes: ["webhooks:write"] },
+  { pattern: /^\/api\/(?:notificationChannels|notificationDeliveries)$/, scopes: ["notifications:write"] },
+  { pattern: /^\/api\/(?:commerceConnectors|commerceImports)$/, scopes: ["commerce:write"] },
+  { pattern: /^\/api\/admin\/restore$/, scopes: ["admin:restore"] }
+];
+
+function apiKeyReadScopesForRoute(method, routePath) {
+  if (String(method || "").toUpperCase() !== "GET") return null;
+  const normalized = String(routePath || "").replace(/\/+$/, "") || "/";
+  return apiKeyReadScopeRules.find((rule) => rule.pattern.test(normalized))?.scopes || [];
+}
+
+function apiKeyCanReadRoute(user, method, routePath) {
+  const scopes = apiKeyReadScopesForRoute(method, routePath);
+  if (scopes === null) return true;
+  return scopes.some((scope) => hasPermission(user, scope));
+}
+
+function normalizeApiKeyScopes(scopes) {
+  const normalized = [];
+  for (const scope of Array.isArray(scopes) ? scopes : []) {
+    const value = String(scope || "").trim();
+    if (!apiKeyGrantableScopeSet.has(value) || normalized.includes(value)) continue;
+    normalized.push(value);
+  }
+  return normalized;
+}
+
+function isMutatingApiRequest(request) {
+  return ["POST", "PATCH", "PUT", "DELETE"].includes(String(request.method || "").toUpperCase()) && String(request.url || "").startsWith("/api/");
+}
+
+function idempotencyEligibleRoute(method, routePath) {
+  if (method === "POST" && routePath === "/api/orders") return true;
+  if (method === "POST" && routePath === "/api/queue") return true;
+  if (method === "POST" && routePath === "/api/queue/match") return true;
+  if (method === "POST" && routePath === "/api/actions") return true;
+  if (method === "POST" && routePath === "/api/file-folders") return true;
+  if (method === "POST" && routePath === "/api/files") return true;
+  if (method === "POST" && routePath === "/api/files/upload") return true;
+  if (method === "POST" && routePath === "/api/files/sample") return true;
+  if (method === "POST" && routePath === "/api/hot-drop") return true;
+  if (method === "POST" && routePath === "/api/parametric/nameplate") return true;
+  if (method === "POST" && routePath === "/api/printers") return true;
+  if (method === "POST" && routePath === "/api/parts") return true;
+  if (method === "POST" && routePath === "/api/skus") return true;
+  if (method === "POST" && routePath === "/api/productionTemplates") return true;
+  if (method === "POST" && routePath === "/api/profiles") return true;
+  if (method === "POST" && routePath === "/api/profiles/import") return true;
+  if (method === "POST" && routePath === "/api/spools") return true;
+  if (method === "POST" && routePath === "/api/spools/labels") return true;
+  if (method === "POST" && routePath === "/api/spools/scan") return true;
+  if (method === "POST" && routePath === "/api/maintenance") return true;
+  if (method === "POST" && routePath === "/api/maintenance/templates") return true;
+  if (method === "POST" && routePath === "/api/maintenance/reports") return true;
+  if (method === "POST" && routePath === "/api/webhooks") return true;
+  if (method === "POST" && routePath === "/api/notificationChannels") return true;
+  if (method === "POST" && routePath === "/api/commerceConnectors") return true;
+  if (method === "POST" && routePath === "/api/bridges") return true;
+  if (method === "POST" && routePath === "/api/public/quoteRequests") return true;
+  if (method === "POST" && routePath === "/api/catalog/material-map") return true;
+  if (method === "POST" && routePath === "/api/commerce/import-csv") return true;
+  if (method === "POST" && routePath === "/api/purchaseRequests") return true;
+  if (method === "POST" && routePath === "/api/purchaseRequests/reorderPlan") return true;
+  if (method === "POST" && routePath === "/api/apiKeys") return true;
+  if (method === "POST" && routePath === "/api/users") return true;
+  if (method === "POST" && routePath === "/api/admin/audit-retention/run") return true;
+  if (method === "POST" && routePath === "/api/support/snapshot") return true;
+  if (method === "POST" && routePath === "/api/billing/portal") return true;
+  if (method === "POST" && routePath === "/api/telemetry/tick") return true;
+  if (method === "POST" && routePath === "/api/bridges/sync") return true;
+  if (method === "POST" && routePath === "/api/slicer/jobs") return true;
+  if (method === "POST" && /^\/api\/schedule\/(auto|optimize|constraint)$/.test(routePath)) return true;
+  if (method === "PATCH" && routePath === "/api/workspaceSettings") return true;
+  if (method === "PATCH" && routePath === "/api/billing/plan") return true;
+  if (method === "PATCH" && routePath === "/api/costCatalog") return true;
+  if (method === "PATCH" && routePath === "/api/profile-policy") return true;
+  if (method === "PATCH" && /^\/api\/addons\/[^/]+$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/webhooks\/[^/]+$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/notificationChannels\/[^/]+$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/commerceConnectors\/[^/]+$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/apiKeys\/[^/]+$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/users\/[^/]+$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/onboarding\/[^/]+$/.test(routePath)) return true;
+  if (method === "POST" && /^\/api\/public\/quoteRequests\/[^/]+\/decision$/.test(routePath)) return true;
+  if (method === "POST" && /^\/api\/orders\/[^/]+\/generate-jobs$/.test(routePath)) return true;
+  if (method === "POST" && /^\/api\/quoteRequests\/[^/]+\/customer-link$/.test(routePath)) return true;
+  if (method === "POST" && /^\/api\/quoteRequests\/[^/]+\/convert-order$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/quoteRequests\/[^/]+$/.test(routePath)) return true;
+  if (method === "POST" && /^\/api\/todos\/[^/]+\/action$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/history\/[^/]+$/.test(routePath)) return true;
+  if (method === "POST" && /^\/api\/history\/[^/]+\/reprint$/.test(routePath)) return true;
+  if (method === "POST" && /^\/api\/webhooks\/[^/]+\/test$/.test(routePath)) return true;
+  if (method === "POST" && /^\/api\/notificationChannels\/[^/]+\/test$/.test(routePath)) return true;
+  if (method === "POST" && /^\/api\/commerceConnectors\/[^/]+\/test$/.test(routePath)) return true;
+  if (method === "POST" && /^\/api\/bridges\/[^/]+\/test$/.test(routePath)) return true;
+  if (method === "POST" && /^\/api\/printers\/[^/]+\/sync$/.test(routePath)) return true;
+  if (method === "POST" && /^\/api\/productionTemplates\/[^/]+\/run$/.test(routePath)) return true;
+  if (method === "POST" && /^\/api\/commerceConnectors\/[^/]+\/import$/.test(routePath)) return true;
+  if (method === "POST" && /^\/api\/purchaseRequests\/[^/]+\/receive$/.test(routePath)) return true;
+  if (method === "POST" && /^\/api\/users\/[^/]+\/reset-password$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/purchaseRequests\/[^/]+$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/printers\/[^/]+$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/printers\/[^/]+\/status$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/parts\/[^/]+$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/skus\/[^/]+$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/productionTemplates\/[^/]+$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/profiles\/[^/]+$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/profiles\/[^/]+\/default$/.test(routePath)) return true;
+  if (method === "DELETE" && /^\/api\/profiles\/[^/]+$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/orders\/[^/]+\/status$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/files\/[^/]+\/version$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/files\/[^/]+\/slice$/.test(routePath)) return true;
+  if (method === "DELETE" && /^\/api\/files\/[^/]+$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/spools\/[^/]+$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/spools\/[^/]+\/usage$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/maintenance\/[^/]+$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/queue\/[^/]+\/(schedule|status|priority)$/.test(routePath)) return true;
+  return false;
+}
+
+function idempotencyKeyFromRequest(request) {
+  const raw = request.headers["idempotency-key"] || request.headers["x-idempotency-key"];
+  const key = Array.isArray(raw) ? raw[0] : raw;
+  return String(key || "").trim();
+}
+
+function stableSerialize(value) {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Buffer.isBuffer(value)) return JSON.stringify(value.toString("base64"));
+  if (Array.isArray(value)) return `[${value.map((item) => stableSerialize(item)).join(",")}]`;
+  return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableSerialize(value[key])}`).join(",")}}`;
+}
+
+function sha256(value) {
+  return createHash("sha256").update(String(value || "")).digest("hex");
+}
+
+function requestBodyDigest(body) {
+  if (body === undefined) return sha256("");
+  return sha256(stableSerialize(body));
+}
+
+function uploadRequestBodyDigest({ filename, material, folder, buffer }) {
+  const byteDigest = Buffer.isBuffer(buffer) ? createHash("sha256").update(buffer).digest("hex") : "";
+  return sha256(stableSerialize({
+    filename: path.basename(filename || "model.stl"),
+    material: material || "PLA",
+    folder: folder || "Uploads",
+    byteDigest
+  }));
+}
+
+function ensureIdempotencyLedger(data) {
+  data.dataMeta ||= {};
+  if (!Array.isArray(data.dataMeta.idempotencyKeys)) data.dataMeta.idempotencyKeys = [];
+  return data.dataMeta.idempotencyKeys;
+}
+
+function pruneIdempotencyLedger(data, now = new Date()) {
+  const cutoff = now.getTime() - IDEMPOTENCY_RETENTION_MS;
+  const retained = ensureIdempotencyLedger(data)
+    .filter((record) => {
+      const createdAt = Date.parse(record.createdAt || "");
+      return Number.isFinite(createdAt) && createdAt >= cutoff;
+    })
+    .sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")))
+    .slice(0, IDEMPOTENCY_MAX_RECORDS);
+  data.dataMeta.idempotencyKeys = retained;
+  return retained;
+}
+
+function idempotencyFingerprint({ method, path: routePath, workspaceId, bodyDigest }) {
+  return sha256([method, routePath, workspaceId || DEFAULT_WORKSPACE_ID, bodyDigest].join("\n"));
+}
+
+function sendIdempotentReplay(reply, record) {
+  reply.header("x-layerpilot-idempotent-replay", "true");
+  if (record.contentType) reply.header("content-type", record.contentType);
+  reply.code(record.statusCode || 200).send(record.responseBody || "");
+}
+
+function isSensitiveResponseKey(key = "") {
+  return /password|secret|token|authorization/i.test(String(key || "")) || /^apiKey$/i.test(String(key || ""));
+}
+
+function isSensitiveResponseUrl(value = "") {
+  if (!/^https?:\/\//i.test(String(value || "").trim())) return false;
+  try {
+    const parsed = new URL(value);
+    return [...parsed.searchParams.keys()].some((key) => /token|secret|api[_-]?key|apikey|session/i.test(key));
+  } catch {
+    return /[?&][^=]*(token|secret|api[_-]?key|apikey|session)[^=]*=/i.test(String(value || ""));
+  }
+}
+
+function redactIdempotencyResponseValue(value, key = "") {
+  if (Array.isArray(value)) return value.map((item) => redactIdempotencyResponseValue(item, key));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([entryKey, entryValue]) => [entryKey, redactIdempotencyResponseValue(entryValue, entryKey)]));
+  }
+  if (typeof value === "boolean") return value;
+  if (isSensitiveResponseKey(key)) return "REDACTED";
+  if (typeof value === "string" && /(^|[._-])(url|uri|endpoint|baseUrl|publicUrl|callbackUrl|feedUrl)$/i.test(key) && isSensitiveResponseUrl(value)) return redactEndpointUrl(value);
+  return value;
+}
+
+function sanitizeIdempotencyResponseBody(responseBody = "") {
+  if (!String(responseBody || "").trim()) return { responseBody, redacted: false };
+  try {
+    const parsed = JSON.parse(responseBody);
+    const redacted = redactIdempotencyResponseValue(parsed);
+    const safeBody = JSON.stringify(redacted);
+    return { responseBody: safeBody, redacted: safeBody !== responseBody };
+  } catch {
+    return { responseBody, redacted: false };
+  }
+}
+
+function isRestoreCommitRequest(method, routePath, body) {
+  return method === "POST" && routePath === "/api/admin/restore" && body?.dryRun === false && body?.confirm === "RESTORE";
+}
+
+async function replayCommittedRestoreRequest(database, request, reply, { workspaceId, actorId } = {}) {
+  const method = String(request.method || "").toUpperCase();
+  const routePath = request.url.split("?")[0];
+  if (!isRestoreCommitRequest(method, routePath, request.body)) return false;
+  const key = idempotencyKeyFromRequest(request);
+  if (!/^[A-Za-z0-9._:-]{8,160}$/.test(key)) return false;
+  const bodyDigest = requestBodyDigest(request.body);
+  const ledger = pruneIdempotencyLedger(database.data);
+  const existing = ledger.find((record) => {
+    if (record.key !== key || record.method !== method || record.path !== routePath) return false;
+    if (workspaceId && record.workspaceId !== workspaceId) return false;
+    if (actorId && record.actorId !== actorId) return false;
+    const fingerprint = idempotencyFingerprint({ method, path: routePath, workspaceId: record.workspaceId, bodyDigest });
+    return record.fingerprint === fingerprint && Number(record.statusCode || 0) >= 200 && Number(record.statusCode || 0) < 300;
+  });
+  if (!existing) return false;
+  existing.replayCount = Number(existing.replayCount || 0) + 1;
+  existing.updatedAt = new Date().toISOString();
+  await database.write();
+  sendIdempotentReplay(reply, existing);
+  return true;
+}
+
+function publicIdempotencyContext(method, routePath) {
+  if (method === "POST" && routePath === "/api/public/quoteRequests") {
+    return { workspaceId: DEFAULT_WORKSPACE_ID, actorId: "public:quote-intake" };
+  }
+  const publicQuoteDecision = method === "POST" ? routePath.match(/^\/api\/public\/quoteRequests\/([^/]+)\/decision$/) : null;
+  if (publicQuoteDecision) {
+    return { workspaceId: DEFAULT_WORKSPACE_ID, actorId: `public:quote-decision:${publicQuoteDecision[1]}` };
+  }
+  return null;
+}
+
+async function prepareIdempotentRequest(database, request, reply, { workspaceId, actorId, bodyDigest: bodyDigestOverride }) {
+  if (!isMutatingApiRequest(request)) return false;
+  const key = idempotencyKeyFromRequest(request);
+  if (!key) return false;
+  if (!/^[A-Za-z0-9._:-]{8,160}$/.test(key)) {
+    reply.code(400).send({ error: "Invalid Idempotency-Key" });
+    return true;
+  }
+  const method = String(request.method || "").toUpperCase();
+  const routePath = request.url.split("?")[0];
+  if (!idempotencyEligibleRoute(method, routePath)) return false;
+  const bodyDigest = bodyDigestOverride || requestBodyDigest(request.body);
+  const fingerprint = idempotencyFingerprint({ method, path: routePath, workspaceId, bodyDigest });
+  const ledger = pruneIdempotencyLedger(database.data);
+  const existing = ledger.find((record) => record.workspaceId === workspaceId && record.actorId === actorId && record.key === key);
+  if (existing) {
+    if (existing.fingerprint !== fingerprint || existing.method !== method || existing.path !== routePath) {
+      reply.code(409).send({ error: "Idempotency key already used with a different request", key, firstUsedAt: existing.createdAt });
+      return true;
+    }
+    existing.replayCount = Number(existing.replayCount || 0) + 1;
+    existing.updatedAt = new Date().toISOString();
+    await database.write();
+    sendIdempotentReplay(reply, existing);
+    return true;
+  }
+  request.idempotency = { key, method, path: routePath, workspaceId, actorId, bodyDigest, fingerprint, createdAt: new Date().toISOString() };
+  return false;
+}
+
+function idempotencyActorForRequest(request) {
+  const user = request.user || {};
+  return request.apiKey ? `api-key:${request.apiKey.id}` : `user:${user.id}`;
+}
+
+async function prepareRestoreCommitIdempotentRequest(database, request, reply, { workspaceId, actorId }) {
+  const method = String(request.method || "").toUpperCase();
+  const routePath = request.url.split("?")[0];
+  if (!isRestoreCommitRequest(method, routePath, request.body)) return false;
+  const key = idempotencyKeyFromRequest(request);
+  if (!key) return false;
+  if (!/^[A-Za-z0-9._:-]{8,160}$/.test(key)) {
+    reply.code(400).send({ error: "Invalid Idempotency-Key" });
+    return true;
+  }
+  if (await replayCommittedRestoreRequest(database, request, reply, { workspaceId, actorId })) return true;
+  const bodyDigest = requestBodyDigest(request.body);
+  request.idempotency = {
+    key,
+    method,
+    path: routePath,
+    workspaceId,
+    actorId,
+    bodyDigest,
+    fingerprint: idempotencyFingerprint({ method, path: routePath, workspaceId, bodyDigest }),
+    createdAt: new Date().toISOString()
+  };
+  return false;
+}
+
+function allowQueryCredentialAuth(request) {
+  return process.env.NODE_ENV !== "production";
+}
+
 function userFromRequest(database, request) {
   const queryToken = typeof request.query?.token === "string" ? request.query.token : "";
-  const token = request.headers.authorization?.replace(/^Bearer\s+/i, "") || queryToken;
-  const session = token ? database.data.sessions.find((item) => item.token === token) : null;
+  const token = request.headers.authorization?.replace(/^Bearer\s+/i, "") || (allowQueryCredentialAuth(request) ? queryToken : "");
+  const session = token ? pruneExpiredSessions(database.data).find((item) => sessionMatchesToken(item, token)) : null;
   const user = session ? database.data.users.find((item) => item.id === session.userId) : null;
   if (user) {
     user.workspaceId ||= session.workspaceId || DEFAULT_WORKSPACE_ID;
     session.workspaceId ||= user.workspaceId;
+    touchSession(database.data, session, token);
     return { token, session, user };
   }
   const key = token?.startsWith("lp_live_")
@@ -1337,15 +2026,71 @@ function userFromRequest(database, request) {
   };
 }
 
+function realtimeTicketHash(token) {
+  return createHash("sha256").update(String(token || "")).digest("hex");
+}
+
+function pruneRealtimeTickets(database, nowMs = Date.now()) {
+  database.realtimeTickets ||= new Map();
+  for (const [hash, ticket] of database.realtimeTickets) {
+    if (Date.parse(ticket.expiresAt || "") <= nowMs) database.realtimeTickets.delete(hash);
+  }
+  while (database.realtimeTickets.size > REALTIME_TICKET_MAX_RECORDS) {
+    const oldest = database.realtimeTickets.keys().next().value;
+    if (!oldest) break;
+    database.realtimeTickets.delete(oldest);
+  }
+  return database.realtimeTickets;
+}
+
+function createRealtimeTicket(database, user) {
+  const token = randomBytes(32).toString("base64url");
+  const nowMs = Date.now();
+  const expiresAt = new Date(nowMs + REALTIME_TICKET_TTL_MS).toISOString();
+  pruneRealtimeTickets(database, nowMs).set(realtimeTicketHash(token), {
+    userId: user.id,
+    workspaceId: user.workspaceId || DEFAULT_WORKSPACE_ID,
+    createdAt: new Date(nowMs).toISOString(),
+    expiresAt
+  });
+  return { token, expiresAt };
+}
+
+function consumeRealtimeTicket(database, token) {
+  const normalized = String(token || "").trim();
+  if (!normalized) return null;
+  const tickets = pruneRealtimeTickets(database);
+  const hash = realtimeTicketHash(normalized);
+  const ticket = tickets.get(hash);
+  if (!ticket) return null;
+  tickets.delete(hash);
+  const user = database.data.users.find((item) => item.id === ticket.userId && itemInWorkspace(item, ticket.workspaceId));
+  if (!user) return null;
+  user.workspaceId ||= ticket.workspaceId || DEFAULT_WORKSPACE_ID;
+  return { user, ticket };
+}
+
+function realtimeUserFromRequest(database, request) {
+  const ticketToken = typeof request.query?.ticket === "string" ? request.query.ticket : "";
+  if (ticketToken) return consumeRealtimeTicket(database, ticketToken) || { user: null, ticket: null };
+  const credentials = userFromRequest(database, request);
+  return { user: credentials.user, ticket: null, session: credentials.session, apiKey: credentials.apiKey };
+}
+
 function publicState(data) {
   const { sessions, ...safeState } = data;
   return {
     ...safeState,
+    dataMeta: sanitizeDataMeta(data.dataMeta),
     users: data.users.map(sanitizeUser),
     bridges: (data.bridges || []).map(sanitizeBridge),
+    webhooks: (data.webhooks || []).map(sanitizeWebhook),
+    webhookDeliveries: (data.webhookDeliveries || []).map(sanitizeWebhookDelivery),
     notificationChannels: (data.notificationChannels || []).map(sanitizeNotificationChannel),
+    notificationDeliveries: (data.notificationDeliveries || []).map(sanitizeNotificationDelivery),
     commerceConnectors: (data.commerceConnectors || []).map(sanitizeCommerceConnector),
     apiKeys: (data.apiKeys || []).map(sanitizeApiKey),
+    quoteRequests: (data.quoteRequests || []).map(sanitizeQuoteRequest),
     addons: (data.addons || []).map(sanitizeAddon)
   };
 }
@@ -1434,21 +2179,65 @@ function normalizeRestoredStoragePaths(data, preserveStoragePaths) {
   return stripped;
 }
 
-async function buildBackupFilePayloads(data) {
-  const payloads = [];
+function parseBackupByteLimit(value, fallback = DEFAULT_FULL_BACKUP_MAX_BYTES) {
+  if (value === undefined || value === null || value === "") return fallback;
+  const parsed = parseHumanFileSize(value);
+  return parsed > 0 ? parsed : fallback;
+}
+
+function fullBackupMaxBytes(query = {}) {
+  const envLimit = parseBackupByteLimit(process.env.LAYERPILOT_FULL_BACKUP_MAX_BYTES);
+  const queryLimit = parseBackupByteLimit(query.maxBytes, envLimit);
+  return Math.min(envLimit, queryLimit);
+}
+
+async function buildBackupStorageManifest(data, maxBytes = DEFAULT_FULL_BACKUP_MAX_BYTES) {
+  const files = [];
   const missing = [];
   let bytes = 0;
   for (const file of data.files || []) {
     if (!file.storagePath) continue;
     try {
+      const size = await statStoredObject(file);
+      bytes += size;
+      files.push({
+        fileId: file.id,
+        name: file.name || path.basename(file.storagePath || file.storageKey || file.id),
+        type: file.type || "",
+        size,
+        originalPath: file.storageKey || (file.storageProvider === "s3" ? String(file.storagePath || "") : path.relative(storageRoot(), file.storagePath).replace(/\\/g, "/"))
+      });
+    } catch (error) {
+      missing.push({ fileId: file.id, name: file.name, reason: error instanceof Error ? error.message : "stat failed" });
+    }
+  }
+  return {
+    included: false,
+    count: files.length,
+    bytes,
+    limitBytes: maxBytes,
+    oversized: bytes > maxBytes,
+    files,
+    missing
+  };
+}
+
+async function buildBackupFilePayloads(data, manifest) {
+  const payloads = [];
+  const missing = [...(manifest?.missing || [])];
+  let bytes = 0;
+  for (const fileInfo of manifest?.files || []) {
+    const file = (data.files || []).find((item) => item.id === fileInfo.fileId);
+    if (!file) continue;
+    try {
       const buffer = await readStoredObject(file);
       bytes += buffer.length;
       payloads.push({
         fileId: file.id,
-        name: file.name || path.basename(file.storagePath),
-        type: file.type || "",
+        name: fileInfo.name,
+        type: fileInfo.type,
         size: buffer.length,
-        originalPath: file.storageKey || (file.storageProvider === "s3" ? String(file.storagePath || "") : path.relative(storageRoot(), file.storagePath).replace(/\\/g, "/")),
+        originalPath: fileInfo.originalPath,
         bytesBase64: buffer.toString("base64")
       });
     } catch (error) {
@@ -1461,6 +2250,7 @@ async function buildBackupFilePayloads(data) {
       included: true,
       count: payloads.length,
       bytes,
+      limitBytes: manifest?.limitBytes || DEFAULT_FULL_BACKUP_MAX_BYTES,
       missing
     }
   };
@@ -1500,7 +2290,30 @@ async function restoreBackupFilePayloads(data, backup, options = {}) {
   return { restored, warnings };
 }
 
-function summarizeRestoreData(data, warnings = [], storagePathsStripped = 0, filePayloadsRestored = 0) {
+function summarizeBackupFilePayloadCoverage(backup, incomingData) {
+  const files = Array.isArray(incomingData?.files) ? incomingData.files : [];
+  const payloads = Array.isArray(backup?.filePayloads) ? backup.filePayloads : [];
+  const storedFiles = files.filter((file) => file?.storagePath || file?.storageKey);
+  const filesById = new Map(files.map((file) => [file.id, file]));
+  const payloadIds = new Set(payloads.map((payload) => payload?.fileId).filter(Boolean));
+  const missing = storedFiles
+    .filter((file) => !payloadIds.has(file.id))
+    .map((file) => ({ fileId: file.id, name: file.name || file.id }));
+  const extra = payloads
+    .filter((payload) => payload?.fileId && !filesById.has(payload.fileId))
+    .map((payload) => ({ fileId: payload.fileId, name: payload.name || payload.fileId }));
+  const included = storedFiles.length - missing.length;
+  return {
+    complete: missing.length === 0 && extra.length === 0,
+    expected: storedFiles.length,
+    included,
+    missing,
+    extra,
+    storageIncluded: backup?.storage?.included === true || payloads.length > 0
+  };
+}
+
+function summarizeRestoreData(data, warnings = [], storagePathsStripped = 0, filePayloadsRestored = 0, filePayloadCoverage = null) {
   const collectionCounts = {};
   for (const key of RESTORABLE_KEYS) {
     if (Array.isArray(data[key])) collectionCounts[key] = data[key].length;
@@ -1515,13 +2328,43 @@ function summarizeRestoreData(data, warnings = [], storagePathsStripped = 0, fil
     files: (data.files || []).length,
     storagePathsStripped,
     filePayloadsRestored,
+    filePayloadCoverage,
     warnings
+  };
+}
+
+function restorePreparedAuditData(summary, actor = null) {
+  const workspaceId = actor?.workspaceId || DEFAULT_WORKSPACE_ID;
+  const coverage = summary.filePayloadCoverage || {};
+  return {
+    workspaceId,
+    actorId: actor?.id || "",
+    actorEmail: actor?.email || "",
+    actorRole: actor?.role || "",
+    actorType: actor ? "user" : "system",
+    collectionCounts: summary.collectionCounts || {},
+    users: summary.users || 0,
+    printers: summary.printers || 0,
+    queue: summary.queue || 0,
+    files: summary.files || 0,
+    storagePathsStripped: summary.storagePathsStripped || 0,
+    filePayloadsRestored: summary.filePayloadsRestored || 0,
+    warningCount: Array.isArray(summary.warnings) ? summary.warnings.length : 0,
+    filePayloadCoverage: {
+      complete: coverage.complete !== false,
+      expected: Number(coverage.expected || 0),
+      included: Number(coverage.included || 0),
+      missing: Array.isArray(coverage.missing) ? coverage.missing.length : 0,
+      extra: Array.isArray(coverage.extra) ? coverage.extra.length : 0,
+      storageIncluded: coverage.storageIncluded === true
+    }
   };
 }
 
 async function prepareRestoreData(currentData, backup, options = {}, actor = null) {
   const incoming = extractBackupData(backup);
   if (!incoming) return { error: "Backup payload must include an object or { data } object" };
+  const filePayloadCoverage = summarizeBackupFilePayloadCoverage(backup, incoming);
   const restored = structuredClone(seedData);
   for (const key of RESTORABLE_KEYS) {
     if (incoming[key] === undefined) continue;
@@ -1533,15 +2376,22 @@ async function prepareRestoreData(currentData, backup, options = {}, actor = nul
   const secretWarnings = normalizeRestoredSecrets(restored);
   const storagePathsStripped = normalizeRestoredStoragePaths(restored, options.preserveStoragePaths === true);
   restored.events = Array.isArray(restored.events) ? restored.events : [];
+  const restoredPayloads = await restoreBackupFilePayloads(restored, backup, { enabled: options.restoreFilePayloads === true });
+  const coverageWarnings = [];
+  if (filePayloadCoverage.missing.length) coverageWarnings.push(`Backup is missing file payloads for ${filePayloadCoverage.missing.length} stored file${filePayloadCoverage.missing.length === 1 ? "" : "s"}; restore will mark them for re-upload unless storage is restored separately`);
+  if (filePayloadCoverage.extra.length) coverageWarnings.push(`Backup includes ${filePayloadCoverage.extra.length} file payload${filePayloadCoverage.extra.length === 1 ? "" : "s"} without matching file records; those payloads will be skipped`);
+  const warnings = [...userResult.warnings, ...secretWarnings, ...coverageWarnings, ...restoredPayloads.warnings];
+  const summary = summarizeRestoreData(restored, warnings, storagePathsStripped, restoredPayloads.restored, filePayloadCoverage);
+  const workspaceId = actor?.workspaceId || DEFAULT_WORKSPACE_ID;
   restored.events.unshift({
     id: randomUUID(),
+    workspaceId,
     type: "admin.restore_prepared",
     message: `${actor?.email || "system"} prepared workspace restore`,
+    data: restorePreparedAuditData(summary, actor),
     at: new Date().toISOString()
   });
-  const restoredPayloads = await restoreBackupFilePayloads(restored, backup, { enabled: options.restoreFilePayloads === true });
-  const warnings = [...userResult.warnings, ...secretWarnings, ...restoredPayloads.warnings];
-  return { data: restored, summary: summarizeRestoreData(restored, warnings, storagePathsStripped, restoredPayloads.restored) };
+  return { data: restored, summary };
 }
 
 function sendSse(raw, event, data) {
@@ -1572,6 +2422,11 @@ function realtimeStateForUser(data, user) {
 function broadcastRealtime(database, event, data) {
   for (const client of database.realtimeClients || []) {
     try {
+      const clientUser = database.data.users.find((user) => user.id === client.userId && itemInWorkspace(user, client.workspaceId));
+      if (!clientUser || requiresProductionAdminTwoFactor(database.data, clientUser, "GET", "/api/events/stream")) {
+        closeRealtimeClient(database, client);
+        continue;
+      }
       const payload = data?.state && client.workspaceId
         ? { ...data, state: realtimeState(scopedWorkspaceData(database.data, client.workspaceId)) }
         : data;
@@ -1766,20 +2621,28 @@ async function deliverWebhook(database, webhook, event, fetchImpl = globalThis.f
   return delivery;
 }
 
-async function dispatchEvent(database, type, message, data = {}, options = {}) {
-  const workspaceId = data.workspaceId || options.workspaceId || DEFAULT_WORKSPACE_ID;
-  const event = { id: randomUUID(), workspaceId, type, message, data: { ...data, workspaceId }, at: options.at || new Date().toISOString() };
+function createAuditEvent(database, type, message, data = {}, options = {}) {
+  const actor = options.actor || null;
+  const workspaceId = data.workspaceId || options.workspaceId || actor?.workspaceId || DEFAULT_WORKSPACE_ID;
+  const actorData = actor ? { actorId: actor.id, actorEmail: actor.email, actorRole: actor.role, actorType: "user" } : {};
+  const event = { id: randomUUID(), workspaceId, type, message, data: { ...data, ...actorData, workspaceId }, at: options.at || new Date().toISOString() };
   database.data.events.unshift(event);
   applyAuditRetention(database.data, { now: event.at });
+  return event;
+}
+
+async function dispatchEvent(database, type, message, data = {}, options = {}) {
+  const event = createAuditEvent(database, type, message, data, options);
+  const workspaceId = event.workspaceId;
   const matching = (database.data.webhooks || []).filter((webhook) => itemInWorkspace(webhook, workspaceId) && webhookMatches(webhook, type));
   const deliveries = [];
   for (const webhook of matching) {
-    deliveries.push(await deliverWebhook(database, webhook, event, options.fetchImpl || globalThis.fetch));
+    deliveries.push(sanitizeWebhookDelivery(await deliverWebhook(database, webhook, event, options.fetchImpl || globalThis.fetch)));
   }
   const matchingNotifications = (database.data.notificationChannels || []).filter((channel) => itemInWorkspace(channel, workspaceId) && notificationMatches(channel, type));
   const notificationDeliveries = [];
   for (const channel of matchingNotifications) {
-    notificationDeliveries.push(await deliverNotification(database, channel, event, options.fetchImpl || globalThis.fetch));
+    notificationDeliveries.push(sanitizeNotificationDelivery(await deliverNotification(database, channel, event, options.fetchImpl || globalThis.fetch)));
   }
   const mqttDelivery = await deliverMqtt(database, event, options.mqttPublisher || database.mqttPublisher || null);
   const mqttDeliveries = mqttDelivery ? [mqttDelivery] : [];
@@ -1787,12 +2650,81 @@ async function dispatchEvent(database, type, message, data = {}, options = {}) {
   return { event, deliveries, notificationDeliveries, mqttDeliveries };
 }
 
+async function dispatchAuthFailureEvent(database, type, request, options = {}) {
+  const email = String(options.email || "").trim().toLowerCase();
+  const user = options.user || null;
+  const workspaceId = user?.workspaceId || options.workspaceId || DEFAULT_WORKSPACE_ID;
+  const requestMeta = {
+    ip: normalizeClientIp(request.ip),
+    userAgent: String(request.headers?.["user-agent"] || "").slice(0, 200)
+  };
+  const data = {
+    workspaceId,
+    userId: user?.id || "",
+    email,
+    reason: options.reason || "authentication_failed",
+    ...requestMeta
+  };
+  if (Number.isFinite(Number(options.failedAttempts))) data.failedAttempts = Number(options.failedAttempts);
+  if (options.lockedUntil) data.lockedUntil = options.lockedUntil;
+  if (options.lockedReason) data.lockedReason = options.lockedReason;
+  await dispatchEvent(database, type, `${email || "Unknown user"} failed authentication`, data, { workspaceId });
+}
+
 function sanitizeBridge(bridge) {
   if (!bridge) return null;
   const { apiKey, ...safeBridge } = bridge;
   return {
     ...safeBridge,
+    baseUrl: redactEndpointUrl(bridge.baseUrl),
+    baseUrlHost: endpointHost(bridge.baseUrl),
+    hasBaseUrl: Boolean(bridge.baseUrl),
+    lastDiagnostics: bridge.lastDiagnostics ? sanitizeBridgeDiagnostic(bridge.lastDiagnostics) : bridge.lastDiagnostics,
     hasApiKey: Boolean(apiKey)
+  };
+}
+
+function sanitizeBridgeDiagnostic(diagnostic) {
+  if (!diagnostic) return null;
+  return {
+    ...diagnostic,
+    baseUrl: redactEndpointUrl(diagnostic.baseUrl),
+    baseUrlHost: endpointHost(diagnostic.baseUrl),
+    hasBaseUrl: Boolean(diagnostic.baseUrl)
+  };
+}
+
+function bridgeAuditMetadata(bridge, printer = null) {
+  return {
+    workspaceId: bridge?.workspaceId || printer?.workspaceId || DEFAULT_WORKSPACE_ID,
+    bridgeId: bridge?.id || "",
+    printerId: printer?.id || bridge?.printerId || "",
+    kind: bridge?.kind || "",
+    enabled: Boolean(bridge?.enabled),
+    hasBaseUrl: Boolean(bridge?.baseUrl),
+    baseUrlHost: endpointHost(bridge?.baseUrl),
+    hasApiKey: Boolean(bridge?.apiKey),
+    lastStatus: bridge?.lastStatus || ""
+  };
+}
+
+function sanitizeWebhook(webhook) {
+  if (!webhook) return null;
+  return {
+    ...webhook,
+    url: redactEndpointUrl(webhook.url),
+    urlHost: endpointHost(webhook.url),
+    hasUrl: Boolean(webhook.url)
+  };
+}
+
+function sanitizeWebhookDelivery(delivery) {
+  if (!delivery) return null;
+  return {
+    ...delivery,
+    url: redactEndpointUrl(delivery.url),
+    urlHost: endpointHost(delivery.url),
+    hasUrl: Boolean(delivery.url)
   };
 }
 
@@ -1801,7 +2733,20 @@ function sanitizeNotificationChannel(channel) {
   const { token, ...safeChannel } = channel;
   return {
     ...safeChannel,
+    url: redactEndpointUrl(channel.url),
+    urlHost: endpointHost(channel.url),
+    hasUrl: Boolean(channel.url),
     hasToken: Boolean(token)
+  };
+}
+
+function sanitizeNotificationDelivery(delivery) {
+  if (!delivery) return null;
+  return {
+    ...delivery,
+    url: redactEndpointUrl(delivery.url),
+    urlHost: endpointHost(delivery.url),
+    hasUrl: Boolean(delivery.url)
   };
 }
 
@@ -1810,6 +2755,9 @@ function sanitizeCommerceConnector(connector) {
   const { token, ...safeConnector } = connector;
   return {
     ...safeConnector,
+    url: redactEndpointUrl(connector.url),
+    urlHost: endpointHost(connector.url),
+    hasUrl: Boolean(connector.url),
     hasToken: Boolean(token)
   };
 }
@@ -1820,6 +2768,15 @@ function sanitizeApiKey(key) {
   return {
     ...safeKey,
     hasSecret: Boolean(secretHash)
+  };
+}
+
+function sanitizeQuoteRequest(quote) {
+  if (!quote) return null;
+  const { customerAccessToken, ...safeQuote } = quote;
+  return {
+    ...safeQuote,
+    hasCustomerAccessToken: Boolean(customerAccessToken)
   };
 }
 
@@ -1838,9 +2795,11 @@ function sanitizeAddon(addon) {
 function parseAuditQuery(query = {}) {
   const rawLimit = Number(query.limit);
   const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.trunc(rawLimit), 1), 1000) : 100;
+  const rawOffset = Number(query.offset);
+  const offset = Number.isFinite(rawOffset) ? Math.min(Math.max(Math.trunc(rawOffset), 0), 100000) : 0;
   const type = typeof query.type === "string" ? query.type.trim() : "";
   const search = typeof query.search === "string" ? query.search.trim().toLowerCase() : "";
-  return { limit, type, search };
+  return { limit, offset, type, search };
 }
 
 function auditTypeMatches(eventType = "", filter = "") {
@@ -1855,6 +2814,7 @@ function auditTypeMatches(eventType = "", filter = "") {
 function normalizeAuditEvent(event) {
   return {
     id: event.id || randomUUID(),
+    workspaceId: event.workspaceId || event.data?.workspaceId || DEFAULT_WORKSPACE_ID,
     type: String(event.type || "unknown"),
     message: String(event.message || ""),
     at: event.at || new Date(0).toISOString(),
@@ -1879,26 +2839,31 @@ function auditRetentionDays(settings = {}) {
 
 function applyAuditRetention(data, options = {}) {
   data.events ||= [];
-  const settings = workspaceSettingsSchema.parse(data.workspaceSettings || {});
+  const workspaceId = options.workspaceId || data.workspaceSettings?.workspaceId || DEFAULT_WORKSPACE_ID;
+  const workspace = workspaceForId(data, workspaceId);
+  const settings = workspaceSettingsSchema.parse(options.settings || workspace?.settings || data.workspaceSettings || {});
   const enabled = settings.auditLogRetention !== false;
   const days = auditRetentionDays(settings);
   const nowMs = options.now ? new Date(options.now).getTime() : Date.now();
   const referenceMs = Number.isFinite(nowMs) ? nowMs : Date.now();
   const cutoffMs = referenceMs - days * 24 * 60 * 60 * 1000;
   const cutoff = new Date(cutoffMs).toISOString();
-  const before = data.events.length;
+  const belongsToWorkspace = (event) => itemInWorkspace(normalizeAuditEvent(event), workspace.id);
+  const before = data.events.filter(belongsToWorkspace).length;
   if (!enabled) return { enabled, days, cutoff, before, pruned: 0, kept: before };
   data.events = data.events.filter((event) => {
+    if (!belongsToWorkspace(event)) return true;
     if (auditRetentionProtectedTypes.has(String(event.type || ""))) return true;
     const eventMs = new Date(event.at || 0).getTime();
     if (!Number.isFinite(eventMs)) return true;
     return eventMs >= cutoffMs;
   });
-  return { enabled, days, cutoff, before, pruned: before - data.events.length, kept: data.events.length };
+  const kept = data.events.filter(belongsToWorkspace).length;
+  return { enabled, days, cutoff, before, pruned: before - kept, kept, workspaceId: workspace.id };
 }
 
 function buildAuditEvents(data, options = {}) {
-  const { limit, type, search } = { ...parseAuditQuery({}), ...options };
+  const { limit, offset, type, search } = { ...parseAuditQuery({}), ...options };
   return (data.events || [])
     .map(normalizeAuditEvent)
     .filter((event) => auditTypeMatches(event.type, type))
@@ -1907,7 +2872,29 @@ function buildAuditEvents(data, options = {}) {
       return [event.type, event.message, JSON.stringify(event.data)].join(" ").toLowerCase().includes(search);
     })
     .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
-    .slice(0, limit);
+    .slice(offset, offset + limit);
+}
+
+function buildAuditEventPage(data, options = {}) {
+  const { limit, offset, type, search } = { ...parseAuditQuery({}), ...options };
+  const matchedEvents = (data.events || [])
+    .map(normalizeAuditEvent)
+    .filter((event) => auditTypeMatches(event.type, type))
+    .filter((event) => {
+      if (!search) return true;
+      return [event.type, event.message, JSON.stringify(event.data)].join(" ").toLowerCase().includes(search);
+    })
+    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+  const events = matchedEvents.slice(offset, offset + limit);
+  return {
+    total: (data.events || []).length,
+    matched: matchedEvents.length,
+    returned: events.length,
+    limit,
+    offset,
+    hasMore: offset + events.length < matchedEvents.length,
+    events
+  };
 }
 
 function escapeCsvCell(value) {
@@ -2298,24 +3285,31 @@ export async function runBridgePollingTick(database, options = {}) {
       bridge.lastStatus = "connected";
       bridge.lastError = "";
       bridge.lastSyncAt = new Date().toISOString();
-      synced.push({ bridgeId: bridge.id, bridge: bridge.name, printerId: printer.id, printer: printer.name, status: printer.status, previousStatus });
+      synced.push({ ...bridgeAuditMetadata(bridge, printer), status: printer.status, previousStatus });
       if (previousStatus !== printer.status) {
-        await dispatchEvent(database, "printer.status", `${printer.name} -> ${printer.status}`, { workspaceId, printerId: printer.id, status: printer.status, source: "bridge.poll" });
+        await dispatchEvent(database, "printer.status", `${printer.name} -> ${printer.status}`, { workspaceId, printerId: printer.id, status: printer.status, source: "bridge.poll" }, { actor: options.actor });
       }
     } catch (error) {
       bridge.lastStatus = "error";
       bridge.lastError = error instanceof Error ? error.message : "Bridge sync failed";
       bridge.lastSyncAt = new Date().toISOString();
       printer.status = "offline";
-      failed.push({ bridgeId: bridge.id, bridge: bridge.name, printerId: printer.id, printer: printer.name, error: bridge.lastError });
+      failed.push({ ...bridgeAuditMetadata(bridge, printer), error: bridge.lastError });
       if (previousStatus !== "offline") {
-        await dispatchEvent(database, "printer.status", `${printer.name} -> offline`, { workspaceId, printerId: printer.id, status: "offline", source: "bridge.poll", error: bridge.lastError });
+        await dispatchEvent(database, "printer.status", `${printer.name} -> offline`, { workspaceId, printerId: printer.id, status: "offline", source: "bridge.poll", error: bridge.lastError }, { actor: options.actor });
       }
     }
   }
   const stateData = scopeWorkspaceId ? scopedWorkspaceData(database.data, scopeWorkspaceId) : database.data;
   if (!synced.length && !failed.length) return { changed: false, synced, failed, state: realtimeState(stateData) };
-  await dispatchEvent(database, "bridge.poll", `${synced.length} bridges synced, ${failed.length} failed`, { workspaceId: scopeWorkspaceId || DEFAULT_WORKSPACE_ID, synced, failed });
+  await dispatchEvent(database, "bridge.poll", `${synced.length} bridges synced, ${failed.length} failed`, {
+    workspaceId: scopeWorkspaceId || options.actor?.workspaceId || DEFAULT_WORKSPACE_ID,
+    bridgeCount: synced.length + failed.length,
+    syncedCount: synced.length,
+    failedCount: failed.length,
+    synced,
+    failed
+  }, { actor: options.actor });
   await database.write();
   const payload = { reason: "bridge.poll", state: realtimeState(stateData), synced, failed };
   broadcastRealtime(database, "state", payload);
@@ -2666,7 +3660,7 @@ async function createSampleFile(database, payload, options = {}) {
   const dimensions = [120, 36, 28];
   const grams = 64;
   const minutes = 128;
-  const quote = calculateQuote(database.data.costCatalog, { material: parsed.material, grams, minutes });
+  const quote = calculateQuote(costCatalogForWorkspace(database.data, workspaceId), { material: parsed.material, grams, minutes });
   const file = {
     id,
     workspaceId,
@@ -2712,7 +3706,7 @@ async function createParametricNameplate(database, payload, options = {}) {
   const volumeMm3 = parsed.width * parsed.height * parsed.thickness;
   const grams = Math.max(1, Math.round(volumeMm3 * 0.00124 * 100) / 100);
   const minutes = Math.max(12, Math.round(volumeMm3 / 720));
-  const quote = calculateQuote(database.data.costCatalog, { material: parsed.material, grams, minutes });
+  const quote = calculateQuote(costCatalogForWorkspace(database.data, workspaceId), { material: parsed.material, grams, minutes });
   const file = {
     id,
     workspaceId,
@@ -2773,7 +3767,7 @@ async function createStoredModelFile(database, payload, options = {}) {
   const id = payload.id || randomUUID();
   const folderResult = ensureFileFolder(database.data, { name: folder, purpose: payload.folderPurpose || "inbox", workspaceId });
   const stored = await storeObject(`uploads/${id}/${filename}`, buffer, { filename, type: metadata.type });
-  const quote = calculateQuote(database.data.costCatalog, { material, grams: metadata.estimateGrams, minutes: metadata.estimateMinutes });
+  const quote = calculateQuote(costCatalogForWorkspace(database.data, workspaceId), { material, grams: metadata.estimateGrams, minutes: metadata.estimateMinutes });
   const file = {
     id,
     workspaceId,
@@ -2835,6 +3829,201 @@ async function buildStorageUsage(data) {
   };
 }
 
+const productionDefaultSecretValues = new Map([
+  ["LAYERPILOT_ADMIN_PASSWORD", "change-this-password"],
+  ["LAYERPILOT_WORKER_TOKEN", "change-this-worker-token"],
+  ["LAYERPILOT_METRICS_TOKEN", "change-this-metrics-token"]
+]);
+
+function productionDependencyConfigIssues(env = process.env) {
+  const issues = [];
+  const dbAdapter = String(env.LAYERPILOT_DB_ADAPTER || "json").trim();
+  if (!["json", "sqlite"].includes(dbAdapter)) issues.push("LAYERPILOT_DB_ADAPTER must be json or sqlite");
+
+  const storageProvider = String(env.LAYERPILOT_OBJECT_STORAGE_PROVIDER || "local").trim().toLowerCase();
+  if (!["local", "s3"].includes(storageProvider)) {
+    issues.push("LAYERPILOT_OBJECT_STORAGE_PROVIDER must be local or s3");
+  } else if (storageProvider === "s3") {
+    for (const key of ["LAYERPILOT_S3_BUCKET", "LAYERPILOT_S3_REGION", "LAYERPILOT_S3_ACCESS_KEY_ID", "LAYERPILOT_S3_SECRET_ACCESS_KEY"]) {
+      if (!String(env[key] || "").trim()) issues.push(`Missing ${key}`);
+    }
+  }
+
+  if (String(env.LAYERPILOT_STRIPE_SECRET_KEY || "").trim() || String(env.LAYERPILOT_STRIPE_WEBHOOK_SECRET || "").trim()) {
+    for (const key of ["LAYERPILOT_STRIPE_SECRET_KEY", "LAYERPILOT_STRIPE_WEBHOOK_SECRET", "LAYERPILOT_STRIPE_PRICE_STUDIO", "LAYERPILOT_STRIPE_PRICE_FARM", "LAYERPILOT_STRIPE_PRICE_ENTERPRISE"]) {
+      if (!String(env[key] || "").trim()) issues.push(`Missing ${key}`);
+    }
+  }
+
+  if (String(env.LAYERPILOT_MQTT_URL || "").trim()) {
+    if (!/^mqtts?:\/\//.test(String(env.LAYERPILOT_MQTT_URL || ""))) issues.push("LAYERPILOT_MQTT_URL must start with mqtt:// or mqtts://");
+    const qos = String(env.LAYERPILOT_MQTT_QOS || "0").trim();
+    if (!["0", "1", "2"].includes(qos)) issues.push("LAYERPILOT_MQTT_QOS must be 0, 1, or 2");
+    const retain = String(env.LAYERPILOT_MQTT_RETAIN || "false").trim();
+    if (!["true", "false"].includes(retain)) issues.push("LAYERPILOT_MQTT_RETAIN must be true or false");
+  }
+
+  return issues;
+}
+
+function rawRequestBody(request) {
+  const raw = request.rawBody;
+  if (typeof raw === "string" || Buffer.isBuffer(raw)) return raw;
+  return JSON.stringify(request.body || {});
+}
+
+function stripeWebhookPayloadFromRequest(request, secret) {
+  const signature = request.headers["stripe-signature"];
+  if (!signature) return { ok: true, payload: request.body || {}, verified: false };
+  if (!secret) {
+    return { ok: false, statusCode: 503, error: "Stripe webhook secret is required for signature verification" };
+  }
+  try {
+    return {
+      ok: true,
+      payload: Stripe.webhooks.constructEvent(rawRequestBody(request), signature, secret),
+      verified: true
+    };
+  } catch {
+    return { ok: false, statusCode: 401, error: "Invalid Stripe webhook signature" };
+  }
+}
+
+function productionReadinessConfigChecks(data, env = process.env) {
+  if (env.NODE_ENV !== "production") return [];
+  const checks = [];
+  const required = ["LAYERPILOT_ADMIN_EMAIL", "LAYERPILOT_ADMIN_PASSWORD", "LAYERPILOT_WORKER_TOKEN", "LAYERPILOT_METRICS_TOKEN"];
+  const missing = required.filter((key) => !String(env[key] || "").trim());
+  checks.push({
+    name: "production-env-required",
+    ok: missing.length === 0,
+    detail: missing.length ? `Missing ${missing.join(", ")}` : "required production env values present"
+  });
+
+  const weak = [];
+  const adminPassword = String(env.LAYERPILOT_ADMIN_PASSWORD || "");
+  const workerToken = String(env.LAYERPILOT_WORKER_TOKEN || "");
+  const metricsToken = String(env.LAYERPILOT_METRICS_TOKEN || "");
+  if (adminPassword && adminPassword.length < 14) weak.push("LAYERPILOT_ADMIN_PASSWORD length < 14");
+  if (workerToken && workerToken.length < 32) weak.push("LAYERPILOT_WORKER_TOKEN length < 32");
+  if (metricsToken && metricsToken.length < 32) weak.push("LAYERPILOT_METRICS_TOKEN length < 32");
+  for (const [key, defaultValue] of productionDefaultSecretValues.entries()) {
+    if (String(env[key] || "") === defaultValue) weak.push(`${key} uses documented default`);
+  }
+  checks.push({
+    name: "production-secrets",
+    ok: weak.length === 0,
+    detail: weak.length ? weak.join("; ") : "production secrets pass minimum checks"
+  });
+
+  const disableDefaultUsers = envFlag("LAYERPILOT_DISABLE_DEFAULT_USERS", env);
+  const disableDemoLogin = disableDefaultUsers || envFlag("LAYERPILOT_DISABLE_DEMO_LOGIN", env);
+  const seededUsers = (data.users || [])
+    .map((user) => String(user.email || "").toLowerCase())
+    .filter((email) => defaultSeedUserEmails.has(email));
+  const defaultUserIssues = [];
+  if (!disableDefaultUsers) defaultUserIssues.push("LAYERPILOT_DISABLE_DEFAULT_USERS is not true");
+  if (!disableDemoLogin) defaultUserIssues.push("LAYERPILOT_DISABLE_DEMO_LOGIN is not true");
+  if (seededUsers.length) defaultUserIssues.push(`seeded users present: ${seededUsers.join(", ")}`);
+  checks.push({
+    name: "production-default-access",
+    ok: defaultUserIssues.length === 0,
+    detail: defaultUserIssues.length ? defaultUserIssues.join("; ") : "default and demo access disabled"
+  });
+
+  const signupEnabled = publicSignupEnabled(env);
+  checks.push({
+    name: "production-public-signup",
+    ok: true,
+    enabled: signupEnabled,
+    detail: signupEnabled ? "public signup explicitly enabled" : "public signup disabled by default"
+  });
+
+  const corsConfig = productionCorsOriginConfig(env);
+  checks.push({
+    name: "production-cors-origins",
+    ok: corsConfig.issues.length === 0,
+    allowedOrigins: [...corsConfig.origins],
+    detail: corsConfig.issues.length ? corsConfig.issues.join("; ") : corsConfig.origins.size ? `${corsConfig.origins.size} trusted browser origin(s) configured` : "same-origin browser access only"
+  });
+
+  const settings = data.workspaceSettings || {};
+  const allowlist = Array.isArray(settings.allowedApiIps) ? settings.allowedApiIps : [];
+  const allowlistIssues = [];
+  if (settings.restrictApiByIp === true && !allowlist.length) {
+    allowlistIssues.push("restrictApiByIp is true but allowedApiIps is empty");
+  }
+  for (const rule of invalidIpAllowlistRules(allowlist)) {
+    allowlistIssues.push(`invalid allowedApiIps rule: ${rule || "(blank)"}`);
+  }
+  checks.push({
+    name: "production-api-ip-allowlist",
+    ok: allowlistIssues.length === 0,
+    detail: allowlistIssues.length ? allowlistIssues.join("; ") : "API key IP allowlist configuration is valid"
+  });
+
+  const dependencyIssues = productionDependencyConfigIssues(env);
+  checks.push({
+    name: "production-dependencies",
+    ok: dependencyIssues.length === 0,
+    detail: dependencyIssues.length ? dependencyIssues.join("; ") : "optional dependency configuration is consistent"
+  });
+  return checks;
+}
+
+function productionWorkerReadinessCheck(data, env = process.env, now = new Date()) {
+  if (env.NODE_ENV !== "production") return null;
+  const telemetryEnabled = envFlagWithDefault("LAYERPILOT_WORKER_TELEMETRY", false, env);
+  const bridgePollingEnabled = envFlagWithDefault("LAYERPILOT_WORKER_BRIDGE_POLLING", false, env);
+  if (!telemetryEnabled && !bridgePollingEnabled) {
+    return { name: "worker", ok: true, detail: "worker checks disabled" };
+  }
+  const telemetryIntervalMs = envPositiveNumber("LAYERPILOT_WORKER_TELEMETRY_INTERVAL_MS", 5000, env);
+  const bridgePollingIntervalMs = envPositiveNumber("LAYERPILOT_WORKER_BRIDGE_POLL_INTERVAL_MS", 10000, env);
+  const enabledIntervals = [
+    telemetryEnabled ? telemetryIntervalMs : 0,
+    bridgePollingEnabled ? bridgePollingIntervalMs : 0
+  ].filter((value) => value > 0);
+  const staleAfterMs = Math.max(60_000, Math.max(...enabledIntervals) * 3);
+  const worker = data.dataMeta?.worker || null;
+  const enabledJobs = [
+    telemetryEnabled ? "telemetry" : "",
+    bridgePollingEnabled ? "bridge polling" : ""
+  ].filter(Boolean).join(" and ");
+  if (!worker?.lastRunAt) {
+    return {
+      name: "worker",
+      ok: false,
+      detail: `no worker heartbeat for enabled ${enabledJobs}`,
+      enabled: { telemetry: telemetryEnabled, bridgePolling: bridgePollingEnabled },
+      staleAfterMs
+    };
+  }
+  const lastRunMs = Date.parse(worker.lastRunAt);
+  if (!Number.isFinite(lastRunMs)) {
+    return {
+      name: "worker",
+      ok: false,
+      id: worker.id || "worker",
+      detail: `invalid worker heartbeat timestamp: ${worker.lastRunAt}`,
+      enabled: { telemetry: telemetryEnabled, bridgePolling: bridgePollingEnabled },
+      staleAfterMs
+    };
+  }
+  const ageMs = Math.max(0, now.getTime() - lastRunMs);
+  const ok = ageMs <= staleAfterMs;
+  return {
+    name: "worker",
+    ok,
+    id: worker.id || "worker",
+    detail: ok ? `${worker.id || "worker"} last ran ${Math.round(ageMs / 1000)}s ago` : `${worker.id || "worker"} heartbeat stale by ${Math.round((ageMs - staleAfterMs) / 1000)}s`,
+    lastRunAt: worker.lastRunAt,
+    ageMs,
+    staleAfterMs,
+    enabled: { telemetry: telemetryEnabled, bridgePolling: bridgePollingEnabled }
+  };
+}
+
 async function checkReadiness(database, startedAt) {
   const checks = [];
   const checkedAt = new Date().toISOString();
@@ -2857,13 +4046,14 @@ async function checkReadiness(database, startedAt) {
     detail: integrity.ok ? `${integrity.warnings.length} warning(s)` : `${integrity.errors.length} error(s)`,
     schemaVersion: integrity.schemaVersion
   });
-  if (database.data.dataMeta?.worker?.lastRunAt) {
-    checks.push({
-      name: "worker",
-      ok: true,
-      detail: `${database.data.dataMeta.worker.id || "worker"} last ran at ${database.data.dataMeta.worker.lastRunAt}`
-    });
-  }
+  const workerCheck = productionWorkerReadinessCheck(database.data, process.env, new Date(checkedAt));
+  if (workerCheck) checks.push(workerCheck);
+  else if (database.data.dataMeta?.worker?.lastRunAt) checks.push({
+    name: "worker",
+    ok: true,
+    detail: `${database.data.dataMeta.worker.id || "worker"} last ran at ${database.data.dataMeta.worker.lastRunAt}`
+  });
+  checks.push(...productionReadinessConfigChecks(database.data));
   const ok = checks.every((check) => check.ok);
   return {
     ok,
@@ -3079,6 +4269,67 @@ function applyStripeBillingEvent(data, event) {
   return { plan, invoice: null };
 }
 
+function ensureStripeWebhookLedger(data) {
+  data.dataMeta ||= {};
+  if (!Array.isArray(data.dataMeta.stripeWebhookEvents)) data.dataMeta.stripeWebhookEvents = [];
+  return data.dataMeta.stripeWebhookEvents;
+}
+
+function pruneStripeWebhookLedger(data, now = new Date()) {
+  const cutoff = now.getTime() - STRIPE_WEBHOOK_RETENTION_MS;
+  const retained = ensureStripeWebhookLedger(data)
+    .filter((record) => {
+      const receivedAt = Date.parse(record.receivedAt || record.updatedAt || "");
+      return Number.isFinite(receivedAt) && receivedAt >= cutoff;
+    })
+    .sort((a, b) => String(b.updatedAt || b.receivedAt || "").localeCompare(String(a.updatedAt || a.receivedAt || "")))
+    .slice(0, STRIPE_WEBHOOK_MAX_RECORDS);
+  data.dataMeta.stripeWebhookEvents = retained;
+  return retained;
+}
+
+function stripeWebhookReplayResponse(record = {}) {
+  return {
+    received: true,
+    replayed: true,
+    eventType: record.eventType || "",
+    plan: record.plan || null,
+    invoice: record.invoice || null
+  };
+}
+
+function recordStripeWebhookEvent(data, event, result) {
+  const eventId = String(event?.id || "").trim();
+  if (!eventId) return null;
+  const now = new Date().toISOString();
+  const ledger = pruneStripeWebhookLedger(data);
+  const record = {
+    eventId,
+    eventType: String(event.type || ""),
+    invoiceId: result.invoice?.id || "",
+    planId: result.plan?.id || "",
+    plan: result.plan || null,
+    invoice: result.invoice || null,
+    replayCount: 0,
+    receivedAt: now,
+    updatedAt: now
+  };
+  ledger.unshift(record);
+  pruneStripeWebhookLedger(data);
+  return record;
+}
+
+function replayStripeWebhookEvent(data, event) {
+  const eventId = String(event?.id || "").trim();
+  if (!eventId) return null;
+  const ledger = pruneStripeWebhookLedger(data);
+  const existing = ledger.find((record) => record.eventId === eventId);
+  if (!existing) return null;
+  existing.replayCount = Number(existing.replayCount || 0) + 1;
+  existing.updatedAt = new Date().toISOString();
+  return existing;
+}
+
 function fileReferences(data, fileId) {
   const activeQueue = (data.queue || []).filter((job) => job.fileId === fileId && !["complete", "failed", "cancelled"].includes(job.status));
   const parts = (data.parts || []).filter((part) => part.fileId === fileId);
@@ -3089,6 +4340,15 @@ function fileReferences(data, fileId) {
     parts: parts.map((part) => ({ id: part.id, name: part.name })),
     quoteRequests: quoteRequests.map((quote) => ({ id: quote.id, project: quote.project, status: quote.status })),
     slicerJobs: slicerJobs.map((job) => ({ id: job.id, status: job.status }))
+  };
+}
+
+function fileReferenceCounts(references = {}) {
+  return {
+    activeQueue: Array.isArray(references.activeQueue) ? references.activeQueue.length : 0,
+    parts: Array.isArray(references.parts) ? references.parts.length : 0,
+    quoteRequests: Array.isArray(references.quoteRequests) ? references.quoteRequests.length : 0,
+    slicerJobs: Array.isArray(references.slicerJobs) ? references.slicerJobs.length : 0
   };
 }
 
@@ -3239,7 +4499,7 @@ async function runSlicerJob(database, payload) {
   const outputPath = path.join(outputDir, outputName);
   const configPath = path.join(outputDir, "layerpilot-slicer-settings.json");
   const estimates = estimateSliceOutput(file, payload);
-  const quote = calculateQuote(database.data.costCatalog, { material: payload.material, grams: estimates.estimateGrams, minutes: estimates.estimateMinutes });
+  const quote = calculateQuote(costCatalogForWorkspace(database.data, payload.workspaceId || DEFAULT_WORKSPACE_ID), { material: payload.material, grams: estimates.estimateGrams, minutes: estimates.estimateMinutes });
   estimates.quote = quote.total;
   estimates.quoteBreakdown = quote;
   await writeFile(configPath, JSON.stringify({ file, printer, profile, settings: payload, estimates }, null, 2));
@@ -3624,6 +4884,7 @@ function publicQuoteSummary(quote) {
     orderId: quote.orderId || "",
     customerDecision: quote.customerDecision || "",
     customerDecisionAt: quote.customerDecisionAt || "",
+    customerDecisionNote: quote.customerDecisionNote || "",
     createdAt: quote.createdAt,
     updatedAt: quote.updatedAt
   };
@@ -3746,6 +5007,7 @@ export function generateJobsForOrder(data, orderId, options = {}) {
   const normalized = orderJobGenerationSchema.parse(options);
   const order = data.orders.find((item) => item.id === orderId);
   if (!order) return { error: "Order not found", statusCode: 404 };
+  if (terminalOrderStatuses.has(order.status)) return { error: "Cannot generate jobs for a terminal order", statusCode: 409, order };
   const workspaceId = order.workspaceId || DEFAULT_WORKSPACE_ID;
   const workspaceData = scopedWorkspaceData(data, workspaceId);
   const existingJobs = (data.queue || []).filter((job) => itemInWorkspace(job, workspaceId) && job.sourceOrderId === order.id && !["cancelled", "failed"].includes(job.status));
@@ -3789,6 +5051,41 @@ export function generateJobsForOrder(data, orderId, options = {}) {
   }
   const nextWorkspaceData = scopedWorkspaceData(data, workspaceId);
   return { order: normalized.dryRun ? { ...order } : order, jobs, missing, skus: nextWorkspaceData.skus, todos: deriveTodos(nextWorkspaceData), dryRun: normalized.dryRun, duplicateBlocked: false, existingJobs: [], stockChanges };
+}
+
+function applyOrderStatusChange(data, order, status) {
+  const workspaceId = order.workspaceId || DEFAULT_WORKSPACE_ID;
+  const workspaceData = scopedWorkspaceData(data, workspaceId);
+  const now = new Date().toISOString();
+  const linkedJobs = (data.queue || []).filter((job) => itemInWorkspace(job, workspaceId) && job.sourceOrderId === order.id);
+  const changedJobs = [];
+  const materialChanges = [];
+  order.status = status;
+  order.updatedAt = now;
+  if (status === "cancelled") {
+    for (const job of linkedJobs) {
+      if (["complete", "failed", "cancelled"].includes(job.status)) continue;
+      job.status = "cancelled";
+      job.stage = "blocked";
+      job.updatedAt = now;
+      job.completedAt = now;
+      const materialChange = releaseJobMaterialReservation(workspaceData, job);
+      if (materialChange) materialChanges.push(materialChange);
+      changedJobs.push(job);
+    }
+  }
+  if (status === "on_hold") {
+    for (const job of linkedJobs) {
+      if (job.status !== "queued") continue;
+      job.stage = "blocked";
+      job.updatedAt = now;
+      changedJobs.push(job);
+    }
+  }
+  if (status === "completed") {
+    order.completedAt = now;
+  }
+  return { order, jobs: changedJobs, materialChanges, spools: workspaceData.spools, todos: deriveTodos(workspaceData) };
 }
 
 function priorityWeight(priority) {
@@ -4325,7 +5622,7 @@ function dayLabel(value = "") {
 }
 
 function materialWasteCost(data, material, grams) {
-  const catalog = costCatalogSchema.parse({ ...defaultCostCatalog, ...(data.costCatalog || {}) });
+  const catalog = normalizeCostCatalog(data.costCatalog || defaultCostCatalog);
   const materialRate = catalog.materialRates[material] ?? catalog.materialRates[Object.keys(catalog.materialRates).find((key) => String(material || "").toLowerCase().includes(key.toLowerCase())) || "PLA"] ?? 1;
   return Math.round(Number(grams || 0) / 100 * materialRate * 100) / 100;
 }
@@ -4473,6 +5770,7 @@ function redactSupportValue(value, key = "") {
   if (/password|secret|token|authorization|stripe|hash/i.test(key) || /^apiKey$/i.test(key)) return "REDACTED";
   if (Array.isArray(value)) return value.map((item) => redactSupportValue(item, key));
   if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([entryKey, entryValue]) => [entryKey, redactSupportValue(entryValue, entryKey)]));
+  if (typeof value === "string" && /(^|[._-])(url|uri|endpoint|baseUrl|publicUrl|callbackUrl|feedUrl)$/i.test(key) && /^https?:\/\//i.test(value.trim())) return redactEndpointUrl(value);
   return value;
 }
 
@@ -4609,6 +5907,17 @@ async function parsePublicQuoteRequestPayload(request) {
   };
 }
 
+function publicQuoteIntakeDigest(incoming = {}) {
+  const upload = incoming.upload
+    ? {
+      filename: incoming.upload.filename || "",
+      bytes: Buffer.byteLength(incoming.upload.buffer || Buffer.alloc(0)),
+      sha256: createHash("sha256").update(incoming.upload.buffer || Buffer.alloc(0)).digest("hex")
+    }
+    : null;
+  return sha256(stableSerialize({ payload: incoming.payload || {}, upload }));
+}
+
 export async function openDatabase(file = process.env.LAYERPILOT_DB_PATH || path.join(process.cwd(), "api", "data", "layerpilot.db.json"), options = {}) {
   await mkdir(path.dirname(file), { recursive: true });
   const adapter = createPersistenceAdapter(file, options);
@@ -4723,10 +6032,22 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   const database = db || await openDatabase();
   activeObjectStorage = objectStorageAdapter;
   database.realtimeClients ||= new Set();
+  database.realtimeTickets ||= new Map();
   database.mqttPublisher = mqttPublisher;
   const startedAt = new Date();
   const app = Fastify({ logger: false });
-  await app.register(cors, { origin: true });
+  app.removeContentTypeParser("application/json");
+  app.addContentTypeParser("application/json", { parseAs: "string" }, (request, body, done) => {
+    request.rawBody = body;
+    if (!body) return done(null, {});
+    try {
+      done(null, JSON.parse(body));
+    } catch (error) {
+      error.statusCode = 400;
+      done(error, undefined);
+    }
+  });
+  await app.register(cors, { origin: corsOriginOption(process.env) });
   await app.register(helmet, {
     contentSecurityPolicy: {
       directives: {
@@ -4783,17 +6104,70 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
 
   app.addHook("preHandler", async (request, reply) => {
     const routePath = request.url.split("?")[0];
-    const publicRoute = routePath === "/api/health" || routePath === "/api/readiness" || routePath === "/api/metrics" && hasValidMetricsToken(request) || routePath === "/api/internal/worker-broadcast" && hasValidWorkerToken(request) || routePath === "/api/billing/webhook/stripe" || routePath === "/api/public/quoteRequests" || routePath.startsWith("/api/public/quoteRequests/") || routePath.startsWith("/api/auth/") || serveStatic && !routePath.startsWith("/api/");
+    const publicRoute = routePath === "/api/health" || routePath === "/api/readiness" || routePath === "/api/metrics" && hasValidMetricsToken(request) || routePath === "/api/internal/worker-broadcast" && hasValidWorkerToken(request) || routePath === "/api/billing/webhook/stripe" || routePath === "/api/public/quoteRequests" || routePath.startsWith("/api/public/quoteRequests/") || routePath.startsWith("/api/auth/") || routePath === "/api/events/stream" || routePath === "/api/events/ws" || serveStatic && !routePath.startsWith("/api/");
     if (publicRoute) return;
+    if (await replayCommittedRestoreRequest(database, request, reply)) return;
     const { session, user, apiKey } = userFromRequest(database, request);
     if (!user) return reply.code(401).send({ error: "Authentication required" });
     if (apiKey && !isApiKeyIpAllowed(workspaceScopeForUser(database.data, user).workspaceSettings, request)) {
       return reply.code(403).send({ error: "API key is not allowed from this IP", ip: normalizeClientIp(request.ip) });
     }
     request.user = user;
+    request.apiKey = apiKey || null;
+    if (!apiKey && requiresProductionAdminTwoFactor(database.data, user, request.method, routePath)) {
+      return reply.code(403).send({
+        error: "Two-factor enrollment required",
+        requiresTwoFactorEnrollment: true,
+        remediation: "Enroll TOTP two-factor authentication before accessing production admin APIs."
+      });
+    }
+    if (apiKey && !apiKeyCanReadRoute(user, request.method, routePath)) {
+      return reply.code(403).send({ error: "API key scope does not allow reading this resource" });
+    }
+    const workspaceId = user.workspaceId || DEFAULT_WORKSPACE_ID;
+    const actorId = idempotencyActorForRequest(request);
+    if (!apiKey && await prepareRestoreCommitIdempotentRequest(database, request, reply, { workspaceId, actorId })) return;
+    const uploadMultipartRoute = String(request.method || "").toUpperCase() === "POST" && routePath === "/api/files/upload";
+    if (!uploadMultipartRoute && await prepareIdempotentRequest(database, request, reply, { workspaceId, actorId })) return;
     const now = new Date().toISOString();
     if (session) session.lastSeenAt = now;
     if (apiKey) apiKey.lastUsedAt = now;
+    if (database.data.__sessionStoreDirty || apiKey) {
+      await database.write();
+      clearSessionStoreDirty(database.data);
+    }
+  });
+
+  app.addHook("onSend", async (request, reply, payload) => {
+    const context = request.idempotency;
+    if (!context || reply.statusCode < 200 || reply.statusCode >= 400) return payload;
+    const responseBody = Buffer.isBuffer(payload) ? payload.toString("utf8") : String(payload || "");
+    const safeReplay = sanitizeIdempotencyResponseBody(responseBody);
+    if (Buffer.byteLength(safeReplay.responseBody) > IDEMPOTENCY_MAX_RESPONSE_BYTES) return payload;
+    const ledger = pruneIdempotencyLedger(database.data);
+    if (ledger.some((record) => record.workspaceId === context.workspaceId && record.actorId === context.actorId && record.key === context.key)) return payload;
+    const now = new Date().toISOString();
+    ledger.unshift({
+      id: randomUUID(),
+      key: context.key,
+      method: context.method,
+      path: context.path,
+      workspaceId: context.workspaceId,
+      actorId: context.actorId,
+      bodyDigest: context.bodyDigest,
+      fingerprint: context.fingerprint,
+      statusCode: reply.statusCode,
+      contentType: String(reply.getHeader("content-type") || "application/json; charset=utf-8"),
+      responseBody: safeReplay.responseBody,
+      responseBytes: Buffer.byteLength(safeReplay.responseBody),
+      responseBodyRedacted: safeReplay.redacted,
+      replayCount: 0,
+      createdAt: context.createdAt || now,
+      updatedAt: now
+    });
+    pruneIdempotencyLedger(database.data);
+    await database.write();
+    return payload;
   });
 
   app.get("/api/health", async () => ({ ok: true, service: "layerpilot-api", persistence: database.persistenceLabel || "lowdb-json" }));
@@ -4816,29 +6190,77 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     reply.type("text/plain; version=0.0.4; charset=utf-8");
     return buildOperationalMetrics(database, startedAt);
   });
+  app.post("/api/events/token", async (request) => createRealtimeTicket(database, request.user));
   app.post("/api/auth/login", { config: { rateLimit: authRateLimit } }, async (request, reply) => {
     const parsed = authSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Invalid login payload", issues: parsed.error.issues });
-    const user = database.data.users.find((item) => item.email.toLowerCase() === parsed.data.email.toLowerCase());
-    if (!user || !verifyPassword(parsed.data.password, user.passwordHash)) return reply.code(401).send({ error: "Invalid email or password" });
+    const email = parsed.data.email.trim().toLowerCase();
+    const user = database.data.users.find((item) => item.email.toLowerCase() === email);
+    const lock = activeAuthLock(user);
+    if (lock) {
+      await dispatchAuthFailureEvent(database, "auth.login_locked", request, { email, user, reason: "account_locked", failedAttempts: lock.failedAttempts, lockedUntil: lock.lockedUntil, lockedReason: lock.reason });
+      await database.write();
+      return reply.code(423).send({ error: "Account temporarily locked", reason: lock.reason, lockedUntil: lock.lockedUntil, retryAfterSeconds: lock.retryAfterSeconds });
+    }
+    if (!user || !verifyPassword(parsed.data.password, user.passwordHash)) {
+      const failure = recordAuthFailureState(user, user ? "invalid_password" : "unknown_user");
+      await dispatchAuthFailureEvent(database, "auth.login_failed", request, { email, user, reason: user ? "invalid_password" : "unknown_user", failedAttempts: failure?.failedAttempts, lockedUntil: failure?.lockedUntil });
+      if (failure?.locked) {
+        await dispatchEvent(database, "auth.account_locked", `${user.email} temporarily locked after authentication failures`, {
+          userId: user.id,
+          email,
+          reason: "invalid_password",
+          failedAttempts: failure.failedAttempts,
+          lockedUntil: failure.lockedUntil,
+          lockMinutes: failure.policy.lockMinutes
+        }, { workspaceId: user.workspaceId || DEFAULT_WORKSPACE_ID });
+      }
+      await database.write();
+      if (failure?.locked) return reply.code(423).send({ error: "Account temporarily locked", reason: "invalid_password", lockedUntil: failure.lockedUntil, retryAfterSeconds: Math.max(1, Math.ceil((Date.parse(failure.lockedUntil) - Date.now()) / 1000)) });
+      return reply.code(401).send({ error: "Invalid email or password" });
+    }
     if (twoFactorStatus(user).enabled) {
       if (!parsed.data.twoFactorCode) return reply.code(409).send({ error: "Two-factor code required", requiresTwoFactor: true });
       const verification = verifyAndConsumeTwoFactorCode(user, parsed.data.twoFactorCode);
-      if (!verification.ok) return reply.code(401).send({ error: "Invalid two-factor code", requiresTwoFactor: true });
-      database.data.events.unshift({ id: randomUUID(), type: "auth.2fa_verified", message: `${user.email} completed 2FA`, at: new Date().toISOString(), data: { userId: user.id, method: verification.method } });
+      if (!verification.ok) {
+        const failure = recordAuthFailureState(user, "invalid_two_factor");
+        await dispatchAuthFailureEvent(database, "auth.2fa_failed", request, { email, user, reason: "invalid_two_factor", failedAttempts: failure?.failedAttempts, lockedUntil: failure?.lockedUntil });
+        if (failure?.locked) {
+          await dispatchEvent(database, "auth.account_locked", `${user.email} temporarily locked after two-factor failures`, {
+            userId: user.id,
+            email,
+            reason: "invalid_two_factor",
+            failedAttempts: failure.failedAttempts,
+            lockedUntil: failure.lockedUntil,
+            lockMinutes: failure.policy.lockMinutes
+          }, { workspaceId: user.workspaceId || DEFAULT_WORKSPACE_ID });
+        }
+        await database.write();
+        if (failure?.locked) return reply.code(423).send({ error: "Account temporarily locked", reason: "invalid_two_factor", lockedUntil: failure.lockedUntil, retryAfterSeconds: Math.max(1, Math.ceil((Date.parse(failure.lockedUntil) - Date.now()) / 1000)) });
+        return reply.code(401).send({ error: "Invalid two-factor code", requiresTwoFactor: true });
+      }
+      await dispatchEvent(database, "auth.2fa_verified", `${user.email} completed 2FA`, { userId: user.id, method: verification.method }, { actor: user });
     }
     const token = randomBytes(32).toString("hex");
     const now = new Date().toISOString();
     user.lastSeen = "Now";
     user.updatedAt = now;
     user.workspaceId ||= DEFAULT_WORKSPACE_ID;
-    database.data.sessions.push({ id: randomUUID(), token, userId: user.id, workspaceId: user.workspaceId, createdAt: now, lastSeenAt: now });
-    database.data.events.unshift({ id: randomUUID(), type: "auth.login", message: `${user.email} signed in`, at: now });
+    clearAuthFailureState(user);
+    const session = createSession({ token, user, workspaceId: user.workspaceId, now: new Date(now) });
+    database.data.sessions.push(session);
+    await dispatchEvent(database, "auth.login", `${user.email} signed in`, { userId: user.id, sessionId: session.id }, { actor: user, at: now });
     await database.write();
     return { token, user: sanitizeUser(user) };
   });
 
   app.post("/api/auth/signup", { config: { rateLimit: authRateLimit } }, async (request, reply) => {
+    if (!publicSignupEnabled()) {
+      return reply.code(403).send({
+        error: "Public signup is disabled in production",
+        remediation: "Set LAYERPILOT_ENABLE_PUBLIC_SIGNUP=true only when tenant self-service registration is intentionally enabled."
+      });
+    }
     const parsed = signupSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Invalid signup payload", issues: parsed.error.issues });
     const exists = database.data.users.some((item) => item.email.toLowerCase() === parsed.data.email.toLowerCase());
@@ -4870,8 +6292,8 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     database.data.workspaces ||= [];
     database.data.workspaces.push(workspace);
     database.data.users.push(user);
-    database.data.sessions.push({ id: randomUUID(), token, userId: user.id, workspaceId, createdAt: now, lastSeenAt: now });
-    database.data.events.unshift({ id: randomUUID(), workspaceId, type: "auth.signup", message: `${user.email} created ${parsed.data.workspace}`, at: now });
+    database.data.sessions.push(createSession({ token, user, workspaceId, now: new Date(now) }));
+    await dispatchEvent(database, "auth.signup", `${user.email} created ${parsed.data.workspace}`, { workspaceId, userId: user.id }, { actor: user, at: now });
     await database.write();
     return reply.code(201).send({ token, user: sanitizeUser(user) });
   });
@@ -4880,6 +6302,10 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const { session, user } = userFromRequest(database, request);
     if (!user) return reply.code(401).send({ error: "Authentication required" });
     if (session) session.lastSeenAt = new Date().toISOString();
+    if (database.data.__sessionStoreDirty) {
+      await database.write();
+      clearSessionStoreDirty(database.data);
+    }
     return { user: sanitizeUser(user) };
   });
 
@@ -4888,7 +6314,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!session || !user) return reply.code(401).send({ error: "User session required" });
     const secret = base32Encode(randomBytes(20));
     const issuer = database.data.workspaceSettings?.organizationName || "3DSTU FarmFlow";
-    await dispatchEvent(database, "auth.2fa_setup_started", `${user.email} started 2FA setup`, { userId: user.id });
+    await dispatchEvent(database, "auth.2fa_setup_started", `${user.email} started 2FA setup`, { userId: user.id }, { actor: user });
     await database.write();
     return { secret, otpauthUrl: buildOtpAuthUrl({ secret, user, issuer }), user: sanitizeUser(user) };
   });
@@ -4898,14 +6324,29 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!session || !user) return reply.code(401).send({ error: "User session required" });
     const parsed = twoFactorEnableSchema.safeParse(request.body || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid 2FA enable payload", issues: parsed.error.issues });
-    if (!verifyTotpCode(parsed.data.secret, parsed.data.code)) return reply.code(401).send({ error: "Invalid two-factor code" });
+    if (!verifyPassword(parsed.data.password, user.passwordHash)) {
+      await dispatchEvent(database, "auth.2fa_enable_failed", `${user.email} failed 2FA enable password check`, {
+        userId: user.id,
+        reason: "invalid_password"
+      }, { actor: user });
+      await database.write();
+      return reply.code(401).send({ error: "Current password is incorrect" });
+    }
+    if (!verifyTotpCode(parsed.data.secret, parsed.data.code)) {
+      await dispatchEvent(database, "auth.2fa_enable_failed", `${user.email} failed 2FA enable code check`, {
+        userId: user.id,
+        reason: "invalid_code"
+      }, { actor: user });
+      await database.write();
+      return reply.code(401).send({ error: "Invalid two-factor code" });
+    }
     const recoveryCodes = generateRecoveryCodes();
     user.twoFactorSecret = parsed.data.secret.toUpperCase().replace(/[^A-Z2-7]/g, "");
     user.twoFactorEnabled = true;
     user.twoFactorEnrolledAt = new Date().toISOString();
     user.twoFactorRecoveryCodeHashes = recoveryCodes.map(createPasswordHash);
     user.updatedAt = user.twoFactorEnrolledAt;
-    await dispatchEvent(database, "auth.2fa_enabled", `${user.email} enabled 2FA`, { userId: user.id });
+    await dispatchEvent(database, "auth.2fa_enabled", `${user.email} enabled 2FA`, { userId: user.id, recoveryCodesIssued: recoveryCodes.length }, { actor: user });
     await database.write();
     return { user: sanitizeUser(user), recoveryCodes };
   });
@@ -4913,6 +6354,13 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   app.post("/api/auth/2fa/disable", { config: { rateLimit: sensitiveRateLimit } }, async (request, reply) => {
     const { session, user } = userFromRequest(database, request);
     if (!session || !user) return reply.code(401).send({ error: "User session required" });
+    if (productionRequiresAdminTwoFactor(database.data, user)) {
+      return reply.code(409).send({
+        error: "Two-factor authentication is required for production Owner/Admin accounts",
+        requiresTwoFactorEnrollment: true,
+        remediation: "Disable the workspace requireAdmin2fa policy before disabling TOTP for Owner/Admin accounts."
+      });
+    }
     const parsed = twoFactorDisableSchema.safeParse(request.body || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid 2FA disable payload", issues: parsed.error.issues });
     if (!verifyPassword(parsed.data.password, user.passwordHash)) return reply.code(401).send({ error: "Invalid password" });
@@ -4922,7 +6370,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     user.twoFactorEnrolledAt = "";
     user.twoFactorRecoveryCodeHashes = [];
     user.updatedAt = new Date().toISOString();
-    await dispatchEvent(database, "auth.2fa_disabled", `${user.email} disabled 2FA`, { userId: user.id });
+    await dispatchEvent(database, "auth.2fa_disabled", `${user.email} disabled 2FA`, { userId: user.id }, { actor: user });
     await database.write();
     return { user: sanitizeUser(user) };
   });
@@ -4936,27 +6384,43 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const persistedUser = database.data.users.find((item) => item.id === user.id);
     if (!persistedUser || !verifyPassword(parsed.data.currentPassword, persistedUser.passwordHash)) return reply.code(401).send({ error: "Current password is incorrect" });
     if (parsed.data.currentPassword === parsed.data.newPassword) return reply.code(409).send({ error: "New password must be different" });
+    const sessionsBeforeChange = (database.data.sessions || []).filter((item) => item.userId === persistedUser.id).length;
     persistedUser.passwordHash = createPasswordHash(parsed.data.newPassword);
     persistedUser.passwordResetRequired = false;
+    clearAuthFailureState(persistedUser);
     persistedUser.updatedAt = new Date().toISOString();
-    database.data.sessions = (database.data.sessions || []).filter((item) => item.userId !== persistedUser.id || item.token === token);
-    await dispatchEvent(database, "auth.password_changed", `${persistedUser.email} changed password`, { userId: persistedUser.id });
+    database.data.sessions = (database.data.sessions || []).filter((item) => item.userId !== persistedUser.id || sessionMatchesToken(item, token));
+    const sessionsAfterChange = (database.data.sessions || []).filter((item) => item.userId === persistedUser.id).length;
+    await dispatchEvent(database, "auth.password_changed", `${persistedUser.email} changed password`, { userId: persistedUser.id, sessionsRevoked: Math.max(0, sessionsBeforeChange - sessionsAfterChange) }, { actor: persistedUser });
     await database.write();
     return { ok: true, user: sanitizeUser(persistedUser) };
   });
 
   app.post("/api/auth/logout", async (request, reply) => {
-    const { token, user } = userFromRequest(database, request);
+    const { token, session, user } = userFromRequest(database, request);
     if (!user) return reply.code(401).send({ error: "Authentication required" });
-    database.data.sessions = database.data.sessions.filter((session) => session.token !== token);
+    const sessionsBeforeLogout = database.data.sessions.length;
+    database.data.sessions = database.data.sessions.filter((session) => !sessionMatchesToken(session, token));
+    await dispatchEvent(database, "auth.logout", `${user.email} signed out`, {
+      userId: user.id,
+      sessionId: session?.id || "",
+      revokedSessions: Math.max(0, sessionsBeforeLogout - database.data.sessions.length)
+    }, { actor: user });
     await database.write();
     return { ok: true };
   });
 
   app.get("/api/state", async (request) => realtimeStateForUser(database.data, request.user));
   app.get("/api/events/stream", async (request, reply) => {
-    const { user } = userFromRequest(database, request);
+    const { user } = realtimeUserFromRequest(database, request);
     if (!user) return reply.code(401).send({ error: "Authentication required" });
+    if (requiresProductionAdminTwoFactor(database.data, user, "GET", "/api/events/stream")) {
+      return reply.code(403).send({
+        error: "Two-factor enrollment required",
+        requiresTwoFactorEnrollment: true,
+        remediation: "Enroll TOTP two-factor authentication before accessing production admin APIs."
+      });
+    }
     reply.hijack();
     reply.raw.writeHead(200, {
       "content-type": "text/event-stream; charset=utf-8",
@@ -4966,6 +6430,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     });
     const client = {
       id: randomUUID(),
+      userId: user.id,
       workspaceId: user.workspaceId || DEFAULT_WORKSPACE_ID,
       raw: reply.raw,
       send: (event, payload) => sendSse(reply.raw, event, payload),
@@ -4979,14 +6444,20 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     client.send("state", { reason: "stream.open", state: realtimeStateForUser(database.data, user) });
   });
   app.get("/api/events/ws", { websocket: true }, (socket, request) => {
-    const { user } = userFromRequest(database, request);
+    const { user } = realtimeUserFromRequest(database, request);
     if (!user) {
       socket.send(JSON.stringify({ event: "error", data: { error: "Authentication required" } }));
       socket.close(1008, "Authentication required");
       return;
     }
+    if (requiresProductionAdminTwoFactor(database.data, user, "GET", "/api/events/ws")) {
+      socket.send(JSON.stringify({ event: "error", data: { error: "Two-factor enrollment required", requiresTwoFactorEnrollment: true } }));
+      socket.close(1008, "Two-factor enrollment required");
+      return;
+    }
     const client = {
       id: randomUUID(),
+      userId: user.id,
       workspaceId: user.workspaceId || DEFAULT_WORKSPACE_ID,
       socket,
       send: (event, payload) => socket.send(JSON.stringify({ event, data: payload })),
@@ -4999,7 +6470,10 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   });
   app.get("/api/users", async (request) => scopedWorkspaceData(database.data, request.user.workspaceId).users.map(sanitizeUser));
   app.get("/api/bridges", async (request) => (scopedWorkspaceData(database.data, request.user.workspaceId).bridges || []).map(sanitizeBridge));
+  app.get("/api/webhooks", async (request) => (scopedWorkspaceData(database.data, request.user.workspaceId).webhooks || []).map(sanitizeWebhook));
+  app.get("/api/webhookDeliveries", async (request) => (scopedWorkspaceData(database.data, request.user.workspaceId).webhookDeliveries || []).map(sanitizeWebhookDelivery));
   app.get("/api/notificationChannels", async (request) => (scopedWorkspaceData(database.data, request.user.workspaceId).notificationChannels || []).map(sanitizeNotificationChannel));
+  app.get("/api/notificationDeliveries", async (request) => (scopedWorkspaceData(database.data, request.user.workspaceId).notificationDeliveries || []).map(sanitizeNotificationDelivery));
   app.get("/api/commerceConnectors", async (request) => (scopedWorkspaceData(database.data, request.user.workspaceId).commerceConnectors || []).map(sanitizeCommerceConnector));
   app.get("/api/apiKeys", async (request) => (scopedWorkspaceData(database.data, request.user.workspaceId).apiKeys || []).map(sanitizeApiKey));
   app.get("/api/addons", async (request) => (scopedWorkspaceData(database.data, request.user.workspaceId).addons || []).map(sanitizeAddon));
@@ -5013,24 +6487,26 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const onboarding = { ...(current.onboarding || {}) };
     onboarding[request.params.id] = { ...parsed.data, updatedAt: new Date().toISOString(), updatedBy: request.user.email };
     const settings = updateWorkspaceSettings(database.data, request.user.workspaceId, { onboarding });
-    await dispatchEvent(database, "onboarding.updated", `${request.params.id} -> ${parsed.data.status}`, { workspaceId: request.user.workspaceId, stepId: request.params.id, status: parsed.data.status });
+    await dispatchEvent(database, "onboarding.updated", `${request.params.id} -> ${parsed.data.status}`, { workspaceId: request.user.workspaceId, stepId: request.params.id, status: parsed.data.status }, { actor: request.user });
     await database.write();
     return { settings, onboarding: buildOnboarding(workspaceScopeForUser(database.data, request.user)) };
   });
   app.post("/api/support/snapshot", async (request, reply) => {
     if (!hasPermission(request.user, "admin:export")) return reply.code(403).send({ error: "Missing permission: admin:export" });
     const snapshot = await buildSupportSnapshot(database.data, request.user);
-    await dispatchEvent(database, "support.snapshot", `${request.user.email} generated support snapshot`, { workspaceId: request.user.workspaceId, generatedAt: snapshot.generatedAt, onboarding: snapshot.readiness.onboarding });
+    await dispatchEvent(database, "support.snapshot", `${request.user.email} generated support snapshot`, { workspaceId: request.user.workspaceId, generatedAt: snapshot.generatedAt, onboarding: snapshot.readiness.onboarding }, { actor: request.user });
     await database.write();
     return snapshot;
   });
   app.get("/api/billing", async (request) => buildBillingSummary(workspaceScopeForUser(database.data, request.user), { stripeClient }));
-  app.get("/api/costCatalog", async () => database.data.costCatalog);
+  app.get("/api/costCatalog", async (request) => costCatalogForWorkspace(database.data, request.user.workspaceId));
 
   for (const collection of COLLECTIONS) {
-    if (collection === "bridges" || collection === "notificationChannels" || collection === "commerceConnectors" || collection === "apiKeys" || collection === "addons") continue;
+    if (collection === "bridges" || collection === "webhooks" || collection === "webhookDeliveries" || collection === "notificationChannels" || collection === "notificationDeliveries" || collection === "commerceConnectors" || collection === "apiKeys" || collection === "addons" || collection === "quoteRequests") continue;
     app.get(`/api/${collection}`, async (request) => scopedWorkspaceData(database.data, request.user.workspaceId)[collection] || []);
   }
+
+  app.get("/api/quoteRequests", async (request) => (scopedWorkspaceData(database.data, request.user.workspaceId).quoteRequests || []).map(sanitizeQuoteRequest));
 
   app.get("/api/todos", async (request) => deriveTodos(scopedWorkspaceData(database.data, request.user.workspaceId)));
 
@@ -5066,6 +6542,8 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
 
   app.post("/api/public/quoteRequests", { config: { rateLimit: { max: 20, timeWindow: "1 minute", groupId: "quote-intake" } } }, async (request, reply) => {
     const incoming = await parsePublicQuoteRequestPayload(request);
+    const publicIdempotency = publicIdempotencyContext("POST", "/api/public/quoteRequests");
+    if (publicIdempotency && await prepareIdempotentRequest(database, request, reply, { ...publicIdempotency, bodyDigest: publicQuoteIntakeDigest(incoming) })) return;
     const parsed = publicQuoteRequestSchema.safeParse(incoming.payload || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid quote request payload", issues: parsed.error.issues });
     const workspace = workspaceForId(database.data, DEFAULT_WORKSPACE_ID);
@@ -5118,6 +6596,8 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsed.success) return reply.code(400).send({ error: "Invalid quote decision payload", issues: parsed.error.issues });
     const quote = database.data.quoteRequests.find((item) => item.id === request.params.id && itemInWorkspace(item, DEFAULT_WORKSPACE_ID));
     if (!quote || !quoteTokenMatches(quote, parsed.data.token)) return reply.code(404).send({ error: "Quote request not found" });
+    const publicIdempotency = publicIdempotencyContext("POST", `/api/public/quoteRequests/${request.params.id}/decision`);
+    if (publicIdempotency && await prepareIdempotentRequest(database, request, reply, { ...publicIdempotency, bodyDigest: requestBodyDigest(parsed.data) })) return;
     if (quote.orderId) return reply.code(409).send({ error: "Quote request already converted", orderId: quote.orderId });
     if (!["quoted", "accepted"].includes(quote.status)) return reply.code(409).send({ error: "Quote request is not ready for a customer decision", status: quote.status });
     if (parsed.data.decision === "accepted" && quoteExpired(quote)) return reply.code(409).send({ error: "Quote request has expired", status: quote.status, validUntil: quote.validUntil });
@@ -5131,6 +6611,12 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (parsed.data.decision === "rejected") {
       Object.assign(quote, { status: "rejected", rejectedAt: now });
       await dispatchEvent(database, "quote_request.customer_rejected", `${quote.id} rejected by customer`, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, quoteRequestId: quote.id });
+      await database.write();
+      return { ok: true, quoteRequest: publicQuoteSummary(quote) };
+    }
+    if (parsed.data.decision === "revision") {
+      Object.assign(quote, { status: "reviewing", revisionRequestedAt: now, reviewedBy: quote.email });
+      await dispatchEvent(database, "quote_request.revision_requested", `${quote.id} revision requested by customer`, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, quoteRequestId: quote.id });
       await database.write();
       return { ok: true, quoteRequest: publicQuoteSummary(quote) };
     }
@@ -5157,7 +6643,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsed.success) return reply.code(400).send({ error: "Invalid auto schedule payload", issues: parsed.error.issues });
     const scoped = workspaceScopeForUser(database.data, request.user);
     const result = autoScheduleQueue(scoped, parsed.data);
-    database.data.events.unshift({ id: randomUUID(), workspaceId: request.user.workspaceId, type: "queue.auto_scheduled", message: `${result.scheduled.length} jobs auto scheduled`, data: { workspaceId: request.user.workspaceId }, at: new Date().toISOString() });
+    await dispatchEvent(database, "queue.auto_scheduled", `${result.scheduled.length} jobs auto scheduled`, { workspaceId: request.user.workspaceId }, { actor: request.user });
     await database.write();
     return result;
   });
@@ -5167,7 +6653,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsed.success) return reply.code(400).send({ error: "Invalid schedule optimization payload", issues: parsed.error.issues });
     const scoped = workspaceScopeForUser(database.data, request.user);
     const result = optimizeScheduleQueue(scoped, parsed.data);
-    database.data.events.unshift({ id: randomUUID(), workspaceId: request.user.workspaceId, type: "queue.optimized", message: `${result.scheduled.length} jobs optimized by ${result.strategy}`, data: { workspaceId: request.user.workspaceId, strategy: result.strategy, scheduled: result.scheduled.map((item) => item.jobId), skipped: result.skipped.length }, at: new Date().toISOString() });
+    await dispatchEvent(database, "queue.optimized", `${result.scheduled.length} jobs optimized by ${result.strategy}`, { workspaceId: request.user.workspaceId, strategy: result.strategy, scheduled: result.scheduled.map((item) => item.jobId), skipped: result.skipped.length }, { actor: request.user });
     await database.write();
     return result;
   });
@@ -5178,14 +6664,14 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const scoped = workspaceScopeForUser(database.data, request.user);
     const result = constraintScheduleQueue(scoped, parsed.data);
     if (!result.dryRun) {
-      database.data.events.unshift({
-        id: randomUUID(),
+      await dispatchEvent(database, "queue.constraint_scheduled", `${result.scheduled.length} jobs solved by ${result.solver.engine}`, {
         workspaceId: request.user.workspaceId,
-        type: "queue.constraint_scheduled",
-        message: `${result.scheduled.length} jobs solved by ${result.solver.engine}`,
-        data: { workspaceId: request.user.workspaceId, objective: result.solver.objective, feasible: result.solver.feasible, cost: result.solver.result, scheduled: result.scheduled.map((item) => item.jobId), skipped: result.skipped.length },
-        at: new Date().toISOString()
-      });
+        objective: result.solver.objective,
+        feasible: result.solver.feasible,
+        cost: result.solver.result,
+        scheduled: result.scheduled.map((item) => item.jobId),
+        skipped: result.skipped.length
+      }, { actor: request.user });
       await database.write();
     }
     return result;
@@ -5195,26 +6681,43 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
 
   app.get("/api/catalog/export", async (request, reply) => {
     if (!hasPermission(request.user, "catalog:write")) return reply.code(403).send({ error: "Missing permission: catalog:write" });
-    return buildCatalogExport(database.data);
+    const scoped = workspaceScopeForUser(database.data, request.user);
+    const exported = buildCatalogExport(scoped);
+    await dispatchEvent(database, "catalog.exported", `${request.user.email} exported catalog CSV`, {
+      workspaceId: request.user.workspaceId,
+      exportedAt: exported.exportedAt,
+      rows: exported.rows.length,
+      skus: scoped.skus?.length || 0,
+      parts: scoped.parts?.length || 0,
+      files: scoped.files?.length || 0
+    }, { actor: request.user });
+    await database.write();
+    return exported;
   });
 
   app.post("/api/catalog/material-map", async (request, reply) => {
     if (!hasPermission(request.user, "catalog:write")) return reply.code(403).send({ error: "Missing permission: catalog:write" });
     const parsed = materialMapSchema.safeParse(request.body || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid material map payload", issues: parsed.error.issues });
-    const result = buildMaterialMapping(database.data, parsed.data);
-    database.data.materialMappings = result.mappings;
+    const scoped = workspaceScopeForUser(database.data, request.user);
+    const result = buildMaterialMapping(scoped, parsed.data);
+    database.data.materialMappings = [
+      ...(database.data.materialMappings || []).filter((item) => !itemInWorkspace(item, request.user.workspaceId)),
+      ...result.mappings.map((mapping) => ({ ...mapping, workspaceId: request.user.workspaceId }))
+    ];
     database.data.materialMapRuns.unshift({
       id: randomUUID(),
+      workspaceId: request.user.workspaceId,
       generatedAt: result.generatedAt,
       applied: result.applied,
       changed: result.changed,
       unmapped: result.unmapped,
       mappings: result.mappings.length
     });
-    await dispatchEvent(database, "catalog.material_mapped", `${result.changed} material labels normalized`, { changed: result.changed, unmapped: result.unmapped, applied: result.applied });
+    await dispatchEvent(database, "catalog.material_mapped", `${result.changed} material labels normalized`, { workspaceId: request.user.workspaceId, changed: result.changed, unmapped: result.unmapped, applied: result.applied }, { actor: request.user });
     await database.write();
-    return { ...result, parts: database.data.parts, files: database.data.files, queue: database.data.queue };
+    const updatedScope = workspaceScopeForUser(database.data, request.user);
+    return { ...result, parts: updatedScope.parts, files: updatedScope.files, queue: updatedScope.queue };
   });
 
   app.get("/api/history", async (request) => buildPrintHistory(workspaceScopeForUser(database.data, request.user)));
@@ -5222,19 +6725,31 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   app.get("/api/audit", async (request) => {
     const options = parseAuditQuery(request.query || {});
     const scoped = workspaceScopeForUser(database.data, request.user);
-    const events = buildAuditEvents(scoped, options);
+    const page = buildAuditEventPage(scoped, options);
     return {
       generatedAt: new Date().toISOString(),
-      total: (scoped.events || []).length,
-      returned: events.length,
-      events
+      ...page
     };
   });
 
   app.get("/api/audit/export", async (request, reply) => {
     if (!hasPermission(request.user, "admin:export")) return reply.code(403).send({ error: "Missing permission: admin:export" });
     const options = parseAuditQuery(request.query || {});
-    const events = buildAuditEvents(workspaceScopeForUser(database.data, request.user), { ...options, limit: request.query?.limit ? options.limit : 1000 });
+    const effectiveOptions = { ...options, limit: request.query?.limit ? options.limit : 1000 };
+    const page = buildAuditEventPage(workspaceScopeForUser(database.data, request.user), effectiveOptions);
+    const events = page.events;
+    const exportedAt = new Date().toISOString();
+    await dispatchEvent(database, "admin.audit_exported", `${request.user.email} exported audit CSV`, {
+      workspaceId: request.user.workspaceId,
+      exportedAt,
+      type: options.type || "",
+      searchApplied: Boolean(options.search),
+      limit: effectiveOptions.limit,
+      offset: effectiveOptions.offset,
+      matchedEvents: page.matched,
+      exportedEvents: events.length
+    }, { actor: request.user });
+    await database.write();
     const date = new Date().toISOString().slice(0, 10);
     reply.header("content-disposition", `attachment; filename="layerpilot-audit-${date}.csv"`);
     reply.type("text/csv; charset=utf-8");
@@ -5243,10 +6758,10 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
 
   app.post("/api/admin/audit-retention/run", { config: { rateLimit: { ...sensitiveRateLimit, groupId: "admin-audit-retention" } } }, async (request, reply) => {
     if (!hasPermission(request.user, "admin:export")) return reply.code(403).send({ error: "Missing permission: admin:export" });
-    const retention = applyAuditRetention(database.data);
+    const retention = applyAuditRetention(database.data, { workspaceId: request.user.workspaceId });
     database.data.dataMeta ||= {};
     database.data.dataMeta.auditRetentionLastRunAt = new Date().toISOString();
-    await dispatchEvent(database, "admin.audit_retention_run", `${request.user.email} ran audit retention`, { retention });
+    await dispatchEvent(database, "admin.audit_retention_run", `${request.user.email} ran audit retention`, { retention }, { actor: request.user });
     await database.write();
     return { retention, events: database.data.events.length, ranAt: database.data.dataMeta.auditRetentionLastRunAt };
   });
@@ -5294,7 +6809,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       }
     }
     job.updatedAt = now;
-    await dispatchEvent(database, "history.annotated", `${job.file} history updated`, { workspaceId: request.user.workspaceId, jobId: job.id, issueTag: job.issueTag || "", issueSeverity: job.issueSeverity || "", failureCategory: job.failureCategory || "", wasteGrams: Number(job.wasteGrams || 0), wasteCost: Number(job.wasteCost || 0), wasteInventory });
+    await dispatchEvent(database, "history.annotated", `${job.file} history updated`, { workspaceId: request.user.workspaceId, jobId: job.id, issueTag: job.issueTag || "", issueSeverity: job.issueSeverity || "", failureCategory: job.failureCategory || "", wasteGrams: Number(job.wasteGrams || 0), wasteCost: Number(job.wasteCost || 0), wasteInventory }, { actor: request.user });
     await database.write();
     const history = buildPrintHistory(workspaceScopeForUser(database.data, request.user));
     const historyRecord = history.find((item) => item.id === job.id);
@@ -5310,7 +6825,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const result = createReprintJob(database.data, sourceJob, parsed.data);
     if (result.error) return reply.code(result.statusCode || 400).send({ error: result.error });
     result.job.workspaceId = request.user.workspaceId;
-    await dispatchEvent(database, "queue.reprint", `${result.job.file} reprint queued`, { workspaceId: request.user.workspaceId, sourceJobId: sourceJob.id, jobId: result.job.id });
+    await dispatchEvent(database, "queue.reprint", `${result.job.file} reprint queued`, { workspaceId: request.user.workspaceId, sourceJobId: sourceJob.id, jobId: result.job.id }, { actor: request.user });
     await database.write();
     return reply.code(201).send({ job: result.job, todos: deriveTodos(workspaceScopeForUser(database.data, request.user)) });
   });
@@ -5319,11 +6834,35 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!hasPermission(request.user, "admin:export")) return reply.code(403).send({ error: "Missing permission: admin:export" });
     const exportedAt = new Date().toISOString();
     const includeFiles = request.query?.includeFiles === "true";
-    await dispatchEvent(database, "admin.export", `${request.user.email} exported workspace data`, { exportedAt, userId: request.user.id, includeFiles });
+    const allowMissingFiles = request.query?.allowMissingFiles === "true";
+    const scoped = workspaceScopeForUser(database.data, request.user);
+    let filePayloads = { storage: { included: false, count: 0, bytes: 0, missing: [] } };
+    if (includeFiles) {
+      const limitBytes = fullBackupMaxBytes(request.query || {});
+      const manifest = await buildBackupStorageManifest(scoped, limitBytes);
+      if (manifest.missing.length && !allowMissingFiles) {
+        await dispatchEvent(database, "admin.export", `${request.user.email} export blocked by missing stored file payloads`, { exportedAt, userId: request.user.id, includeFiles, blocked: true, missingFiles: manifest.missing.length, files: manifest.count, bytes: manifest.bytes }, { actor: request.user });
+        await database.write();
+        return reply.code(409).send({
+          error: "Full backup export is missing stored file payloads",
+          storage: manifest,
+          remediation: "Restore or re-upload the missing stored files before exporting, restore the production volume/object store separately, or retry with allowMissingFiles=true when a partial JSON backup is intentional."
+        });
+      }
+      if (manifest.oversized) {
+        await dispatchEvent(database, "admin.export", `${request.user.email} export blocked by full backup size limit`, { exportedAt, userId: request.user.id, includeFiles, blocked: true, limitBytes, bytes: manifest.bytes, files: manifest.count }, { actor: request.user });
+        await database.write();
+        return reply.code(413).send({
+          error: "Full backup export exceeds the configured byte limit",
+          storage: manifest,
+          remediation: "Use the verified Ubuntu volume backup or raise LAYERPILOT_FULL_BACKUP_MAX_BYTES for this instance before exporting stored file bytes."
+        });
+      }
+      filePayloads = await buildBackupFilePayloads(scoped, manifest);
+    }
+    await dispatchEvent(database, "admin.export", `${request.user.email} exported workspace data`, { exportedAt, userId: request.user.id, includeFiles, allowMissingFiles, limitBytes: filePayloads.storage.limitBytes || undefined, bytes: filePayloads.storage.bytes, files: filePayloads.storage.count, missingFiles: filePayloads.storage.missing?.length || 0 }, { actor: request.user });
     await database.write();
     reply.header("content-disposition", `attachment; filename="layerpilot-export-${exportedAt.slice(0, 10)}.json"`);
-    const scoped = workspaceScopeForUser(database.data, request.user);
-    const filePayloads = includeFiles ? await buildBackupFilePayloads(scoped) : { storage: { included: false, count: 0, bytes: 0, missing: [] } };
     return {
       exportedAt,
       service: "3DSTU FarmFlow",
@@ -5342,7 +6881,17 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const report = await buildDataIntegrityReport(workspaceScopeForUser(database.data, request.user), { checkStorage: request.query?.checkStorage === "true" });
     database.data.dataMeta ||= {};
     database.data.dataMeta.integrityLastCheckedAt = report.checkedAt;
-    await dispatchEvent(database, "admin.integrity_checked", `${request.user.email} checked data integrity`, { ok: report.ok, errors: report.errors.length, warnings: report.warnings.length });
+    await dispatchEvent(database, "admin.integrity_checked", `${request.user.email} checked data integrity`, {
+      ok: report.ok,
+      errors: report.errors.length,
+      warnings: report.warnings.length,
+      checkStorage: report.storage.checked,
+      storageComplete: report.storage.complete,
+      storageExpected: report.storage.expected,
+      storagePresent: report.storage.present,
+      storageBytes: report.storage.bytes,
+      storageMissingFiles: report.storage.missing.length
+    }, { actor: request.user });
     await database.write();
     return report;
   });
@@ -5352,19 +6901,14 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const parsed = adminRestoreSchema.safeParse(request.body || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid restore payload", issues: parsed.error.issues });
     const commitRequested = parsed.data.dryRun === false;
+    if (commitRequested && Array.isArray(request.user?.apiScopes)) return reply.code(403).send({ error: "Restore commit requires a user session" });
     const restoreFilePayloads = commitRequested && parsed.data.confirm === "RESTORE";
     const prepared = await prepareRestoreData(database.data, parsed.data.backup, { preserveStoragePaths: parsed.data.preserveStoragePaths, restoreFilePayloads }, request.user);
     if (prepared.error) return reply.code(400).send({ error: prepared.error });
     if (parsed.data.dryRun !== false) return { dryRun: true, ...prepared.summary };
     if (parsed.data.confirm !== "RESTORE") return reply.code(409).send({ error: "Restore commit requires confirm: RESTORE", dryRun: true, ...prepared.summary });
     database.data = prepared.data;
-    database.data.events.unshift({
-      id: randomUUID(),
-      type: "admin.restore",
-      message: `${request.user.email} restored workspace data`,
-      data: { summary: prepared.summary },
-      at: new Date().toISOString()
-    });
+    await dispatchEvent(database, "admin.restore", `${request.user.email} restored workspace data`, { summary: prepared.summary }, { actor: request.user });
     await ensureAuthData(database, { skipDemoUser: true });
     await database.write();
     broadcastRealtime(database, "state", { reason: "admin.restore", state: realtimeState(database.data), summary: prepared.summary });
@@ -5377,9 +6921,9 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsed.success) return reply.code(400).send({ error: "Invalid webhook payload", issues: parsed.error.issues });
     const webhook = { id: randomUUID(), workspaceId: request.user.workspaceId, ...parsed.data, lastStatus: "not sent", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     database.data.webhooks.push(webhook);
-    await dispatchEvent(database, "webhook.created", `${webhook.name} configured`, { webhookId: webhook.id });
+    await dispatchEvent(database, "webhook.created", `${webhook.name} configured`, { workspaceId: request.user.workspaceId, webhookId: webhook.id, enabled: webhook.enabled, events: webhook.events }, { actor: request.user });
     await database.write();
-    return reply.code(201).send(webhook);
+    return reply.code(201).send(sanitizeWebhook(webhook));
   });
 
   app.patch("/api/webhooks/:id", async (request, reply) => {
@@ -5389,20 +6933,20 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const webhook = database.data.webhooks.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!webhook) return reply.code(404).send({ error: "Webhook not found" });
     Object.assign(webhook, parsed.data, { updatedAt: new Date().toISOString() });
-    await dispatchEvent(database, "webhook.updated", `${webhook.name} updated`, { webhookId: webhook.id });
+    await dispatchEvent(database, "webhook.updated", `${webhook.name} updated`, { workspaceId: request.user.workspaceId, webhookId: webhook.id, enabled: webhook.enabled, events: webhook.events }, { actor: request.user });
     await database.write();
-    return webhook;
+    return sanitizeWebhook(webhook);
   });
 
   app.post("/api/webhooks/:id/test", async (request, reply) => {
     if (!hasPermission(request.user, "webhooks:write")) return reply.code(403).send({ error: "Missing permission: webhooks:write" });
     const webhook = database.data.webhooks.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!webhook) return reply.code(404).send({ error: "Webhook not found" });
-    const event = { id: randomUUID(), type: "webhook.test", message: `${webhook.name} test delivery`, data: { webhookId: webhook.id }, at: new Date().toISOString() };
-    database.data.events.unshift(event);
+    const event = createAuditEvent(database, "webhook.test", `${webhook.name} test delivery`, { workspaceId: request.user.workspaceId, webhookId: webhook.id, enabled: webhook.enabled, events: webhook.events }, { actor: request.user });
     const delivery = await deliverWebhook(database, webhook, event);
     await database.write();
-    return { event, delivery, webhook };
+    broadcastRealtime(database, "event", { event, deliveries: [sanitizeWebhookDelivery(delivery)] });
+    return { event, delivery: sanitizeWebhookDelivery(delivery), webhook: sanitizeWebhook(webhook) };
   });
 
   app.post("/api/notificationChannels", async (request, reply) => {
@@ -5411,7 +6955,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsed.success) return reply.code(400).send({ error: "Invalid notification channel payload", issues: parsed.error.issues });
     const channel = { id: randomUUID(), workspaceId: request.user.workspaceId, ...parsed.data, lastStatus: "not sent", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     database.data.notificationChannels.push(channel);
-    await dispatchEvent(database, "notification.channel_created", `${channel.name} configured`, { channelId: channel.id });
+    await dispatchEvent(database, "notification.channel_created", `${channel.name} configured`, { workspaceId: request.user.workspaceId, channelId: channel.id, channelType: channel.type, enabled: channel.enabled, events: channel.events, recipients: channel.recipients?.length || 0, hasToken: Boolean(channel.token) }, { actor: request.user });
     await database.write();
     return reply.code(201).send(sanitizeNotificationChannel(channel));
   });
@@ -5423,7 +6967,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const channel = database.data.notificationChannels.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!channel) return reply.code(404).send({ error: "Notification channel not found" });
     Object.assign(channel, parsed.data, { updatedAt: new Date().toISOString() });
-    await dispatchEvent(database, "notification.channel_updated", `${channel.name} updated`, { channelId: channel.id });
+    await dispatchEvent(database, "notification.channel_updated", `${channel.name} updated`, { workspaceId: request.user.workspaceId, channelId: channel.id, channelType: channel.type, enabled: channel.enabled, events: channel.events, recipients: channel.recipients?.length || 0, hasToken: Boolean(channel.token) }, { actor: request.user });
     await database.write();
     return sanitizeNotificationChannel(channel);
   });
@@ -5432,15 +6976,16 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!hasPermission(request.user, "notifications:write")) return reply.code(403).send({ error: "Missing permission: notifications:write" });
     const channel = database.data.notificationChannels.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!channel) return reply.code(404).send({ error: "Notification channel not found" });
-    const event = { id: randomUUID(), type: "notification.test", message: `${channel.name} test alert`, data: { channelId: channel.id }, at: new Date().toISOString() };
-    database.data.events.unshift(event);
+    const event = createAuditEvent(database, "notification.test", `${channel.name} test alert`, { workspaceId: request.user.workspaceId, channelId: channel.id, channelType: channel.type, enabled: channel.enabled, events: channel.events, recipients: channel.recipients?.length || 0, hasToken: Boolean(channel.token) }, { actor: request.user });
     const delivery = await deliverNotification(database, channel, event);
     await database.write();
-    broadcastRealtime(database, "event", { event, notificationDeliveries: [delivery] });
-    return { event, delivery, channel: sanitizeNotificationChannel(channel) };
+    const safeDelivery = sanitizeNotificationDelivery(delivery);
+    broadcastRealtime(database, "event", { event, notificationDeliveries: [safeDelivery] });
+    return { event, delivery: safeDelivery, channel: sanitizeNotificationChannel(channel) };
   });
 
   app.post("/api/apiKeys", { config: { rateLimit: { ...sensitiveRateLimit, groupId: "api-keys-create" } } }, async (request, reply) => {
+    if (request.apiKey) return reply.code(403).send({ error: "API key management requires a user session" });
     if (!hasPermission(request.user, "apiKeys:write")) return reply.code(403).send({ error: "Missing permission: apiKeys:write" });
     const parsed = apiKeySchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Invalid API key payload", issues: parsed.error.issues });
@@ -5460,19 +7005,20 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       lastUsedAt: ""
     };
     database.data.apiKeys.push(key);
-    await dispatchEvent(database, "api_key.created", `${key.name} created`, { apiKeyId: key.id, scopes: key.scopes });
+    await dispatchEvent(database, "api_key.created", `${key.name} created`, { workspaceId: request.user.workspaceId, apiKeyId: key.id, scopes: key.scopes }, { actor: request.user });
     await database.write();
     return reply.code(201).send({ apiKey: sanitizeApiKey(key), secret });
   });
 
   app.patch("/api/apiKeys/:id", async (request, reply) => {
+    if (request.apiKey) return reply.code(403).send({ error: "API key management requires a user session" });
     if (!hasPermission(request.user, "apiKeys:write")) return reply.code(403).send({ error: "Missing permission: apiKeys:write" });
     const parsed = apiKeyPatchSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Invalid API key update", issues: parsed.error.issues });
     const key = database.data.apiKeys.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!key) return reply.code(404).send({ error: "API key not found" });
     Object.assign(key, parsed.data, { updatedAt: new Date().toISOString() });
-    await dispatchEvent(database, "api_key.updated", `${key.name} updated`, { apiKeyId: key.id, enabled: key.enabled, scopes: key.scopes });
+    await dispatchEvent(database, "api_key.updated", `${key.name} updated`, { workspaceId: request.user.workspaceId, apiKeyId: key.id, enabled: key.enabled, scopes: key.scopes }, { actor: request.user });
     await database.write();
     return sanitizeApiKey(key);
   });
@@ -5499,7 +7045,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       passwordHash: createPasswordHash(password)
     };
     database.data.users.push(user);
-    await dispatchEvent(database, "user.invited", `${user.email} invited as ${user.role}`, { userId: user.id, role: user.role, location: user.location });
+    await dispatchEvent(database, "user.invited", `${user.email} invited as ${user.role}`, { workspaceId: request.user.workspaceId, userId: user.id, role: user.role, location: user.location }, { actor: request.user });
     await database.write();
     return reply.code(201).send({ user: sanitizeUser(user), temporaryPassword: parsed.data.password ? undefined : password });
   });
@@ -5515,7 +7061,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       if (ownerCount <= 1) return reply.code(409).send({ error: "At least one Owner is required" });
     }
     Object.assign(user, parsed.data, { updatedAt: new Date().toISOString() });
-    await dispatchEvent(database, "user.updated", `${user.email} updated`, { userId: user.id, role: user.role, location: user.location });
+    await dispatchEvent(database, "user.updated", `${user.email} updated`, { workspaceId: request.user.workspaceId, userId: user.id, role: user.role, location: user.location }, { actor: request.user });
     await database.write();
     return sanitizeUser(user);
   });
@@ -5529,9 +7075,10 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const password = parsed.data.password || randomBytes(10).toString("base64url");
     user.passwordHash = createPasswordHash(password);
     user.passwordResetRequired = parsed.data.requireChange;
+    clearAuthFailureState(user);
     user.updatedAt = new Date().toISOString();
     database.data.sessions = (database.data.sessions || []).filter((session) => session.userId !== user.id);
-    await dispatchEvent(database, "user.password_reset", `${user.email} password reset`, { userId: user.id, resetBy: request.user.email, requireChange: parsed.data.requireChange });
+    await dispatchEvent(database, "user.password_reset", `${user.email} password reset`, { workspaceId: request.user.workspaceId, userId: user.id, resetBy: request.user.email, requireChange: parsed.data.requireChange }, { actor: request.user });
     await database.write();
     return { user: sanitizeUser(user), temporaryPassword: parsed.data.password ? undefined : password };
   });
@@ -5539,9 +7086,12 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   app.patch("/api/workspaceSettings", async (request, reply) => {
     if (!hasPermission(request.user, "settings:write")) return reply.code(403).send({ error: "Missing permission: settings:write" });
     const parsed = workspaceSettingsPatchSchema.safeParse(request.body);
-    if (!parsed.success) return reply.code(400).send({ error: "Invalid workspace settings", issues: parsed.error.issues });
-    const settings = updateWorkspaceSettings(database.data, request.user.workspaceId, parsed.data);
-    await dispatchEvent(database, "settings.updated", `${settings.organizationName} settings updated`, { workspaceId: request.user.workspaceId, settings });
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid workspace settings payload", issues: parsed.error.issues });
+    const current = workspaceForId(database.data, request.user.workspaceId).settings || database.data.workspaceSettings || {};
+    const next = workspaceSettingsSchema.safeParse({ ...current, ...parsed.data, workspaceId: request.user.workspaceId || current.workspaceId || DEFAULT_WORKSPACE_ID });
+    if (!next.success) return reply.code(400).send({ error: "Invalid workspace settings payload", issues: next.error.issues });
+    const settings = updateWorkspaceSettings(database.data, request.user.workspaceId, next.data);
+    await dispatchEvent(database, "settings.updated", `${settings.organizationName} settings updated`, { workspaceId: request.user.workspaceId, settings }, { actor: request.user });
     await database.write();
     return settings;
   });
@@ -5570,7 +7120,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       at: new Date().toISOString()
     };
     database.data.invoices.unshift(invoice);
-    await dispatchEvent(database, "billing.plan_changed", `${previousPlan.name} -> ${plan.name}`, { workspaceId: request.user.workspaceId, previousPlan: previousPlan.id, planId: plan.id, invoiceId: invoice.id });
+    await dispatchEvent(database, "billing.plan_changed", `${previousPlan.name} -> ${plan.name}`, { workspaceId: request.user.workspaceId, previousPlan: previousPlan.id, planId: plan.id, invoiceId: invoice.id }, { actor: request.user });
     await database.write();
     return { settings, billing: await buildBillingSummary(workspaceScopeForUser(database.data, request.user), { stripeClient }), invoice };
   });
@@ -5584,7 +7134,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       workspaceId: request.user.workspaceId
     };
     database.data.billingSessions.unshift(session);
-    await dispatchEvent(database, "billing.portal_session", `${request.user.email} opened billing management`, { workspaceId: request.user.workspaceId, sessionId: session.id, mode: session.mode });
+    await dispatchEvent(database, "billing.portal_session", `${request.user.email} opened billing management`, { workspaceId: request.user.workspaceId, sessionId: session.id, mode: session.mode }, { actor: request.user });
     await database.write();
     return { session, billing: await buildBillingSummary(workspaceScopeForUser(database.data, request.user), { stripeClient }) };
   });
@@ -5592,10 +7142,19 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   app.post("/api/billing/webhook/stripe", { config: { rateLimit: { ...sensitiveRateLimit, groupId: "billing-webhook" } } }, async (request, reply) => {
     const expectedSecret = process.env.LAYERPILOT_STRIPE_WEBHOOK_SECRET || "";
     if (!expectedSecret && process.env.NODE_ENV === "production") return reply.code(503).send({ error: "Stripe webhook secret is required in production" });
-    if (expectedSecret && request.headers["x-layerpilot-billing-webhook-secret"] !== expectedSecret) return reply.code(401).send({ error: "Invalid billing webhook secret" });
-    const parsed = stripeWebhookSchema.safeParse(request.body || {});
+    const verified = stripeWebhookPayloadFromRequest(request, expectedSecret);
+    if (!verified.ok) return reply.code(verified.statusCode).send({ error: verified.error });
+    if (!verified.verified && expectedSecret && request.headers["x-layerpilot-billing-webhook-secret"] !== expectedSecret) return reply.code(401).send({ error: "Invalid billing webhook secret" });
+    const parsed = stripeWebhookSchema.safeParse(verified.payload || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid Stripe webhook payload", issues: parsed.error.issues });
+    const replayRecord = replayStripeWebhookEvent(database.data, parsed.data);
+    if (replayRecord) {
+      await database.write();
+      reply.header("x-layerpilot-stripe-webhook-replay", "true");
+      return stripeWebhookReplayResponse(replayRecord);
+    }
     const result = applyStripeBillingEvent(database.data, parsed.data);
+    recordStripeWebhookEvent(database.data, parsed.data, result);
     await dispatchEvent(database, "billing.stripe_webhook", `Stripe ${parsed.data.type}`, { eventId: parsed.data.id, eventType: parsed.data.type, planId: result.plan?.id, invoiceId: result.invoice?.id });
     await database.write();
     return { received: true, eventType: parsed.data.type, plan: result.plan || null, invoice: result.invoice || null, billing: await buildBillingSummary(database.data, { stripeClient }) };
@@ -5605,14 +7164,10 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!hasPermission(request.user, "catalog:write")) return reply.code(403).send({ error: "Missing permission: catalog:write" });
     const parsed = costCatalogPatchSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Invalid cost catalog", issues: parsed.error.issues });
-    database.data.costCatalog = costCatalogSchema.parse({
-      ...database.data.costCatalog,
-      ...parsed.data,
-      materialRates: { ...database.data.costCatalog.materialRates, ...(parsed.data.materialRates || {}) }
-    });
-    await dispatchEvent(database, "cost_catalog.updated", "Cost catalog updated", { costCatalog: database.data.costCatalog });
+    const costCatalog = updateCostCatalogForWorkspace(database.data, request.user.workspaceId, parsed.data);
+    await dispatchEvent(database, "cost_catalog.updated", "Cost catalog updated", { workspaceId: request.user.workspaceId, costCatalog }, { actor: request.user });
     await database.write();
-    return database.data.costCatalog;
+    return costCatalog;
   });
 
   app.patch("/api/addons/:id", async (request, reply) => {
@@ -5635,7 +7190,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       previousStatus,
       status: addon.status,
       note: parsed.data.note || ""
-    });
+    }, { actor: request.user });
     await database.write();
     broadcastRealtime(database, "state", { reason: "addon.updated", state: realtimeState(database.data), addon: sanitizeAddon(addon) });
     return { addon: sanitizeAddon(addon), addons: workspaceScopeForUser(database.data, request.user).addons.map(sanitizeAddon) };
@@ -5644,7 +7199,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   app.post("/api/quotes", async (request, reply) => {
     const parsed = quoteRequestSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Invalid quote request", issues: parsed.error.issues });
-    return calculateQuote(database.data.costCatalog, parsed.data);
+    return calculateQuote(costCatalogForWorkspace(database.data, request.user.workspaceId), parsed.data);
   });
 
   app.post("/api/printers", async (request, reply) => {
@@ -5666,7 +7221,14 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       updatedAt: new Date().toISOString()
     };
     database.data.printers.push(printer);
-    await dispatchEvent(database, "printer.created", `${printer.name} added`, { printerId: printer.id, connection: printer.connection, buildVolume: printer.buildVolume });
+    await dispatchEvent(database, "printer.created", `${printer.name} added`, {
+      workspaceId: request.user.workspaceId,
+      printerId: printer.id,
+      printerName: printer.name,
+      connection: printer.connection,
+      buildVolume: printer.buildVolume,
+      compatibleMaterials: printer.compatibleMaterials || []
+    }, { actor: request.user });
     await database.write();
     return reply.code(201).send(printer);
   });
@@ -5681,7 +7243,14 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       return reply.code(409).send({ error: "Printer name already exists" });
     }
     Object.assign(printer, parsed.data, { updatedAt: new Date().toISOString() });
-    await dispatchEvent(database, "printer.updated", `${printer.name} updated`, { printerId: printer.id, connection: printer.connection, buildVolume: printer.buildVolume });
+    await dispatchEvent(database, "printer.updated", `${printer.name} updated`, {
+      workspaceId: request.user.workspaceId,
+      printerId: printer.id,
+      printerName: printer.name,
+      connection: printer.connection,
+      buildVolume: printer.buildVolume,
+      compatibleMaterials: printer.compatibleMaterials || []
+    }, { actor: request.user });
     await database.write();
     return printer;
   });
@@ -5692,7 +7261,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsed.success) return reply.code(400).send({ error: "Invalid commerce connector payload", issues: parsed.error.issues });
     const connector = { id: randomUUID(), workspaceId: request.user.workspaceId, ...parsed.data, lastStatus: "not synced", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     database.data.commerceConnectors.push(connector);
-    await dispatchEvent(database, "commerce.connector_created", `${connector.name} configured`, { connectorId: connector.id, source: connector.source });
+    await dispatchEvent(database, "commerce.connector_created", `${connector.name} configured`, { workspaceId: request.user.workspaceId, connectorId: connector.id, source: connector.source, enabled: connector.enabled, hasToken: Boolean(connector.token) }, { actor: request.user });
     await database.write();
     return reply.code(201).send(sanitizeCommerceConnector(connector));
   });
@@ -5704,7 +7273,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const connector = database.data.commerceConnectors.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!connector) return reply.code(404).send({ error: "Commerce connector not found" });
     Object.assign(connector, parsed.data, { updatedAt: new Date().toISOString() });
-    await dispatchEvent(database, "commerce.connector_updated", `${connector.name} updated`, { connectorId: connector.id, source: connector.source });
+    await dispatchEvent(database, "commerce.connector_updated", `${connector.name} updated`, { workspaceId: request.user.workspaceId, connectorId: connector.id, source: connector.source, enabled: connector.enabled, hasToken: Boolean(connector.token) }, { actor: request.user });
     await database.write();
     return sanitizeCommerceConnector(connector);
   });
@@ -5795,7 +7364,13 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const parsed = fileFolderSchema.safeParse(request.body || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid file folder payload", issues: parsed.error.issues });
     const result = ensureFileFolder(database.data, { ...parsed.data, workspaceId: request.user.workspaceId });
-    await dispatchEvent(database, result.created ? "file_folder.created" : "file_folder.reused", `${result.folder.name} folder ${result.created ? "created" : "reused"}`, { folderId: result.folder.id, name: result.folder.name });
+    await dispatchEvent(database, result.created ? "file_folder.created" : "file_folder.reused", `${result.folder.name} folder ${result.created ? "created" : "reused"}`, {
+      workspaceId: request.user.workspaceId,
+      folderId: result.folder.id,
+      name: result.folder.name,
+      purpose: result.folder.purpose || "",
+      parent: result.folder.parent || ""
+    }, { actor: request.user });
     await database.write();
     return reply.code(result.created ? 201 : 200).send({ ...result, folders: database.data.fileFolders });
   });
@@ -5807,7 +7382,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const minutes = parsed.data.estimateMinutes || 60;
     const hours = Math.floor(minutes / 60);
     const remainder = String(minutes % 60).padStart(2, "0");
-    const quote = calculateQuote(database.data.costCatalog, { material: parsed.data.material, grams: parsed.data.estimateGrams, minutes });
+    const quote = calculateQuote(costCatalogForWorkspace(database.data, request.user.workspaceId), { material: parsed.data.material, grams: parsed.data.estimateGrams, minutes });
     const file = {
       id: randomUUID(),
       workspaceId: request.user.workspaceId,
@@ -5823,7 +7398,17 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       quoteBreakdown: quote
     };
     database.data.files.push(file);
-    database.data.events.unshift({ id: randomUUID(), type: "file.created", message: file.name, at: new Date().toISOString() });
+    await dispatchEvent(database, "file.created", `${file.name} created`, {
+      workspaceId: request.user.workspaceId,
+      fileId: file.id,
+      name: file.name,
+      type: file.type,
+      material: file.material,
+      folder: file.folder,
+      status: file.status,
+      version: file.version,
+      storageBacked: Boolean(file.storagePath)
+    }, { actor: request.user });
     await database.write();
     return reply.code(201).send(file);
   });
@@ -5833,7 +7418,17 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const parsed = sampleFileSchema.safeParse(request.body || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid sample file payload", issues: parsed.error.issues });
     const result = await createSampleFile(database, parsed.data, { workspaceId: request.user.workspaceId });
-    await dispatchEvent(database, "file.sample_generated", `${result.file.name} sample STL generated`, { fileId: result.file.id, folderId: result.folder.id, stlBytes: result.stlBytes });
+    await dispatchEvent(database, "file.sample_generated", `${result.file.name} sample STL generated`, {
+      workspaceId: request.user.workspaceId,
+      fileId: result.file.id,
+      fileName: result.file.name,
+      fileType: result.file.type || "STL",
+      material: result.file.material || "",
+      folderId: result.folder.id,
+      folderName: result.folder.name,
+      storageBacked: Boolean(result.file.storagePath || result.file.storageKey),
+      stlBytes: result.stlBytes
+    }, { actor: request.user });
     await database.write();
     return reply.code(201).send({ ...result, files: database.data.files, folders: database.data.fileFolders });
   });
@@ -5852,7 +7447,18 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
 
     const result = await createSampleFile(database, { name: parsed.data.name, material: parsed.data.material, folder: parsed.data.folder }, { workspaceId: request.user.workspaceId });
     result.file.tags = Array.from(new Set([...(result.file.tags || []), "hot-drop", mode.toLowerCase().replace(" ", "-")]));
-    await dispatchEvent(database, "file.sample_generated", `${result.file.name} generated from Hot Drop`, { fileId: result.file.id, folderId: result.folder.id, stlBytes: result.stlBytes, mode });
+    await dispatchEvent(database, "file.sample_generated", `${result.file.name} generated from Hot Drop`, {
+      workspaceId: request.user.workspaceId,
+      fileId: result.file.id,
+      fileName: result.file.name,
+      fileType: result.file.type || "STL",
+      material: result.file.material || "",
+      folderId: result.folder.id,
+      folderName: result.folder.name,
+      storageBacked: Boolean(result.file.storagePath || result.file.storageKey),
+      stlBytes: result.stlBytes,
+      mode
+    }, { actor: request.user });
 
     let job = null;
     let match = null;
@@ -5879,14 +7485,35 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       };
       job.scheduleWarnings = getScheduleWarnings(database.data, job, printer);
       database.data.queue.push(job);
-      await dispatchEvent(database, "queue.created", `${job.file} queued from Hot Drop`, { jobId: job.id, fileId: job.fileId, printerId: job.printerId, material: job.material, mode });
+      await dispatchEvent(database, "queue.created", `${job.file} queued from Hot Drop`, {
+        workspaceId: request.user.workspaceId,
+        jobId: job.id,
+        fileId: job.fileId,
+        fileName: job.file,
+        printerId: job.printerId,
+        material: job.material,
+        mode
+      }, { actor: request.user });
       if (mode === "Direct Print" && printable) {
         match = matchQueueNow(workspaceScopeForUser(database.data, request.user), { dryRun: false, maxActiveSlots: 3, respectMaterial: true, respectBuildVolume: true });
-        await dispatchEvent(database, "queue.matched", `${match.matches.length} Hot Drop jobs started`, { matches: match.matches.map((item) => ({ jobId: item.jobId, printerId: item.printerId })), skipped: match.skipped.length, mode });
+        await dispatchEvent(database, "queue.matched", `${match.matches.length} Hot Drop jobs started`, {
+          workspaceId: request.user.workspaceId,
+          matches: match.matches.map((item) => ({ jobId: item.jobId, printerId: item.printerId })),
+          skipped: match.skipped.length,
+          mode
+        }, { actor: request.user });
       }
     }
 
-    await dispatchEvent(database, "hot_drop.handled", `Hot Drop handled as ${mode}`, { mode, fileId: result.file.id, jobId: job?.id || "", directMatched: Boolean(match?.matches?.length) });
+    await dispatchEvent(database, "hot_drop.handled", `Hot Drop handled as ${mode}`, {
+      workspaceId: request.user.workspaceId,
+      mode,
+      fileId: result.file.id,
+      fileName: result.file.name,
+      material: result.file.material || "",
+      jobId: job?.id || "",
+      directMatched: Boolean(match?.matches?.length)
+    }, { actor: request.user });
     await database.write();
     return reply.code(201).send({
       mode,
@@ -5911,8 +7538,12 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const material = typeof part.fields?.material?.value === "string" ? part.fields.material.value : "PLA";
     const folder = typeof part.fields?.folder?.value === "string" ? part.fields.folder.value : "Uploads";
     const buffer = await part.toBuffer();
+    const workspaceId = request.user.workspaceId || DEFAULT_WORKSPACE_ID;
+    const actorId = idempotencyActorForRequest(request);
+    const bodyDigest = uploadRequestBodyDigest({ filename, material, folder, buffer });
+    if (await prepareIdempotentRequest(database, request, reply, { workspaceId, actorId, bodyDigest })) return;
     const { file } = await createStoredModelFile(database, { filename, buffer, material, folder, tags: ["uploaded", "parsed"], source: "Operator upload" }, { workspaceId: request.user.workspaceId });
-    database.data.events.unshift({ id: randomUUID(), type: "file.uploaded", message: `${filename} parsed and stored`, at: new Date().toISOString() });
+    await dispatchEvent(database, "file.uploaded", `${filename} parsed and stored`, { fileId: file.id, filename, material, folder: file.folder, bytes: buffer.length }, { actor: request.user });
     await database.write();
     return reply.code(201).send(file);
   });
@@ -5922,7 +7553,18 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const parsed = parametricNameplateSchema.safeParse(request.body || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid parametric nameplate payload", issues: parsed.error.issues });
     const result = await createParametricNameplate(database, parsed.data, { workspaceId: request.user.workspaceId });
-    await dispatchEvent(database, "parametric.generated", `${result.file.name} generated`, { fileId: result.file.id, partId: result.part?.id || "", generator: result.file.parametric.generator, estimates: result.estimates });
+    await dispatchEvent(database, "parametric.generated", `${result.file.name} generated`, {
+      workspaceId: request.user.workspaceId,
+      fileId: result.file.id,
+      fileName: result.file.name,
+      fileType: result.file.type || "STL",
+      material: result.file.material || "",
+      partId: result.part?.id || "",
+      generator: result.file.parametric.generator,
+      storageBacked: Boolean(result.file.storagePath || result.file.storageKey),
+      stlBytes: result.stlBytes,
+      estimates: result.estimates
+    }, { actor: request.user });
     await database.write();
     return reply.code(201).send({ ...result, files: database.data.files, parts: database.data.parts });
   });
@@ -5931,9 +7573,24 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const file = database.data.files.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!file) return reply.code(404).send({ error: "File not found" });
     const filename = path.basename(file.name || file.storageKey || file.storagePath || `${file.id}.json`);
+    const auditDownload = async ({ bytes = 0, fallbackManifest = false } = {}) => {
+      await dispatchEvent(database, "file.downloaded", `${request.user.email} downloaded ${file.name || file.id}`, {
+        workspaceId: request.user.workspaceId,
+        fileId: file.id,
+        fileName: file.name || filename,
+        fileType: file.type || "",
+        material: file.material || "",
+        folder: file.folder || "",
+        storageBacked: Boolean(file.storagePath || file.storageKey),
+        fallbackManifest,
+        bytes
+      }, { actor: request.user });
+      await database.write();
+    };
     if (file.storagePath) {
       try {
         const bytes = await readStoredObject(file);
+        await auditDownload({ bytes: bytes.length, fallbackManifest: false });
         reply.header("content-disposition", `attachment; filename="${filename.replace(/"/g, "")}"`);
         reply.type(file.type === "GCODE" ? "text/x-gcode" : "application/octet-stream");
         return bytes;
@@ -5941,9 +7598,11 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
         // Fall back to a metadata manifest below when stored bytes are not available.
       }
     }
+    const manifest = JSON.stringify({ exportedAt: new Date().toISOString(), file }, null, 2);
+    await auditDownload({ bytes: Buffer.byteLength(manifest), fallbackManifest: true });
     reply.header("content-disposition", `attachment; filename="${path.basename(file.name, path.extname(file.name)) || file.id}.layerpilot.json"`);
     reply.type("application/json");
-    return JSON.stringify({ exportedAt: new Date().toISOString(), file }, null, 2);
+    return manifest;
   });
 
   app.get("/api/files/:id/preview", async (request, reply) => {
@@ -5957,7 +7616,20 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
         buffer = null;
       }
     }
-    return buildFilePreview(file, buffer, workspaceScopeForUser(database.data, request.user));
+    const preview = await buildFilePreview(file, buffer, workspaceScopeForUser(database.data, request.user));
+    await dispatchEvent(database, "file.previewed", `${request.user.email} previewed ${file.name || file.id}`, {
+      workspaceId: request.user.workspaceId,
+      fileId: file.id,
+      fileName: file.name || file.id,
+      fileType: file.type || "",
+      material: file.material || "",
+      folder: file.folder || "",
+      storageBacked: Boolean(file.storagePath || file.storageKey),
+      bytes: buffer ? buffer.length : 0,
+      previewKind: preview?.visualization?.kind || preview?.type || ""
+    }, { actor: request.user });
+    await database.write();
+    return preview;
   });
 
   app.delete("/api/files/:id", async (request, reply) => {
@@ -5972,7 +7644,18 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const removedStorage = await removeStoredFile(file);
     database.data.files = database.data.files.filter((item) => item.id !== file.id);
     database.data.queue = (database.data.queue || []).filter((job) => job.fileId !== file.id || ["complete", "failed", "cancelled"].includes(job.status));
-    await dispatchEvent(database, "file.deleted", `${file.name} deleted`, { fileId: file.id, removedStorage, force, references });
+    await dispatchEvent(database, "file.deleted", `${file.name} deleted`, {
+      workspaceId: request.user.workspaceId,
+      fileId: file.id,
+      fileName: file.name || file.id,
+      fileType: file.type || "",
+      material: file.material || "",
+      folder: file.folder || "",
+      storageBacked: Boolean(file.storagePath || file.storageKey),
+      removedStorage,
+      force,
+      referenceCounts: fileReferenceCounts(references)
+    }, { actor: request.user });
     await database.write();
     return { ok: true, file, removedStorage, references };
   });
@@ -5983,7 +7666,15 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsed.success) return reply.code(400).send({ error: "Invalid spool payload", issues: parsed.error.issues });
     const spool = { id: randomUUID(), workspaceId: request.user.workspaceId, ...parsed.data, updatedAt: new Date().toISOString() };
     database.data.spools.push(spool);
-    database.data.events.unshift({ id: randomUUID(), type: "spool.created", message: `${spool.material} ${spool.brand} added`, at: spool.updatedAt });
+    await dispatchEvent(database, "spool.created", `${spool.material} ${spool.brand} added`, {
+      workspaceId: request.user.workspaceId,
+      spoolId: spool.id,
+      material: spool.material,
+      brand: spool.brand,
+      location: spool.location,
+      remaining: spool.remaining,
+      weight: spool.weight
+    }, { actor: request.user, at: spool.updatedAt });
     await database.write();
     return reply.code(201).send(spool);
   });
@@ -5996,7 +7687,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const selected = (database.data.spools || [])
       .filter((spool) => itemInWorkspace(spool, request.user.workspaceId) && (!selectedIds.size || selectedIds.has(spool.id)) && (parsed.data.includeEmpty || Number(spool.remaining ?? 0) > 0));
     const exportPayload = buildSpoolLabelExport(selected);
-    await dispatchEvent(database, "spool.labels_generated", `${exportPayload.count} spool labels generated`, { count: exportPayload.count, spoolIds: selected.map((spool) => spool.id) });
+    await dispatchEvent(database, "spool.labels_generated", `${exportPayload.count} spool labels generated`, { workspaceId: request.user.workspaceId, count: exportPayload.count, spoolIds: selected.map((spool) => spool.id) }, { actor: request.user });
     await database.write();
     return exportPayload;
   });
@@ -6023,6 +7714,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (spool.remaining <= 0) warnings.push("Spool empty");
     else if (spool.remaining < 150) warnings.push("Low stock");
     await dispatchEvent(database, parsed.data.grams ? "spool.scanned_usage" : "spool.scanned", parsed.data.grams ? `${parsed.data.grams}g scanned for ${spool.material}` : `${spool.material} spool scanned`, {
+      workspaceId: request.user.workspaceId,
       spoolId: spool.id,
       code: parsed.data.code,
       location: spool.location,
@@ -6030,7 +7722,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       remaining: spool.remaining,
       grams: parsed.data.grams || 0,
       warnings
-    });
+    }, { actor: request.user });
     await database.write();
     return { spool, matchedBy: spool.nfc === parsed.data.code ? "nfc" : spool.id === parsed.data.code ? "id" : "label", usageLogged: parsed.data.grams || 0, warnings, spools: database.data.spools };
   });
@@ -6042,7 +7734,16 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const spool = database.data.spools.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!spool) return reply.code(404).send({ error: "Spool not found" });
     Object.assign(spool, parsed.data, { remaining: Math.min(parsed.data.remaining ?? spool.remaining, parsed.data.weight ?? spool.weight), updatedAt: new Date().toISOString() });
-    database.data.events.unshift({ id: randomUUID(), type: "spool.updated", message: `${spool.material} ${spool.brand} updated`, at: spool.updatedAt });
+    await dispatchEvent(database, "spool.updated", `${spool.material} ${spool.brand} updated`, {
+      workspaceId: request.user.workspaceId,
+      spoolId: spool.id,
+      material: spool.material,
+      brand: spool.brand,
+      location: spool.location,
+      remaining: spool.remaining,
+      weight: spool.weight,
+      dry: spool.dry
+    }, { actor: request.user, at: spool.updatedAt });
     await database.write();
     return spool;
   });
@@ -6055,7 +7756,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!spool) return reply.code(404).send({ error: "Spool not found" });
     spool.remaining = Math.max(0, Number(spool.remaining || 0) - parsed.data.grams);
     spool.updatedAt = new Date().toISOString();
-    await dispatchEvent(database, "spool.usage", `${parsed.data.grams}g logged for ${spool.material}`, { spoolId: spool.id, material: spool.material, remaining: spool.remaining, grams: parsed.data.grams });
+    await dispatchEvent(database, "spool.usage", `${parsed.data.grams}g logged for ${spool.material}`, { workspaceId: request.user.workspaceId, spoolId: spool.id, material: spool.material, remaining: spool.remaining, grams: parsed.data.grams }, { actor: request.user });
     await database.write();
     return spool;
   });
@@ -6068,7 +7769,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const now = new Date().toISOString();
     const purchaseRequest = { id: randomUUID(), workspaceId: request.user.workspaceId, ...parsed.data, createdAt: now, updatedAt: now };
     database.data.purchaseRequests.unshift(purchaseRequest);
-    await dispatchEvent(database, "purchase_request.created", `${purchaseRequest.material} reorder request created`, { purchaseRequestId: purchaseRequest.id, material: purchaseRequest.material, quantity: purchaseRequest.quantity });
+    await dispatchEvent(database, "purchase_request.created", `${purchaseRequest.material} reorder request created`, { workspaceId: request.user.workspaceId, purchaseRequestId: purchaseRequest.id, material: purchaseRequest.material, quantity: purchaseRequest.quantity }, { actor: request.user });
     await database.write();
     return reply.code(201).send(purchaseRequest);
   });
@@ -6078,7 +7779,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const parsed = purchaseReorderPlanSchema.safeParse(request.body || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid reorder plan payload", issues: parsed.error.issues });
     const result = createReorderPlan(database.data, request.user.workspaceId, parsed.data);
-    await dispatchEvent(database, "purchase_request.reorder_plan", `${result.created.length} reorder requests created`, { created: result.created.map((item) => item.id), skipped: result.skipped.length, thresholdGrams: result.thresholdGrams });
+    await dispatchEvent(database, "purchase_request.reorder_plan", `${result.created.length} reorder requests created`, { workspaceId: request.user.workspaceId, created: result.created.map((item) => item.id), skipped: result.skipped.length, thresholdGrams: result.thresholdGrams }, { actor: request.user });
     await database.write();
     return result;
   });
@@ -6093,7 +7794,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const rawPatch = request.body && typeof request.body === "object" ? request.body : {};
     const patch = Object.fromEntries(Object.entries(parsed.data).filter(([key]) => Object.prototype.hasOwnProperty.call(rawPatch, key)));
     Object.assign(purchaseRequest, patch, { updatedAt: new Date().toISOString() });
-    await dispatchEvent(database, "purchase_request.updated", `${purchaseRequest.material} reorder request ${purchaseRequest.status}`, { purchaseRequestId: purchaseRequest.id, status: purchaseRequest.status });
+    await dispatchEvent(database, "purchase_request.updated", `${purchaseRequest.material} reorder request ${purchaseRequest.status}`, { workspaceId: request.user.workspaceId, purchaseRequestId: purchaseRequest.id, status: purchaseRequest.status }, { actor: request.user });
     await database.write();
     return purchaseRequest;
   });
@@ -6104,7 +7805,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsed.success) return reply.code(400).send({ error: "Invalid receive payload", issues: parsed.error.issues });
     const result = receivePurchaseRequest(database.data, request.params.id, request.user.workspaceId, parsed.data);
     if (result.error) return reply.code(result.statusCode || 400).send({ error: result.error });
-    await dispatchEvent(database, "purchase_request.received", `${result.spools.length} ${result.request.material} spools received`, { purchaseRequestId: result.request.id, spoolIds: result.spools.map((spool) => spool.id) });
+    await dispatchEvent(database, "purchase_request.received", `${result.spools.length} ${result.request.material} spools received`, { workspaceId: request.user.workspaceId, purchaseRequestId: result.request.id, spoolIds: result.spools.map((spool) => spool.id) }, { actor: request.user });
     await database.write();
     return result;
   });
@@ -6115,7 +7816,15 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsed.success) return reply.code(400).send({ error: "Invalid maintenance payload", issues: parsed.error.issues });
     const job = { id: randomUUID(), workspaceId: request.user.workspaceId, ...parsed.data, updatedAt: new Date().toISOString() };
     database.data.maintenance.push(job);
-    database.data.events.unshift({ id: randomUUID(), type: "maintenance.created", message: `${job.title} for ${job.printer}`, at: job.updatedAt });
+    await dispatchEvent(database, "maintenance.created", `${job.title} for ${job.printer}`, {
+      workspaceId: request.user.workspaceId,
+      maintenanceId: job.id,
+      title: job.title,
+      printer: job.printer,
+      status: job.status,
+      severity: job.severity,
+      due: job.due
+    }, { actor: request.user, at: job.updatedAt });
     await database.write();
     return reply.code(201).send(job);
   });
@@ -6127,7 +7836,15 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const job = database.data.maintenance.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!job) return reply.code(404).send({ error: "Maintenance job not found" });
     Object.assign(job, parsed.data, { updatedAt: new Date().toISOString() });
-    database.data.events.unshift({ id: randomUUID(), type: "maintenance.updated", message: `${job.title} -> ${job.status}`, at: job.updatedAt });
+    await dispatchEvent(database, "maintenance.updated", `${job.title} -> ${job.status}`, {
+      workspaceId: request.user.workspaceId,
+      maintenanceId: job.id,
+      title: job.title,
+      printer: job.printer,
+      status: job.status,
+      severity: job.severity,
+      progress: job.progress
+    }, { actor: request.user, at: job.updatedAt });
     await database.write();
     return job;
   });
@@ -6139,13 +7856,13 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const existing = (database.data.maintenanceTemplates || []).find((template) => itemInWorkspace(template, request.user.workspaceId) && template.title.toLowerCase() === parsed.data.title.toLowerCase() && template.printerModel.toLowerCase() === parsed.data.printerModel.toLowerCase());
     if (existing) {
       Object.assign(existing, parsed.data, { updatedAt: new Date().toISOString() });
-      await dispatchEvent(database, "maintenance_template.updated", `${existing.title} template updated`, { templateId: existing.id });
+      await dispatchEvent(database, "maintenance_template.updated", `${existing.title} template updated`, { workspaceId: request.user.workspaceId, templateId: existing.id }, { actor: request.user });
       await database.write();
       return { template: existing, templates: database.data.maintenanceTemplates, created: false };
     }
     const template = { id: randomUUID(), workspaceId: request.user.workspaceId, ...parsed.data, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     database.data.maintenanceTemplates.unshift(template);
-    await dispatchEvent(database, "maintenance_template.created", `${template.title} template saved`, { templateId: template.id, intervalDays: template.intervalDays });
+    await dispatchEvent(database, "maintenance_template.created", `${template.title} template saved`, { workspaceId: request.user.workspaceId, templateId: template.id, intervalDays: template.intervalDays }, { actor: request.user });
     await database.write();
     return reply.code(201).send({ template, templates: database.data.maintenanceTemplates, created: true });
   });
@@ -6174,7 +7891,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       database.data.maintenance.push(job);
       report.linkedJobId = job.id;
     }
-    await dispatchEvent(database, "maintenance_report.created", `${report.title} reported for ${report.printer}`, { reportId: report.id, jobId: job?.id || "", severity: report.severity });
+    await dispatchEvent(database, "maintenance_report.created", `${report.title} reported for ${report.printer}`, { workspaceId: request.user.workspaceId, reportId: report.id, jobId: job?.id || "", severity: report.severity }, { actor: request.user });
     await database.write();
     return reply.code(201).send({ report, job, reports: database.data.maintenanceReports, maintenance: database.data.maintenance });
   });
@@ -6185,7 +7902,15 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsed.success) return reply.code(400).send({ error: "Invalid order payload", issues: parsed.error.issues });
     const order = { id: `ord-${1000 + database.data.orders.length + 1}`, workspaceId: request.user.workspaceId, ...parsed.data, updatedAt: new Date().toISOString() };
     database.data.orders.push(order);
-    database.data.events.unshift({ id: randomUUID(), type: "order.created", message: `${order.id} from ${order.source}`, at: order.updatedAt });
+    await dispatchEvent(database, "order.created", `${order.id} from ${order.source}`, {
+      workspaceId: request.user.workspaceId,
+      orderId: order.id,
+      source: order.source,
+      customer: order.customer,
+      itemCount: order.items.length,
+      status: order.status,
+      value: order.value
+    }, { actor: request.user, at: order.updatedAt });
     await database.write();
     return reply.code(201).send(order);
   });
@@ -6197,7 +7922,15 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const quote = database.data.quoteRequests.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!quote) return reply.code(404).send({ error: "Quote request not found" });
     Object.assign(quote, parsed.data, { updatedAt: new Date().toISOString(), reviewedBy: request.user.email });
-    await dispatchEvent(database, "quote_request.updated", `${quote.id} -> ${quote.status}`, { quoteRequestId: quote.id, status: quote.status, quotedValue: quote.quotedValue || 0 });
+    await dispatchEvent(database, "quote_request.updated", `${quote.id} -> ${quote.status}`, {
+      workspaceId: request.user.workspaceId,
+      quoteRequestId: quote.id,
+      status: quote.status,
+      priority: quote.priority,
+      quotedValue: quote.quotedValue || 0,
+      validUntil: quote.validUntil || "",
+      hasFile: Boolean(quote.fileId)
+    }, { actor: request.user });
     await database.write();
     return quote;
   });
@@ -6213,7 +7946,13 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     quote.portalLinkGeneratedBy = request.user.email;
     quote.updatedAt = quote.portalLinkGeneratedAt;
     const url = publicQuoteUrl(request, quote);
-    await dispatchEvent(database, parsed.data.rotate ? "quote_request.portal_link_rotated" : "quote_request.portal_link_generated", `${quote.id} customer portal link ${parsed.data.rotate ? "rotated" : "generated"}`, { workspaceId: request.user.workspaceId, quoteRequestId: quote.id });
+    await dispatchEvent(database, parsed.data.rotate ? "quote_request.portal_link_rotated" : "quote_request.portal_link_generated", `${quote.id} customer portal link ${parsed.data.rotate ? "rotated" : "generated"}`, {
+      workspaceId: request.user.workspaceId,
+      quoteRequestId: quote.id,
+      rotated: parsed.data.rotate,
+      hasCustomerAccessToken: Boolean(quote.customerAccessToken),
+      portalLinkGeneratedAt: quote.portalLinkGeneratedAt
+    }, { actor: request.user });
     await database.write();
     return { quoteRequest: quote, url, accessToken: quote.customerAccessToken };
   });
@@ -6227,8 +7966,21 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (quote.orderId) return reply.code(409).send({ error: "Quote request already converted", orderId: quote.orderId });
     const result = convertQuoteToProduction(database.data, quote, { workspaceId: request.user.workspaceId, due: parsed.data.due, value: parsed.data.value, createJob: parsed.data.createJob, reviewedBy: request.user.email });
     if (result.error) return reply.code(result.statusCode || 400).send({ error: result.error, orderId: result.orderId });
-    await dispatchEvent(database, "quote_request.converted", `${quote.id} converted to ${result.order.id}`, { workspaceId: request.user.workspaceId, quoteRequestId: quote.id, orderId: result.order.id, value: result.order.value });
-    if (result.job) await dispatchEvent(database, "queue.created", `${result.job.file} queued from quote`, { workspaceId: request.user.workspaceId, jobId: result.job.id, fileId: result.job.fileId, orderId: result.order.id, quoteRequestId: quote.id, material: result.job.material });
+    await dispatchEvent(database, "quote_request.converted", `${quote.id} converted to ${result.order.id}`, {
+      workspaceId: request.user.workspaceId,
+      quoteRequestId: quote.id,
+      orderId: result.order.id,
+      value: result.order.value,
+      createdJob: Boolean(result.job)
+    }, { actor: request.user });
+    if (result.job) await dispatchEvent(database, "queue.created", `${result.job.file} queued from quote`, {
+      workspaceId: request.user.workspaceId,
+      jobId: result.job.id,
+      fileId: result.job.fileId,
+      orderId: result.order.id,
+      quoteRequestId: quote.id,
+      material: result.job.material
+    }, { actor: request.user });
     await database.write();
     return reply.code(201).send(result);
   });
@@ -6239,11 +7991,17 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsed.success) return reply.code(400).send({ error: "Invalid order status", issues: parsed.error.issues });
     const order = database.data.orders.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!order) return reply.code(404).send({ error: "Order not found" });
-    order.status = parsed.data.status;
-    order.updatedAt = new Date().toISOString();
-    await dispatchEvent(database, "order.status", `${order.id} -> ${order.status}`, { orderId: order.id, status: order.status });
+    const result = applyOrderStatusChange(database.data, order, parsed.data.status);
+    await dispatchEvent(database, "order.status", `${order.id} -> ${order.status}`, {
+      workspaceId: request.user.workspaceId,
+      orderId: order.id,
+      status: order.status,
+      jobCount: result.jobs.length,
+      jobs: result.jobs.map((job) => job.id),
+      materialChanges: result.materialChanges
+    }, { actor: request.user });
     await database.write();
-    return order;
+    return { ...result.order, order: result.order, jobs: result.jobs, materialChanges: result.materialChanges, spools: result.spools, todos: result.todos };
   });
 
   app.post("/api/parts", async (request, reply) => {
@@ -6253,7 +8011,16 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!database.data.files.some((file) => file.id === parsed.data.fileId && itemInWorkspace(file, request.user.workspaceId))) return reply.code(404).send({ error: "Linked file not found" });
     const part = { id: randomUUID(), workspaceId: request.user.workspaceId, ...parsed.data, updatedAt: new Date().toISOString() };
     database.data.parts.push(part);
-    database.data.events.unshift({ id: randomUUID(), type: "part.created", message: part.name, at: part.updatedAt });
+    await dispatchEvent(database, "part.created", part.name, {
+      workspaceId: request.user.workspaceId,
+      partId: part.id,
+      fileId: part.fileId,
+      material: part.material,
+      process: part.process,
+      plates: part.plates,
+      status: part.status,
+      variantCount: part.variants.length
+    }, { actor: request.user, at: part.updatedAt });
     await database.write();
     return reply.code(201).send(part);
   });
@@ -6266,7 +8033,16 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const part = database.data.parts.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!part) return reply.code(404).send({ error: "Part not found" });
     Object.assign(part, parsed.data, { updatedAt: new Date().toISOString() });
-    database.data.events.unshift({ id: randomUUID(), type: "part.updated", message: part.name, at: part.updatedAt });
+    await dispatchEvent(database, "part.updated", part.name, {
+      workspaceId: request.user.workspaceId,
+      partId: part.id,
+      fileId: part.fileId,
+      material: part.material,
+      process: part.process,
+      plates: part.plates,
+      status: part.status,
+      variantCount: part.variants.length
+    }, { actor: request.user, at: part.updatedAt });
     await database.write();
     return part;
   });
@@ -6282,7 +8058,16 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (duplicate) return reply.code(409).send({ error: "Production template already exists" });
     const template = { id: randomUUID(), workspaceId: request.user.workspaceId, ...parsed.data, runCount: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     database.data.productionTemplates.unshift(template);
-    await dispatchEvent(database, "production_template.created", `${template.name} template saved`, { templateId: template.id, fileId: template.fileId, sku: template.sku });
+    await dispatchEvent(database, "production_template.created", `${template.name} template saved`, {
+      workspaceId: request.user.workspaceId,
+      templateId: template.id,
+      fileId: template.fileId,
+      sku: template.sku,
+      printerId: template.printerId || "",
+      material: template.material,
+      quantity: template.quantity,
+      priority: template.priority
+    }, { actor: request.user });
     await database.write();
     return reply.code(201).send(template);
   });
@@ -6296,7 +8081,16 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const template = database.data.productionTemplates.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!template) return reply.code(404).send({ error: "Production template not found" });
     Object.assign(template, parsed.data, { updatedAt: new Date().toISOString() });
-    await dispatchEvent(database, "production_template.updated", `${template.name} template updated`, { templateId: template.id });
+    await dispatchEvent(database, "production_template.updated", `${template.name} template updated`, {
+      workspaceId: request.user.workspaceId,
+      templateId: template.id,
+      fileId: template.fileId,
+      sku: template.sku,
+      printerId: template.printerId || "",
+      material: template.material,
+      quantity: template.quantity,
+      priority: template.priority
+    }, { actor: request.user });
     await database.write();
     return template;
   });
@@ -6308,7 +8102,16 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const result = createJobsFromProductionTemplate(database.data, request.params.id, { ...parsed.data, workspaceId: request.user.workspaceId });
     if (result.error) return reply.code(result.statusCode || 400).send({ error: result.error });
     if (!result.dryRun) {
-      await dispatchEvent(database, "production_template.run", `${result.jobs.length} jobs created from ${result.template.name}`, { templateId: result.template.id, jobs: result.jobs.map((job) => job.id) });
+      await dispatchEvent(database, "production_template.run", `${result.jobs.length} jobs created from ${result.template.name}`, {
+        workspaceId: request.user.workspaceId,
+        templateId: result.template.id,
+        fileId: result.template.fileId,
+        sku: result.template.sku,
+        printerId: result.template.printerId || "",
+        quantity: result.template.quantity,
+        jobs: result.jobs.map((job) => job.id),
+        jobCount: result.jobs.length
+      }, { actor: request.user });
       await database.write();
     }
     return result;
@@ -6322,7 +8125,13 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (exists) return reply.code(409).send({ error: "Profile already exists" });
     const profile = { id: randomUUID(), workspaceId: request.user.workspaceId, ...parsed.data, updated: "Just now", updatedAt: new Date().toISOString() };
     database.data.profiles.push(profile);
-    await dispatchEvent(database, "profile.created", `${profile.name} profile created`, { profileId: profile.id, kind: profile.kind, source: profile.source });
+    await dispatchEvent(database, "profile.created", `${profile.name} profile created`, {
+      workspaceId: request.user.workspaceId,
+      profileId: profile.id,
+      kind: profile.kind,
+      source: profile.source,
+      target: profile.target || ""
+    }, { actor: request.user });
     await database.write();
     return reply.code(201).send(profile);
   });
@@ -6345,7 +8154,14 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       database.data.profiles.push(profile);
       imported.push(profile);
     }
-    await dispatchEvent(database, "profile.imported", `${imported.length} profiles imported from ${parsed.data.source}`, { source: parsed.data.source, imported: imported.map((profile) => profile.id), skipped });
+    await dispatchEvent(database, "profile.imported", `${imported.length} profiles imported from ${parsed.data.source}`, {
+      workspaceId: request.user.workspaceId,
+      source: parsed.data.source,
+      imported: imported.map((profile) => profile.id),
+      importedCount: imported.length,
+      skipped,
+      skippedCount: skipped.length
+    }, { actor: request.user });
     await database.write();
     return { imported, skipped, profiles: database.data.profiles };
   });
@@ -6357,7 +8173,13 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const profile = database.data.profiles.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!profile) return reply.code(404).send({ error: "Profile not found" });
     Object.assign(profile, parsed.data, { updated: "Just now", updatedAt: new Date().toISOString() });
-    await dispatchEvent(database, "profile.updated", `${profile.name} profile updated`, { profileId: profile.id, kind: profile.kind });
+    await dispatchEvent(database, "profile.updated", `${profile.name} profile updated`, {
+      workspaceId: request.user.workspaceId,
+      profileId: profile.id,
+      kind: profile.kind,
+      source: profile.source,
+      target: profile.target || ""
+    }, { actor: request.user });
     await database.write();
     return profile;
   });
@@ -6371,7 +8193,12 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     profile.default = true;
     profile.updated = "Just now";
     profile.updatedAt = new Date().toISOString();
-    await dispatchEvent(database, "profile.default_set", `${profile.name} set as default ${profile.kind} profile`, { profileId: profile.id, kind: profile.kind, defaults: database.data.profileDefaults });
+    await dispatchEvent(database, "profile.default_set", `${profile.name} set as default ${profile.kind} profile`, {
+      workspaceId: request.user.workspaceId,
+      profileId: profile.id,
+      kind: profile.kind,
+      defaultProfileId: profile.id
+    }, { actor: request.user });
     await database.write();
     return { profile, profileDefaults: database.data.profileDefaults, profiles: database.data.profiles };
   });
@@ -6381,7 +8208,13 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const parsed = profileMatchingPolicyPatchSchema.safeParse(request.body || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid profile matching policy", issues: parsed.error.issues });
     database.data.profileMatchingPolicy = profileMatchingPolicySchema.parse({ ...(database.data.profileMatchingPolicy || {}), ...parsed.data, updatedAt: new Date().toISOString(), updatedBy: request.user.email });
-    await dispatchEvent(database, "profile.policy_updated", "Profile matching policy updated", { policy: database.data.profileMatchingPolicy });
+    await dispatchEvent(database, "profile.policy_updated", "Profile matching policy updated", {
+      workspaceId: request.user.workspaceId,
+      materialCompatibility: database.data.profileMatchingPolicy.materialCompatibility,
+      machineCompatibility: database.data.profileMatchingPolicy.machineCompatibility,
+      dueWindowHours: database.data.profileMatchingPolicy.dueWindowHours,
+      warnBeforeFallback: database.data.profileMatchingPolicy.warnBeforeFallback
+    }, { actor: request.user });
     await database.write();
     return database.data.profileMatchingPolicy;
   });
@@ -6390,9 +8223,16 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!hasPermission(request.user, "catalog:write")) return reply.code(403).send({ error: "Missing permission: catalog:write" });
     const profile = database.data.profiles.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!profile) return reply.code(404).send({ error: "Profile not found" });
-    if (database.data.profileDefaults?.[profile.kind] === profile.id) database.data.profileDefaults[profile.kind] = "";
+    const wasDefault = database.data.profileDefaults?.[profile.kind] === profile.id;
+    if (wasDefault) database.data.profileDefaults[profile.kind] = "";
     database.data.profiles = database.data.profiles.filter((item) => item.id !== profile.id);
-    await dispatchEvent(database, "profile.archived", `${profile.name} profile archived`, { profileId: profile.id, kind: profile.kind });
+    await dispatchEvent(database, "profile.archived", `${profile.name} profile archived`, {
+      workspaceId: request.user.workspaceId,
+      profileId: profile.id,
+      kind: profile.kind,
+      source: profile.source,
+      wasDefault
+    }, { actor: request.user });
     await database.write();
     return { ok: true, profile };
   });
@@ -6407,7 +8247,16 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (exists) return reply.code(409).send({ error: "SKU already exists" });
     const sku = { id: randomUUID(), workspaceId: request.user.workspaceId, ...parsed.data, updatedAt: new Date().toISOString() };
     database.data.skus.push(sku);
-    database.data.events.unshift({ id: randomUUID(), type: "sku.created", message: sku.sku, at: sku.updatedAt });
+    await dispatchEvent(database, "sku.created", sku.sku, {
+      workspaceId: request.user.workspaceId,
+      skuId: sku.id,
+      sku: sku.sku,
+      partCount: sku.parts.length,
+      variantCount: sku.variants.length,
+      channel: sku.channel,
+      stock: sku.stock,
+      price: sku.price
+    }, { actor: request.user, at: sku.updatedAt });
     await database.write();
     return reply.code(201).send(sku);
   });
@@ -6423,7 +8272,16 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const sku = database.data.skus.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!sku) return reply.code(404).send({ error: "SKU not found" });
     Object.assign(sku, parsed.data, { updatedAt: new Date().toISOString() });
-    database.data.events.unshift({ id: randomUUID(), type: "sku.updated", message: sku.sku, at: sku.updatedAt });
+    await dispatchEvent(database, "sku.updated", sku.sku, {
+      workspaceId: request.user.workspaceId,
+      skuId: sku.id,
+      sku: sku.sku,
+      partCount: sku.parts.length,
+      variantCount: sku.variants.length,
+      channel: sku.channel,
+      stock: sku.stock,
+      price: sku.price
+    }, { actor: request.user, at: sku.updatedAt });
     await database.write();
     return sku;
   });
@@ -6435,7 +8293,14 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const result = generateJobsForOrder(database.data, request.params.id, parsed.data);
     if (result.error) return reply.code(result.statusCode || 400).send({ error: result.error });
     if (!result.dryRun && !result.duplicateBlocked) {
-      await dispatchEvent(database, "order.jobs_generated", `${result.jobs.length} jobs generated for ${result.order.id}`, { orderId: result.order.id, jobs: result.jobs.map((job) => job.id), missing: result.missing, stockChanges: result.stockChanges });
+      await dispatchEvent(database, "order.jobs_generated", `${result.jobs.length} jobs generated for ${result.order.id}`, {
+        workspaceId: request.user.workspaceId,
+        orderId: result.order.id,
+        jobs: result.jobs.map((job) => job.id),
+        jobCount: result.jobs.length,
+        missing: result.missing,
+        stockChanges: result.stockChanges
+      }, { actor: request.user });
       await database.write();
     }
     return result;
@@ -6459,7 +8324,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       scheduleWarnings: getScheduleWarnings(scoped, { ...parsed.data, id: "draft", workspaceId: request.user.workspaceId, printerId: printer.id, printer: printer.name }, printer, parsed.data.scheduledStart)
     };
     database.data.queue.push(job);
-    await dispatchEvent(database, "queue.created", `${job.file} queued`, { workspaceId: request.user.workspaceId, jobId: job.id, fileId: job.fileId, printerId: job.printerId, material: job.material });
+    await dispatchEvent(database, "queue.created", `${job.file} queued`, { workspaceId: request.user.workspaceId, jobId: job.id, fileId: job.fileId, printerId: job.printerId, material: job.material }, { actor: request.user });
     await database.write();
     return reply.code(201).send({ job, todos: deriveTodos(workspaceScopeForUser(database.data, request.user)) });
   });
@@ -6470,7 +8335,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsed.success) return reply.code(400).send({ error: "Invalid queue match payload", issues: parsed.error.issues });
     const result = matchQueueNow(workspaceScopeForUser(database.data, request.user), parsed.data);
     if (!result.dryRun) {
-      await dispatchEvent(database, "queue.matched", `${result.matches.length} queued jobs started`, { workspaceId: request.user.workspaceId, matches: result.matches.map((match) => ({ jobId: match.jobId, printerId: match.printerId })), skipped: result.skipped.length });
+      await dispatchEvent(database, "queue.matched", `${result.matches.length} queued jobs started`, { workspaceId: request.user.workspaceId, matches: result.matches.map((match) => ({ jobId: match.jobId, printerId: match.printerId })), skipped: result.skipped.length }, { actor: request.user });
       await database.write();
     }
     return result;
@@ -6487,14 +8352,14 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     Object.assign(bridge, parsed.data, { updatedAt: new Date().toISOString() });
     if (!existing) database.data.bridges.push(bridge);
     printer.connection = parsed.data.kind === "octoprint" ? "OctoPrint" : parsed.data.kind === "moonraker" ? "Klipper / Moonraker" : parsed.data.kind === "prusalink" ? "PrusaLink" : "Manual bridge";
-    database.data.events.unshift({ id: randomUUID(), workspaceId: request.user.workspaceId, type: "bridge.saved", message: `${bridge.name} saved for ${printer.name}`, data: { workspaceId: request.user.workspaceId }, at: new Date().toISOString() });
+    await dispatchEvent(database, "bridge.saved", `${bridge.name} saved for ${printer.name}`, bridgeAuditMetadata(bridge, printer), { actor: request.user });
     await database.write();
     return reply.code(existing ? 200 : 201).send(sanitizeBridge(bridge));
   });
 
   app.post("/api/bridges/sync", async (request, reply) => {
     if (!hasPermission(request.user, "printers:control")) return reply.code(403).send({ error: "Missing permission: printers:control" });
-    const result = await runBridgePollingTick(database, { workspaceId: request.user.workspaceId });
+    const result = await runBridgePollingTick(database, { workspaceId: request.user.workspaceId, actor: request.user });
     const scoped = workspaceScopeForUser(database.data, request.user);
     return { ...result, bridges: (scoped.bridges || []).map(sanitizeBridge), printers: scoped.printers };
   });
@@ -6512,15 +8377,15 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       if (diagnostic.status) applyBridgeStatus(printer, diagnostic.status);
       bridge.lastStatus = "connected";
       bridge.lastError = "";
-      database.data.events.unshift({ id: randomUUID(), workspaceId: request.user.workspaceId, type: "bridge.connected", message: `${bridge.name} connected`, data: { workspaceId: request.user.workspaceId, diagnostic: { ok: true, latencyMs: diagnostic.latencyMs } }, at: bridge.lastSyncAt });
+      await dispatchEvent(database, "bridge.connected", `${bridge.name} connected`, { ...bridgeAuditMetadata(bridge, printer), diagnostic: { ok: true, latencyMs: diagnostic.latencyMs } }, { actor: request.user, at: bridge.lastSyncAt });
     } else {
       bridge.lastStatus = "error";
       bridge.lastError = diagnostic.summary || "Bridge test failed";
       printer.status = "offline";
-      database.data.events.unshift({ id: randomUUID(), workspaceId: request.user.workspaceId, type: "bridge.diagnostic_failed", message: `${bridge.name} diagnostic failed`, data: { workspaceId: request.user.workspaceId, diagnostic: { ok: false, latencyMs: diagnostic.latencyMs, recommendation: diagnostic.recommendation } }, at: bridge.lastSyncAt });
+      await dispatchEvent(database, "bridge.diagnostic_failed", `${bridge.name} diagnostic failed`, { ...bridgeAuditMetadata(bridge, printer), diagnostic: { ok: false, latencyMs: diagnostic.latencyMs, recommendation: diagnostic.recommendation } }, { actor: request.user, at: bridge.lastSyncAt });
     }
     await database.write();
-    return { ok: diagnostic.ok, bridge: sanitizeBridge(bridge), printer, status: diagnostic.status, diagnostic };
+    return { ok: diagnostic.ok, bridge: sanitizeBridge(bridge), printer, status: diagnostic.status, diagnostic: sanitizeBridgeDiagnostic(diagnostic) };
   });
 
   app.post("/api/printers/:id/sync", async (request, reply) => {
@@ -6554,7 +8419,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (parsed.data.progress !== undefined) printer.progress = parsed.data.progress;
     if (parsed.data.targetNozzle !== undefined) printer.targetNozzle = parsed.data.targetNozzle;
     if (parsed.data.targetBed !== undefined) printer.targetBed = parsed.data.targetBed;
-    await dispatchEvent(database, "printer.status", `${printer.name} -> ${printer.status}`, { workspaceId: request.user.workspaceId, printerId: printer.id, status: printer.status });
+    await dispatchEvent(database, "printer.status", `${printer.name} -> ${printer.status}`, { workspaceId: request.user.workspaceId, printerId: printer.id, status: printer.status }, { actor: request.user });
     await database.write();
     return printer;
   });
@@ -6574,7 +8439,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (job.stage !== "needs slicing") job.stage = "scheduled";
     const materialReservation = reserveJobMaterial(scoped, job);
     job.scheduleWarnings = getScheduleWarnings(scoped, job, printer, parsed.data.scheduledStart);
-    database.data.events.unshift({ id: randomUUID(), workspaceId: request.user.workspaceId, type: "queue.scheduled", message: `${job.file} on ${printer.name}`, data: { workspaceId: request.user.workspaceId, materialReservation }, at: new Date().toISOString() });
+    await dispatchEvent(database, "queue.scheduled", `${job.file} on ${printer.name}`, { workspaceId: request.user.workspaceId, jobId: job.id, printerId: printer.id, materialReservation }, { actor: request.user });
     await database.write();
     return { job, warnings: job.scheduleWarnings, materialReservation, spools: scoped.spools, todos: deriveTodos(workspaceScopeForUser(database.data, request.user)) };
   });
@@ -6595,7 +8460,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       : ["failed", "cancelled"].includes(parsed.data.status)
         ? releaseJobMaterialReservation(scoped, job)
         : null;
-    await dispatchEvent(database, "queue.status", `${job.file} -> ${job.status}`, { workspaceId: request.user.workspaceId, jobId: job.id, status: job.status, stage: job.stage, materialChange });
+    await dispatchEvent(database, "queue.status", `${job.file} -> ${job.status}`, { workspaceId: request.user.workspaceId, jobId: job.id, status: job.status, stage: job.stage, materialChange }, { actor: request.user });
     await database.write();
     return { job, materialChange, spools: scoped.spools, todos: deriveTodos(workspaceScopeForUser(database.data, request.user)) };
   });
@@ -6607,7 +8472,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const job = database.data.queue.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!job) return reply.code(404).send({ error: "Queue job not found" });
     job.priority = parsed.data.priority;
-    database.data.events.unshift({ id: randomUUID(), workspaceId: request.user.workspaceId, type: "queue.priority", message: `${job.file} -> ${job.priority}`, data: { workspaceId: request.user.workspaceId }, at: new Date().toISOString() });
+    await dispatchEvent(database, "queue.priority", `${job.file} -> ${job.priority}`, { workspaceId: request.user.workspaceId, jobId: job.id, priority: job.priority }, { actor: request.user });
     await database.write();
     return { job, todos: deriveTodos(workspaceScopeForUser(database.data, request.user)) };
   });
@@ -6618,7 +8483,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!file) return reply.code(404).send({ error: "File not found" });
     file.version += 1;
     file.status = "needs review";
-    database.data.events.unshift({ id: randomUUID(), workspaceId: request.user.workspaceId, type: "file.versioned", message: `${file.name} v${file.version}`, data: { workspaceId: request.user.workspaceId }, at: new Date().toISOString() });
+    await dispatchEvent(database, "file.versioned", `${file.name} v${file.version}`, { workspaceId: request.user.workspaceId, fileId: file.id, version: file.version }, { actor: request.user });
     await database.write();
     return file;
   });
@@ -6631,7 +8496,20 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsed.success) return reply.code(400).send({ error: "Invalid slicer job payload", issues: parsed.error.issues });
     const result = await runSlicerJob(database, { ...parsed.data, workspaceId: request.user.workspaceId });
     if (result.error) return reply.code(result.statusCode || 400).send({ error: result.error });
-    await dispatchEvent(database, result.job.status === "complete" ? "slicer.completed" : "slicer.failed", `${result.job.sourceFile} -> ${result.job.status}`, { workspaceId: request.user.workspaceId, slicerJobId: result.job.id, fileId: result.file.id, status: result.job.status });
+    await dispatchEvent(database, result.job.status === "complete" ? "slicer.completed" : "slicer.failed", `${result.job.sourceFile} -> ${result.job.status}`, {
+      workspaceId: request.user.workspaceId,
+      slicerJobId: result.job.id,
+      fileId: result.file.id,
+      printerId: result.job.printerId,
+      profileId: result.job.profileId,
+      status: result.job.status,
+      engine: result.job.engine,
+      material: parsed.data.material,
+      layerHeight: parsed.data.layerHeight,
+      infill: parsed.data.infill,
+      supports: parsed.data.supports,
+      outputSize: result.job.outputSize || ""
+    }, { actor: request.user });
     await database.write();
     const code = result.job.status === "complete" ? 201 : 502;
     return reply.code(code).send({ ...result, slicerJobs: workspaceScopeForUser(database.data, request.user).slicerJobs });
@@ -6654,7 +8532,20 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       supports: true
     });
     if (result.error) return reply.code(result.statusCode || 400).send({ error: result.error });
-    await dispatchEvent(database, result.job.status === "complete" ? "file.sliced" : "slicer.failed", `${file.name} -> ${result.job.status}`, { workspaceId: request.user.workspaceId, slicerJobId: result.job.id, fileId: file.id, status: result.job.status });
+    await dispatchEvent(database, result.job.status === "complete" ? "file.sliced" : "slicer.failed", `${file.name} -> ${result.job.status}`, {
+      workspaceId: request.user.workspaceId,
+      slicerJobId: result.job.id,
+      fileId: file.id,
+      printerId: result.job.printerId,
+      profileId: result.job.profileId,
+      status: result.job.status,
+      engine: result.job.engine,
+      material: result.job.settings?.material || file.material || "",
+      layerHeight: result.job.settings?.layerHeight || file.layerHeight || "",
+      infill: result.job.settings?.infill,
+      supports: result.job.settings?.supports,
+      outputSize: result.job.outputSize || ""
+    }, { actor: request.user });
     await database.write();
     if (result.job.status !== "complete") return reply.code(502).send(result);
     return result.file;
@@ -6691,7 +8582,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       jobId: result.job?.id || "",
       previous: result.previous,
       bridgeId: bridge?.id || ""
-    });
+    }, { actor: request.user });
     await database.write();
     return { ok: true, accepted: true, action: result.action, printer: result.printer, job: result.job || null, bridge: sanitizeBridge(bridge), event, todos: deriveTodos(workspaceScopeForUser(database.data, request.user)) };
   });
