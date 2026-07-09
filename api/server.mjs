@@ -16,6 +16,7 @@ import { Low } from "lowdb";
 import mqtt from "mqtt";
 import { z } from "zod";
 import Stripe from "stripe";
+import nodemailer from "nodemailer";
 import { diagnoseBridge, fetchBridgeStatus, sendBridgeCommand } from "./hardware-bridge.mjs";
 import { formatBytes, parseModelMetadata } from "./model-metadata.mjs";
 import { createObjectStorage, defaultStorageRoot } from "./object-storage.mjs";
@@ -25,7 +26,7 @@ import { seedData } from "./seed.mjs";
 
 const execFileAsync = promisify(execFile);
 
-const COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "orders", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns"];
+const COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "orders", "customers", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns"];
 const RESTORABLE_EXTRA_KEYS = ["users", "workspaces", "workspaceSettings", "costCatalog", "costCatalogs", "profileDefaults", "profileMatchingPolicy", "billingSessions", "invoices", "dataMeta"];
 const RESTORABLE_KEYS = [...COLLECTIONS, ...RESTORABLE_EXTRA_KEYS];
 const defaultCostCatalog = {
@@ -55,7 +56,9 @@ const billingPlanTiers = [
 ];
 const defaultAuthRateLimit = { max: 8, timeWindow: "1 minute", groupId: "auth" };
 const defaultSensitiveRateLimit = { max: 30, timeWindow: "1 minute" };
-const CURRENT_SCHEMA_VERSION = 4;
+const customerAuthRateLimit = { max: 8, timeWindow: "1 minute", groupId: "customer-auth" };
+const customerMessageRateLimit = { max: 20, timeWindow: "1 minute", groupId: "quote-message" };
+const CURRENT_SCHEMA_VERSION = 6;
 const DEFAULT_WORKSPACE_ID = "ws-default";
 const IDEMPOTENCY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const IDEMPOTENCY_MAX_RECORDS = 500;
@@ -86,7 +89,7 @@ const API_KEY_GRANTABLE_SCOPES = [
   "webhooks:write"
 ];
 const apiKeyGrantableScopeSet = new Set(API_KEY_GRANTABLE_SCOPES);
-const TENANT_COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "orders", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns", "billingSessions", "invoices"];
+const TENANT_COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "orders", "customers", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns", "billingSessions", "invoices"];
 const printerStatusSchema = z.enum(["idle", "printing", "paused", "offline", "error", "maintenance"]);
 const jobStatusSchema = z.enum(["queued", "printing", "paused", "complete", "failed", "cancelled"]);
 const prioritySchema = z.enum(["Rush", "High", "Normal", "Low"]);
@@ -101,6 +104,38 @@ const authSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
   twoFactorCode: z.string().min(6).max(32).optional()
+});
+const customerRegisterSchema = z.object({
+  name: z.string().min(1).max(120),
+  email: z.string().email(),
+  password: z.string().min(8),
+  phone: z.string().max(60).optional().default("")
+});
+const customerLoginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8)
+});
+const customerClaimSchema = z.object({
+  quoteId: z.string().min(1),
+  token: z.string().min(1),
+  password: z.string().min(8),
+  name: z.string().max(120).optional()
+});
+const customerMessageSchema = z.object({
+  body: z.string().min(1).max(2000)
+});
+const customerResetRequestSchema = z.object({
+  email: z.string().email()
+});
+const customerResetConfirmSchema = z.object({
+  token: z.string().min(1),
+  password: z.string().min(8)
+});
+const customerProfileUpdateSchema = z.object({
+  name: z.string().min(1).max(120).optional(),
+  phone: z.string().max(60).optional(),
+  company: z.string().max(120).optional(),
+  line: z.string().max(80).optional()
 });
 const passwordChangeSchema = z.object({
   currentPassword: z.string().min(8),
@@ -136,10 +171,6 @@ const printerSchema = z.object({
   camera: z.string().min(1).default("No camera")
 });
 const printerPatchSchema = printerSchema.partial();
-const signupSchema = authSchema.extend({
-  name: z.string().min(1),
-  workspace: z.string().min(1).default("3DSTU FarmFlow Workspace")
-});
 const userCreateSchema = z.object({
   name: z.string().min(1),
   email: z.string().email(),
@@ -274,10 +305,15 @@ const orderSchema = z.object({
   due: z.string().min(1).default("Tomorrow 17:00"),
   value: z.number().nonnegative().default(0)
 });
+const orderTrackingUpdateSchema = z.object({
+  trackingNumber: z.string().max(100).optional().default(""),
+  carrier: z.string().max(60).optional().default("")
+});
 const quoteStatusSchema = z.enum(["new", "reviewing", "quoted", "accepted", "converted", "rejected"]);
 const publicQuoteRequestSchema = z.object({
   customer: z.string().min(1).max(120),
   email: z.string().email(),
+  phone: z.string().max(60).optional().default(""),
   company: z.string().max(120).optional().default(""),
   project: z.string().min(1).max(160),
   material: z.string().min(1).default("PLA"),
@@ -286,8 +322,33 @@ const publicQuoteRequestSchema = z.object({
   budget: z.number().nonnegative().default(0),
   notes: z.string().max(2000).optional().default(""),
   fileName: z.string().max(160).optional().default(""),
-  source: z.string().min(1).default("Website")
+  source: z.string().min(1).default("Website"),
+  process: z.string().max(40).optional().default("FDM"),
+  color: z.string().max(60).optional().default(""),
+  quality: z.string().max(40).optional().default("Standard"),
+  layerHeight: z.string().max(20).optional().default(""),
+  infill: z.number().min(0).max(100).optional().default(15),
+  walls: z.number().int().min(1).max(10).optional().default(2),
+  support: z.string().max(40).optional().default("Auto"),
+  postProcessing: z.array(z.string().max(60)).max(10).optional().default([]),
+  inserts: z.number().int().min(0).max(100).optional().default(0),
+  inspection: z.string().max(60).optional().default("Standard"),
+  rush: z.boolean().optional().default(false),
+  useCase: z.string().max(60).optional().default(""),
+  formMode: z.enum(["quick", "expert"]).optional().default("quick"),
+  clientEstimate: z.number().nonnegative().optional().default(0)
 });
+const customerSchema = z.object({
+  name: z.string().min(1).max(120),
+  company: z.string().max(120).optional().default(""),
+  email: z.union([z.literal(""), z.string().email()]).optional().default(""),
+  phone: z.string().max(60).optional().default(""),
+  line: z.string().max(80).optional().default(""),
+  tags: z.array(z.string().min(1).max(40)).max(12).optional().default([]),
+  notes: z.string().max(2000).optional().default(""),
+  source: z.string().max(60).optional().default("Manual")
+});
+const customerPatchSchema = customerSchema.partial();
 const quoteRequestPatchSchema = z.object({
   status: quoteStatusSchema.optional(),
   priority: prioritySchema.optional(),
@@ -583,15 +644,6 @@ const workspaceSettingsSchema = workspaceSettingsBaseSchema.superRefine((value, 
     });
   }
 });
-const workspaceRecordSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  slug: z.string().min(1),
-  ownerEmail: z.string().email().optional(),
-  createdAt: z.string().min(1),
-  updatedAt: z.string().min(1),
-  settings: workspaceSettingsSchema
-});
 const workspaceSettingsPatchSchema = workspaceSettingsBaseSchema.partial();
 const onboardingStepPatchSchema = z.object({
   status: z.enum(["pending", "complete", "skipped"]).default("complete"),
@@ -809,11 +861,6 @@ function envFlagWithDefault(name, fallback, env = process.env) {
   return ["1", "true", "yes", "on"].includes(value.toLowerCase());
 }
 
-function publicSignupEnabled(env = process.env) {
-  if (env.NODE_ENV !== "production") return true;
-  return envFlag("LAYERPILOT_ENABLE_PUBLIC_SIGNUP", env);
-}
-
 function envFlagDefault(name, fallback = true) {
   const value = String(process.env[name] || "").trim();
   if (!value) return fallback;
@@ -991,6 +1038,38 @@ function touchSession(data, session, token, now = new Date()) {
   markSessionStoreDirty(data);
 }
 
+function createCustomerSession({ token, customer, workspaceId, now = new Date() }) {
+  const at = now.toISOString();
+  return {
+    id: randomUUID(),
+    tokenHash: createPasswordHash(token),
+    customerId: customer.id,
+    workspaceId: workspaceId || customer.workspaceId || DEFAULT_WORKSPACE_ID,
+    createdAt: at,
+    lastSeenAt: at,
+    ...sessionExpiryFields(now)
+  };
+}
+
+function pruneExpiredCustomerSessions(data, now = new Date()) {
+  const sessions = ensureArray(data, "customerSessions");
+  const retained = sessions.filter((session) => !sessionExpired(session, now.getTime()));
+  if (retained.length !== sessions.length) {
+    data.customerSessions = retained;
+    markSessionStoreDirty(data);
+  }
+  return data.customerSessions;
+}
+
+function customerFromRequest(database, request) {
+  const token = request.headers.authorization?.replace(/^Bearer\s+/i, "") || "";
+  const session = token ? pruneExpiredCustomerSessions(database.data).find((item) => sessionMatchesToken(item, token)) : null;
+  const customer = session ? (database.data.customers || []).find((item) => item.id === session.customerId) : null;
+  if (!customer) return { token, session: null, customer: null };
+  touchSession(database.data, session, token);
+  return { token, session, customer };
+}
+
 function ensureArray(data, key) {
   if (!Array.isArray(data[key])) data[key] = [];
   return data[key];
@@ -1104,6 +1183,7 @@ function scopedWorkspaceData(data, workspaceId) {
   }
   scoped.users = (data.users || []).filter((user) => itemInWorkspace(user, workspace.id));
   scoped.sessions = [];
+  scoped.customerSessions = [];
   scoped.workspaces = [workspace];
   scoped.workspaceSettings = workspace.settings || data.workspaceSettings;
   scoped.costCatalog = costCatalogForWorkspace(data, workspace.id);
@@ -1178,6 +1258,50 @@ function applyDataMigrations(data) {
     const workspace = ensureWorkspaceCatalog(data, now);
     markWorkspaceDefaults(data, workspace.id);
     applied.push({ version: 4, name: "workspace tenant scoping", appliedAt: now });
+  }
+  if (fromVersion < 5) {
+    const customers = ensureArray(data, "customers");
+    for (const customer of customers) {
+      customer.id ||= `cus-${randomUUID().slice(0, 8)}`;
+      customer.workspaceId ||= DEFAULT_WORKSPACE_ID;
+      customer.createdAt ||= now;
+      customer.updatedAt ||= now;
+    }
+    const byKey = new Map(customers.map((customer) => [`${customer.workspaceId}:${String(customer.email || "").toLowerCase()}`, customer]));
+    for (const quote of ensureArray(data, "quoteRequests")) {
+      const email = String(quote.email || "").toLowerCase();
+      if (!email) continue;
+      const workspaceId = quote.workspaceId || DEFAULT_WORKSPACE_ID;
+      let customer = byKey.get(`${workspaceId}:${email}`);
+      if (!customer) {
+        customer = {
+          id: `cus-${randomUUID().slice(0, 8)}`,
+          workspaceId,
+          name: quote.customer || email,
+          company: quote.company || "",
+          email,
+          phone: quote.phone || "",
+          line: "",
+          tags: ["quote-intake"],
+          notes: "",
+          source: quote.source || "Quote form",
+          createdAt: quote.createdAt || now,
+          updatedAt: now,
+          lastActivityAt: quote.updatedAt || quote.createdAt || now
+        };
+        customers.push(customer);
+        byKey.set(`${workspaceId}:${email}`, customer);
+      }
+      quote.customerId ||= customer.id;
+    }
+    applied.push({ version: 5, name: "customer directory", appliedAt: now });
+  }
+  if (fromVersion < 6) {
+    ensureArray(data, "customerSessions");
+    for (const quote of ensureArray(data, "quoteRequests")) {
+      if (!Array.isArray(quote.messages)) quote.messages = [];
+    }
+    applied.push({ version: 6, name: "customer portal accounts", appliedAt: now });
   }
   data.dataMeta = {
     ...meta,
@@ -1667,7 +1791,7 @@ const apiKeyReadScopeRules = [
   { pattern: /^\/api\/catalog\/export$/, scopes: ["catalog:write"] },
   { pattern: /^\/api\/costCatalog$/, scopes: ["catalog:write"] },
   { pattern: /^\/api\/(?:parts|skus|profiles|productionTemplates|materialMappings|materialMapRuns)$/, scopes: ["catalog:write", "orders:write", "queue:write"] },
-  { pattern: /^\/api\/(?:orders|quoteRequests)$/, scopes: ["orders:write", "commerce:write", "queue:write"] },
+  { pattern: /^\/api\/(?:orders|quoteRequests|customers)$/, scopes: ["orders:write", "commerce:write", "queue:write"] },
   { pattern: /^\/api\/(?:queue|todos|history|schedule\/diagnostics|slicer\/jobs)$/, scopes: ["queue:write", "actions:write"] },
   { pattern: /^\/api\/(?:printers|bridges)$/, scopes: ["printers:control", "queue:write", "maintenance:write"] },
   { pattern: /^\/api\/(?:files|fileFolders)$/, scopes: ["files:write", "queue:write", "orders:write"] },
@@ -1762,6 +1886,10 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "POST" && /^\/api\/orders\/[^/]+\/generate-jobs$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/quoteRequests\/[^/]+\/customer-link$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/quoteRequests\/[^/]+\/convert-order$/.test(routePath)) return true;
+  if (method === "POST" && /^\/api\/quoteRequests\/[^/]+\/messages$/.test(routePath)) return true;
+  if (method === "POST" && /^\/api\/customer\/quotes\/[^/]+\/decision$/.test(routePath)) return true;
+  if (method === "POST" && /^\/api\/customer\/quotes\/[^/]+\/messages$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/orders\/[^/]+\/tracking$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/quoteRequests\/[^/]+$/.test(routePath)) return true;
   if (method === "POST" && /^\/api\/todos\/[^/]+\/action$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/history\/[^/]+$/.test(routePath)) return true;
@@ -2078,7 +2206,7 @@ function realtimeUserFromRequest(database, request) {
 }
 
 function publicState(data) {
-  const { sessions, ...safeState } = data;
+  const { sessions, customerSessions, ...safeState } = data;
   return {
     ...safeState,
     dataMeta: sanitizeDataMeta(data.dataMeta),
@@ -2091,6 +2219,7 @@ function publicState(data) {
     commerceConnectors: (data.commerceConnectors || []).map(sanitizeCommerceConnector),
     apiKeys: (data.apiKeys || []).map(sanitizeApiKey),
     quoteRequests: (data.quoteRequests || []).map(sanitizeQuoteRequest),
+    customers: (data.customers || []).map(sanitizeCustomer),
     addons: (data.addons || []).map(sanitizeAddon)
   };
 }
@@ -2777,6 +2906,16 @@ function sanitizeQuoteRequest(quote) {
   return {
     ...safeQuote,
     hasCustomerAccessToken: Boolean(customerAccessToken)
+  };
+}
+
+function sanitizeCustomer(customer) {
+  if (!customer) return null;
+  const { passwordHash, resetTokenHash, resetTokenExpiresAt, ...safeCustomer } = customer;
+  return {
+    ...safeCustomer,
+    hasPortalAccount: Boolean(passwordHash),
+    hasPendingPasswordReset: Boolean(resetTokenHash) && Date.parse(resetTokenExpiresAt || "") > Date.now()
   };
 }
 
@@ -3931,14 +4070,6 @@ function productionReadinessConfigChecks(data, env = process.env) {
     detail: defaultUserIssues.length ? defaultUserIssues.join("; ") : "default and demo access disabled"
   });
 
-  const signupEnabled = publicSignupEnabled(env);
-  checks.push({
-    name: "production-public-signup",
-    ok: true,
-    enabled: signupEnabled,
-    detail: signupEnabled ? "public signup explicitly enabled" : "public signup disabled by default"
-  });
-
   const corsConfig = productionCorsOriginConfig(env);
   checks.push({
     name: "production-cors-origins",
@@ -4167,6 +4298,48 @@ function createStripeClient() {
   const secretKey = process.env.LAYERPILOT_STRIPE_SECRET_KEY;
   if (!secretKey) return null;
   return new Stripe(secretKey);
+}
+
+function emailConfigFromEnv(env = process.env) {
+  const host = String(env.LAYERPILOT_SMTP_HOST || "").trim();
+  if (!host) return null;
+  const port = Number(env.LAYERPILOT_SMTP_PORT || 587);
+  const secureValue = String(env.LAYERPILOT_SMTP_SECURE ?? "").trim();
+  return {
+    host,
+    port: Number.isFinite(port) ? port : 587,
+    secure: secureValue ? envFlag("LAYERPILOT_SMTP_SECURE", env) : port === 465,
+    user: String(env.LAYERPILOT_SMTP_USER || ""),
+    pass: String(env.LAYERPILOT_SMTP_PASSWORD || ""),
+    from: String(env.LAYERPILOT_SMTP_FROM || env.LAYERPILOT_SMTP_USER || "no-reply@3dstu.local")
+  };
+}
+
+function createEmailClient(env = process.env) {
+  const config = emailConfigFromEnv(env);
+  if (!config) return null;
+  const transporter = nodemailer.createTransport({
+    host: config.host,
+    port: config.port,
+    secure: config.secure,
+    auth: config.user ? { user: config.user, pass: config.pass } : undefined
+  });
+  return {
+    from: config.from,
+    async send({ to, subject, text, html }) {
+      return transporter.sendMail({ from: config.from, to, subject, text, html });
+    }
+  };
+}
+
+async function sendTransactionalEmail(emailClient, { to, subject, text, html }) {
+  if (!emailClient || !to) return { sent: false, reason: emailClient ? "no_recipient" : "not_configured" };
+  try {
+    await emailClient.send({ to, subject, text, html });
+    return { sent: true };
+  } catch {
+    return { sent: false, reason: "send_failed" };
+  }
 }
 
 async function buildBillingSummary(data, { stripeClient = null } = {}) {
@@ -4862,6 +5035,41 @@ function createJobFromQuote({ quote, order, file, printer, workspaceData }) {
   return job;
 }
 
+function upsertCustomerFromQuote(data, quote) {
+  const email = String(quote.email || "").toLowerCase();
+  if (!email) return null;
+  const workspaceId = quote.workspaceId || DEFAULT_WORKSPACE_ID;
+  const customers = ensureArray(data, "customers");
+  const now = new Date().toISOString();
+  let customer = customers.find((item) => itemInWorkspace(item, workspaceId) && String(item.email || "").toLowerCase() === email);
+  const created = !customer;
+  if (!customer) {
+    customer = {
+      id: `cus-${randomUUID().slice(0, 8)}`,
+      workspaceId,
+      name: quote.customer || email,
+      company: quote.company || "",
+      email,
+      phone: quote.phone || "",
+      line: "",
+      tags: ["quote-intake"],
+      notes: "",
+      source: quote.source || "Quote form",
+      createdAt: now,
+      updatedAt: now,
+      lastActivityAt: now
+    };
+    customers.push(customer);
+  } else {
+    customer.name ||= quote.customer || email;
+    customer.company ||= quote.company || "";
+    customer.phone ||= quote.phone || "";
+    customer.lastActivityAt = now;
+    customer.updatedAt = now;
+  }
+  return { customer, created };
+}
+
 function publicQuoteSummary(quote) {
   return {
     id: quote.id,
@@ -4871,6 +5079,15 @@ function publicQuoteSummary(quote) {
     company: quote.company || "",
     material: quote.material,
     quantity: quote.quantity,
+    process: quote.process || "",
+    color: quote.color || "",
+    quality: quote.quality || "",
+    layerHeight: quote.layerHeight || "",
+    infill: quote.infill ?? 0,
+    support: quote.support || "",
+    postProcessing: Array.isArray(quote.postProcessing) ? quote.postProcessing : [],
+    inspection: quote.inspection || "",
+    rush: Boolean(quote.rush),
     due: quote.due,
     budget: quote.budget,
     quotedValue: quote.quotedValue || 0,
@@ -4913,6 +5130,16 @@ function publicQuoteUrl(request, quote) {
   return `${base}/?${params.toString()}#quote`;
 }
 
+function customerPortalUrl(request, params = {}) {
+  const configured = process.env.LAYERPILOT_PUBLIC_URL || "";
+  const forwardedProto = String(request.headers["x-forwarded-proto"] || "").split(",")[0].trim();
+  const forwardedHost = String(request.headers["x-forwarded-host"] || "").split(",")[0].trim();
+  const host = forwardedHost || request.headers.host || "127.0.0.1:8797";
+  const base = (configured || `${forwardedProto || "http"}://${host}`).replace(/\/+$/, "");
+  const query = new URLSearchParams(params).toString();
+  return `${base}/?${query}#portal`;
+}
+
 function convertQuoteToProduction(data, quote, { workspaceId, due, value, createJob = true, reviewedBy = "system" } = {}) {
   if (quote.orderId) return { error: "Quote request already converted", statusCode: 409, orderId: quote.orderId };
   const now = new Date().toISOString();
@@ -4923,6 +5150,7 @@ function convertQuoteToProduction(data, quote, { workspaceId, due, value, create
     source: "Manual",
     externalId: quote.id,
     customer: quote.company ? `${quote.customer} / ${quote.company}` : quote.customer,
+    customerId: quote.customerId || "",
     items: [`${quote.project} x${quote.quantity}`],
     status: "received",
     due: due || quote.due || "Flexible",
@@ -4943,6 +5171,47 @@ function convertQuoteToProduction(data, quote, { workspaceId, due, value, create
   Object.assign(quote, { status: "converted", orderId: order.id, convertedAt: now, updatedAt: now, reviewedBy });
   const nextScoped = scopedWorkspaceData(data, targetWorkspaceId);
   return { quoteRequest: quote, order, job, orders: nextScoped.orders, quoteRequests: nextScoped.quoteRequests, queue: nextScoped.queue, todos: deriveTodos(nextScoped) };
+}
+
+async function applyQuoteDecision(database, quote, { decision, note }) {
+  if (quote.orderId) return { statusCode: 409, body: { error: "Quote request already converted", orderId: quote.orderId } };
+  if (!["quoted", "accepted"].includes(quote.status)) return { statusCode: 409, body: { error: "Quote request is not ready for a customer decision", status: quote.status } };
+  if (decision === "accepted" && quoteExpired(quote)) return { statusCode: 409, body: { error: "Quote request has expired", status: quote.status, validUntil: quote.validUntil } };
+  const now = new Date().toISOString();
+  Object.assign(quote, {
+    customerDecision: decision,
+    customerDecisionAt: now,
+    customerDecisionNote: note,
+    updatedAt: now
+  });
+  if (decision === "rejected") {
+    Object.assign(quote, { status: "rejected", rejectedAt: now });
+    await dispatchEvent(database, "quote_request.customer_rejected", `${quote.id} rejected by customer`, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, quoteRequestId: quote.id });
+    await database.write();
+    return { statusCode: 200, body: { ok: true, quoteRequest: publicQuoteSummary(quote) } };
+  }
+  if (decision === "revision") {
+    Object.assign(quote, { status: "reviewing", revisionRequestedAt: now, reviewedBy: quote.email });
+    await dispatchEvent(database, "quote_request.revision_requested", `${quote.id} revision requested by customer`, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, quoteRequestId: quote.id });
+    await database.write();
+    return { statusCode: 200, body: { ok: true, quoteRequest: publicQuoteSummary(quote) } };
+  }
+  Object.assign(quote, { status: "accepted", acceptedAt: now });
+  await dispatchEvent(database, "quote_request.customer_accepted", `${quote.id} accepted by customer`, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, quoteRequestId: quote.id, quotedValue: quote.quotedValue || 0 });
+  const result = convertQuoteToProduction(database.data, quote, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, due: quote.due, value: quote.quotedValue || quote.budget || 0, createJob: true, reviewedBy: quote.email });
+  if (result.error) return { statusCode: result.statusCode || 400, body: { error: result.error, orderId: result.orderId } };
+  await dispatchEvent(database, "quote_request.converted", `${quote.id} converted to ${result.order.id}`, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, quoteRequestId: quote.id, orderId: result.order.id, value: result.order.value });
+  if (result.job) await dispatchEvent(database, "queue.created", `${result.job.file} queued from quote`, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, jobId: result.job.id, fileId: result.job.fileId, orderId: result.order.id, quoteRequestId: quote.id, material: result.job.material });
+  await database.write();
+  return {
+    statusCode: 201,
+    body: {
+      ok: true,
+      quoteRequest: publicQuoteSummary(quote),
+      order: { id: result.order.id, status: result.order.status, due: result.order.due, value: result.order.value },
+      job: result.job ? { id: result.job.id, status: result.job.status, stage: result.job.stage, printer: result.job.printer } : null
+    }
+  };
 }
 
 function dueFromOffset(days = 2) {
@@ -5893,6 +6162,7 @@ async function parsePublicQuoteRequestPayload(request) {
     payload: {
       customer: fieldValue("customer"),
       email: fieldValue("email"),
+      phone: fieldValue("phone"),
       company: fieldValue("company"),
       project: fieldValue("project"),
       material: fieldValue("material", "PLA"),
@@ -5901,7 +6171,21 @@ async function parsePublicQuoteRequestPayload(request) {
       budget: Number(fieldValue("budget", "0")),
       notes: fieldValue("notes"),
       fileName: fieldValue("fileName", filename),
-      source: fieldValue("source", "Website")
+      source: fieldValue("source", "Website"),
+      process: fieldValue("process", "FDM"),
+      color: fieldValue("color"),
+      quality: fieldValue("quality", "Standard"),
+      layerHeight: fieldValue("layerHeight"),
+      infill: Number(fieldValue("infill", "15")),
+      walls: Number(fieldValue("walls", "2")),
+      support: fieldValue("support", "Auto"),
+      postProcessing: fieldValue("postProcessing").split(",").map((item) => item.trim()).filter(Boolean),
+      inserts: Number(fieldValue("inserts", "0")),
+      inspection: fieldValue("inspection", "Standard"),
+      rush: fieldValue("rush") === "true",
+      useCase: fieldValue("useCase"),
+      formMode: fieldValue("formMode") === "expert" ? "expert" : "quick",
+      clientEstimate: Number(fieldValue("clientEstimate", "0"))
     },
     upload: buffer.length ? { filename, buffer } : null
   };
@@ -6028,7 +6312,7 @@ export async function runTelemetryTick(database, options = {}) {
   return { changed: true, changedPrinters, completedJobs, todos: deriveTodos(stateData) };
 }
 
-export async function buildServer({ db, enableTelemetry = false, telemetryIntervalMs = 5000, enableBridgePolling = false, bridgePollingIntervalMs = 10000, serveStatic = process.env.LAYERPILOT_SERVE_STATIC === "true", authRateLimit = defaultAuthRateLimit, sensitiveRateLimit = defaultSensitiveRateLimit, mqttPublisher = null, stripeClient = createStripeClient(), objectStorageAdapter = createObjectStorage() } = {}) {
+export async function buildServer({ db, enableTelemetry = false, telemetryIntervalMs = 5000, enableBridgePolling = false, bridgePollingIntervalMs = 10000, serveStatic = process.env.LAYERPILOT_SERVE_STATIC === "true", authRateLimit = defaultAuthRateLimit, sensitiveRateLimit = defaultSensitiveRateLimit, mqttPublisher = null, stripeClient = createStripeClient(), objectStorageAdapter = createObjectStorage(), emailClient = createEmailClient() } = {}) {
   const database = db || await openDatabase();
   activeObjectStorage = objectStorageAdapter;
   database.realtimeClients ||= new Set();
@@ -6104,7 +6388,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
 
   app.addHook("preHandler", async (request, reply) => {
     const routePath = request.url.split("?")[0];
-    const publicRoute = routePath === "/api/health" || routePath === "/api/readiness" || routePath === "/api/metrics" && hasValidMetricsToken(request) || routePath === "/api/internal/worker-broadcast" && hasValidWorkerToken(request) || routePath === "/api/billing/webhook/stripe" || routePath === "/api/public/quoteRequests" || routePath.startsWith("/api/public/quoteRequests/") || routePath.startsWith("/api/auth/") || routePath === "/api/events/stream" || routePath === "/api/events/ws" || serveStatic && !routePath.startsWith("/api/");
+    const publicRoute = routePath === "/api/health" || routePath === "/api/readiness" || routePath === "/api/metrics" && hasValidMetricsToken(request) || routePath === "/api/internal/worker-broadcast" && hasValidWorkerToken(request) || routePath === "/api/billing/webhook/stripe" || routePath === "/api/public/quoteRequests" || routePath.startsWith("/api/public/quoteRequests/") || routePath.startsWith("/api/auth/") || routePath.startsWith("/api/customer-auth/") || routePath.startsWith("/api/customer/") || routePath === "/api/events/stream" || routePath === "/api/events/ws" || serveStatic && !routePath.startsWith("/api/");
     if (publicRoute) return;
     if (await replayCommittedRestoreRequest(database, request, reply)) return;
     const { session, user, apiKey } = userFromRequest(database, request);
@@ -6254,49 +6538,8 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     return { token, user: sanitizeUser(user) };
   });
 
-  app.post("/api/auth/signup", { config: { rateLimit: authRateLimit } }, async (request, reply) => {
-    if (!publicSignupEnabled()) {
-      return reply.code(403).send({
-        error: "Public signup is disabled in production",
-        remediation: "Set LAYERPILOT_ENABLE_PUBLIC_SIGNUP=true only when tenant self-service registration is intentionally enabled."
-      });
-    }
-    const parsed = signupSchema.safeParse(request.body);
-    if (!parsed.success) return reply.code(400).send({ error: "Invalid signup payload", issues: parsed.error.issues });
-    const exists = database.data.users.some((item) => item.email.toLowerCase() === parsed.data.email.toLowerCase());
-    if (exists) return reply.code(409).send({ error: "User already exists" });
-    const now = new Date().toISOString();
-    const workspaceId = `ws-${randomUUID()}`;
-    const workspaceName = parsed.data.workspace;
-    const workspace = workspaceRecordSchema.parse({
-      id: workspaceId,
-      name: workspaceName,
-      slug: workspaceSlug(workspaceName),
-      ownerEmail: parsed.data.email,
-      createdAt: now,
-      updatedAt: now,
-      settings: { ...database.data.workspaceSettings, workspaceId, organizationName: workspaceName }
-    });
-    const user = {
-      id: randomUUID(),
-      workspaceId,
-      name: parsed.data.name,
-      email: parsed.data.email,
-      role: "Owner",
-      location: parsed.data.workspace,
-      lastSeen: "Now",
-      passwordHash: createPasswordHash(parsed.data.password),
-      updatedAt: now
-    };
-    const token = randomBytes(32).toString("hex");
-    database.data.workspaces ||= [];
-    database.data.workspaces.push(workspace);
-    database.data.users.push(user);
-    database.data.sessions.push(createSession({ token, user, workspaceId, now: new Date(now) }));
-    await dispatchEvent(database, "auth.signup", `${user.email} created ${parsed.data.workspace}`, { workspaceId, userId: user.id }, { actor: user, at: now });
-    await database.write();
-    return reply.code(201).send({ token, user: sanitizeUser(user) });
-  });
+  // Single-tenant deployment: no self-service signup. Additional operators are
+  // added by the workspace owner from the Team page (POST /api/users).
 
   app.get("/api/auth/me", async (request, reply) => {
     const { session, user } = userFromRequest(database, request);
@@ -6410,6 +6653,207 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     return { ok: true };
   });
 
+  app.post("/api/customer-auth/register", { config: { rateLimit: customerAuthRateLimit } }, async (request, reply) => {
+    const parsed = customerRegisterSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid registration payload", issues: parsed.error.issues });
+    const email = parsed.data.email.trim().toLowerCase();
+    const workspaceId = DEFAULT_WORKSPACE_ID;
+    database.data.customers ||= [];
+    let customer = database.data.customers.find((item) => itemInWorkspace(item, workspaceId) && String(item.email || "").toLowerCase() === email);
+    if (customer?.passwordHash) return reply.code(409).send({ error: "An account with this email already exists. Sign in instead." });
+    const now = new Date().toISOString();
+    if (!customer) {
+      customer = {
+        id: `cus-${randomUUID().slice(0, 8)}`,
+        workspaceId,
+        name: parsed.data.name,
+        company: "",
+        email,
+        phone: parsed.data.phone,
+        line: "",
+        tags: [],
+        notes: "",
+        source: "Portal signup",
+        createdAt: now,
+        updatedAt: now,
+        lastActivityAt: now
+      };
+      database.data.customers.push(customer);
+    } else {
+      customer.name = parsed.data.name || customer.name;
+      customer.phone = customer.phone || parsed.data.phone;
+      customer.updatedAt = now;
+    }
+    customer.passwordHash = createPasswordHash(parsed.data.password);
+    customer.lastLoginAt = now;
+    const token = randomBytes(32).toString("hex");
+    const session = createCustomerSession({ token, customer, workspaceId, now: new Date(now) });
+    database.data.customerSessions ||= [];
+    database.data.customerSessions.push(session);
+    await dispatchEvent(database, "customer.portal_registered", `${customer.name} created a customer portal account`, { workspaceId, customerId: customer.id, email: customer.email });
+    await database.write();
+    return reply.code(201).send({ token, customer: sanitizeCustomer(customer) });
+  });
+
+  app.post("/api/customer-auth/claim", { config: { rateLimit: customerAuthRateLimit } }, async (request, reply) => {
+    const parsed = customerClaimSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid claim payload", issues: parsed.error.issues });
+    const quote = database.data.quoteRequests.find((item) => item.id === parsed.data.quoteId && itemInWorkspace(item, DEFAULT_WORKSPACE_ID));
+    if (!quote || !quoteTokenMatches(quote, parsed.data.token)) return reply.code(404).send({ error: "Quote request not found" });
+    database.data.customers ||= [];
+    let customer = quote.customerId ? database.data.customers.find((item) => item.id === quote.customerId) : null;
+    if (!customer) {
+      const link = upsertCustomerFromQuote(database.data, quote);
+      customer = link?.customer || null;
+      if (customer) quote.customerId = customer.id;
+    }
+    if (!customer) return reply.code(404).send({ error: "No customer record linked to this quote request" });
+    if (customer.passwordHash) return reply.code(409).send({ error: "This account already has a password. Sign in instead." });
+    const now = new Date().toISOString();
+    if (parsed.data.name) customer.name = parsed.data.name;
+    customer.passwordHash = createPasswordHash(parsed.data.password);
+    customer.lastLoginAt = now;
+    customer.updatedAt = now;
+    const token = randomBytes(32).toString("hex");
+    const session = createCustomerSession({ token, customer, workspaceId: customer.workspaceId, now: new Date(now) });
+    database.data.customerSessions ||= [];
+    database.data.customerSessions.push(session);
+    await dispatchEvent(database, "customer.portal_claimed", `${customer.name} set up portal access from a quote link`, { workspaceId: customer.workspaceId, customerId: customer.id, quoteRequestId: quote.id });
+    await database.write();
+    return reply.code(201).send({ token, customer: sanitizeCustomer(customer) });
+  });
+
+  app.post("/api/customer-auth/login", { config: { rateLimit: customerAuthRateLimit } }, async (request, reply) => {
+    const parsed = customerLoginSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid login payload", issues: parsed.error.issues });
+    const email = parsed.data.email.trim().toLowerCase();
+    const customer = (database.data.customers || []).find((item) => itemInWorkspace(item, DEFAULT_WORKSPACE_ID) && String(item.email || "").toLowerCase() === email);
+    if (!customer || !customer.passwordHash || !verifyPassword(parsed.data.password, customer.passwordHash)) {
+      return reply.code(401).send({ error: "Invalid email or password" });
+    }
+    const now = new Date().toISOString();
+    customer.lastLoginAt = now;
+    const token = randomBytes(32).toString("hex");
+    const session = createCustomerSession({ token, customer, workspaceId: customer.workspaceId, now: new Date(now) });
+    database.data.customerSessions ||= [];
+    database.data.customerSessions.push(session);
+    await dispatchEvent(database, "customer.portal_login", `${customer.name} signed in to the customer portal`, { workspaceId: customer.workspaceId, customerId: customer.id });
+    await database.write();
+    return { token, customer: sanitizeCustomer(customer) };
+  });
+
+  app.post("/api/customer-auth/request-reset", { config: { rateLimit: customerAuthRateLimit } }, async (request, reply) => {
+    const parsed = customerResetRequestSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid request", issues: parsed.error.issues });
+    const email = parsed.data.email.trim().toLowerCase();
+    const customer = (database.data.customers || []).find((item) => itemInWorkspace(item, DEFAULT_WORKSPACE_ID) && String(item.email || "").toLowerCase() === email && item.passwordHash);
+    if (customer) {
+      const resetToken = randomBytes(24).toString("base64url");
+      customer.resetTokenHash = createPasswordHash(resetToken);
+      customer.resetTokenExpiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      const resetUrl = customerPortalUrl(request, { resetEmail: email, resetToken });
+      await sendTransactionalEmail(emailClient, {
+        to: customer.email,
+        subject: "Reset your customer portal password",
+        text: `Hi ${customer.name},\n\nUse this link to reset your customer portal password: ${resetUrl}\n\nThis link expires in 1 hour. If you did not request this, you can safely ignore this email.`
+      });
+      await dispatchEvent(database, "customer.portal_reset_requested", `Password reset requested for ${customer.email}`, { workspaceId: customer.workspaceId, customerId: customer.id });
+      await database.write();
+    }
+    return { ok: true };
+  });
+
+  app.post("/api/customer-auth/reset", { config: { rateLimit: customerAuthRateLimit } }, async (request, reply) => {
+    const parsed = customerResetConfirmSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid reset payload", issues: parsed.error.issues });
+    const customer = (database.data.customers || []).find((item) => item.resetTokenHash && verifyPassword(parsed.data.token, item.resetTokenHash));
+    if (!customer || !customer.resetTokenExpiresAt || Date.parse(customer.resetTokenExpiresAt) < Date.now()) {
+      return reply.code(400).send({ error: "Reset link is invalid or has expired" });
+    }
+    const now = new Date().toISOString();
+    customer.passwordHash = createPasswordHash(parsed.data.password);
+    customer.resetTokenHash = "";
+    customer.resetTokenExpiresAt = "";
+    customer.updatedAt = now;
+    database.data.customerSessions = (database.data.customerSessions || []).filter((session) => session.customerId !== customer.id);
+    await dispatchEvent(database, "customer.portal_reset_completed", `${customer.name} reset their portal password`, { workspaceId: customer.workspaceId, customerId: customer.id });
+    await database.write();
+    return { ok: true };
+  });
+
+  app.get("/api/customer-auth/me", async (request, reply) => {
+    const { customer } = customerFromRequest(database, request);
+    if (!customer) return reply.code(401).send({ error: "Authentication required" });
+    return { customer: sanitizeCustomer(customer) };
+  });
+
+  app.post("/api/customer-auth/logout", async (request, reply) => {
+    const { token, session, customer } = customerFromRequest(database, request);
+    if (!customer) return reply.code(401).send({ error: "Authentication required" });
+    database.data.customerSessions = (database.data.customerSessions || []).filter((item) => !sessionMatchesToken(item, token));
+    await dispatchEvent(database, "customer.portal_logout", `${customer.name} signed out of the customer portal`, { workspaceId: customer.workspaceId, customerId: customer.id, sessionId: session?.id || "" });
+    await database.write();
+    return { ok: true };
+  });
+
+  app.patch("/api/customer-auth/profile", async (request, reply) => {
+    const { customer } = customerFromRequest(database, request);
+    if (!customer) return reply.code(401).send({ error: "Authentication required" });
+    const parsed = customerProfileUpdateSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid profile update", issues: parsed.error.issues });
+    Object.assign(customer, parsed.data, { updatedAt: new Date().toISOString() });
+    await dispatchEvent(database, "customer.portal_profile_updated", `${customer.name} updated their portal profile`, { workspaceId: customer.workspaceId, customerId: customer.id });
+    await database.write();
+    return { customer: sanitizeCustomer(customer) };
+  });
+
+  function customerLinkedQuotes(database, customer) {
+    const email = String(customer.email || "").toLowerCase();
+    return (database.data.quoteRequests || []).filter((quote) => itemInWorkspace(quote, customer.workspaceId) && (quote.customerId === customer.id || (email && String(quote.email || "").toLowerCase() === email)));
+  }
+
+  app.get("/api/customer/quotes", async (request, reply) => {
+    const { customer } = customerFromRequest(database, request);
+    if (!customer) return reply.code(401).send({ error: "Authentication required" });
+    return customerLinkedQuotes(database, customer).map(sanitizeQuoteRequest);
+  });
+
+  app.get("/api/customer/orders", async (request, reply) => {
+    const { customer } = customerFromRequest(database, request);
+    if (!customer) return reply.code(401).send({ error: "Authentication required" });
+    const quoteOrderIds = new Set(customerLinkedQuotes(database, customer).map((quote) => quote.orderId).filter(Boolean));
+    return (database.data.orders || []).filter((order) => itemInWorkspace(order, customer.workspaceId) && (order.customerId === customer.id || quoteOrderIds.has(order.id)));
+  });
+
+  app.post("/api/customer/quotes/:id/decision", { config: { rateLimit: customerAuthRateLimit } }, async (request, reply) => {
+    const { customer } = customerFromRequest(database, request);
+    if (!customer) return reply.code(401).send({ error: "Authentication required" });
+    const parsed = z.object({ decision: z.enum(["accepted", "rejected", "revision"]), note: z.string().max(1000).optional().default("") }).safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid quote decision payload", issues: parsed.error.issues });
+    const quote = customerLinkedQuotes(database, customer).find((item) => item.id === request.params.id);
+    if (!quote) return reply.code(404).send({ error: "Quote request not found" });
+    if (await prepareIdempotentRequest(database, request, reply, { workspaceId: customer.workspaceId, actorId: `customer:${customer.id}`, bodyDigest: requestBodyDigest(parsed.data) })) return;
+    const result = await applyQuoteDecision(database, quote, { decision: parsed.data.decision, note: parsed.data.note });
+    return reply.code(result.statusCode).send(result.body);
+  });
+
+  app.post("/api/customer/quotes/:id/messages", { config: { rateLimit: customerMessageRateLimit } }, async (request, reply) => {
+    const { customer } = customerFromRequest(database, request);
+    if (!customer) return reply.code(401).send({ error: "Authentication required" });
+    const parsed = customerMessageSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid message payload", issues: parsed.error.issues });
+    const quote = customerLinkedQuotes(database, customer).find((item) => item.id === request.params.id);
+    if (!quote) return reply.code(404).send({ error: "Quote request not found" });
+    if (await prepareIdempotentRequest(database, request, reply, { workspaceId: customer.workspaceId, actorId: `customer:${customer.id}`, bodyDigest: requestBodyDigest(parsed.data) })) return;
+    const message = { id: randomUUID(), author: "customer", authorName: customer.name, body: parsed.data.body, createdAt: new Date().toISOString() };
+    quote.messages ||= [];
+    quote.messages.push(message);
+    quote.updatedAt = message.createdAt;
+    await dispatchEvent(database, "quote_request.message_added", `${customer.name} sent a message on ${quote.id}`, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, quoteRequestId: quote.id, author: "customer" });
+    await database.write();
+    return reply.code(201).send({ ok: true, quoteRequest: sanitizeQuoteRequest(quote) });
+  });
+
   app.get("/api/state", async (request) => realtimeStateForUser(database.data, request.user));
   app.get("/api/events/stream", async (request, reply) => {
     const { user } = realtimeUserFromRequest(database, request);
@@ -6502,11 +6946,12 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   app.get("/api/costCatalog", async (request) => costCatalogForWorkspace(database.data, request.user.workspaceId));
 
   for (const collection of COLLECTIONS) {
-    if (collection === "bridges" || collection === "webhooks" || collection === "webhookDeliveries" || collection === "notificationChannels" || collection === "notificationDeliveries" || collection === "commerceConnectors" || collection === "apiKeys" || collection === "addons" || collection === "quoteRequests") continue;
+    if (collection === "bridges" || collection === "webhooks" || collection === "webhookDeliveries" || collection === "notificationChannels" || collection === "notificationDeliveries" || collection === "commerceConnectors" || collection === "apiKeys" || collection === "addons" || collection === "quoteRequests" || collection === "customers") continue;
     app.get(`/api/${collection}`, async (request) => scopedWorkspaceData(database.data, request.user.workspaceId)[collection] || []);
   }
 
   app.get("/api/quoteRequests", async (request) => (scopedWorkspaceData(database.data, request.user.workspaceId).quoteRequests || []).map(sanitizeQuoteRequest));
+  app.get("/api/customers", async (request) => (scopedWorkspaceData(database.data, request.user.workspaceId).customers || []).map(sanitizeCustomer));
 
   app.get("/api/todos", async (request) => deriveTodos(scopedWorkspaceData(database.data, request.user.workspaceId)));
 
@@ -6578,8 +7023,13 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       createdAt: now,
       updatedAt: now
     };
+    const customerLink = upsertCustomerFromQuote(database.data, quote);
+    if (customerLink) quote.customerId = customerLink.customer.id;
     database.data.quoteRequests.unshift(quote);
-    await dispatchEvent(database, "quote_request.created", `${quote.customer} requested ${quote.project}`, { quoteRequestId: quote.id, fileId: quote.fileId, material: quote.material, quantity: quote.quantity, source: quote.source });
+    if (customerLink?.created) {
+      await dispatchEvent(database, "customer.created", `${customerLink.customer.name} added to customer directory`, { workspaceId: quote.workspaceId, customerId: customerLink.customer.id, email: customerLink.customer.email, source: quote.source });
+    }
+    await dispatchEvent(database, "quote_request.created", `${quote.customer} requested ${quote.project}`, { quoteRequestId: quote.id, customerId: quote.customerId || "", fileId: quote.fileId, material: quote.material, quantity: quote.quantity, source: quote.source });
     await database.write();
     return reply.code(201).send({ ok: true, quoteRequest: { ...publicQuoteSummary(quote), fileId: quote.fileId, accessToken: quote.customerAccessToken } });
   });
@@ -6598,36 +7048,8 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!quote || !quoteTokenMatches(quote, parsed.data.token)) return reply.code(404).send({ error: "Quote request not found" });
     const publicIdempotency = publicIdempotencyContext("POST", `/api/public/quoteRequests/${request.params.id}/decision`);
     if (publicIdempotency && await prepareIdempotentRequest(database, request, reply, { ...publicIdempotency, bodyDigest: requestBodyDigest(parsed.data) })) return;
-    if (quote.orderId) return reply.code(409).send({ error: "Quote request already converted", orderId: quote.orderId });
-    if (!["quoted", "accepted"].includes(quote.status)) return reply.code(409).send({ error: "Quote request is not ready for a customer decision", status: quote.status });
-    if (parsed.data.decision === "accepted" && quoteExpired(quote)) return reply.code(409).send({ error: "Quote request has expired", status: quote.status, validUntil: quote.validUntil });
-    const now = new Date().toISOString();
-    Object.assign(quote, {
-      customerDecision: parsed.data.decision,
-      customerDecisionAt: now,
-      customerDecisionNote: parsed.data.note,
-      updatedAt: now
-    });
-    if (parsed.data.decision === "rejected") {
-      Object.assign(quote, { status: "rejected", rejectedAt: now });
-      await dispatchEvent(database, "quote_request.customer_rejected", `${quote.id} rejected by customer`, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, quoteRequestId: quote.id });
-      await database.write();
-      return { ok: true, quoteRequest: publicQuoteSummary(quote) };
-    }
-    if (parsed.data.decision === "revision") {
-      Object.assign(quote, { status: "reviewing", revisionRequestedAt: now, reviewedBy: quote.email });
-      await dispatchEvent(database, "quote_request.revision_requested", `${quote.id} revision requested by customer`, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, quoteRequestId: quote.id });
-      await database.write();
-      return { ok: true, quoteRequest: publicQuoteSummary(quote) };
-    }
-    Object.assign(quote, { status: "accepted", acceptedAt: now });
-    await dispatchEvent(database, "quote_request.customer_accepted", `${quote.id} accepted by customer`, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, quoteRequestId: quote.id, quotedValue: quote.quotedValue || 0 });
-    const result = convertQuoteToProduction(database.data, quote, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, due: quote.due, value: quote.quotedValue || quote.budget || 0, createJob: true, reviewedBy: quote.email });
-    if (result.error) return reply.code(result.statusCode || 400).send({ error: result.error, orderId: result.orderId });
-    await dispatchEvent(database, "quote_request.converted", `${quote.id} converted to ${result.order.id}`, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, quoteRequestId: quote.id, orderId: result.order.id, value: result.order.value });
-    if (result.job) await dispatchEvent(database, "queue.created", `${result.job.file} queued from quote`, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, jobId: result.job.id, fileId: result.job.fileId, orderId: result.order.id, quoteRequestId: quote.id, material: result.job.material });
-    await database.write();
-    return reply.code(201).send({ ok: true, quoteRequest: publicQuoteSummary(quote), order: { id: result.order.id, status: result.order.status, due: result.order.due, value: result.order.value }, job: result.job ? { id: result.job.id, status: result.job.status, stage: result.job.stage, printer: result.job.printer } : null });
+    const result = await applyQuoteDecision(database, quote, { decision: parsed.data.decision, note: parsed.data.note });
+    return reply.code(result.statusCode).send(result.body);
   });
 
   app.post("/api/telemetry/tick", async (request, reply) => {
@@ -7915,12 +8337,68 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     return reply.code(201).send(order);
   });
 
+  app.post("/api/customers", async (request, reply) => {
+    if (!hasPermission(request.user, "orders:write")) return reply.code(403).send({ error: "Missing permission: orders:write" });
+    const parsed = customerSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid customer payload", issues: parsed.error.issues });
+    const email = String(parsed.data.email || "").toLowerCase();
+    if (email && (database.data.customers || []).some((item) => itemInWorkspace(item, request.user.workspaceId) && String(item.email || "").toLowerCase() === email)) {
+      return reply.code(409).send({ error: "A customer with this email already exists" });
+    }
+    const now = new Date().toISOString();
+    const customer = { id: `cus-${randomUUID().slice(0, 8)}`, workspaceId: request.user.workspaceId, ...parsed.data, email, createdAt: now, updatedAt: now, lastActivityAt: now };
+    database.data.customers ||= [];
+    database.data.customers.push(customer);
+    await dispatchEvent(database, "customer.created", `${customer.name} added to customer directory`, {
+      workspaceId: request.user.workspaceId,
+      customerId: customer.id,
+      email: customer.email,
+      source: customer.source
+    }, { actor: request.user });
+    await database.write();
+    return reply.code(201).send(sanitizeCustomer(customer));
+  });
+
+  app.patch("/api/customers/:id", async (request, reply) => {
+    if (!hasPermission(request.user, "orders:write")) return reply.code(403).send({ error: "Missing permission: orders:write" });
+    const parsed = customerPatchSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid customer update", issues: parsed.error.issues });
+    const customer = (database.data.customers || []).find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
+    if (!customer) return reply.code(404).send({ error: "Customer not found" });
+    const patch = { ...parsed.data };
+    if (typeof patch.email === "string") patch.email = patch.email.toLowerCase();
+    if (patch.email && patch.email !== String(customer.email || "").toLowerCase() && database.data.customers.some((item) => item.id !== customer.id && itemInWorkspace(item, request.user.workspaceId) && String(item.email || "").toLowerCase() === patch.email)) {
+      return reply.code(409).send({ error: "A customer with this email already exists" });
+    }
+    Object.assign(customer, patch, { updatedAt: new Date().toISOString() });
+    await dispatchEvent(database, "customer.updated", `${customer.name} customer record updated`, {
+      workspaceId: request.user.workspaceId,
+      customerId: customer.id
+    }, { actor: request.user });
+    await database.write();
+    return sanitizeCustomer(customer);
+  });
+
+  app.delete("/api/customers/:id", async (request, reply) => {
+    if (!hasPermission(request.user, "orders:write")) return reply.code(403).send({ error: "Missing permission: orders:write" });
+    const index = (database.data.customers || []).findIndex((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
+    if (index === -1) return reply.code(404).send({ error: "Customer not found" });
+    const [removed] = database.data.customers.splice(index, 1);
+    await dispatchEvent(database, "customer.deleted", `${removed.name} removed from customer directory`, {
+      workspaceId: request.user.workspaceId,
+      customerId: removed.id
+    }, { actor: request.user });
+    await database.write();
+    return { ok: true, customer: sanitizeCustomer(removed) };
+  });
+
   app.patch("/api/quoteRequests/:id", async (request, reply) => {
     if (!hasPermission(request.user, "orders:write")) return reply.code(403).send({ error: "Missing permission: orders:write" });
     const parsed = quoteRequestPatchSchema.safeParse(request.body || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid quote request update", issues: parsed.error.issues });
     const quote = database.data.quoteRequests.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!quote) return reply.code(404).send({ error: "Quote request not found" });
+    const previousStatus = quote.status;
     Object.assign(quote, parsed.data, { updatedAt: new Date().toISOString(), reviewedBy: request.user.email });
     await dispatchEvent(database, "quote_request.updated", `${quote.id} -> ${quote.status}`, {
       workspaceId: request.user.workspaceId,
@@ -7931,8 +8409,39 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       validUntil: quote.validUntil || "",
       hasFile: Boolean(quote.fileId)
     }, { actor: request.user });
+    if (quote.status === "quoted" && previousStatus !== "quoted" && quote.email) {
+      const portalUrl = customerPortalUrl(request);
+      await sendTransactionalEmail(emailClient, {
+        to: quote.email,
+        subject: `Your quote for ${quote.project} is ready`,
+        text: `Hi ${quote.customer},\n\nYour quote for "${quote.project}" is ready to review${quote.quotedValue ? ` ($${quote.quotedValue})` : ""}.\n\nSign in to your customer account to review and approve it: ${portalUrl}`
+      });
+    }
     await database.write();
     return quote;
+  });
+
+  app.post("/api/quoteRequests/:id/messages", { config: { rateLimit: customerMessageRateLimit } }, async (request, reply) => {
+    if (!hasPermission(request.user, "orders:write")) return reply.code(403).send({ error: "Missing permission: orders:write" });
+    const parsed = customerMessageSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid message payload", issues: parsed.error.issues });
+    const quote = database.data.quoteRequests.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
+    if (!quote) return reply.code(404).send({ error: "Quote request not found" });
+    const message = { id: randomUUID(), author: "operator", authorName: request.user.name || request.user.email, body: parsed.data.body, createdAt: new Date().toISOString() };
+    quote.messages ||= [];
+    quote.messages.push(message);
+    quote.updatedAt = message.createdAt;
+    await dispatchEvent(database, "quote_request.message_added", `${message.authorName} replied on ${quote.id}`, { workspaceId: request.user.workspaceId, quoteRequestId: quote.id, author: "operator" }, { actor: request.user });
+    if (quote.email) {
+      const portalUrl = customerPortalUrl(request);
+      await sendTransactionalEmail(emailClient, {
+        to: quote.email,
+        subject: `New message about your quote: ${quote.project}`,
+        text: `Hi ${quote.customer},\n\n${message.authorName} sent a new message about "${quote.project}":\n\n"${message.body}"\n\nSign in to your customer account to reply: ${portalUrl}`
+      });
+    }
+    await database.write();
+    return reply.code(201).send({ ok: true, quoteRequest: quote });
   });
 
   app.post("/api/quoteRequests/:id/customer-link", async (request, reply) => {
@@ -8002,6 +8511,23 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     }, { actor: request.user });
     await database.write();
     return { ...result.order, order: result.order, jobs: result.jobs, materialChanges: result.materialChanges, spools: result.spools, todos: result.todos };
+  });
+
+  app.patch("/api/orders/:id/tracking", async (request, reply) => {
+    if (!hasPermission(request.user, "orders:write")) return reply.code(403).send({ error: "Missing permission: orders:write" });
+    const parsed = orderTrackingUpdateSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid tracking update", issues: parsed.error.issues });
+    const order = database.data.orders.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
+    if (!order) return reply.code(404).send({ error: "Order not found" });
+    Object.assign(order, parsed.data, { updatedAt: new Date().toISOString() });
+    await dispatchEvent(database, "order.tracking_updated", `${order.id} tracking updated`, {
+      workspaceId: request.user.workspaceId,
+      orderId: order.id,
+      carrier: order.carrier || "",
+      hasTrackingNumber: Boolean(order.trackingNumber)
+    }, { actor: request.user });
+    await database.write();
+    return order;
   });
 
   app.post("/api/parts", async (request, reply) => {

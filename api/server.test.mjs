@@ -1,4 +1,4 @@
-import { access, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+﻿import { access, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import Stripe from "stripe";
@@ -339,8 +339,7 @@ describe("3DSTU FarmFlow API", () => {
         expect(readiness.json().checks).toEqual(expect.arrayContaining([
           expect.objectContaining({ name: "production-env-required", ok: true }),
           expect.objectContaining({ name: "production-secrets", ok: true }),
-          expect.objectContaining({ name: "production-default-access", ok: true }),
-          expect.objectContaining({ name: "production-public-signup", ok: true, enabled: false })
+          expect.objectContaining({ name: "production-default-access", ok: true })
         ]));
       });
     });
@@ -407,68 +406,6 @@ describe("3DSTU FarmFlow API", () => {
         expect(detail).toContain("LAYERPILOT_PUBLIC_URL: not-a-url is not a valid http(s) URL");
         expect(detail).toContain("wildcard origins are not allowed in production");
         expect(detail).toContain("ftp://legacy.example.com");
-      });
-    });
-  });
-
-  it("blocks public signup in production unless explicitly enabled", async () => {
-    const productionEnv = {
-      NODE_ENV: "production",
-      LAYERPILOT_ADMIN_EMAIL: "owner@example.com",
-      LAYERPILOT_ADMIN_PASSWORD: "production-owner-password",
-      LAYERPILOT_WORKER_TOKEN: "worker-token-32-characters-minimum",
-      LAYERPILOT_METRICS_TOKEN: "metrics-token-32-characters-minimum",
-      LAYERPILOT_DISABLE_DEFAULT_USERS: "true",
-      LAYERPILOT_DISABLE_DEMO_LOGIN: "true",
-      LAYERPILOT_WORKER_TELEMETRY: "false",
-      LAYERPILOT_WORKER_BRIDGE_POLLING: "false",
-      LAYERPILOT_ENABLE_PUBLIC_SIGNUP: ""
-    };
-    await withEnv(productionEnv, async () => {
-      await withApp(async ({ app, db }) => {
-        const readiness = await app.inject({ method: "GET", url: "/api/readiness" });
-        expect(readiness.statusCode).toBe(200);
-        expect(readiness.json().checks).toEqual(expect.arrayContaining([
-          expect.objectContaining({ name: "production-public-signup", ok: true, enabled: false })
-        ]));
-
-        const blocked = await app.inject({
-          method: "POST",
-          url: "/api/auth/signup",
-          payload: {
-            name: "Customer Owner",
-            email: "customer@example.com",
-            password: "customer-owner-password",
-            workspace: "Customer Farm"
-          }
-        });
-        expect(blocked.statusCode).toBe(403);
-        expect(blocked.json()).toMatchObject({ error: "Public signup is disabled in production" });
-        expect(db.data.users.some((user) => user.email === "customer@example.com")).toBe(false);
-      });
-    });
-
-    await withEnv({ ...productionEnv, LAYERPILOT_ENABLE_PUBLIC_SIGNUP: "true" }, async () => {
-      await withApp(async ({ app, db }) => {
-        const readiness = await app.inject({ method: "GET", url: "/api/readiness" });
-        expect(readiness.statusCode).toBe(200);
-        expect(readiness.json().checks).toEqual(expect.arrayContaining([
-          expect.objectContaining({ name: "production-public-signup", ok: true, enabled: true })
-        ]));
-
-        const created = await app.inject({
-          method: "POST",
-          url: "/api/auth/signup",
-          payload: {
-            name: "Customer Owner",
-            email: "customer@example.com",
-            password: "customer-owner-password",
-            workspace: "Customer Farm"
-          }
-        });
-        expect(created.statusCode).toBe(201);
-        expect(created.json().user).toMatchObject({ email: "customer@example.com", role: "Owner" });
-        expect(db.data.users.some((user) => user.email === "customer@example.com" && user.role === "Owner")).toBe(true);
       });
     });
   });
@@ -812,13 +749,13 @@ describe("3DSTU FarmFlow API", () => {
     }, null, 2));
     try {
       const db = await openDatabase(dbPath);
-      expect(db.data.dataMeta).toMatchObject({ schemaVersion: 4 });
-      expect(db.data.dataMeta.migrations.map((item) => item.version)).toEqual([1, 2, 3, 4]);
+      expect(db.data.dataMeta).toMatchObject({ schemaVersion: 6 });
+      expect(db.data.dataMeta.migrations.map((item) => item.version)).toEqual([1, 2, 3, 4, 5, 6]);
       expect(db.data.printers[0].id).toBeTruthy();
       expect(db.data.users.find((user) => user.email === "legacy@example.com").passwordHash).toMatch(/^scrypt\$/);
       expect(db.data.events.some((event) => event.type === "system.migrated")).toBe(true);
       const files = await readdir(dir);
-      expect(files.some((file) => file.includes(".pre-migration-0-to-4-") && file.endsWith(".bak.json"))).toBe(true);
+      expect(files.some((file) => file.includes(".pre-migration-0-to-6-") && file.endsWith(".bak.json"))).toBe(true);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -829,7 +766,7 @@ describe("3DSTU FarmFlow API", () => {
       const token = await login(app);
       const clean = await app.inject({ method: "GET", url: "/api/admin/integrity", headers: auth(token) });
       expect(clean.statusCode).toBe(200);
-      expect(clean.json()).toMatchObject({ ok: true, schemaVersion: 4 });
+      expect(clean.json()).toMatchObject({ ok: true, schemaVersion: 6 });
       expect(clean.json().counts.printers).toBeGreaterThan(0);
 
       db.data.queue.push({
@@ -1429,163 +1366,6 @@ describe("3DSTU FarmFlow API", () => {
         expect(defaultOwner.statusCode).toBe(401);
         expect(demo.statusCode).toBe(401);
       });
-    });
-  });
-
-  it("creates isolated workspaces for signup tenants", async () => {
-    await withApp(async ({ app, dbPath }) => {
-      const signup = await app.inject({
-        method: "POST",
-        url: "/api/auth/signup",
-        payload: {
-          email: "tenant.owner@layerpilot.test",
-          password: "tenant-secret-1",
-          name: "Tenant Owner",
-          workspace: "Tenant Print Farm"
-        }
-      });
-      expect(signup.statusCode).toBe(201);
-      expect(signup.json().user).toMatchObject({ email: "tenant.owner@layerpilot.test", role: "Owner", workspaceId: expect.any(String) });
-      const tenantToken = signup.json().token;
-      const tenantWorkspaceId = signup.json().user.workspaceId;
-
-      const tenantState = await app.inject({ method: "GET", url: "/api/state", headers: auth(tenantToken) });
-      expect(tenantState.statusCode).toBe(200);
-      expect(tenantState.json().workspaceSettings).toMatchObject({ organizationName: "Tenant Print Farm", workspaceId: tenantWorkspaceId });
-      expect(tenantState.json().costCatalog).toMatchObject({ currency: "USD", materialRates: { PETG: 1.05 }, machineHourlyRate: 18 });
-      expect(tenantState.json().costCatalogs).toBeUndefined();
-      expect(tenantState.json().printers).toHaveLength(0);
-      expect(tenantState.json().files).toHaveLength(0);
-      expect(tenantState.json().users.map((user) => user.email)).toEqual(["tenant.owner@layerpilot.test"]);
-
-      const tenantPricing = await app.inject({
-        method: "PATCH",
-        url: "/api/costCatalog",
-        headers: auth(tenantToken),
-        payload: { materialRates: { PETG: 3 }, machineHourlyRate: 60, failureReservePercent: 0, overheadPercent: 0, minimumQuote: 5 }
-      });
-      expect(tenantPricing.statusCode).toBe(200);
-      expect(tenantPricing.json()).toMatchObject({ materialRates: { PETG: 3 }, machineHourlyRate: 60 });
-
-      const tenantQuote = await app.inject({
-        method: "POST",
-        url: "/api/quotes",
-        headers: auth(tenantToken),
-        payload: { material: "PETG", grams: 100, minutes: 60, includeLabor: false, quantity: 1 }
-      });
-      expect(tenantQuote.statusCode).toBe(200);
-      expect(tenantQuote.json()).toMatchObject({ currency: "USD", materialCost: 3, machineCost: 60, total: 63 });
-
-      const invited = await app.inject({
-        method: "POST",
-        url: "/api/users",
-        headers: auth(tenantToken),
-        payload: { name: "Tenant Scheduler", email: "tenant.scheduler@layerpilot.test", role: "Admin", location: "Remote" }
-      });
-      expect(invited.statusCode).toBe(201);
-      expect(invited.json().user).toMatchObject({ email: "tenant.scheduler@layerpilot.test", workspaceId: tenantWorkspaceId });
-
-      const apiKey = await app.inject({
-        method: "POST",
-        url: "/api/apiKeys",
-        headers: auth(tenantToken),
-        payload: { name: "Tenant automation", scopes: ["queue:write"], enabled: true }
-      });
-      expect(apiKey.statusCode).toBe(201);
-      expect(apiKey.json().apiKey).toMatchObject({ workspaceId: tenantWorkspaceId });
-
-      const tenantCannotPatchDefaultJob = await app.inject({
-        method: "PATCH",
-        url: "/api/queue/q1/status",
-        headers: auth(tenantToken),
-        payload: { status: "failed" }
-      });
-      expect(tenantCannotPatchDefaultJob.statusCode).toBe(404);
-
-      const tenantPrinter = await app.inject({
-        method: "POST",
-        url: "/api/printers",
-        headers: auth(tenantToken),
-        payload: {
-          name: "Tenant CoreXY",
-          model: "Voron 2.4",
-          status: "idle",
-          connection: "Manual",
-          compatibleMaterials: ["PLA"],
-          buildVolume: [300, 300, 300],
-          filament: "PLA White",
-          nozzle: 25,
-          bed: 25,
-          targetNozzle: 0,
-          targetBed: 0
-        }
-      });
-      expect(tenantPrinter.statusCode).toBe(201);
-      expect(tenantPrinter.json()).toMatchObject({ name: "Tenant CoreXY", workspaceId: tenantWorkspaceId });
-
-      const tenantFile = await app.inject({
-        method: "POST",
-        url: "/api/files",
-        headers: auth(tenantToken),
-        payload: { name: "Tenant priced fixture.stl", type: "STL", material: "PETG", dimensions: [80, 80, 20], estimateGrams: 100, estimateMinutes: 60 }
-      });
-      expect(tenantFile.statusCode).toBe(201);
-      expect(tenantFile.json()).toMatchObject({ workspaceId: tenantWorkspaceId, quote: 63, quoteBreakdown: { materialCost: 3, machineCost: 60, total: 63 } });
-
-      const tenantOrder = await app.inject({
-        method: "POST",
-        url: "/api/orders",
-        headers: auth(tenantToken),
-        payload: { source: "Manual", customer: "Tenant Customer", items: ["TENANT-PART x1"], status: "received", due: "Tomorrow 12:00", value: 120 }
-      });
-      expect(tenantOrder.statusCode).toBe(201);
-      expect(tenantOrder.json()).toMatchObject({ customer: "Tenant Customer", workspaceId: tenantWorkspaceId });
-
-      const tenantAudit = await app.inject({ method: "GET", url: "/api/audit?type=order.created&limit=5", headers: auth(tenantToken) });
-      expect(tenantAudit.statusCode).toBe(200);
-      expect(tenantAudit.json()).toMatchObject({ returned: 1 });
-      expect(tenantAudit.json().events[0]).toMatchObject({
-        workspaceId: tenantWorkspaceId,
-        type: "order.created",
-        data: {
-          workspaceId: tenantWorkspaceId,
-          actorEmail: "tenant.owner@layerpilot.test",
-          actorRole: "Owner",
-          orderId: tenantOrder.json().id
-        }
-      });
-
-      const defaultToken = await login(app, "owner@layerpilot.test", "layerpilot");
-      const defaultState = await app.inject({ method: "GET", url: "/api/state", headers: auth(defaultToken) });
-      expect(defaultState.statusCode).toBe(200);
-      expect(defaultState.json().costCatalog).toMatchObject({ materialRates: { PETG: 1.05 }, machineHourlyRate: 18 });
-      expect(defaultState.json().costCatalogs).toBeUndefined();
-      const defaultQuote = await app.inject({
-        method: "POST",
-        url: "/api/quotes",
-        headers: auth(defaultToken),
-        payload: { material: "PETG", grams: 100, minutes: 60, includeLabor: false, quantity: 1 }
-      });
-      expect(defaultQuote.statusCode).toBe(200);
-      expect(defaultQuote.json()).toMatchObject({ materialCost: 1.05, machineCost: 18, total: 21.72 });
-      expect(defaultState.json().workspaceSettings.workspaceId).not.toBe(tenantWorkspaceId);
-      expect(defaultState.json().printers.length).toBeGreaterThan(0);
-      expect(defaultState.json().printers.map((printer) => printer.id)).not.toContain(tenantPrinter.json().id);
-      expect(defaultState.json().users.map((user) => user.email)).not.toContain("tenant.owner@layerpilot.test");
-
-      const defaultCannotPatchTenantPrinter = await app.inject({
-        method: "PATCH",
-        url: `/api/printers/${tenantPrinter.json().id}/status`,
-        headers: auth(defaultToken),
-        payload: { status: "maintenance" }
-      });
-      expect(defaultCannotPatchTenantPrinter.statusCode).toBe(404);
-
-      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
-      expect(persisted.workspaces.some((workspace) => workspace.id === tenantWorkspaceId && workspace.name === "Tenant Print Farm")).toBe(true);
-      expect(persisted.users.find((user) => user.email === "tenant.scheduler@layerpilot.test")).toMatchObject({ workspaceId: tenantWorkspaceId });
-      expect(persisted.apiKeys.find((key) => key.name === "Tenant automation")).toMatchObject({ workspaceId: tenantWorkspaceId });
-      expect(persisted.events.find((event) => event.type === "order.created" && event.data?.orderId === tenantOrder.json().id)).toMatchObject({ workspaceId: tenantWorkspaceId, data: { actorEmail: "tenant.owner@layerpilot.test" } });
     });
   });
 
@@ -5489,6 +5269,411 @@ endsolid s3_store`;
       expect(persisted.quoteRequests.find((item) => item.id === id)).toMatchObject({ status: "converted", orderId: converted.json().order.id });
       expect(persisted.orders.find((item) => item.id === converted.json().order.id)).toMatchObject({ quoteRequestId: id });
       expect(persisted.events.some((event) => event.type === "quote_request.converted")).toBe(true);
+    });
+  });
+
+  it("creates customers from public quote intake and supports customer CRUD", async () => {
+    await withApp(async ({ app }) => {
+      const quote = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        payload: {
+          customer: "Casey Lin",
+          email: "casey@example.com",
+          phone: "+886 900 111 222",
+          project: "Drone arm set",
+          material: "PETG",
+          quantity: 8,
+          process: "FDM",
+          color: "Black",
+          quality: "Fine",
+          layerHeight: "0.12 mm",
+          infill: 40,
+          walls: 4,
+          support: "Tree",
+          postProcessing: ["Sanding", "Heat-set inserts x2"],
+          inserts: 2,
+          inspection: "Photo confirmation",
+          rush: true,
+          useCase: "functional",
+          formMode: "expert",
+          clientEstimate: 96
+        }
+      });
+      expect(quote.statusCode).toBe(201);
+      const quoteId = quote.json().quoteRequest.id;
+
+      const token = await login(app);
+      const customersList = await app.inject({ method: "GET", url: "/api/customers", headers: auth(token) });
+      expect(customersList.statusCode).toBe(200);
+      const created = customersList.json().find((item) => item.email === "casey@example.com");
+      expect(created).toMatchObject({ name: "Casey Lin", phone: "+886 900 111 222", tags: ["quote-intake"] });
+
+      const quotes = await app.inject({ method: "GET", url: "/api/quoteRequests", headers: auth(token) });
+      const linkedQuote = quotes.json().find((item) => item.id === quoteId);
+      expect(linkedQuote).toMatchObject({ customerId: created.id, process: "FDM", quality: "Fine", layerHeight: "0.12 mm", infill: 40, walls: 4, support: "Tree", rush: true, formMode: "expert", clientEstimate: 96 });
+
+      const repeat = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        payload: { customer: "Casey Lin", email: "casey@example.com", project: "Second batch", material: "PLA", quantity: 2 }
+      });
+      expect(repeat.statusCode).toBe(201);
+      const afterRepeat = await app.inject({ method: "GET", url: "/api/customers", headers: auth(token) });
+      expect(afterRepeat.json().filter((item) => item.email === "casey@example.com")).toHaveLength(1);
+
+      const converted = await app.inject({ method: "POST", url: `/api/quoteRequests/${quoteId}/convert-order`, headers: auth(token) });
+      expect(converted.statusCode).toBe(201);
+      expect(converted.json().order).toMatchObject({ customerId: created.id });
+
+      const manual = await app.inject({
+        method: "POST",
+        url: "/api/customers",
+        headers: auth(token),
+        payload: { name: "Manual Buyer", email: "manual@example.com", phone: "0912", line: "manual-line", tags: ["vip"], notes: "Walk-in customer" }
+      });
+      expect(manual.statusCode).toBe(201);
+      expect(manual.json()).toMatchObject({ name: "Manual Buyer", email: "manual@example.com", tags: ["vip"] });
+
+      const duplicateEmail = await app.inject({
+        method: "POST",
+        url: "/api/customers",
+        headers: auth(token),
+        payload: { name: "Duplicate", email: "casey@example.com" }
+      });
+      expect(duplicateEmail.statusCode).toBe(409);
+
+      const patched = await app.inject({
+        method: "PATCH",
+        url: `/api/customers/${manual.json().id}`,
+        headers: auth(token),
+        payload: { tags: ["vip", "school"], notes: "Updated note" }
+      });
+      expect(patched.statusCode).toBe(200);
+      expect(patched.json()).toMatchObject({ tags: ["vip", "school"], notes: "Updated note" });
+
+      const removed = await app.inject({ method: "DELETE", url: `/api/customers/${manual.json().id}`, headers: auth(token) });
+      expect(removed.statusCode).toBe(200);
+      const finalList = await app.inject({ method: "GET", url: "/api/customers", headers: auth(token) });
+      expect(finalList.json().some((item) => item.id === manual.json().id)).toBe(false);
+
+      const unauthorized = await app.inject({ method: "GET", url: "/api/customers" });
+      expect(unauthorized.statusCode).toBe(401);
+    });
+  });
+
+  it("supports customer portal registration, login, logout, and never exposes passwordHash", async () => {
+    await withApp(async ({ app }) => {
+      const register = await app.inject({
+        method: "POST",
+        url: "/api/customer-auth/register",
+        payload: { name: "Portal Buyer", email: "portal.buyer@example.com", password: "portal-secret-1", phone: "0900-000-000" }
+      });
+      expect(register.statusCode).toBe(201);
+      expect(register.json().customer).toMatchObject({ name: "Portal Buyer", email: "portal.buyer@example.com", hasPortalAccount: true });
+      expect(register.json().customer.passwordHash).toBeUndefined();
+      const customerToken = register.json().token;
+
+      const duplicate = await app.inject({
+        method: "POST",
+        url: "/api/customer-auth/register",
+        payload: { name: "Portal Buyer", email: "portal.buyer@example.com", password: "another-secret-1" }
+      });
+      expect(duplicate.statusCode).toBe(409);
+
+      const me = await app.inject({ method: "GET", url: "/api/customer-auth/me", headers: auth(customerToken) });
+      expect(me.statusCode).toBe(200);
+      expect(me.json().customer).toMatchObject({ email: "portal.buyer@example.com" });
+
+      const badLogin = await app.inject({ method: "POST", url: "/api/customer-auth/login", payload: { email: "portal.buyer@example.com", password: "wrong-password" } });
+      expect(badLogin.statusCode).toBe(401);
+
+      const loginResponse = await app.inject({ method: "POST", url: "/api/customer-auth/login", payload: { email: "portal.buyer@example.com", password: "portal-secret-1" } });
+      expect(loginResponse.statusCode).toBe(200);
+      const loginToken = loginResponse.json().token;
+
+      const logout = await app.inject({ method: "POST", url: "/api/customer-auth/logout", headers: auth(loginToken) });
+      expect(logout.statusCode).toBe(200);
+      const afterLogout = await app.inject({ method: "GET", url: "/api/customer-auth/me", headers: auth(loginToken) });
+      expect(afterLogout.statusCode).toBe(401);
+
+      const staffToken = await login(app);
+      const operatorList = await app.inject({ method: "GET", url: "/api/customers", headers: auth(staffToken) });
+      const portalCustomer = operatorList.json().find((item) => item.email === "portal.buyer@example.com");
+      expect(portalCustomer).toMatchObject({ hasPortalAccount: true });
+      expect(portalCustomer.passwordHash).toBeUndefined();
+      expect(JSON.stringify(operatorList.json())).not.toContain("scrypt$");
+
+      const state = await app.inject({ method: "GET", url: "/api/state", headers: auth(staffToken) });
+      expect(JSON.stringify(state.json())).not.toContain("scrypt$");
+    });
+  });
+
+  it("lets a customer claim portal access from an existing quote link, isolates customer-scoped data, accepts quotes, and exchanges messages with operators", async () => {
+    await withApp(async ({ app }) => {
+      const quoteA = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        payload: { customer: "Casey Claimant", email: "casey.claim@example.com", project: "Bracket set", material: "PLA", quantity: 3 }
+      });
+      expect(quoteA.statusCode).toBe(201);
+      const quoteAId = quoteA.json().quoteRequest.id;
+      const quoteAToken = quoteA.json().quoteRequest.accessToken;
+
+      const quoteB = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        payload: { customer: "Other Buyer", email: "other.buyer@example.com", project: "Unrelated part", material: "PETG", quantity: 1 }
+      });
+      expect(quoteB.statusCode).toBe(201);
+
+      const badClaim = await app.inject({
+        method: "POST",
+        url: "/api/customer-auth/claim",
+        payload: { quoteId: quoteAId, token: "wrong-token", password: "claimed-secret-1" }
+      });
+      expect(badClaim.statusCode).toBe(404);
+
+      const claim = await app.inject({
+        method: "POST",
+        url: "/api/customer-auth/claim",
+        payload: { quoteId: quoteAId, token: quoteAToken, password: "claimed-secret-1" }
+      });
+      expect(claim.statusCode).toBe(201);
+      expect(claim.json().customer).toMatchObject({ email: "casey.claim@example.com", hasPortalAccount: true });
+      const customerToken = claim.json().token;
+
+      const alreadyClaimed = await app.inject({
+        method: "POST",
+        url: "/api/customer-auth/claim",
+        payload: { quoteId: quoteAId, token: quoteAToken, password: "another-secret-1" }
+      });
+      expect(alreadyClaimed.statusCode).toBe(409);
+
+      const myQuotes = await app.inject({ method: "GET", url: "/api/customer/quotes", headers: auth(customerToken) });
+      expect(myQuotes.statusCode).toBe(200);
+      expect(myQuotes.json().map((item) => item.id)).toEqual([quoteAId]);
+
+      const myOrders = await app.inject({ method: "GET", url: "/api/customer/orders", headers: auth(customerToken) });
+      expect(myOrders.statusCode).toBe(200);
+      expect(myOrders.json()).toEqual([]);
+
+      const unauthorizedDecision = await app.inject({
+        method: "POST",
+        url: `/api/customer/quotes/${quoteB.json().quoteRequest.id}/decision`,
+        headers: auth(customerToken),
+        payload: { decision: "accepted" }
+      });
+      expect(unauthorizedDecision.statusCode).toBe(404);
+
+      const staffToken = await login(app);
+      await app.inject({
+        method: "PATCH",
+        url: `/api/quoteRequests/${quoteAId}`,
+        headers: auth(staffToken),
+        payload: { status: "quoted", quotedValue: 45 }
+      });
+
+      const customerMessage = await app.inject({
+        method: "POST",
+        url: `/api/customer/quotes/${quoteAId}/messages`,
+        headers: auth(customerToken),
+        payload: { body: "Can this ship in black PLA?" }
+      });
+      expect(customerMessage.statusCode).toBe(201);
+      expect(customerMessage.json().quoteRequest.messages).toHaveLength(1);
+      expect(customerMessage.json().quoteRequest.messages[0]).toMatchObject({ author: "customer", body: "Can this ship in black PLA?" });
+
+      const operatorReply = await app.inject({
+        method: "POST",
+        url: `/api/quoteRequests/${quoteAId}/messages`,
+        headers: auth(staffToken),
+        payload: { body: "Yes, black PLA works." }
+      });
+      expect(operatorReply.statusCode).toBe(201);
+      expect(operatorReply.json().quoteRequest.messages).toHaveLength(2);
+      expect(operatorReply.json().quoteRequest.messages[1]).toMatchObject({ author: "operator", body: "Yes, black PLA works." });
+
+      const operatorView = await app.inject({ method: "GET", url: "/api/quoteRequests", headers: auth(staffToken) });
+      const threadFromList = operatorView.json().find((item) => item.id === quoteAId);
+      expect(threadFromList.messages).toHaveLength(2);
+
+      const decision = await app.inject({
+        method: "POST",
+        url: `/api/customer/quotes/${quoteAId}/decision`,
+        headers: auth(customerToken),
+        payload: { decision: "accepted" }
+      });
+      expect(decision.statusCode).toBe(201);
+      expect(decision.json().order).toBeTruthy();
+
+      const ordersAfterAccept = await app.inject({ method: "GET", url: "/api/customer/orders", headers: auth(customerToken) });
+      expect(ordersAfterAccept.json()).toHaveLength(1);
+      expect(ordersAfterAccept.json()[0].id).toBe(decision.json().order.id);
+    });
+  });
+
+  it("sends transactional email for password reset, quote-ready, and new-message events, and lets a customer reset their password", async () => {
+    const sentEmails = [];
+    const fakeEmailClient = {
+      async send(message) {
+        sentEmails.push(message);
+      }
+    };
+    await withApp(async ({ app }) => {
+      const register = await app.inject({
+        method: "POST",
+        url: "/api/customer-auth/register",
+        payload: { name: "Email Buyer", email: "email.buyer@example.com", password: "email-secret-1" }
+      });
+      expect(register.statusCode).toBe(201);
+
+      const requestUnknown = await app.inject({ method: "POST", url: "/api/customer-auth/request-reset", payload: { email: "unknown@example.com" } });
+      expect(requestUnknown.statusCode).toBe(200);
+      expect(sentEmails).toHaveLength(0);
+
+      const requestReset = await app.inject({ method: "POST", url: "/api/customer-auth/request-reset", payload: { email: "email.buyer@example.com" } });
+      expect(requestReset.statusCode).toBe(200);
+      expect(sentEmails).toHaveLength(1);
+      expect(sentEmails[0]).toMatchObject({ to: "email.buyer@example.com" });
+      const resetUrlMatch = sentEmails[0].text.match(/resetToken=([^&\s#]+)/);
+      expect(resetUrlMatch).toBeTruthy();
+      const resetToken = decodeURIComponent(resetUrlMatch[1]);
+
+      const registerToken = register.json().token;
+      const profileWithPendingReset = await app.inject({
+        method: "PATCH",
+        url: "/api/customer-auth/profile",
+        headers: auth(registerToken),
+        payload: { phone: "0900-111-222" }
+      });
+      expect(profileWithPendingReset.statusCode).toBe(200);
+      expect(profileWithPendingReset.json().customer).toMatchObject({ hasPendingPasswordReset: true });
+      expect(JSON.stringify(profileWithPendingReset.json())).not.toContain("resetTokenHash");
+      expect(JSON.stringify(profileWithPendingReset.json())).not.toContain("scrypt$");
+
+      const badReset = await app.inject({ method: "POST", url: "/api/customer-auth/reset", payload: { token: "wrong-token", password: "new-secret-123" } });
+      expect(badReset.statusCode).toBe(400);
+
+      const reset = await app.inject({ method: "POST", url: "/api/customer-auth/reset", payload: { token: resetToken, password: "new-secret-123" } });
+      expect(reset.statusCode).toBe(200);
+
+      const oldLogin = await app.inject({ method: "POST", url: "/api/customer-auth/login", payload: { email: "email.buyer@example.com", password: "email-secret-1" } });
+      expect(oldLogin.statusCode).toBe(401);
+      const newLogin = await app.inject({ method: "POST", url: "/api/customer-auth/login", payload: { email: "email.buyer@example.com", password: "new-secret-123" } });
+      expect(newLogin.statusCode).toBe(200);
+
+      const quote = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        payload: { customer: "Email Buyer", email: "email.buyer@example.com", project: "Email trigger part", material: "PLA", quantity: 1 }
+      });
+      const quoteId = quote.json().quoteRequest.id;
+      const staffToken = await login(app);
+      sentEmails.length = 0;
+
+      await app.inject({ method: "PATCH", url: `/api/quoteRequests/${quoteId}`, headers: auth(staffToken), payload: { status: "quoted", quotedValue: 20 } });
+      expect(sentEmails).toHaveLength(1);
+      expect(sentEmails[0]).toMatchObject({ to: "email.buyer@example.com" });
+      expect(sentEmails[0].subject).toContain("ready");
+
+      await app.inject({ method: "POST", url: `/api/quoteRequests/${quoteId}/messages`, headers: auth(staffToken), payload: { body: "Question about your order" } });
+      expect(sentEmails).toHaveLength(2);
+      expect(sentEmails[1]).toMatchObject({ to: "email.buyer@example.com" });
+      expect(sentEmails[1].subject).toContain("message");
+    }, { emailClient: fakeEmailClient });
+  });
+
+  it("lets a customer edit their own profile and lets an operator update order tracking info", async () => {
+    await withApp(async ({ app }) => {
+      const register = await app.inject({
+        method: "POST",
+        url: "/api/customer-auth/register",
+        payload: { name: "Profile Buyer", email: "profile.buyer@example.com", password: "profile-secret-1" }
+      });
+      const customerToken = register.json().token;
+
+      const profileUpdate = await app.inject({
+        method: "PATCH",
+        url: "/api/customer-auth/profile",
+        headers: auth(customerToken),
+        payload: { name: "Updated Name", phone: "0911-222-333", company: "Acme Prototyping" }
+      });
+      expect(profileUpdate.statusCode).toBe(200);
+      expect(profileUpdate.json().customer).toMatchObject({ name: "Updated Name", phone: "0911-222-333", company: "Acme Prototyping" });
+      expect(profileUpdate.json().customer.passwordHash).toBeUndefined();
+
+      const staffToken = await login(app);
+      const order = await app.inject({
+        method: "POST",
+        url: "/api/orders",
+        headers: auth(staffToken),
+        payload: { source: "Manual", customer: "Tracking Test Customer", items: ["Bracket x1"], status: "received", due: "Tomorrow", value: 50 }
+      });
+      expect(order.statusCode).toBe(201);
+      const orderId = order.json().id;
+
+      const trackingUpdate = await app.inject({
+        method: "PATCH",
+        url: `/api/orders/${orderId}/tracking`,
+        headers: auth(staffToken),
+        payload: { trackingNumber: "TW123456789", carrier: "Black Cat" }
+      });
+      expect(trackingUpdate.statusCode).toBe(200);
+      expect(trackingUpdate.json()).toMatchObject({ trackingNumber: "TW123456789", carrier: "Black Cat" });
+
+      const unauthorized = await app.inject({ method: "PATCH", url: `/api/orders/${orderId}/tracking`, payload: { trackingNumber: "x", carrier: "y" } });
+      expect(unauthorized.statusCode).toBe(401);
+    });
+  });
+
+  it("replays idempotent customer decisions, customer messages, and operator message replies without duplicating side effects", async () => {
+    await withApp(async ({ app }) => {
+      const quote = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        payload: { customer: "Idempotent Buyer", email: "idempotent.buyer@example.com", project: "Retry-safe part", material: "PLA", quantity: 1 }
+      });
+      const quoteId = quote.json().quoteRequest.id;
+      const quoteToken = quote.json().quoteRequest.accessToken;
+
+      const claim = await app.inject({
+        method: "POST",
+        url: "/api/customer-auth/claim",
+        payload: { quoteId, token: quoteToken, password: "idempotent-secret-1" }
+      });
+      const customerToken = claim.json().token;
+
+      const messagePayload = { body: "Is this still on track?" };
+      const messageHeaders = { ...auth(customerToken), "idempotency-key": "customer-message-retry-key-1" };
+      const firstMessage = await app.inject({ method: "POST", url: `/api/customer/quotes/${quoteId}/messages`, headers: messageHeaders, payload: messagePayload });
+      expect(firstMessage.statusCode).toBe(201);
+      const retryMessage = await app.inject({ method: "POST", url: `/api/customer/quotes/${quoteId}/messages`, headers: messageHeaders, payload: messagePayload });
+      expect(retryMessage.statusCode).toBe(201);
+      expect(retryMessage.json().quoteRequest.messages).toHaveLength(1);
+
+      const staffToken = await login(app);
+      await app.inject({ method: "PATCH", url: `/api/quoteRequests/${quoteId}`, headers: auth(staffToken), payload: { status: "quoted", quotedValue: 30 } });
+
+      const replyPayload = { body: "Yes, on schedule." };
+      const replyHeaders = { ...auth(staffToken), "idempotency-key": "operator-message-retry-key-1" };
+      const firstReply = await app.inject({ method: "POST", url: `/api/quoteRequests/${quoteId}/messages`, headers: replyHeaders, payload: replyPayload });
+      expect(firstReply.statusCode).toBe(201);
+      const retryReply = await app.inject({ method: "POST", url: `/api/quoteRequests/${quoteId}/messages`, headers: replyHeaders, payload: replyPayload });
+      expect(retryReply.statusCode).toBe(201);
+      expect(retryReply.json().quoteRequest.messages).toHaveLength(2);
+
+      const decisionPayload = { decision: "accepted" };
+      const decisionHeaders = { ...auth(customerToken), "idempotency-key": "customer-decision-retry-key-1" };
+      const firstDecision = await app.inject({ method: "POST", url: `/api/customer/quotes/${quoteId}/decision`, headers: decisionHeaders, payload: decisionPayload });
+      expect(firstDecision.statusCode).toBe(201);
+      const orderId = firstDecision.json().order.id;
+      const retryDecision = await app.inject({ method: "POST", url: `/api/customer/quotes/${quoteId}/decision`, headers: decisionHeaders, payload: decisionPayload });
+      expect(retryDecision.statusCode).toBe(201);
+      expect(retryDecision.json().order.id).toBe(orderId);
+
+      const orders = await app.inject({ method: "GET", url: "/api/customer/orders", headers: auth(customerToken) });
+      expect(orders.json()).toHaveLength(1);
     });
   });
 

@@ -125,7 +125,7 @@ Run the production preflight first:
 scripts/ubuntu-deploy.sh doctor
 ```
 
-The doctor check verifies Docker Compose, current-user access to the Docker daemon, required deployment files, private `.env` permissions, required production secrets, demo/default user disabling, non-default and minimum-length worker/metrics tokens, password length, boolean/numeric environment values including the public-signup opt-in flag, public/billing URL formats, optional comma-separated `LAYERPILOT_CORS_ORIGINS` values without wildcards, S3 settings when object storage is enabled, Stripe price/webhook settings when billing is configured, MQTT URL/QoS/retain settings when event streaming is configured, and Compose config rendering. Live `/api/readiness` also reports whether production public signup is disabled or explicitly enabled, validates production CORS trusted origins, and fails when workspace API-key IP restrictions are enabled with an empty or invalid IPv4/CIDR allowlist. If Docker was just installed, run `newgrp docker` or reconnect before running deploy commands as a non-root user.
+The doctor check verifies Docker Compose, current-user access to the Docker daemon, required deployment files, private `.env` permissions, required production secrets, demo/default user disabling, non-default and minimum-length worker/metrics tokens, password length, boolean/numeric environment values, public/billing URL formats, optional comma-separated `LAYERPILOT_CORS_ORIGINS` values without wildcards, S3 settings when object storage is enabled, Stripe price/webhook settings when billing is configured, MQTT URL/QoS/retain settings when event streaming is configured, and Compose config rendering. Live `/api/readiness` also validates production CORS trusted origins and fails when workspace API-key IP restrictions are enabled with an empty or invalid IPv4/CIDR allowlist. If Docker was just installed, run `newgrp docker` or reconnect before running deploy commands as a non-root user.
 
 ```bash
 scripts/ubuntu-deploy.sh deploy
@@ -308,7 +308,7 @@ Keep `.env` out of git. The production containers use `.env`, Docker named volum
 
 ## 9. Production Notes
 
-- Use `LAYERPILOT_DISABLE_DEFAULT_USERS=true`, `LAYERPILOT_DISABLE_DEMO_LOGIN=true`, and `LAYERPILOT_ENABLE_PUBLIC_SIGNUP=false` for normal customer VPS deployments.
+- Use `LAYERPILOT_DISABLE_DEFAULT_USERS=true` and `LAYERPILOT_DISABLE_DEMO_LOGIN=true` for normal customer VPS deployments. Provision each customer's own isolated environment with `scripts/provision-tenant.sh` instead of self-service signup.
 - Use a strong `LAYERPILOT_ADMIN_PASSWORD`.
 - Keep account lockout/backoff enabled with `LAYERPILOT_AUTH_LOCK_THRESHOLD` and `LAYERPILOT_AUTH_LOCK_MINUTES`; defaults are 5 failed known-account auth attempts and a 15-minute lock.
 - Keep `LAYERPILOT_BIND_ADDRESS=127.0.0.1` behind Nginx unless you intentionally expose port `8797`.

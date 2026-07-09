@@ -97,4 +97,35 @@ describe("3DSTU FarmFlow background worker", () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
+
+  it("reloads the shared database before each cycle so it does not clobber API writes", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "layerpilot-worker-"));
+    const dbPath = path.join(dir, "db.json");
+    try {
+      const workerDb = await openDatabase(dbPath);
+      const apiDb = await openDatabase(dbPath);
+      apiDb.data.quoteRequests.unshift({
+        id: "qr-concurrent",
+        customer: "Concurrent Customer",
+        email: "concurrent@example.com",
+        project: "Race check",
+        material: "PLA",
+        quantity: 1,
+        due: "Flexible",
+        budget: 0,
+        source: "Website",
+        status: "new",
+        priority: "Normal"
+      });
+      await apiDb.write();
+
+      await runWorkerCycle(workerDb, { id: "race-worker", telemetryEnabled: true, bridgePollingEnabled: false });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.quoteRequests.some((quote) => quote.id === "qr-concurrent")).toBe(true);
+      expect(persisted.dataMeta.worker.id).toBe("race-worker");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });

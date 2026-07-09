@@ -16,6 +16,7 @@ import {
   ClipboardList,
   Cloud,
   Code2,
+  Contact,
   Database,
   Download,
   FileCode2,
@@ -75,6 +76,7 @@ type View =
   | "printers"
   | "products"
   | "orders"
+  | "customers"
   | "files"
   | "queue"
   | "scheduler"
@@ -233,9 +235,11 @@ type SKU = { id: string; sku: string; title: string; parts: string[]; variants: 
 type ProductionTemplate = { id: string; name: string; sku?: string; fileId: string; material: string; color: string; priority: QueueItem["priority"]; stage: TaskStage; printerId?: string; process: string; dueOffsetDays: number; quantity: number; time: string; cost: number; notes?: string; runCount?: number; lastRunAt?: string; createdAt?: string; updatedAt?: string };
 type ProductionTemplateRunResult = { template: ProductionTemplate; jobs: QueueItem[]; dryRun: boolean; queue: QueueItem[]; todos: Todo[] };
 type OrderStatus = "received" | "queued" | "printing" | "on_hold" | "packed" | "shipped" | "completed" | "cancelled";
-type Order = { id: string; source: "Shopify" | "Etsy" | "Manual" | "eBay"; externalId?: string; customer: string; items: string[]; status: OrderStatus; due: string; value: number };
+type Order = { id: string; source: "Shopify" | "Etsy" | "Manual" | "eBay"; externalId?: string; customer: string; customerId?: string; items: string[]; status: OrderStatus; due: string; value: number; trackingNumber?: string; carrier?: string };
+type Customer = { id: string; name: string; company?: string; email?: string; phone?: string; line?: string; tags?: string[]; notes?: string; source?: string; createdAt?: string; updatedAt?: string; lastActivityAt?: string; hasPortalAccount?: boolean; lastLoginAt?: string };
 type OrderStatusUpdateResult = Order & { order?: Order; jobs?: QueueItem[]; materialChanges?: Array<{ spoolId: string; grams: number; material: string }>; spools?: Spool[]; todos?: Todo[] };
-type QuoteRequest = { id: string; customer: string; email: string; company?: string; project: string; material: string; quantity: number; due: string; budget: number; notes?: string; fileName?: string; fileId?: string; fileType?: string; fileSize?: string; estimatedGrams?: number; estimatedMinutes?: number; estimatedQuote?: number; source: string; status: "new" | "reviewing" | "quoted" | "accepted" | "converted" | "rejected"; priority: QueueItem["priority"]; quotedValue?: number; validUntil?: string; internalNote?: string; orderId?: string; customerDecision?: string; customerDecisionNote?: string; customerAccessToken?: string; portalLinkGeneratedAt?: string; createdAt?: string; updatedAt?: string };
+type QuoteMessage = { id: string; author: "customer" | "operator"; authorName: string; body: string; createdAt: string };
+type QuoteRequest = { id: string; customer: string; customerId?: string; email: string; phone?: string; company?: string; project: string; material: string; quantity: number; due: string; budget: number; notes?: string; fileName?: string; fileId?: string; fileType?: string; fileSize?: string; estimatedGrams?: number; estimatedMinutes?: number; estimatedQuote?: number; source: string; status: "new" | "reviewing" | "quoted" | "accepted" | "converted" | "rejected"; priority: QueueItem["priority"]; quotedValue?: number; validUntil?: string; internalNote?: string; orderId?: string; customerDecision?: string; customerDecisionNote?: string; customerAccessToken?: string; portalLinkGeneratedAt?: string; createdAt?: string; updatedAt?: string; process?: string; color?: string; quality?: string; layerHeight?: string; infill?: number; walls?: number; support?: string; postProcessing?: string[]; inserts?: number; inspection?: string; rush?: boolean; useCase?: string; formMode?: string; clientEstimate?: number; messages?: QuoteMessage[] };
 type PublicQuoteStatus = Pick<QuoteRequest, "id" | "status" | "project" | "material" | "quantity" | "due" | "budget" | "quotedValue" | "validUntil" | "fileName" | "fileType" | "fileSize" | "estimatedGrams" | "estimatedMinutes" | "estimatedQuote" | "orderId" | "createdAt" | "updatedAt"> & { customerDecision?: string; customerDecisionAt?: string; customerDecisionNote?: string };
 type OrderJobGenerationResult = { order: Order; jobs: QueueItem[]; existingJobs?: QueueItem[]; missing?: Array<{ item: string; reason: string }>; skus?: SKU[]; todos?: Todo[]; dryRun?: boolean; duplicateBlocked?: boolean; stockChanges?: Array<{ sku: string; before: number; after: number; quantity: number }> };
 type CommerceConnector = { id: string; name: string; source: Order["source"] | "Generic"; url: string; enabled: boolean; hasToken?: boolean; lastStatus?: string; lastStatusCode?: number; lastError?: string; lastSyncAt?: string };
@@ -281,6 +285,90 @@ type CatalogExportResult = { exportedAt: string; rows: Array<Record<string, stri
 type MaterialMapResult = { generatedAt: string; applied: boolean; changed: number; unmapped: number; mappings: Array<{ alias: string; canonical: string; confidence: number; status: string; occurrences: number }>; items: Array<{ collection: string; id: string; name: string; material: string; canonical: string; confidence: number; status: string; changed: boolean }>; parts?: Part[]; files?: PrintFile[]; queue?: QueueItem[] };
 
 const zhTwTranslations: Record<string, string> = {
+  "Customers": "客戶",
+  "Customer directory, quote history, and order value": "客戶名錄、報價紀錄與訂單金額",
+  "New this month": "本月新增",
+  "Open quotes": "進行中報價",
+  "With orders": "有訂單客戶",
+  "Add customer": "新增客戶",
+  "Edit customer": "編輯客戶",
+  "Save customer": "儲存客戶",
+  "Update customer": "更新客戶",
+  "Cancel edit": "取消編輯",
+  "Customer detail": "客戶詳情",
+  "Directory": "客戶列表",
+  "Phone": "電話",
+  "LINE ID": "LINE ID",
+  "Tags": "標籤",
+  "Quotes": "報價",
+  "Last activity": "最近活動",
+  "View": "檢視",
+  "Edit": "編輯",
+  "Delete": "刪除",
+  "Deleting": "刪除中",
+  "Close": "關閉",
+  "No customers yet. Website quote requests create customers automatically.": "還沒有客戶。官網報價需求會自動建立客戶。",
+  "No customers match this search.": "沒有符合搜尋條件的客戶。",
+  "Website quote requests create or update customers automatically by email.": "官網報價需求會依 Email 自動建立或更新客戶。",
+  "Select a customer from the list to see linked quotes, orders, and order value.": "從列表選擇客戶,查看關聯報價、訂單與金額。",
+  "No quotes yet": "還沒有報價",
+  "No orders yet": "還沒有訂單",
+  "Website submissions match this customer by email": "官網送出的需求會依 Email 對應到此客戶",
+  "Convert a quote to create the first order": "將報價轉換成訂單即可建立第一筆",
+  "Customer name is required": "客戶名稱為必填",
+  "Search name, email, tag": "搜尋名稱、Email、標籤",
+  "vip, school, print-farm": "vip, 學校, 列印農場",
+  "Customer Portal": "客戶入口",
+  "Track your quotes and orders in one place.": "在同一處追蹤您的報價與訂單。",
+  "Sign in to see live status, message your production team, and approve or decline quotes.": "登入即可查看即時狀態、與生產團隊留言,並核准或婉拒報價。",
+  "Have a quote link?": "已有報價連結?",
+  "Create your account": "建立您的帳號",
+  "Set up portal access": "設定客戶入口存取",
+  "Enter the quote ID and tracking token from your quote confirmation to set a password.": "輸入報價確認信中的報價編號與追蹤代碼以設定密碼。",
+  "Track every quote and order under one login.": "用同一組帳號追蹤每筆報價與訂單。",
+  "Phone (optional)": "電話(選填)",
+  "Set password and sign in": "設定密碼並登入",
+  "Back to the website": "返回官網",
+  "Back to website": "返回官網",
+  "Loading your account...": "正在載入您的帳號...",
+  "Your quotes": "您的報價",
+  "Your orders": "您的訂單",
+  "No quotes yet. Request a quote from the website to get started.": "還沒有報價。請至官網送出報價需求以開始。",
+  "No orders yet. Approve a quote to create your first order.": "還沒有訂單。核准報價即可建立第一筆訂單。",
+  "Quote detail": "報價詳情",
+  "Select a quote from the list to see status, value, and messages.": "從列表選擇報價,查看狀態、金額與留言。",
+  "Messages": "留言",
+  "No messages yet": "還沒有留言",
+  "Ask a question about this quote and the team will reply here.": "在此詢問報價相關問題,團隊會回覆給您。",
+  "Write a message...": "輸入訊息...",
+  "Send message": "送出留言",
+  "Decline": "婉拒",
+  "Sign out": "登出",
+  "Carrier": "物流商",
+  "Tracking number": "追蹤號碼",
+  "Tracking": "物流追蹤",
+  "Tracking info saved": "物流資訊已儲存",
+  "Reset your customer portal password": "重設您的客戶入口密碼",
+  "Send reset link": "傳送重設連結",
+  "Set a new password": "設定新密碼",
+  "Forgot your password?": "忘記密碼?",
+  "Reset link sent if that email has an account. Check your inbox.": "若該 Email 已有帳號,重設連結已寄出,請查收信箱。",
+  "Password reset. Please sign in with your new password.": "密碼已重設,請用新密碼登入。",
+  "Edit profile": "編輯個人資料",
+  "Save profile": "儲存個人資料",
+  "Profile updated": "個人資料已更新",
+  "Back to sign in": "返回登入",
+  "Name (optional)": "姓名(選填)",
+  "Message could not be sent": "留言傳送失敗",
+  "Reply to customer...": "回覆客戶...",
+  "Submitted": "已送出",
+  "Quoted": "已報價",
+  "Approved": "已核准",
+  "In production": "生產中",
+  "Shipped": "已出貨",
+  "Quote declined": "報價已婉拒",
+  "Order cancelled": "訂單已取消",
+  "Sign in with the operator account for this workspace.": "使用這個工作區的操作員帳號登入。",
   "Sign in": "登入",
   "Create account": "建立帳號",
   "Welcome back": "歡迎回來",
@@ -326,8 +414,6 @@ const zhTwTranslations: Record<string, string> = {
   "Go-live readiness": "上線準備度",
   "Drop demo files here": "投放 Demo 檔案",
   "Run hot drop": "執行快速投放",
-  "Print Farm Trial": "打印農場試用",
-  "14 days left in mock billing.": "模擬方案剩餘 14 天。",
   "Open navigation": "開啟導覽",
   "Search printers, files, spools, jobs": "搜尋打印機、檔案、線材捲、任務",
   "Today tasks": "今日任務",
@@ -700,6 +786,7 @@ const zhTwTranslations: Record<string, string> = {
   "Plain plate": "純平板",
   "Plan": "方案",
   "Plan and storage": "方案與儲存空間",
+  "Storage": "儲存空間",
   "Plan change requires owner/admin access and live API": "方案變更需要擁有者/管理員權限與可用 API。",
   "Plan jobs": "規劃任務",
   "Preheat": "預熱",
@@ -1330,7 +1417,7 @@ const integrations = [
   ["Zapier", "Trigger automations from job, spool, and maintenance events.", "Beta"],
   ["n8n", "Self-hosted workflow hooks for advanced print farms.", "Beta"]
 ];
-const defaultWorkspaceSettings: WorkspaceSettings = { organizationName: "North Campus Lab", defaultLocation: "Studio North", units: "metric", currency: "USD", timezone: "Asia/Taipei", theme: "system", requireAdmin2fa: true, auditLogRetention: true, auditLogRetentionDays: 365, restrictApiByIp: false, allowedApiIps: [], storageLimitGb: 10, hotDropMode: "Direct Print", plan: "Print Farm Trial" };
+const defaultWorkspaceSettings: WorkspaceSettings = { organizationName: "North Campus Lab", defaultLocation: "Studio North", units: "metric", currency: "USD", timezone: "Asia/Taipei", theme: "system", requireAdmin2fa: true, auditLogRetention: true, auditLogRetentionDays: 365, restrictApiByIp: false, allowedApiIps: [], storageLimitGb: 10, hotDropMode: "Direct Print", plan: "Self-hosted" };
 const defaultCostCatalog: CostCatalog = { currency: "USD", materialRates: { PLA: 0.82, PETG: 1.05, ASA: 1.28, TPU: 1.5, Resin: 2.1 }, machineHourlyRate: 18, laborPerOrder: 35, failureReservePercent: 6, minimumQuote: 18, overheadPercent: 8 };
 
 const chartData = [
@@ -1400,6 +1487,30 @@ async function apiRequest<T>(path: string, init: RequestInit = {}) {
 
 async function realtimeTicket() {
   return apiRequest<{ token: string; expiresAt: string }>("/api/events/token", { method: "POST" });
+}
+
+async function customerApiRequest<T>(path: string, init: RequestInit = {}) {
+  const token = typeof window !== "undefined" ? window.localStorage.getItem("layerpilot-customer-token") : "";
+  const hasBody = init.body !== undefined;
+  const response = await fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers: {
+      ...(!hasBody ? {} : { "Content-Type": "application/json" }),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init.headers || {})
+    }
+  });
+  if (!response.ok) {
+    let body: Record<string, unknown> = {};
+    try {
+      const parsed = await response.json();
+      if (parsed && typeof parsed === "object") body = parsed as Record<string, unknown>;
+    } catch {
+      body = {};
+    }
+    throw new ApiError(response.status, body);
+  }
+  return response.json() as Promise<T>;
 }
 
 function downloadJsonFile(filename: string, payload: unknown) {
@@ -1513,6 +1624,7 @@ function applyTodoActions(todos: Todo[], actions: TodoAction[]) {
 function App() {
   const [language, setLanguage] = useState<Language>("en");
   const [showMarketing, setShowMarketing] = useState(() => !Boolean(window.localStorage.getItem("layerpilot-token")) && window.location.hash !== "#app");
+  const [portalView, setPortalView] = useState(() => window.location.hash === "#portal");
   const [authToken, setAuthToken] = useState(() => window.localStorage.getItem("layerpilot-token") || "");
   const [authed, setAuthed] = useState(() => Boolean(window.localStorage.getItem("layerpilot-token")));
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -1534,6 +1646,7 @@ function App() {
   const [skus, setSkus] = useState(skuSeed);
   const [productionTemplates, setProductionTemplates] = useState<ProductionTemplate[]>([]);
   const [quoteRequests, setQuoteRequests] = useState<QuoteRequest[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [orders, setOrders] = useState(orderSeed);
   const [profiles, setProfiles] = useState(profileSeed);
   const [profileDefaults, setProfileDefaults] = useState<ProfileDefaults>({ Machine: "prof-1", Process: "prof-2", Filament: "" });
@@ -1572,15 +1685,12 @@ function App() {
     window.setTimeout(() => setToasts((items) => items.filter((item) => item.id !== id)), 3600);
   };
 
-  const authenticate = async (payload: { email: string; password: string; mode: "login" | "signup"; name?: string; workspace?: string; twoFactorCode?: string }) => {
-    const path = payload.mode === "signup" ? "/api/auth/signup" : "/api/auth/login";
+  const authenticate = async (payload: { email: string; password: string; twoFactorCode?: string }) => {
     try {
-      const response = await fetch(`${API_BASE}${path}`, {
+      const response = await fetch(`${API_BASE}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload.mode === "signup"
-          ? { email: payload.email, password: payload.password, name: payload.name || payload.email.split("@")[0], workspace: payload.workspace || "3DSTU FarmFlow Workspace" }
-          : { email: payload.email, password: payload.password, twoFactorCode: payload.twoFactorCode || undefined })
+        body: JSON.stringify({ email: payload.email, password: payload.password, twoFactorCode: payload.twoFactorCode || undefined })
       });
       const auth = await response.json();
       if (!response.ok) {
@@ -1954,6 +2064,78 @@ function App() {
     }
   };
 
+  const updateOrderTracking = async (orderId: string, patch: { trackingNumber: string; carrier: string }) => {
+    const attemptKey = `order-tracking:${orderId}`;
+    setOrders((items) => items.map((order) => order.id === orderId ? { ...order, ...patch } : order));
+    try {
+      const updated = await apiRequest<Order>(`/api/orders/${orderId}/tracking`, {
+        method: "PATCH",
+        headers: operatorIdempotencyHeaders(attemptKey, { orderId, ...patch }),
+        body: JSON.stringify(patch)
+      });
+      setOrders((items) => items.map((order) => order.id === orderId ? updated : order));
+      setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
+      return updated;
+    } catch {
+      setBackendStatus("local");
+      return orders.find((order) => order.id === orderId);
+    }
+  };
+
+  const createCustomer = async (draft: Omit<Customer, "id">) => {
+    const fallback: Customer = { ...draft, id: `cus-local-${Date.now()}` };
+    const attemptKey = "customer-create";
+    try {
+      const created = await apiRequest<Customer>("/api/customers", {
+        method: "POST",
+        headers: operatorIdempotencyHeaders(attemptKey, draft),
+        body: JSON.stringify(draft)
+      });
+      setCustomers((items) => [...items, created]);
+      setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
+      return created;
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409) throw error;
+      setCustomers((items) => [...items, fallback]);
+      setBackendStatus("local");
+      return fallback;
+    }
+  };
+
+  const updateCustomer = async (customerId: string, patch: Partial<Omit<Customer, "id">>) => {
+    const attemptKey = `customer-update:${customerId}`;
+    setCustomers((items) => items.map((customer) => customer.id === customerId ? { ...customer, ...patch } : customer));
+    try {
+      const updated = await apiRequest<Customer>(`/api/customers/${customerId}`, {
+        method: "PATCH",
+        headers: operatorIdempotencyHeaders(attemptKey, { customerId, patch }),
+        body: JSON.stringify(patch)
+      });
+      setCustomers((items) => items.map((customer) => customer.id === customerId ? updated : customer));
+      setBackendStatus("connected");
+      clearOperatorIdempotency(attemptKey);
+      return updated;
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409) throw error;
+      setBackendStatus("local");
+      return customers.find((customer) => customer.id === customerId);
+    }
+  };
+
+  const deleteCustomer = async (customerId: string) => {
+    setCustomers((items) => items.filter((customer) => customer.id !== customerId));
+    try {
+      await apiRequest<{ ok: boolean }>(`/api/customers/${customerId}`, { method: "DELETE" });
+      setBackendStatus("connected");
+      return true;
+    } catch {
+      setBackendStatus("local");
+      return false;
+    }
+  };
+
   const updateQuoteRequest = async (quoteId: string, patch: Partial<Pick<QuoteRequest, "status" | "priority" | "quotedValue" | "validUntil" | "internalNote">>) => {
     const attemptKey = `quote-update:${quoteId}`;
     setQuoteRequests((items) => items.map((quote) => quote.id === quoteId ? { ...quote, ...patch } : quote));
@@ -1971,6 +2153,16 @@ function App() {
       setBackendStatus("local");
       return quoteRequests.find((quote) => quote.id === quoteId);
     }
+  };
+
+  const sendQuoteMessage = async (quoteId: string, body: string) => {
+    const result = await apiRequest<{ ok: boolean; quoteRequest: QuoteRequest }>(`/api/quoteRequests/${quoteId}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ body })
+    });
+    setQuoteRequests((items) => items.map((quote) => quote.id === quoteId ? result.quoteRequest : quote));
+    setBackendStatus("connected");
+    return result.quoteRequest;
   };
 
   const createQuotePortalLink = async (quote: QuoteRequest, rotate = false) => {
@@ -3232,6 +3424,7 @@ function App() {
     if (Array.isArray(data.skus)) setSkus(data.skus as SKU[]);
     if (Array.isArray(data.productionTemplates)) setProductionTemplates(data.productionTemplates as ProductionTemplate[]);
     if (Array.isArray(data.quoteRequests)) setQuoteRequests(data.quoteRequests as QuoteRequest[]);
+    if (Array.isArray(data.customers)) setCustomers(data.customers as Customer[]);
     if (Array.isArray(data.orders)) setOrders(data.orders as Order[]);
     if (Array.isArray(data.profiles)) setProfiles(data.profiles as Profile[]);
     if (data.profileDefaults && typeof data.profileDefaults === "object") setProfileDefaults(data.profileDefaults as ProfileDefaults);
@@ -3316,7 +3509,9 @@ function App() {
     };
   }, [authed, authToken, twoFactorEnrollmentRequired]);
 
-  if (!authed && showMarketing) return <MarketingSite onOpenApp={() => { window.location.hash = "app"; setShowMarketing(false); }} />;
+  if (portalView) return <CustomerPortalApp onExit={() => { window.location.hash = ""; setPortalView(false); }} />;
+
+  if (!authed && showMarketing) return <MarketingSite onOpenApp={() => { window.location.hash = "app"; setShowMarketing(false); }} onOpenPortal={() => { window.location.hash = "portal"; setPortalView(true); }} />;
 
   if (!authed) return <><AuthScreen onLogin={authenticate} language={language} setLanguage={setLanguage} /><VersionBadge /></>;
 
@@ -3328,7 +3523,8 @@ function App() {
         {view === "dashboard" && <Dashboard metrics={metrics} printers={printers} queue={queue} setView={setView} setModal={setModal} onPrinter={setSelectedPrinter} />}
         {view === "printers" && <PrintersPage printers={printers} onPrinter={setSelectedPrinter} setModal={setModal} api={mockApi} />}
         {view === "products" && <ProductsPage parts={parts} skus={skus} productionTemplates={productionTemplates} files={files} createPart={createPart} createSku={createSku} createProductionTemplate={createProductionTemplate} runProductionTemplate={runProductionTemplate} generateNameplate={generateNameplate} exportCatalog={exportCatalog} mapMaterials={mapMaterials} addToast={addToast} />}
-        {view === "orders" && <OrdersPage orders={orders} setOrders={setOrders} quoteRequests={quoteRequests} files={files} skus={skus} commerceConnectors={commerceConnectors} setCommerceConnectors={setCommerceConnectors} commerceImports={commerceImports} setCommerceImports={setCommerceImports} createOrder={createOrder} updateOrderStatus={updateOrderStatus} updateQuoteRequest={updateQuoteRequest} createQuotePortalLink={createQuotePortalLink} convertQuoteRequest={convertQuoteRequest} generateJobsForOrder={generateJobsForOrder} downloadFile={downloadFile} addToast={addToast} setBackendStatus={setBackendStatus} />}
+        {view === "orders" && <OrdersPage orders={orders} setOrders={setOrders} quoteRequests={quoteRequests} files={files} skus={skus} commerceConnectors={commerceConnectors} setCommerceConnectors={setCommerceConnectors} commerceImports={commerceImports} setCommerceImports={setCommerceImports} createOrder={createOrder} updateOrderStatus={updateOrderStatus} updateOrderTracking={updateOrderTracking} updateQuoteRequest={updateQuoteRequest} sendQuoteMessage={sendQuoteMessage} createQuotePortalLink={createQuotePortalLink} convertQuoteRequest={convertQuoteRequest} generateJobsForOrder={generateJobsForOrder} downloadFile={downloadFile} addToast={addToast} setBackendStatus={setBackendStatus} />}
+        {view === "customers" && <CustomersPage customers={customers} quoteRequests={quoteRequests} orders={orders} createCustomer={createCustomer} updateCustomer={updateCustomer} deleteCustomer={deleteCustomer} addToast={addToast} />}
         {view === "files" && <FilesPage files={files} folders={fileFolders} queueFile={mockApi.addQueueFromFile} setView={setView} addToast={addToast} createSampleFile={createSampleFile} createFileFolder={createFileFolder} uploadModelFile={uploadModelFile} versionFile={versionFile} downloadFile={downloadFile} deleteFile={deleteFile} />}
         {view === "queue" && <QueuePage queue={queue} setQueue={setQueue} printers={printers} addToast={addToast} scheduleJob={scheduleQueueJob} updateStatus={updateQueueStatus} updatePriority={updateQueuePriority} matchQueueJobs={matchQueueJobs} />}
         {view === "scheduler" && <SchedulerPage queue={queue} setQueue={setQueue} printers={printers} addToast={addToast} scheduleJob={scheduleQueueJob} autoScheduleJobs={autoScheduleQueueJobs} optimizeScheduleJobs={optimizeScheduleJobs} solveScheduleJobs={solveScheduleJobs} />}
@@ -3357,12 +3553,82 @@ function VersionBadge() {
   return <footer className="version-badge"><span>System version</span> <strong data-i18n-ignore>v{APP_VERSION}</strong></footer>;
 }
 
-function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
+type QuoteProcess = "FDM" | "Resin";
+const QUOTE_MATERIALS: Record<QuoteProcess, { name: string; rate: number; colors: string[]; hint: string }[]> = {
+  FDM: [
+    { name: "PLA", rate: 0.05, colors: ["Any / operator pick", "White", "Black", "Gray", "Red", "Orange", "Yellow", "Green", "Blue", "Purple"], hint: "Easiest material, crisp prints, huge color range. Not for heat above ~55C." },
+    { name: "PLA Silk", rate: 0.07, colors: ["Silk Gold", "Silk Silver", "Silk Copper", "Silk Purple"], hint: "Metallic sheen for decorative parts, trophies, and gifts." },
+    { name: "PLA-CF", rate: 0.1, colors: ["Carbon Black"], hint: "Stiff matte carbon-fiber blend for housings and jigs." },
+    { name: "PETG", rate: 0.06, colors: ["Any / operator pick", "White", "Black", "Gray", "Red", "Orange", "Blue", "Transparent"], hint: "Tough, heat- and weather-resistant. Best all-rounder for functional parts." },
+    { name: "ASA", rate: 0.08, colors: ["White", "Black", "Gray"], hint: "UV-stable for outdoor parts that live in the sun." },
+    { name: "TPU 95A", rate: 0.12, colors: ["Black", "White", "Red", "Blue"], hint: "Flexible rubber-like parts: grips, gaskets, protective covers." }
+  ],
+  Resin: [
+    { name: "Standard Resin", rate: 0.15, colors: ["Gray", "White", "Black", "Translucent"], hint: "Sharp detail and smooth surfaces. Brittle - best for display models." },
+    { name: "Tough Resin (ABS-like)", rate: 0.18, colors: ["Gray", "Black"], hint: "Impact-resistant resin for small functional parts." },
+    { name: "Water-washable Resin", rate: 0.16, colors: ["Gray", "White"], hint: "Budget-friendly prototypes with easy cleanup." }
+  ]
+};
+const QUOTE_USE_CASES: { id: string; label: string; hint: string; process: QuoteProcess; material: string }[] = [
+  { id: "display", label: "Display & decor", hint: "PLA - easy, colorful", process: "FDM", material: "PLA" },
+  { id: "functional", label: "Functional parts", hint: "PETG - heat & impact", process: "FDM", material: "PETG" },
+  { id: "miniature", label: "High-detail minis", hint: "Resin - sharp detail", process: "Resin", material: "Standard Resin" },
+  { id: "unsure", label: "Not sure - advise me", hint: "An engineer picks for you", process: "FDM", material: "PLA" }
+];
+const QUOTE_QUALITIES: { id: string; label: string; factor: number; layer: Record<QuoteProcess, string>; hint: string; price: string }[] = [
+  { id: "Economy", label: "Economy", factor: 0.85, layer: { FDM: "0.28 mm", Resin: "0.10 mm" }, hint: "Visible layers, fastest turnaround", price: "-15%" },
+  { id: "Standard", label: "Standard", factor: 1, layer: { FDM: "0.20 mm", Resin: "0.05 mm" }, hint: "Balanced quality for most parts", price: "base price" },
+  { id: "Fine", label: "Fine", factor: 1.35, layer: { FDM: "0.12 mm", Resin: "0.025 mm" }, hint: "Smooth detail for showcase parts", price: "+35%" }
+];
+const QUOTE_LAYER_OPTIONS: Record<QuoteProcess, { value: string; factor: number }[]> = {
+  FDM: [
+    { value: "0.28 mm", factor: 0.85 },
+    { value: "0.20 mm", factor: 1 },
+    { value: "0.16 mm", factor: 1.15 },
+    { value: "0.12 mm", factor: 1.35 },
+    { value: "0.08 mm", factor: 1.7 }
+  ],
+  Resin: [
+    { value: "0.10 mm", factor: 1 },
+    { value: "0.05 mm", factor: 1.2 },
+    { value: "0.025 mm", factor: 1.5 }
+  ]
+};
+const initialQuoteDraft = {
+  customer: "",
+  email: "",
+  phone: "",
+  company: "",
+  project: "",
+  useCase: "display",
+  process: "FDM" as QuoteProcess,
+  material: "PLA",
+  color: "Any / operator pick",
+  quality: "Standard",
+  layerHeight: "",
+  infill: 15,
+  walls: 2,
+  support: "Auto",
+  sanding: false,
+  painting: false,
+  inserts: 0,
+  inspection: "Standard",
+  quantity: 1,
+  due: "",
+  rush: false,
+  budget: 0,
+  fileName: "",
+  notes: ""
+};
+
+function MarketingSite({ onOpenApp, onOpenPortal }: { onOpenApp: () => void; onOpenPortal: () => void }) {
   const initialQuoteLookup = () => {
     const params = new URLSearchParams(window.location.search);
     return { id: params.get("quoteId") || "", token: params.get("quoteToken") || "" };
   };
-  const [quoteDraft, setQuoteDraft] = useState({ customer: "", email: "", company: "", project: "Prototype enclosure", material: "PLA", quantity: 1, due: "Flexible", budget: 0, fileName: "", notes: "" });
+  const [quoteMode, setQuoteMode] = useState<"quick" | "expert">("quick");
+  const [quoteDraft, setQuoteDraft] = useState(initialQuoteDraft);
+  const [supportRisk, setSupportRisk] = useState(false);
   const [quoteFile, setQuoteFile] = useState<File | null>(null);
   const [quoteStatus, setQuoteStatus] = useState("");
   const [quoteLookup, setQuoteLookup] = useState(initialQuoteLookup);
@@ -3370,14 +3636,88 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
   const [quoteLookupResult, setQuoteLookupResult] = useState<PublicQuoteStatus | null>(null);
   const quoteSubmitAttempt = useRef<IdempotencyAttempt | null>(null);
   const quoteDecisionAttempts = useRef<Record<string, IdempotencyAttempt>>({});
+  const quoteMaterials = QUOTE_MATERIALS[quoteDraft.process];
+  const quoteMaterial = quoteMaterials.find((item) => item.name === quoteDraft.material) || quoteMaterials[0];
+  const quoteQuality = QUOTE_QUALITIES.find((item) => item.id === quoteDraft.quality) || QUOTE_QUALITIES[1];
+  const effectiveLayer = quoteMode === "expert" && quoteDraft.layerHeight ? quoteDraft.layerHeight : quoteQuality.layer[quoteDraft.process];
+  const quoteEstimate = () => {
+    const grams = quoteFile ? Math.max(8, Math.round(quoteFile.size / 40000)) : 40;
+    const layerFactor = quoteMode === "expert" && quoteDraft.layerHeight
+      ? QUOTE_LAYER_OPTIONS[quoteDraft.process].find((option) => option.value === quoteDraft.layerHeight)?.factor ?? 1
+      : quoteQuality.factor;
+    const infillFactor = quoteDraft.process === "FDM" ? 0.55 + 0.45 * (Number(quoteDraft.infill) || 15) / 100 : 1;
+    const wallFactor = quoteDraft.process === "FDM" ? 1 + (Number(quoteDraft.walls) - 2) * 0.03 : 1;
+    let perPart = 3 + grams * quoteMaterial.rate * layerFactor * infillFactor * wallFactor;
+    if (quoteDraft.sanding) perPart += 4;
+    if (quoteDraft.painting) perPart += 15;
+    perPart += (Number(quoteDraft.inserts) || 0) * 1.2;
+    const qty = Math.max(1, Number(quoteDraft.quantity) || 1);
+    let total = perPart * qty;
+    if (qty >= 20) total *= 0.85;
+    else if (qty >= 10) total *= 0.9;
+    else if (qty >= 5) total *= 0.95;
+    if (quoteDraft.inspection === "Dimensional report") total += 8;
+    if (quoteDraft.rush) total *= 1.3;
+    return { grams, qty, total: Math.max(15, Math.round(total)), fileBased: Boolean(quoteFile) };
+  };
+  const applyUseCase = (useCase: (typeof QUOTE_USE_CASES)[number]) => {
+    const materials = QUOTE_MATERIALS[useCase.process];
+    const material = materials.find((item) => item.name === useCase.material) || materials[0];
+    setQuoteDraft((draft) => ({ ...draft, useCase: useCase.id, process: useCase.process, material: material.name, color: material.colors[0], layerHeight: "" }));
+  };
+  const applyProcess = (process: QuoteProcess) => {
+    const material = QUOTE_MATERIALS[process][0];
+    setQuoteDraft((draft) => ({ ...draft, process, material: material.name, color: material.colors[0], layerHeight: "" }));
+  };
+  const applyMaterial = (name: string) => {
+    const material = QUOTE_MATERIALS[quoteDraft.process].find((item) => item.name === name) || QUOTE_MATERIALS[quoteDraft.process][0];
+    setQuoteDraft((draft) => ({ ...draft, material: material.name, color: material.colors.includes(draft.color) ? draft.color : material.colors[0] }));
+  };
   const submitQuote = async () => {
-    if (!quoteDraft.customer.trim() || !quoteDraft.email.trim() || !quoteDraft.project.trim()) {
-      setQuoteStatus("Please add your name, email, and project.");
+    if (!quoteDraft.customer.trim() || !quoteDraft.email.trim()) {
+      setQuoteStatus("Please add your name and email.");
+      return;
+    }
+    if (quoteMode === "expert" && quoteDraft.support === "None" && !supportRisk) {
+      setQuoteStatus("Please confirm the no-support printing risk checkbox first.");
       return;
     }
     setQuoteStatus("Sending quote request...");
     try {
-      const payload = { ...quoteDraft, quantity: Number(quoteDraft.quantity || 1), budget: Number(quoteDraft.budget || 0), source: "Marketing website" };
+      const estimate = quoteEstimate();
+      const postProcessing = [
+        quoteDraft.sanding ? "Sanding" : "",
+        quoteDraft.painting ? "Primer & paint" : "",
+        Number(quoteDraft.inserts) > 0 ? `Heat-set inserts x${quoteDraft.inserts}` : ""
+      ].filter(Boolean);
+      const payload = {
+        customer: quoteDraft.customer,
+        email: quoteDraft.email,
+        phone: quoteDraft.phone,
+        company: quoteDraft.company,
+        project: quoteDraft.project.trim() || quoteFile?.name || "3D print request",
+        material: quoteDraft.material,
+        quantity: Number(quoteDraft.quantity || 1),
+        due: quoteMode === "expert" && quoteDraft.due.trim() ? quoteDraft.due.trim() : quoteDraft.rush ? "Rush (1-2 business days)" : "Standard (3-5 business days)",
+        budget: Number(quoteDraft.budget || 0),
+        notes: quoteDraft.notes,
+        fileName: quoteDraft.fileName,
+        source: "Marketing website",
+        process: quoteDraft.process,
+        color: quoteDraft.color,
+        quality: quoteDraft.quality,
+        layerHeight: effectiveLayer,
+        infill: Number(quoteDraft.infill || 15),
+        walls: Number(quoteDraft.walls || 2),
+        support: quoteDraft.support,
+        postProcessing,
+        inserts: Number(quoteDraft.inserts || 0),
+        inspection: quoteDraft.inspection,
+        rush: quoteDraft.rush,
+        useCase: quoteDraft.useCase,
+        formMode: quoteMode,
+        clientEstimate: estimate.total
+      };
       const fingerprint = idempotencyFingerprint({
         ...payload,
         file: quoteFile ? { name: quoteFile.name, size: quoteFile.size, lastModified: quoteFile.lastModified } : null
@@ -3385,7 +3725,7 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
       quoteSubmitAttempt.current = idempotencyKeyForAttempt(quoteSubmitAttempt.current, "public-quote-intake", fingerprint);
       const body = quoteFile ? new FormData() : JSON.stringify(payload);
       if (quoteFile && body instanceof FormData) {
-        Object.entries(payload).forEach(([key, value]) => body.append(key, String(value ?? "")));
+        Object.entries(payload).forEach(([key, value]) => body.append(key, Array.isArray(value) ? value.join(",") : String(value ?? "")));
         body.append("file", quoteFile, quoteFile.name);
       }
       const response = await fetch(`${API_BASE}/api/public/quoteRequests`, {
@@ -3402,7 +3742,8 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
       setQuoteStatus(token ? `Quote request ${result.quoteRequest.id} received. Tracking token: ${token}` : `Quote request ${result.quoteRequest.id} received.`);
       setQuoteLookup({ id: result.quoteRequest.id, token });
       setQuoteLookupResult(result.quoteRequest);
-      setQuoteDraft({ customer: "", email: "", company: "", project: "Prototype enclosure", material: "PLA", quantity: 1, due: "Flexible", budget: 0, fileName: "", notes: "" });
+      setQuoteDraft(initialQuoteDraft);
+      setSupportRisk(false);
       setQuoteFile(null);
       quoteSubmitAttempt.current = null;
     } catch {
@@ -3476,7 +3817,7 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
     ["File operations", "STL, 3MF, and G-code uploads, model metadata, generated thumbnails, stored versions, slicer profiles, and G-code outputs."],
     ["Fleet control", "Printer states, bridge configs, OctoPrint/Moonraker-style sync, API actions, telemetry, and maintenance workflows."],
     ["Team execution", "Role permissions, automatic todos, 2FA, audit logs, notifications, webhooks, Slack, Discord, and email channels."],
-    ["Business layer", "Cost catalog, storage usage, billing hooks, quote assumptions, backups, restore previews, and customer-ready deployment."]
+    ["Business layer", "Customer directory, quote intake and estimates, cost catalog, order history, backups, and restore previews."]
   ];
   const audiences = ["Print farms", "Service bureaus", "Makerspaces", "School labs", "Factory prototyping teams"];
   const installSteps = [
@@ -3523,12 +3864,13 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
           <div className="marketing-hero-media" aria-hidden="true"></div>
           <div className="marketing-hero-shade" aria-hidden="true"></div>
           <div className="marketing-hero-content">
-            <p className="eyebrow">3D printing farm operating system</p>
-            <h1>Production control for serious 3D printing teams.</h1>
-            <p>3DSTU FarmFlow connects orders, files, materials, printers, operators, alerts, and backups into one deployable SaaS platform for real print-farm operations.</p>
+            <p className="eyebrow">On-demand 3D printing service</p>
+            <h1>Get your parts 3D printed, fast.</h1>
+            <p>Upload your model, choose a material and finish, and get an instant estimate. Our team reviews every job before printing and confirms the final quote.</p>
             <div className="marketing-actions">
-              <button className="primary" onClick={onOpenApp}>Open App</button>
-              <a className="ghost-link" href="mailto:support@3dstu.com">Talk to 3DSTU</a>
+              <a className="primary" href="#quote">Request a quote</a>
+              <button className="ghost-link" onClick={onOpenPortal}>Customer login</button>
+              <a className="ghost-link" href="mailto:support@3dstu.com">Talk to us</a>
             </div>
           </div>
           <div className="marketing-hero-strip">
@@ -3664,17 +4006,89 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
             <h2>Send print requirements into the production pipeline.</h2>
           </div>
           <div className="quote-form">
+            <div className="wide quote-mode-row">
+              <div className="segmented">
+                <button className={quoteMode === "quick" ? "active" : ""} onClick={() => setQuoteMode("quick")}>Quick quote</button>
+                <button className={quoteMode === "expert" ? "active" : ""} onClick={() => setQuoteMode("expert")}>Expert mode</button>
+              </div>
+              <p className="quote-mode-hint">{quoteMode === "quick" ? "Answer a few questions - we pick safe production settings for you." : "Full control: process, material, layer height, infill, supports, and finishing."}</p>
+            </div>
             <label>Name<input value={quoteDraft.customer} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, customer: event.target.value }))} /></label>
             <label>Email<input type="email" value={quoteDraft.email} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, email: event.target.value }))} /></label>
-            <label>Company<input value={quoteDraft.company} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, company: event.target.value }))} /></label>
-            <label>Project<input value={quoteDraft.project} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, project: event.target.value }))} /></label>
-            <label>Material<select value={quoteDraft.material} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, material: event.target.value }))}>{["PLA", "PETG", "ASA", "TPU", "Resin"].map((item) => <option key={item}>{item}</option>)}</select></label>
+            <label>Phone / LINE (optional)<input value={quoteDraft.phone} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, phone: event.target.value }))} /></label>
+            <label>Project name (optional)<input value={quoteDraft.project} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, project: event.target.value }))} placeholder="e.g. Camera mount v2" /></label>
+            {quoteMode === "expert" && <label>Company (optional)<input value={quoteDraft.company} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, company: event.target.value }))} /></label>}
+            {quoteMode === "quick" && (
+              <div className="wide">
+                <span className="quote-field-label">What are you making?</span>
+                <div className="quote-option-grid">
+                  {QUOTE_USE_CASES.map((useCase) => (
+                    <button key={useCase.id} className={`quote-option-card ${quoteDraft.useCase === useCase.id ? "active" : ""}`} onClick={() => applyUseCase(useCase)}>
+                      <b>{useCase.label}</b>
+                      <span>{useCase.hint}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {quoteMode === "expert" && (
+              <>
+                <label>Process<select value={quoteDraft.process} onChange={(event) => applyProcess(event.target.value as QuoteProcess)}><option value="FDM">FDM (filament)</option><option value="Resin">Resin (SLA / LCD)</option></select></label>
+                <label>Material<select value={quoteDraft.material} onChange={(event) => applyMaterial(event.target.value)}>{quoteMaterials.map((item) => <option key={item.name}>{item.name}</option>)}</select></label>
+              </>
+            )}
+            <label>Color<select value={quoteDraft.color} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, color: event.target.value }))}>{quoteMaterial.colors.map((color) => <option key={color}>{color}</option>)}<option>Custom (describe in notes)</option></select></label>
             <label>Quantity<input type="number" min="1" value={quoteDraft.quantity} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, quantity: Number(event.target.value) }))} /></label>
-            <label>Due date<input value={quoteDraft.due} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, due: event.target.value }))} /></label>
-            <label>Budget<input type="number" min="0" value={quoteDraft.budget} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, budget: Number(event.target.value) }))} /></label>
-            <label>File name<input value={quoteDraft.fileName} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, fileName: event.target.value }))} placeholder="model.stl / model.3mf" /></label>
-            <label className="wide">Notes<textarea value={quoteDraft.notes} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, notes: event.target.value }))} /></label>
-            <label className="wide">Model file<input type="file" accept=".stl,.3mf,.gcode,.obj" onChange={(event) => setQuoteFile(event.currentTarget.files?.[0] || null)} /></label>
+            <p className="quote-material-hint wide">{quoteMaterial.name}: {quoteMaterial.hint}</p>
+            <div className="wide">
+              <span className="quote-field-label">Print quality</span>
+              <div className="quote-option-grid">
+                {QUOTE_QUALITIES.map((quality) => (
+                  <button key={quality.id} className={`quote-option-card ${quoteDraft.quality === quality.id ? "active" : ""}`} onClick={() => setQuoteDraft((draft) => ({ ...draft, quality: quality.id, layerHeight: "" }))}>
+                    <b>{quality.label}</b>
+                    <span>{quality.layer[quoteDraft.process]} layers - {quality.hint}</span>
+                    <em>{quality.price}</em>
+                  </button>
+                ))}
+              </div>
+            </div>
+            {quoteMode === "expert" && (
+              <>
+                <label>Layer height override<select value={quoteDraft.layerHeight} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, layerHeight: event.target.value }))}><option value="">Use quality preset ({quoteQuality.layer[quoteDraft.process]})</option>{QUOTE_LAYER_OPTIONS[quoteDraft.process].map((option) => <option key={option.value} value={option.value}>{option.value}</option>)}</select></label>
+                {quoteDraft.process === "FDM" && <label>Infill - {quoteDraft.infill}%<input type="range" min="10" max="100" step="5" value={quoteDraft.infill} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, infill: Number(event.target.value) }))} /></label>}
+                {quoteDraft.process === "FDM" && <label>Walls (perimeters)<select value={quoteDraft.walls} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, walls: Number(event.target.value) }))}>{[2, 3, 4, 6].map((walls) => <option key={walls} value={walls}>{walls}{walls === 2 ? " (default)" : walls === 6 ? " (high strength)" : ""}</option>)}</select></label>}
+                <label>Supports<select value={quoteDraft.support} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, support: event.target.value }))}><option>Auto</option><option>Tree</option><option>None</option></select></label>
+                {quoteDraft.support === "None" && <label className="wide quote-risk-row"><input type="checkbox" checked={supportRisk} onChange={(event) => setSupportRisk(event.target.checked)} />I understand overhangs may sag or fail without supports and accept the risk.</label>}
+                <div className="wide quote-finishing-row">
+                  <span className="quote-field-label">Finishing</span>
+                  <label className="quote-check"><input type="checkbox" checked={quoteDraft.sanding} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, sanding: event.target.checked }))} />Sanding (+$4/part)</label>
+                  <label className="quote-check"><input type="checkbox" checked={quoteDraft.painting} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, painting: event.target.checked }))} />Primer &amp; paint (+$15/part, +2 days)</label>
+                  <label className="quote-check quote-inline-number">Heat-set inserts<input type="number" min="0" max="100" value={quoteDraft.inserts} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, inserts: Number(event.target.value) }))} />per part ($1.20 each)</label>
+                </div>
+                <label>Inspection<select value={quoteDraft.inspection} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, inspection: event.target.value }))}><option>Standard</option><option>Photo confirmation</option><option value="Dimensional report">Dimensional report (+$8)</option></select></label>
+                <label>Budget (optional)<input type="number" min="0" value={quoteDraft.budget} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, budget: Number(event.target.value) }))} /></label>
+                <label>Due date (optional)<input value={quoteDraft.due} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, due: event.target.value }))} placeholder="Flexible" /></label>
+              </>
+            )}
+            <div className="wide">
+              <span className="quote-field-label">Delivery</span>
+              <div className="segmented">
+                <button className={!quoteDraft.rush ? "active" : ""} onClick={() => setQuoteDraft((draft) => ({ ...draft, rush: false }))}>Standard - 3-5 business days</button>
+                <button className={quoteDraft.rush ? "active" : ""} onClick={() => setQuoteDraft((draft) => ({ ...draft, rush: true }))}>Rush - 1-2 days (+30%)</button>
+              </div>
+            </div>
+            <label className="wide">Notes<textarea value={quoteDraft.notes} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, notes: event.target.value }))} placeholder="Tolerances, colors we don't list, assembly fit - anything missing from the form goes here and we quote it manually." /></label>
+            <label className="wide">Model file<input type="file" accept=".stl,.3mf,.gcode,.obj,.step,.stp" onChange={(event) => setQuoteFile(event.currentTarget.files?.[0] || null)} /></label>
+            {(() => {
+              const estimate = quoteEstimate();
+              return (
+                <div className="wide quote-estimate">
+                  <div className="quote-estimate-total"><span>Estimated total</span><strong>${estimate.total}</strong></div>
+                  <p>{estimate.qty} {estimate.qty === 1 ? "part" : "parts"} - about {estimate.grams} g each {estimate.fileBased ? "(from your file size)" : "(assumed until you attach a file)"} - {quoteDraft.material}, {effectiveLayer} layers{quoteDraft.rush ? " - rush" : ""}</p>
+                  <p className="quote-estimate-note">Instant estimate only. An operator checks wall thickness, overhangs, and supports before sending the final quote.</p>
+                </div>
+              );
+            })()}
             <button className="primary wide" onClick={submitQuote}>Request quote</button>
             {quoteFile && <p className="quote-status wide">Attached: {quoteFile.name} ({Math.round(quoteFile.size / 1024)} KB)</p>}
             {quoteStatus && <p className="quote-status wide">{quoteStatus}</p>}
@@ -3690,6 +4104,7 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
             {quoteLookupResult?.validUntil && <p className="quote-status wide">Quote valid until {quoteLookupResult.validUntil}</p>}
             {quoteLookupResult?.status === "quoted" && <div className="quote-actions wide"><button className="primary" onClick={() => decideQuote("accepted")}>Approve quote</button><button onClick={() => decideQuote("revision")}>Request changes</button><button onClick={() => decideQuote("rejected")}>Reject quote</button></div>}
             {quoteLookupStatus && <p className="quote-status wide">{quoteLookupStatus}</p>}
+            <p className="quote-status wide">Want to track every quote and order in one place? <button className="link-button" onClick={onOpenPortal}>Sign in or create a customer account</button>.</p>
           </div>
         </section>
 
@@ -3710,22 +4125,17 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
   );
 }
 
-function AuthScreen({ onLogin, language, setLanguage }: { onLogin: (payload: { email: string; password: string; mode: "login" | "signup"; name?: string; workspace?: string; twoFactorCode?: string }) => Promise<string>; language: Language; setLanguage: (language: Language) => void }) {
-  const [mode, setMode] = useState<"login" | "signup">("login");
-  const [step, setStep] = useState(0);
-  const [email, setEmail] = useState("demo@layerpilot.test");
-  const [password, setPassword] = useState("layerpilot");
+function AuthScreen({ onLogin, language, setLanguage }: { onLogin: (payload: { email: string; password: string; twoFactorCode?: string }) => Promise<string>; language: Language; setLanguage: (language: Language) => void }) {
+  const [email, setEmail] = useState(import.meta.env.PROD ? "" : "demo@layerpilot.test");
+  const [password, setPassword] = useState(import.meta.env.PROD ? "" : "layerpilot");
   const [twoFactorCode, setTwoFactorCode] = useState("");
   const [needsTwoFactor, setNeedsTwoFactor] = useState(false);
-  const [name, setName] = useState("Demo Operator");
-  const [workspace, setWorkspace] = useState("North Campus Lab");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const steps = ["Profile", "Workspace", "Mock printer", "Done"];
   const submit = async () => {
     setBusy(true);
     setError("");
-    const nextError = await onLogin({ email, password, mode, name, workspace, twoFactorCode: needsTwoFactor ? twoFactorCode : undefined });
+    const nextError = await onLogin({ email, password, twoFactorCode: needsTwoFactor ? twoFactorCode : undefined });
     setNeedsTwoFactor(nextError.toLowerCase().includes("two-factor"));
     setError(nextError);
     setBusy(false);
@@ -3742,24 +4152,400 @@ function AuthScreen({ onLogin, language, setLanguage }: { onLogin: (payload: { e
         </div>
       </section>
       <section className="auth-panel">
-        <div className="segmented">
-          <button className={mode === "login" ? "active" : ""} onClick={() => setMode("login")}>Sign in</button>
-          <button className={mode === "signup" ? "active" : ""} onClick={() => setMode("signup")}>Create account</button>
-        </div>
-        <h2>{mode === "login" ? "Welcome back" : "Start a workspace"}</h2>
-        {mode === "signup" && <label>Name<input value={name} onChange={(event) => setName(event.target.value)} /></label>}
-        <label>Email<input value={email} onChange={(event) => setEmail(event.target.value)} /></label>
-        <label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
-        {needsTwoFactor && <label>Two-factor code<input inputMode="numeric" value={twoFactorCode} onChange={(event) => setTwoFactorCode(event.target.value)} placeholder="123456 or recovery code" /></label>}
-        {mode === "signup" && <label>Workspace name<input value={workspace} onChange={(event) => setWorkspace(event.target.value)} /></label>}
-        {error && <div className="notice error"><AlertTriangle size={18} /><span>{error}</span></div>}
-        <button className="primary wide" onClick={submit} disabled={busy}>{busy ? "Signing in..." : mode === "login" ? "Demo Login" : "Create demo workspace"}</button>
+        <h2>Welcome back</h2>
+        <p className="auth-subtitle">Sign in with the operator account for this workspace.</p>
+        <form onSubmit={(event) => { event.preventDefault(); void submit(); }}>
+          <label>Email<input value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username" /></label>
+          <label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" /></label>
+          {needsTwoFactor && <label>Two-factor code<input inputMode="numeric" value={twoFactorCode} onChange={(event) => setTwoFactorCode(event.target.value)} placeholder="123456 or recovery code" /></label>}
+          {error && <div className="notice error"><AlertTriangle size={18} /><span>{error}</span></div>}
+          <button className="primary wide" type="submit" disabled={busy}>{busy ? "Signing in..." : "Sign in"}</button>
+        </form>
         <LanguageSwitcher language={language} setLanguage={setLanguage} />
-        <div className="onboarding">
-          <div className="step-line">{steps.map((name, index) => <button key={name} className={index <= step ? "done" : ""} onClick={() => setStep(index)}>{index < step ? <Check size={14} /> : index + 1}<span>{name}</span></button>)}</div>
-          <p>{step === 0 ? "Choose role and preferred units." : step === 1 ? "Create locations for lab, farm, or classrooms." : step === 2 ? "Connect a mock bridge now, real hardware later." : "Workspace is ready for the app dashboard."}</p>
-        </div>
+        <p className="support-note">Need a new operator account? Ask your workspace owner to add you from the Team page, or contact <a href="mailto:support@3dstu.com">support@3dstu.com</a>.</p>
       </section>
+    </div>
+  );
+}
+
+function CustomerPortalApp({ onExit }: { onExit: () => void }) {
+  const [language, setLanguage] = useState<Language>("en");
+  const [token, setToken] = useState(() => (typeof window !== "undefined" ? window.localStorage.getItem("layerpilot-customer-token") : "") || "");
+  const [customer, setCustomer] = useState<Customer | null>(null);
+  const [checking, setChecking] = useState(true);
+  const [quotes, setQuotes] = useState<QuoteRequest[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+
+  const refresh = async () => {
+    const [nextQuotes, nextOrders] = await Promise.all([
+      customerApiRequest<QuoteRequest[]>("/api/customer/quotes"),
+      customerApiRequest<Order[]>("/api/customer/orders")
+    ]);
+    setQuotes(nextQuotes);
+    setOrders(nextOrders);
+  };
+
+  useEffect(() => {
+    if (!token) {
+      setChecking(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await customerApiRequest<{ customer: Customer }>("/api/customer-auth/me");
+        if (cancelled) return;
+        setCustomer(result.customer);
+        await refresh();
+      } catch {
+        if (cancelled) return;
+        window.localStorage.removeItem("layerpilot-customer-token");
+        setToken("");
+      } finally {
+        if (!cancelled) setChecking(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  const onAuthed = async (nextToken: string, nextCustomer: Customer) => {
+    window.localStorage.setItem("layerpilot-customer-token", nextToken);
+    setToken(nextToken);
+    setCustomer(nextCustomer);
+    setChecking(false);
+    await refresh();
+  };
+
+  const logout = async () => {
+    try {
+      await customerApiRequest("/api/customer-auth/logout", { method: "POST" });
+    } catch {
+      // Session may already be expired; clear local state regardless.
+    }
+    window.localStorage.removeItem("layerpilot-customer-token");
+    setToken("");
+    setCustomer(null);
+    setQuotes([]);
+    setOrders([]);
+  };
+
+  if (checking) return <div className="auth-page customer-portal-loading">Loading your account...</div>;
+  if (!customer) return <CustomerAuthScreen onAuthed={onAuthed} onExit={onExit} language={language} setLanguage={setLanguage} />;
+  return <CustomerDashboard customer={customer} quotes={quotes} orders={orders} onLogout={logout} onExit={onExit} refresh={refresh} onProfileUpdated={setCustomer} language={language} setLanguage={setLanguage} />;
+}
+
+function CustomerAuthScreen({ onAuthed, onExit, language, setLanguage }: { onAuthed: (token: string, customer: Customer) => Promise<void>; onExit: () => void; language: Language; setLanguage: (language: Language) => void }) {
+  const initialResetParams = () => {
+    const params = new URLSearchParams(window.location.search);
+    return { email: params.get("resetEmail") || "", token: params.get("resetToken") || "" };
+  };
+  const [resetParams] = useState(initialResetParams);
+  const [mode, setMode] = useState<"login" | "register" | "claim" | "reset-request" | "reset-confirm">(() => (resetParams.token ? "reset-confirm" : "login"));
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState(resetParams.email);
+  const [password, setPassword] = useState("");
+  const [phone, setPhone] = useState("");
+  const [quoteId, setQuoteId] = useState("");
+  const [quoteToken, setQuoteToken] = useState("");
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const switchMode = (nextMode: typeof mode) => {
+    setMode(nextMode);
+    setError("");
+    setNotice("");
+  };
+
+  const submit = async () => {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      if (mode === "login") {
+        const result = await customerApiRequest<{ token: string; customer: Customer }>("/api/customer-auth/login", {
+          method: "POST",
+          body: JSON.stringify({ email, password })
+        });
+        await onAuthed(result.token, result.customer);
+        return;
+      }
+      if (mode === "register") {
+        const result = await customerApiRequest<{ token: string; customer: Customer }>("/api/customer-auth/register", {
+          method: "POST",
+          body: JSON.stringify({ name, email, password, phone })
+        });
+        await onAuthed(result.token, result.customer);
+        return;
+      }
+      if (mode === "claim") {
+        const result = await customerApiRequest<{ token: string; customer: Customer }>("/api/customer-auth/claim", {
+          method: "POST",
+          body: JSON.stringify({ quoteId, token: quoteToken, password, name: name || undefined })
+        });
+        await onAuthed(result.token, result.customer);
+        return;
+      }
+      if (mode === "reset-request") {
+        await customerApiRequest("/api/customer-auth/request-reset", { method: "POST", body: JSON.stringify({ email }) });
+        setNotice("Reset link sent if that email has an account. Check your inbox.");
+        return;
+      }
+      await customerApiRequest("/api/customer-auth/reset", { method: "POST", body: JSON.stringify({ token: resetParams.token, password }) });
+      setNotice("Password reset. Please sign in with your new password.");
+      switchMode("login");
+    } catch (submitError) {
+      const message = submitError instanceof ApiError && typeof submitError.body.error === "string" ? submitError.body.error : "Something went wrong. Please try again.";
+      setError(message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="auth-page customer-portal-auth">
+      <section className="auth-visual">
+        <div className="brand-lockup"><Contact /><span>Customer Portal</span></div>
+        <h1>Track your quotes and orders in one place.</h1>
+        <p>Sign in to see live status, message your production team, and approve or decline quotes.</p>
+        <p className="support-note">Need help? Contact <a href="mailto:support@3dstu.com">support@3dstu.com</a></p>
+      </section>
+      <section className="auth-panel">
+        {mode !== "reset-confirm" && mode !== "reset-request" && (
+          <div className="segmented">
+            <button className={mode === "login" ? "active" : ""} onClick={() => switchMode("login")}>Sign in</button>
+            <button className={mode === "register" ? "active" : ""} onClick={() => switchMode("register")}>Create account</button>
+            <button className={mode === "claim" ? "active" : ""} onClick={() => switchMode("claim")}>Have a quote link?</button>
+          </div>
+        )}
+        <h2>{mode === "login" ? "Welcome back" : mode === "register" ? "Create your account" : mode === "claim" ? "Set up portal access" : mode === "reset-request" ? "Forgot your password?" : "Set a new password"}</h2>
+        <p className="auth-subtitle">
+          {mode === "login" ? "Sign in with your customer account." : mode === "register" ? "Track every quote and order under one login." : mode === "claim" ? "Enter the quote ID and tracking token from your quote confirmation to set a password." : mode === "reset-request" ? "Enter your account email and we'll send you a reset link." : "Choose a new password for your customer account."}
+        </p>
+        <form onSubmit={(event) => { event.preventDefault(); void submit(); }}>
+          {mode === "register" && <label>Name<input value={name} onChange={(event) => setName(event.target.value)} required /></label>}
+          {mode === "claim" && <label>Name (optional)<input value={name} onChange={(event) => setName(event.target.value)} /></label>}
+          {mode === "claim" && <label>Quote request ID<input value={quoteId} onChange={(event) => setQuoteId(event.target.value)} placeholder="qr-..." /></label>}
+          {mode === "claim" && <label>Tracking token<input value={quoteToken} onChange={(event) => setQuoteToken(event.target.value)} /></label>}
+          {(mode === "login" || mode === "register" || mode === "reset-request") && <label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username" /></label>}
+          {mode === "register" && <label>Phone (optional)<input value={phone} onChange={(event) => setPhone(event.target.value)} /></label>}
+          {(mode === "login" || mode === "register" || mode === "claim") && <label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={mode === "login" ? "current-password" : "new-password"} /></label>}
+          {mode === "reset-confirm" && <label>New password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" /></label>}
+          {error && <div className="notice error"><AlertTriangle size={18} /><span>{error}</span></div>}
+          {notice && <div className="notice success"><Check size={18} /><span>{notice}</span></div>}
+          <button className="primary wide" type="submit" disabled={busy}>
+            {busy ? "Please wait..." : mode === "login" ? "Sign in" : mode === "register" ? "Create account" : mode === "claim" ? "Set password and sign in" : mode === "reset-request" ? "Send reset link" : "Set a new password"}
+          </button>
+        </form>
+        {mode === "login" && <p className="support-note"><button className="link-button" onClick={() => switchMode("reset-request")}>Forgot your password?</button></p>}
+        {(mode === "reset-request" || mode === "reset-confirm") && <p className="support-note"><button className="link-button" onClick={() => switchMode("login")}>Back to sign in</button></p>}
+        <LanguageSwitcher language={language} setLanguage={setLanguage} />
+        <p className="support-note"><button className="link-button" onClick={onExit}>Back to the website</button></p>
+      </section>
+    </div>
+  );
+}
+
+const QUOTE_PROGRESS_STAGES = ["Submitted", "Quoted", "Approved", "In production", "Shipped", "Completed"];
+
+function quoteProgressIndex(quote: QuoteRequest, order: Order | null) {
+  if (quote.status === "rejected") return -1;
+  if (order?.status === "cancelled") return -1;
+  if (order?.status === "completed") return 5;
+  if (order?.status === "shipped") return 4;
+  if (order && ["queued", "printing", "on_hold", "packed"].includes(order.status)) return 3;
+  if (quote.status === "converted" || quote.status === "accepted") return 2;
+  if (quote.status === "quoted") return 1;
+  return 0;
+}
+
+function QuoteProgress({ quote, order }: { quote: QuoteRequest; order: Order | null }) {
+  const index = quoteProgressIndex(quote, order);
+  if (index === -1) return <p className="quote-progress-cancelled">{quote.status === "rejected" ? "Quote declined" : "Order cancelled"}</p>;
+  return (
+    <div className="quote-progress">
+      {QUOTE_PROGRESS_STAGES.map((stage, stageIndex) => (
+        <div key={stage} className={`quote-progress-step ${stageIndex <= index ? "done" : ""} ${stageIndex === index ? "current" : ""}`}>
+          <span className="quote-progress-dot" />
+          <em>{stage}</em>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CustomerDashboard({ customer, quotes, orders, onLogout, onExit, refresh, onProfileUpdated, language, setLanguage }: { customer: Customer; quotes: QuoteRequest[]; orders: Order[]; onLogout: () => Promise<void>; onExit: () => void; refresh: () => Promise<void>; onProfileUpdated: (customer: Customer) => void; language: Language; setLanguage: (language: Language) => void }) {
+  const [selectedQuoteId, setSelectedQuoteId] = useState("");
+  const [messageDraft, setMessageDraft] = useState("");
+  const [busy, setBusy] = useState("");
+  const [notice, setNotice] = useState("");
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profileDraft, setProfileDraft] = useState({ name: customer.name, phone: customer.phone || "", company: customer.company || "" });
+
+  const saveProfile = async () => {
+    setBusy("profile");
+    try {
+      const result = await customerApiRequest<{ customer: Customer }>("/api/customer-auth/profile", {
+        method: "PATCH",
+        body: JSON.stringify(profileDraft)
+      });
+      onProfileUpdated(result.customer);
+      setEditingProfile(false);
+      setNotice("Profile updated");
+    } catch {
+      setNotice("Profile could not be saved. Please try again.");
+    } finally {
+      setBusy("");
+    }
+  };
+  const selectedQuote = quotes.find((quote) => quote.id === selectedQuoteId) || null;
+  const selectedQuoteOrder = selectedQuote ? orders.find((order) => order.id === selectedQuote.orderId) || null : null;
+  const openQuotes = quotes.filter((quote) => ["new", "reviewing", "quoted"].includes(quote.status));
+
+  const decide = async (decision: "accepted" | "rejected" | "revision") => {
+    if (!selectedQuote) return;
+    setBusy(decision);
+    setNotice("");
+    try {
+      await customerApiRequest(`/api/customer/quotes/${selectedQuote.id}/decision`, {
+        method: "POST",
+        body: JSON.stringify({ decision })
+      });
+      await refresh();
+      setNotice(decision === "accepted" ? "Quote approved. Your order has been created." : decision === "rejected" ? "Quote declined." : "Revision requested.");
+    } catch (error) {
+      setNotice(error instanceof ApiError && typeof error.body.error === "string" ? error.body.error : "Could not update this quote.");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const sendMessage = async () => {
+    if (!selectedQuote || !messageDraft.trim()) return;
+    setBusy("message");
+    try {
+      await customerApiRequest(`/api/customer/quotes/${selectedQuote.id}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ body: messageDraft.trim() })
+      });
+      setMessageDraft("");
+      await refresh();
+    } catch {
+      setNotice("Message could not be sent. Please try again.");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  return (
+    <div className="app-shell customer-portal-shell">
+      <header className="customer-portal-header">
+        <div className="brand-lockup"><Contact /><span>Customer Portal</span></div>
+        <div className="customer-portal-header-actions">
+          <LanguageSwitcher language={language} setLanguage={setLanguage} compact />
+          <button onClick={onExit}>Back to website</button>
+          <button onClick={() => void onLogout()}><LogOut size={15} />Sign out</button>
+        </div>
+      </header>
+      <main className="customer-portal-main">
+        <p className="muted">Signed in as {customer.name} ({customer.email}) <button className="link-button" onClick={() => setEditingProfile((value) => !value)}>Edit profile</button></p>
+        {editingProfile && (
+          <section className="panel customer-profile-edit">
+            <PanelTitle title="Edit profile" />
+            <div className="settings-grid">
+              <label>Name<input value={profileDraft.name} onChange={(event) => setProfileDraft((draft) => ({ ...draft, name: event.target.value }))} /></label>
+              <label>Phone<input value={profileDraft.phone} onChange={(event) => setProfileDraft((draft) => ({ ...draft, phone: event.target.value }))} /></label>
+              <label>Company<input value={profileDraft.company} onChange={(event) => setProfileDraft((draft) => ({ ...draft, company: event.target.value }))} /></label>
+            </div>
+            <button className="primary" onClick={() => void saveProfile()} disabled={busy === "profile"}>{busy === "profile" ? "Saving..." : "Save profile"}</button>
+          </section>
+        )}
+        {notice && <p className="quote-status">{notice}</p>}
+        <div className="metric-grid">
+          <Metric label="Quotes" value={`${quotes.length}`} icon={FilePlus2} />
+          <Metric label="Open quotes" value={`${openQuotes.length}`} icon={AlertTriangle} tone="orange" />
+          <Metric label="Orders" value={`${orders.length}`} icon={ShoppingBag} tone="green" />
+        </div>
+        <div className="split">
+          <section className="panel">
+            <PanelTitle title="Your quotes" />
+            <DataTable headers={["Project", "Material", "Status", "Value"]}>
+              {quotes.map((quote) => (
+                <tr key={quote.id} className={`clickable-row ${quote.id === selectedQuoteId ? "selected-row" : ""}`} onClick={() => setSelectedQuoteId(quote.id)}>
+                  <td><b>{quote.project}</b></td>
+                  <td>{quote.material} x{quote.quantity}</td>
+                  <td><StatusPill status={quote.status} /></td>
+                  <td>{quote.quotedValue ? `$${quote.quotedValue}` : "-"}</td>
+                </tr>
+              ))}
+            </DataTable>
+            {!quotes.length && <p className="muted">No quotes yet. Request a quote from the website to get started.</p>}
+            <PanelTitle title="Your orders" />
+            <DataTable headers={["Order", "Items", "Status", "Value"]}>
+              {orders.map((order) => (
+                <tr key={order.id}>
+                  <td><b>{order.id}</b></td>
+                  <td>{order.items.join(", ")}</td>
+                  <td><StatusPill status={order.status} /></td>
+                  <td>${order.value}</td>
+                </tr>
+              ))}
+            </DataTable>
+            {!orders.length && <p className="muted">No orders yet. Approve a quote to create your first order.</p>}
+          </section>
+          <section className="panel">
+            {selectedQuote ? (
+              <>
+                <PanelTitle title={selectedQuote.project} action={<button onClick={() => setSelectedQuoteId("")}><X size={14} />Close</button>} />
+                <p className="muted">{selectedQuote.material} x{selectedQuote.quantity} - <StatusPill status={selectedQuote.status} /></p>
+                <QuoteProgress quote={selectedQuote} order={selectedQuoteOrder} />
+                {selectedQuoteOrder?.trackingNumber && <p className="muted">{selectedQuoteOrder.carrier ? `${selectedQuoteOrder.carrier}: ` : "Tracking: "}{selectedQuoteOrder.trackingNumber}</p>}
+                {selectedQuote.fileName && (
+                  <div className="model-cell">
+                    <span className="model-thumb">{selectedQuote.fileName.slice(0, 2).toUpperCase()}</span>
+                    <div>
+                      <b>{selectedQuote.fileName}</b>
+                      <small>{[selectedQuote.fileType, selectedQuote.fileSize, selectedQuote.estimatedGrams ? `${selectedQuote.estimatedGrams}g estimate` : ""].filter(Boolean).join(" - ")}</small>
+                    </div>
+                  </div>
+                )}
+                {selectedQuote.quotedValue ? <p>Quoted value: ${selectedQuote.quotedValue}</p> : null}
+                {selectedQuote.validUntil && <p className="muted">Quote valid until {selectedQuote.validUntil}</p>}
+                {selectedQuote.status === "quoted" && (
+                  <div className="quote-actions">
+                    <button className="primary" onClick={() => void decide("accepted")} disabled={Boolean(busy)}>{busy === "accepted" ? "Approving..." : "Approve quote"}</button>
+                    <button onClick={() => void decide("revision")} disabled={Boolean(busy)}>{busy === "revision" ? "Requesting..." : "Request changes"}</button>
+                    <button onClick={() => void decide("rejected")} disabled={Boolean(busy)}>{busy === "rejected" ? "Declining..." : "Decline"}</button>
+                  </div>
+                )}
+                {notice && <p className="quote-status">{notice}</p>}
+                <PanelTitle title="Messages" />
+                <div className="event-feed customer-message-thread">
+                  {(selectedQuote.messages || []).map((message) => (
+                    <div key={message.id} className={`customer-message ${message.author}`}>
+                      <span>{message.authorName}</span>
+                      <p>{message.body}</p>
+                    </div>
+                  ))}
+                  {!(selectedQuote.messages || []).length && <div><span>No messages yet</span><em>Ask a question about this quote and the team will reply here.</em></div>}
+                </div>
+                <div className="customer-message-composer">
+                  <textarea value={messageDraft} onChange={(event) => setMessageDraft(event.target.value)} placeholder="Write a message..." />
+                  <button className="primary" onClick={() => void sendMessage()} disabled={busy === "message" || !messageDraft.trim()}>{busy === "message" ? "Sending..." : "Send message"}</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <PanelTitle title="Quote detail" />
+                <p className="muted">Select a quote from the list to see status, value, and messages.</p>
+              </>
+            )}
+          </section>
+        </div>
+      </main>
     </div>
   );
 }
@@ -3770,6 +4556,7 @@ function Sidebar({ view, setView, mobileNav, setMobileNav, hotDropMode, setHotDr
     ["printers", "Printers", Box],
     ["products", "Products", Package],
     ["orders", "Orders", ShoppingBag],
+    ["customers", "Customers", Contact],
     ["files", "Files", Archive],
     ["queue", "Print Queue", ClipboardList],
     ["scheduler", "Scheduler", CalendarClock],
@@ -3804,11 +4591,6 @@ function Sidebar({ view, setView, mobileNav, setMobileNav, hotDropMode, setHotDr
           <option>Auto-Queue</option>
         </select>
         <button onClick={onHotDrop}><Upload size={15} />Run hot drop</button>
-      </div>
-      <div className="plan-tile">
-        <Sparkles size={18} />
-        <b>Print Farm Trial</b>
-        <span>14 days left in mock billing.</span>
       </div>
     </aside>
   );
@@ -4074,7 +4856,7 @@ function ProductsPage({ parts, skus, productionTemplates, files, createPart, cre
   );
 }
 
-function OrdersPage({ orders, setOrders, quoteRequests, files, skus, commerceConnectors, setCommerceConnectors, commerceImports, setCommerceImports, createOrder, updateOrderStatus, updateQuoteRequest, createQuotePortalLink, convertQuoteRequest, generateJobsForOrder, downloadFile, addToast, setBackendStatus }: { orders: Order[]; setOrders: React.Dispatch<React.SetStateAction<Order[]>>; quoteRequests: QuoteRequest[]; files: PrintFile[]; skus: SKU[]; commerceConnectors: CommerceConnector[]; setCommerceConnectors: React.Dispatch<React.SetStateAction<CommerceConnector[]>>; commerceImports: CommerceImport[]; setCommerceImports: React.Dispatch<React.SetStateAction<CommerceImport[]>>; createOrder: (order: Omit<Order, "id">) => Promise<Order>; updateOrderStatus: (orderId: string, status: Order["status"]) => Promise<Order | undefined>; updateQuoteRequest: (quoteId: string, patch: Partial<Pick<QuoteRequest, "status" | "priority" | "quotedValue" | "validUntil" | "internalNote">>) => Promise<QuoteRequest | undefined>; createQuotePortalLink: (quote: QuoteRequest, rotate?: boolean) => Promise<{ quoteRequest: QuoteRequest; url: string; accessToken: string } | null>; convertQuoteRequest: (quote: QuoteRequest) => Promise<{ quoteRequest: QuoteRequest; order: Order; job?: QueueItem | null; orders: Order[]; quoteRequests: QuoteRequest[]; queue?: QueueItem[]; todos?: Todo[] }>; generateJobsForOrder: (order: Order, dryRun?: boolean) => Promise<OrderJobGenerationResult>; downloadFile: (file: PrintFile) => Promise<boolean>; addToast: (message: string, type?: Toast["type"]) => void; setBackendStatus: React.Dispatch<React.SetStateAction<"local" | "connected">> }) {
+function OrdersPage({ orders, setOrders, quoteRequests, files, skus, commerceConnectors, setCommerceConnectors, commerceImports, setCommerceImports, createOrder, updateOrderStatus, updateOrderTracking, updateQuoteRequest, sendQuoteMessage, createQuotePortalLink, convertQuoteRequest, generateJobsForOrder, downloadFile, addToast, setBackendStatus }: { orders: Order[]; setOrders: React.Dispatch<React.SetStateAction<Order[]>>; quoteRequests: QuoteRequest[]; files: PrintFile[]; skus: SKU[]; commerceConnectors: CommerceConnector[]; setCommerceConnectors: React.Dispatch<React.SetStateAction<CommerceConnector[]>>; commerceImports: CommerceImport[]; setCommerceImports: React.Dispatch<React.SetStateAction<CommerceImport[]>>; createOrder: (order: Omit<Order, "id">) => Promise<Order>; updateOrderStatus: (orderId: string, status: Order["status"]) => Promise<Order | undefined>; updateOrderTracking: (orderId: string, patch: { trackingNumber: string; carrier: string }) => Promise<Order | undefined>; updateQuoteRequest: (quoteId: string, patch: Partial<Pick<QuoteRequest, "status" | "priority" | "quotedValue" | "validUntil" | "internalNote">>) => Promise<QuoteRequest | undefined>; sendQuoteMessage: (quoteId: string, body: string) => Promise<QuoteRequest>; createQuotePortalLink: (quote: QuoteRequest, rotate?: boolean) => Promise<{ quoteRequest: QuoteRequest; url: string; accessToken: string } | null>; convertQuoteRequest: (quote: QuoteRequest) => Promise<{ quoteRequest: QuoteRequest; order: Order; job?: QueueItem | null; orders: Order[]; quoteRequests: QuoteRequest[]; queue?: QueueItem[]; todos?: Todo[] }>; generateJobsForOrder: (order: Order, dryRun?: boolean) => Promise<OrderJobGenerationResult>; downloadFile: (file: PrintFile) => Promise<boolean>; addToast: (message: string, type?: Toast["type"]) => void; setBackendStatus: React.Dispatch<React.SetStateAction<"local" | "connected">> }) {
   const [connectorDraft, setConnectorDraft] = useState({ name: "Shopify feed", source: "Shopify" as CommerceConnector["source"], url: "https://example.com/orders.json", token: "", enabled: true });
   const [csvText, setCsvText] = useState("externalId,customer,items,due,value\nSP-1001,Demo Customer,DUCT-KIT-BLK x1,Tomorrow 17:00,680");
   const [busy, setBusy] = useState("");
@@ -4249,10 +5031,10 @@ function OrdersPage({ orders, setOrders, quoteRequests, files, skus, commerceCon
       </div>
       <section className="panel">
         <PanelTitle title="Quote intake" />
-        <DataTable headers={["Request", "Customer", "Material", "Qty", "Due", "Budget", "Status", "Actions"]}>
+        <DataTable headers={["Request", "Customer", "Material", "Qty", "Due", "Budget", "Status", "Messages", "Actions"]}>
           {quoteRequests.map((quote) => {
             const attachment = quoteAttachment(quote);
-            return <tr key={quote.id}><td><b>{quote.project}</b><small>{quote.fileName || "No file attached"}{quote.fileSize ? ` - ${quote.fileSize}` : ""}{quote.estimatedGrams ? ` - ${quote.estimatedGrams}g estimate` : ""}</small><small>{quote.customerDecisionNote || quote.notes || "No notes"}</small>{attachment && <button onClick={() => downloadFile(attachment)}><Download size={14} />Download model</button>}</td><td>{quote.customer}<small>{quote.email}{quote.company ? ` - ${quote.company}` : ""}</small></td><td>{quote.material}</td><td>{quote.quantity}</td><td>{quote.due}<small>{quote.validUntil ? `Quote valid until ${quote.validUntil}` : "No quote expiry"}</small></td><td>${quoteValue(quote)}</td><td><StatusPill status={quote.status} /></td><td><button onClick={() => copyPortalLink(quote)} disabled={busy === `portal-${quote.id}`}>{busy === `portal-${quote.id}` ? "Creating" : "Copy portal link"}</button><button onClick={() => copyPortalLink(quote, true)} disabled={busy === `rotate-${quote.id}`}>{busy === `rotate-${quote.id}` ? "Rotating" : "Rotate link"}</button><button onClick={() => markQuoted(quote)} disabled={busy === `quote-${quote.id}` || quote.status === "converted"}>{busy === `quote-${quote.id}` ? "Quoting" : "Mark quoted"}</button><button className="primary" onClick={() => acceptQuote(quote)} disabled={busy === `convert-${quote.id}` || quote.status === "converted"}>{busy === `convert-${quote.id}` ? "Converting" : "Accept / order"}</button></td></tr>;
+            return <tr key={quote.id}><td><b>{quote.project}</b><small>{quote.fileName || "No file attached"}{quote.fileSize ? ` - ${quote.fileSize}` : ""}{quote.estimatedGrams ? ` - ${quote.estimatedGrams}g estimate` : ""}</small>{quote.process ? <small>{[quote.process, quote.color, quote.layerHeight || quote.quality, quote.process !== "Resin" && quote.infill != null ? `${quote.infill}% infill` : "", quote.support && quote.support !== "Auto" ? `${quote.support} support` : "", ...(quote.postProcessing || []), quote.rush ? "RUSH" : ""].filter(Boolean).join(" - ")}</small> : null}<small>{quote.customerDecisionNote || quote.notes || "No notes"}</small>{attachment && <button onClick={() => downloadFile(attachment)}><Download size={14} />Download model</button>}</td><td>{quote.customer}<small>{quote.email}{quote.company ? ` - ${quote.company}` : ""}</small></td><td>{quote.material}</td><td>{quote.quantity}</td><td>{quote.due}<small>{quote.validUntil ? `Quote valid until ${quote.validUntil}` : "No quote expiry"}</small></td><td>${quoteValue(quote)}</td><td><StatusPill status={quote.status} /></td><td><QuoteMessageThread quote={quote} sendQuoteMessage={sendQuoteMessage} addToast={addToast} /></td><td><button onClick={() => copyPortalLink(quote)} disabled={busy === `portal-${quote.id}`}>{busy === `portal-${quote.id}` ? "Creating" : "Copy portal link"}</button><button onClick={() => copyPortalLink(quote, true)} disabled={busy === `rotate-${quote.id}`}>{busy === `rotate-${quote.id}` ? "Rotating" : "Rotate link"}</button><button onClick={() => markQuoted(quote)} disabled={busy === `quote-${quote.id}` || quote.status === "converted"}>{busy === `quote-${quote.id}` ? "Quoting" : "Mark quoted"}</button><button className="primary" onClick={() => acceptQuote(quote)} disabled={busy === `convert-${quote.id}` || quote.status === "converted"}>{busy === `convert-${quote.id}` ? "Converting" : "Accept / order"}</button></td></tr>;
           })}
         </DataTable>
         {!quoteRequests.length && <p className="muted">No quote requests yet. Website submissions will appear here.</p>}
@@ -4264,8 +5046,8 @@ function OrdersPage({ orders, setOrders, quoteRequests, files, skus, commerceCon
         </DataTable>
         {!commerceConnectors.length && <p className="muted">No commerce feeds yet. Save one above or use CSV intake.</p>}
       </section>
-      <DataTable headers={["Order", "Source", "Customer", "Items", "Status", "Due", "Value", "Actions"]}>
-        {orders.map((order) => <tr key={order.id}><td><b>{order.id}</b><small>{order.externalId ? `External ${order.externalId}` : "Manual record"}</small></td><td>{order.source}</td><td>{order.customer}</td><td>{order.items.join(", ")}</td><td><StatusPill status={order.status} /></td><td>{order.due}</td><td>${order.value}</td><td><button onClick={() => planOrderJobs(order)} disabled={busy === `plan-${order.id}` || terminalOrder(order)}>Plan jobs</button><button className="primary" onClick={() => commitOrderJobs(order)} disabled={busy === `generate-${order.id}` || terminalOrder(order)}>Generate jobs</button><button onClick={() => setOrderLifecycleStatus(order, "on_hold", "placed on hold")} disabled={busy === `on_hold-${order.id}` || terminalOrder(order)}>Hold</button><button onClick={() => setOrderLifecycleStatus(order, "shipped", "shipped")} disabled={busy === `shipped-${order.id}` || terminalOrder(order)}>Ship</button><button onClick={() => setOrderLifecycleStatus(order, "completed", "completed")} disabled={busy === `completed-${order.id}` || terminalOrder(order)}>Complete</button><button onClick={() => setOrderLifecycleStatus(order, "cancelled", "cancelled")} disabled={busy === `cancelled-${order.id}` || terminalOrder(order)}>Cancel</button></td></tr>)}
+      <DataTable headers={["Order", "Source", "Customer", "Items", "Status", "Due", "Value", "Tracking", "Actions"]}>
+        {orders.map((order) => <tr key={order.id}><td><b>{order.id}</b><small>{order.externalId ? `External ${order.externalId}` : "Manual record"}</small></td><td>{order.source}</td><td>{order.customer}</td><td>{order.items.join(", ")}</td><td><StatusPill status={order.status} /></td><td>{order.due}</td><td>${order.value}</td><td><OrderTrackingCell order={order} updateOrderTracking={updateOrderTracking} addToast={addToast} /></td><td><button onClick={() => planOrderJobs(order)} disabled={busy === `plan-${order.id}` || terminalOrder(order)}>Plan jobs</button><button className="primary" onClick={() => commitOrderJobs(order)} disabled={busy === `generate-${order.id}` || terminalOrder(order)}>Generate jobs</button><button onClick={() => setOrderLifecycleStatus(order, "on_hold", "placed on hold")} disabled={busy === `on_hold-${order.id}` || terminalOrder(order)}>Hold</button><button onClick={() => setOrderLifecycleStatus(order, "shipped", "shipped")} disabled={busy === `shipped-${order.id}` || terminalOrder(order)}>Ship</button><button onClick={() => setOrderLifecycleStatus(order, "completed", "completed")} disabled={busy === `completed-${order.id}` || terminalOrder(order)}>Complete</button><button onClick={() => setOrderLifecycleStatus(order, "cancelled", "cancelled")} disabled={busy === `cancelled-${order.id}` || terminalOrder(order)}>Cancel</button></td></tr>)}
       </DataTable>
       {jobPlan && (
         <section className="panel">
@@ -4286,6 +5068,202 @@ function OrdersPage({ orders, setOrders, quoteRequests, files, skus, commerceCon
       <section className="panel">
         <PanelTitle title="SKU mapping rules" />
         <div className="rule-grid">{skus.map((sku) => <div key={sku.id} className="rule-card"><b>{sku.channel}</b><span><code>{sku.sku}</code> maps to {sku.parts.join(" + ")}</span><em>{sku.variants.join(", ")}</em></div>)}</div>
+      </section>
+    </Page>
+  );
+}
+
+function QuoteMessageThread({ quote, sendQuoteMessage, addToast }: { quote: QuoteRequest; sendQuoteMessage: (quoteId: string, body: string) => Promise<QuoteRequest>; addToast: (message: string, type?: Toast["type"]) => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const messages = quote.messages || [];
+  const lastMessage = messages[messages.length - 1];
+  const unreplied = lastMessage?.author === "customer";
+  const send = async () => {
+    if (!draft.trim()) return;
+    setSending(true);
+    try {
+      await sendQuoteMessage(quote.id, draft.trim());
+      setDraft("");
+    } catch {
+      addToast("Message could not be sent", "warning");
+    } finally {
+      setSending(false);
+    }
+  };
+  return (
+    <div className="quote-message-cell">
+      <button onClick={() => setExpanded((value) => !value)} className={unreplied ? "unread-messages" : ""}>
+        {messages.length ? `${messages.length} message${messages.length === 1 ? "" : "s"}` : "No messages"}{unreplied ? " - new" : ""}
+      </button>
+      {expanded && (
+        <div className="quote-message-panel">
+          <div className="customer-message-thread">
+            {messages.map((message) => <div key={message.id} className={`customer-message ${message.author}`}><span>{message.authorName}</span><p>{message.body}</p></div>)}
+            {!messages.length && <p className="muted">No messages yet</p>}
+          </div>
+          <textarea value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Reply to customer..." />
+          <button className="primary" onClick={() => void send()} disabled={sending || !draft.trim()}>{sending ? "Sending" : "Send reply"}</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OrderTrackingCell({ order, updateOrderTracking, addToast }: { order: Order; updateOrderTracking: (orderId: string, patch: { trackingNumber: string; carrier: string }) => Promise<Order | undefined>; addToast: (message: string, type?: Toast["type"]) => void }) {
+  const [carrier, setCarrier] = useState(order.carrier || "");
+  const [trackingNumber, setTrackingNumber] = useState(order.trackingNumber || "");
+  const [saving, setSaving] = useState(false);
+  const save = async () => {
+    setSaving(true);
+    await updateOrderTracking(order.id, { carrier, trackingNumber });
+    setSaving(false);
+    addToast("Tracking info saved", "success");
+  };
+  return (
+    <div className="order-tracking-cell">
+      <input value={carrier} onChange={(event) => setCarrier(event.target.value)} placeholder="Carrier" />
+      <input value={trackingNumber} onChange={(event) => setTrackingNumber(event.target.value)} placeholder="Tracking number" />
+      <button onClick={() => void save()} disabled={saving}>{saving ? "Saving" : "Save"}</button>
+    </div>
+  );
+}
+
+function CustomersPage({ customers, quoteRequests, orders, createCustomer, updateCustomer, deleteCustomer, addToast }: { customers: Customer[]; quoteRequests: QuoteRequest[]; orders: Order[]; createCustomer: (draft: Omit<Customer, "id">) => Promise<Customer>; updateCustomer: (customerId: string, patch: Partial<Omit<Customer, "id">>) => Promise<Customer | undefined>; deleteCustomer: (customerId: string) => Promise<boolean>; addToast: (message: string, type?: Toast["type"]) => void }) {
+  const emptyDraft = { name: "", company: "", email: "", phone: "", line: "", tags: "", notes: "" };
+  const [draft, setDraft] = useState(emptyDraft);
+  const [editingId, setEditingId] = useState("");
+  const [query, setQuery] = useState("");
+  const [selectedId, setSelectedId] = useState("");
+  const [busy, setBusy] = useState("");
+  const openQuoteStatuses = new Set(["new", "reviewing", "quoted", "accepted"]);
+  const linkedQuotes = (customer: Customer) => quoteRequests.filter((quote) => quote.customerId === customer.id || Boolean(customer.email && quote.email && quote.email.toLowerCase() === customer.email.toLowerCase()));
+  const linkedOrders = (customer: Customer) => {
+    const quoteOrderIds = new Set(linkedQuotes(customer).map((quote) => quote.orderId).filter(Boolean));
+    return orders.filter((order) => order.customerId === customer.id || quoteOrderIds.has(order.id) || Boolean(customer.name && order.customer && order.customer.toLowerCase().includes(customer.name.toLowerCase())));
+  };
+  const normalizedQuery = query.trim().toLowerCase();
+  const filtered = customers.filter((customer) => !normalizedQuery || [customer.name, customer.company, customer.email, customer.phone, customer.line, ...(customer.tags || [])].some((value) => String(value || "").toLowerCase().includes(normalizedQuery)));
+  const selected = customers.find((customer) => customer.id === selectedId);
+  const monthAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const saveDraft = async () => {
+    if (!draft.name.trim()) {
+      addToast("Customer name is required", "warning");
+      return;
+    }
+    const payload = {
+      name: draft.name.trim(),
+      company: draft.company.trim(),
+      email: draft.email.trim().toLowerCase(),
+      phone: draft.phone.trim(),
+      line: draft.line.trim(),
+      tags: draft.tags.split(",").map((tag) => tag.trim()).filter(Boolean),
+      notes: draft.notes.trim()
+    };
+    setBusy("save");
+    try {
+      if (editingId) {
+        const updated = await updateCustomer(editingId, payload);
+        addToast(updated ? `${payload.name} updated` : `${payload.name} saved locally`, updated ? "success" : "warning");
+      } else {
+        const created = await createCustomer({ ...payload, source: "Manual" });
+        addToast(`${created.name} added to customers`, "success");
+      }
+      setDraft(emptyDraft);
+      setEditingId("");
+    } catch (error) {
+      addToast(error instanceof ApiError && error.status === 409 ? "A customer with this email already exists" : "Customer could not be saved", "warning");
+    }
+    setBusy("");
+  };
+  const startEdit = (customer: Customer) => {
+    setEditingId(customer.id);
+    setDraft({ name: customer.name || "", company: customer.company || "", email: customer.email || "", phone: customer.phone || "", line: customer.line || "", tags: (customer.tags || []).join(", "), notes: customer.notes || "" });
+  };
+  const removeCustomer = async (customer: Customer) => {
+    if (!window.confirm(`Delete ${customer.name}? Linked quotes and orders are kept.`)) return;
+    setBusy(`delete-${customer.id}`);
+    const removed = await deleteCustomer(customer.id);
+    setBusy("");
+    if (selectedId === customer.id) setSelectedId("");
+    if (editingId === customer.id) {
+      setEditingId("");
+      setDraft(emptyDraft);
+    }
+    addToast(removed ? `${customer.name} deleted` : `${customer.name} removed locally`, removed ? "success" : "warning");
+  };
+  return (
+    <Page title="Customers" kicker="Customer directory, quote history, and order value">
+      <div className="metric-grid">
+        <Metric label="Customers" value={`${customers.length}`} icon={Contact} tone="teal" />
+        <Metric label="New this month" value={`${customers.filter((customer) => customer.createdAt && new Date(customer.createdAt).getTime() >= monthAgo).length}`} icon={Sparkles} tone="orange" />
+        <Metric label="Open quotes" value={`${quoteRequests.filter((quote) => openQuoteStatuses.has(quote.status)).length}`} icon={FilePlus2} />
+        <Metric label="With orders" value={`${customers.filter((customer) => linkedOrders(customer).length > 0).length}`} icon={ShoppingBag} tone="green" />
+      </div>
+      <div className="split">
+        <section className="panel">
+          <PanelTitle title={editingId ? "Edit customer" : "Add customer"} action={<button className="primary" onClick={saveDraft} disabled={busy === "save"}><Save size={16} />{busy === "save" ? "Saving" : editingId ? "Update customer" : "Save customer"}</button>} />
+          <div className="settings-grid">
+            <label>Name<input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} /></label>
+            <label>Company<input value={draft.company} onChange={(event) => setDraft((current) => ({ ...current, company: event.target.value }))} /></label>
+            <label>Email<input type="email" value={draft.email} onChange={(event) => setDraft((current) => ({ ...current, email: event.target.value }))} /></label>
+            <label>Phone<input value={draft.phone} onChange={(event) => setDraft((current) => ({ ...current, phone: event.target.value }))} /></label>
+            <label>LINE ID<input value={draft.line} onChange={(event) => setDraft((current) => ({ ...current, line: event.target.value }))} /></label>
+            <label>Tags<input value={draft.tags} onChange={(event) => setDraft((current) => ({ ...current, tags: event.target.value }))} placeholder="vip, school, print-farm" /></label>
+          </div>
+          <label>Notes<textarea value={draft.notes} onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))} /></label>
+          {editingId && <button onClick={() => { setEditingId(""); setDraft(emptyDraft); }}>Cancel edit</button>}
+          <p className="muted">Website quote requests create or update customers automatically by email.</p>
+        </section>
+        <section className="panel">
+          {selected ? (
+            <>
+              <PanelTitle title={selected.name} action={<button onClick={() => setSelectedId("")}><X size={14} />Close</button>} />
+              <p className="muted">{[selected.company, selected.email, selected.phone, selected.line ? `LINE: ${selected.line}` : ""].filter(Boolean).join(" - ") || "No contact details"}</p>
+              {selected.tags?.length ? <p className="muted">Tags: {selected.tags.join(", ")}</p> : null}
+              {selected.notes && <p>{selected.notes}</p>}
+              <PanelTitle title={`Quotes (${linkedQuotes(selected).length})`} />
+              <div className="event-feed">
+                {linkedQuotes(selected).slice(0, 6).map((quote) => <div key={quote.id}><StatusDot status={quote.status === "converted" ? "complete" : "queued"} /><span>{quote.project}</span><em>{quote.status} - {quote.material} x{quote.quantity}{quote.quotedValue ? ` - $${quote.quotedValue}` : ""}</em></div>)}
+                {!linkedQuotes(selected).length && <div><StatusDot status="queued" /><span>No quotes yet</span><em>Website submissions match this customer by email</em></div>}
+              </div>
+              <PanelTitle title={`Orders (${linkedOrders(selected).length})`} />
+              <div className="event-feed">
+                {linkedOrders(selected).slice(0, 6).map((order) => <div key={order.id}><StatusDot status={order.status === "completed" ? "complete" : "queued"} /><span>{order.id}</span><em>{order.items.join(", ")} - {order.status} - ${order.value}</em></div>)}
+                {!linkedOrders(selected).length && <div><StatusDot status="queued" /><span>No orders yet</span><em>Convert a quote to create the first order</em></div>}
+              </div>
+            </>
+          ) : (
+            <>
+              <PanelTitle title="Customer detail" />
+              <p className="muted">Select a customer from the list to see linked quotes, orders, and order value.</p>
+            </>
+          )}
+        </section>
+      </div>
+      <section className="panel">
+        <PanelTitle title="Directory" action={<input className="customer-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name, email, tag" />} />
+        <DataTable headers={["Customer", "Contact", "Tags", "Quotes", "Orders", "Value", "Last activity", "Actions"]}>
+          {filtered.map((customer) => {
+            const quotes = linkedQuotes(customer);
+            const linked = linkedOrders(customer);
+            return (
+              <tr key={customer.id}>
+                <td><b>{customer.name}</b><small>{customer.company || customer.source || ""}</small></td>
+                <td>{customer.email || "-"}<small>{[customer.phone, customer.line ? `LINE: ${customer.line}` : ""].filter(Boolean).join(" - ")}</small></td>
+                <td>{(customer.tags || []).join(", ") || "-"}</td>
+                <td>{quotes.length}</td>
+                <td>{linked.length}</td>
+                <td>${linked.reduce((sum, order) => sum + (order.value || 0), 0)}</td>
+                <td>{(customer.lastActivityAt || customer.updatedAt || "").slice(0, 10) || "-"}</td>
+                <td><button onClick={() => setSelectedId(customer.id)}>View</button><button onClick={() => startEdit(customer)}>Edit</button><button onClick={() => removeCustomer(customer)} disabled={busy === `delete-${customer.id}`}><Trash2 size={14} />{busy === `delete-${customer.id}` ? "Deleting" : "Delete"}</button></td>
+              </tr>
+            );
+          })}
+        </DataTable>
+        {!customers.length && <p className="muted">No customers yet. Website quote requests create customers automatically.</p>}
+        {customers.length > 0 && !filtered.length && <p className="muted">No customers match this search.</p>}
       </section>
     </Page>
   );
@@ -5742,44 +6720,6 @@ function SettingsPage({ settings, setSettings, addToast, setBackendStatus, curre
       addToast("Two-factor disable failed. Check password and code.", "warning");
     }
   };
-  const changePlan = async (planId: string) => {
-    const payload = { planId };
-    const attemptKey = "billing-plan";
-    try {
-      const result = await apiRequest<{ settings: WorkspaceSettings; billing: BillingSummary }>("/api/billing/plan", {
-        method: "PATCH",
-        headers: idempotencyHeaders(attemptKey, payload),
-        body: JSON.stringify(payload)
-      });
-      setSettings(result.settings);
-      setBilling(result.billing);
-      setBackendStatus("connected");
-      addToast(`${result.billing.plan.name} plan activated`, "success");
-      delete governanceIdempotencyAttempts.current[attemptKey];
-    } catch {
-      setBackendStatus("local");
-      addToast("Plan change requires owner/admin access and live API", "warning");
-    }
-  };
-  const managePlan = async () => {
-    const payload = { returnUrl: window.location.href };
-    const attemptKey = "billing-portal";
-    try {
-      const result = await apiRequest<{ session: { mode: string; url: string }; billing: BillingSummary }>("/api/billing/portal", {
-        method: "POST",
-        headers: idempotencyHeaders(attemptKey, payload),
-        body: JSON.stringify(payload)
-      });
-      setBilling(result.billing);
-      setBackendStatus("connected");
-      if (result.session.url.startsWith("http")) window.open(result.session.url, "_blank", "noopener,noreferrer");
-      addToast(result.session.mode === "stripe" ? "Stripe billing opened" : result.session.mode === "external" ? "Billing portal opened" : "Billing session created", "success");
-      delete governanceIdempotencyAttempts.current[attemptKey];
-    } catch {
-      setBackendStatus("local");
-      addToast("Billing session could not be created", "warning");
-    }
-  };
   const updateOnboardingStep = async (step: OnboardingStep, status: OnboardingStep["status"]) => {
     const payload = { id: step.id, status, note: step.note || "" };
     const attemptKey = `onboarding:${step.id}`;
@@ -5819,24 +6759,17 @@ function SettingsPage({ settings, setSettings, addToast, setBackendStatus, curre
     }
   };
   const storage = billing?.storage || { used: "0 B", usedGb: 0, limitGb: settings.storageLimitGb, percent: 0, files: 0, storedFiles: 0, usedBytes: 0 };
-  const currentPlanId = billing?.plan.id || "";
   const adminTwoFactorRequired = settings.requireAdmin2fa && (currentUser?.role === "Owner" || currentUser?.role === "Admin") && !currentUser?.twoFactor?.enabled;
   return (
-    <Page title="Settings" kicker="Organization, billing, storage, units and security">
+    <Page title="Settings" kicker="Organization, storage, units and security">
       {adminTwoFactorRequired && <div className="notice warning"><Shield size={18} /><span>Production admin access requires two-factor authentication. Set up 2FA to unlock protected workspace APIs.</span></div>}
       <div className="settings-grid">
         <section className="panel"><PanelTitle title="Organization" /><label>Name<input value={settings.organizationName} onChange={(event) => setSettings({ ...settings, organizationName: event.target.value })} /></label><label>Default location<input value={settings.defaultLocation} onChange={(event) => setSettings({ ...settings, defaultLocation: event.target.value })} /></label><button onClick={() => saveSettings({ organizationName: settings.organizationName, defaultLocation: settings.defaultLocation }, "Organization settings")}>Save</button></section>
         <section className="panel">
-          <PanelTitle title="Plan and storage" action={<button onClick={refreshBilling}><RefreshCw size={16} />Refresh</button>} />
-          <div className="plan-row"><b>{billing?.plan.name || settings.plan}</b><span>{storage.limitGb} GB included</span></div>
+          <PanelTitle title="Storage" action={<button onClick={refreshBilling}><RefreshCw size={16} />Refresh</button>} />
           <div className="progress"><span style={{ width: `${storage.percent}%` }} /></div>
-          <p>{storage.used} of {storage.limitGb} GB used across {storage.files} files</p>
-          <label>Plan<select value={currentPlanId} onChange={(event) => event.target.value && changePlan(event.target.value)}>
-            <option value={currentPlanId}>{billing?.plan.name || settings.plan}</option>
-            {(billing?.tiers || []).map((tier) => <option key={tier.id} value={tier.id}>{tier.name} - {tier.monthlyPrice ? `$${tier.monthlyPrice}/mo` : "Trial"} - {tier.storageLimitGb} GB</option>)}
-          </select></label>
-          <div className="quickbar"><button onClick={managePlan}>Manage plan</button><button onClick={() => exportWorkspace()}><Download size={16} />Export backup</button><button onClick={() => exportWorkspace(true)}><Download size={16} />Export full backup</button></div>
-          {billing?.invoices.length ? <div className="event-feed billing-feed">{billing.invoices.slice(0, 3).map((invoice) => <div key={invoice.id}><StatusDot status={invoice.status === "paid" ? "complete" : "queued"} /><span>{invoice.plan} - {invoice.currency} {invoice.amount}</span><em>{invoice.status} - {invoice.at.slice(0, 10)}</em></div>)}</div> : <p className="muted">No billing records yet.</p>}
+          <p>{storage.used} used across {storage.files} files</p>
+          <div className="quickbar"><button onClick={() => exportWorkspace()}><Download size={16} />Export backup</button><button onClick={() => exportWorkspace(true)}><Download size={16} />Export full backup</button></div>
         </section>
         <section className="panel">
           <PanelTitle title="Go-live readiness" action={<strong>{onboarding?.progress.percent ?? 0}%</strong>} />

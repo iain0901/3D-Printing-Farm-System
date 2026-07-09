@@ -132,8 +132,11 @@ export const seedData = {
     { id: "ord-1048", source: "Shopify", customer: "M. Rivera", items: ["DUCT-KIT-BLK x2"], status: "queued", due: "Jun 14", value: 1360 },
     { id: "ord-1049", source: "Etsy", customer: "A. Wood", items: ["CAM-MOUNT-ORG x1"], status: "received", due: "Jun 15", value: 420 }
   ],
+  customers: [
+    { id: "cus-demo-1", name: "Jamie Park", company: "Prototype Studio", email: "jamie@example.com", phone: "+886 912 345 678", line: "", tags: ["quote-intake"], notes: "Repeat prototype customer, prefers PETG.", source: "Website", lastActivityAt: "" }
+  ],
   quoteRequests: [
-    { id: "qr-demo-1", customer: "Jamie Park", email: "jamie@example.com", company: "Prototype Studio", project: "PETG enclosure prototype", material: "PETG", quantity: 4, due: "Next Friday", budget: 520, notes: "Needs threaded inserts after printing", fileName: "enclosure-v2.step", source: "Website", status: "new", priority: "Normal", quotedValue: 0 }
+    { id: "qr-demo-1", customerId: "cus-demo-1", customer: "Jamie Park", email: "jamie@example.com", company: "Prototype Studio", project: "PETG enclosure prototype", material: "PETG", quantity: 4, due: "Next Friday", budget: 520, notes: "Needs threaded inserts after printing", fileName: "enclosure-v2.step", source: "Website", status: "new", priority: "Normal", quotedValue: 0, process: "FDM", color: "Black", quality: "Standard", layerHeight: "0.20 mm", infill: 30, walls: 3, support: "Auto", postProcessing: ["Heat-set inserts x4"], inserts: 4, inspection: "Photo confirmation", rush: false, useCase: "functional", formMode: "expert" }
   ],
   profiles: [
     { id: "prof-1", name: "CoreXY Pro 300", kind: "Machine", target: "Forge A1", source: "Manual", updated: "Today" },

@@ -50,6 +50,13 @@ export async function runWorkerCycle(database, config = {}) {
     telemetry: { skipped: true },
     bridgePolling: { skipped: true }
   };
+  if (config.reloadBeforeCycle !== false) {
+    // The API process writes the same document; reload before mutating so this
+    // cycle's full-document write does not clobber writes made since the last cycle.
+    const previous = database.data;
+    await database.read();
+    database.data ||= previous;
+  }
   if (config.telemetryEnabled !== false) {
     result.telemetry = await runTelemetryTick(database, { increment: config.telemetryIncrement ?? 2 });
   }

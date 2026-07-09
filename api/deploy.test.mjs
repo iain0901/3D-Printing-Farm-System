@@ -37,7 +37,7 @@ describe("3DSTU FarmFlow deployment packaging", () => {
     const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
     expect(compose).toContain("name: layerpilot");
     expect(compose).toContain("layerpilot-data:/data");
-    expect(compose).toContain("${LAYERPILOT_BIND_ADDRESS:-127.0.0.1}:8797:8797");
+    expect(compose).toContain("${LAYERPILOT_BIND_ADDRESS:-127.0.0.1}:${LAYERPILOT_HOST_PORT:-8797}:8797");
     expect(compose).toContain("init: true");
     expect(compose).toContain("stop_grace_period: 30s");
     expect(compose).toContain("no-new-privileges:true");
@@ -73,6 +73,30 @@ describe("3DSTU FarmFlow deployment packaging", () => {
     expect(envExample).toContain("LAYERPILOT_PRE_RESTORE_BACKUP=true");
     expect(envExample).toContain("LAYERPILOT_DEPLOY_LOCK_DIR=/tmp/layerpilot-deploy.lock");
     expect(packageJson.scripts["package:ubuntu"]).toBe("node scripts/package-ubuntu.mjs package");
+  });
+
+  it("provisions isolated single-tenant customer environments", async () => {
+    const compose = await readFile(new URL("../docker-compose.yml", import.meta.url), "utf8");
+    const envExample = await readFile(new URL("../.env.example", import.meta.url), "utf8");
+    const provision = await readFile(new URL("../scripts/provision-tenant.sh", import.meta.url), "utf8");
+    // Compose identity is parametrized so several customers can share one host.
+    expect(compose).toContain("container_name: ${LAYERPILOT_CONTAINER_NAME:-layerpilot}");
+    expect(compose).toContain("container_name: ${LAYERPILOT_CONTAINER_NAME:-layerpilot}-worker");
+    expect(compose).toContain("${LAYERPILOT_HOST_PORT:-8797}:8797");
+    expect(envExample).toContain("LAYERPILOT_HOST_PORT=8797");
+    expect(envExample).toContain("COMPOSE_PROJECT_NAME=layerpilot");
+    expect(envExample).toContain("LAYERPILOT_CONTAINER_NAME=layerpilot");
+    // Provisioning script surface and single-tenant hardening defaults.
+    expect(provision).toContain("--slug");
+    expect(provision).toContain("--admin-email");
+    expect(provision).toContain("--domain");
+    expect(provision).toContain("--dry-run");
+    expect(provision).toContain("random_secret");
+    expect(provision).toContain("COMPOSE_PROJECT_NAME");
+    expect(provision).toContain('write_env_line "LAYERPILOT_DISABLE_DEFAULT_USERS" "true"');
+    expect(provision).toContain('write_env_line "LAYERPILOT_DISABLE_DEMO_LOGIN" "true"');
+    expect(provision).toContain("already exists. Use --force");
+    expect(provision).toContain("DNS-safe");
   });
 
   it("ships Ubuntu deployment helpers and reverse-proxy documentation", async () => {

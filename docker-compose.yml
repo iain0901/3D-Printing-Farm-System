@@ -5,7 +5,7 @@ services:
     build:
       context: .
     image: layerpilot:local
-    container_name: layerpilot
+    container_name: ${LAYERPILOT_CONTAINER_NAME:-layerpilot}
     init: true
     restart: unless-stopped
     stop_grace_period: 30s
@@ -60,7 +60,7 @@ services:
       LAYERPILOT_ENABLE_INTERNAL_TELEMETRY: "false"
       LAYERPILOT_ENABLE_INTERNAL_BRIDGE_POLLING: "false"
     ports:
-      - "${LAYERPILOT_BIND_ADDRESS:-127.0.0.1}:8797:8797"
+      - "${LAYERPILOT_BIND_ADDRESS:-127.0.0.1}:${LAYERPILOT_HOST_PORT:-8797}:8797"
     volumes:
       - layerpilot-data:/data
     healthcheck:
@@ -72,7 +72,7 @@ services:
 
   layerpilot-worker:
     image: layerpilot:local
-    container_name: layerpilot-worker
+    container_name: ${LAYERPILOT_CONTAINER_NAME:-layerpilot}-worker
     init: true
     healthcheck:
       disable: true

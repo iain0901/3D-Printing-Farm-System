@@ -34,7 +34,6 @@ Set real values for:
 - `LAYERPILOT_METRICS_TOKEN`
 - `LAYERPILOT_PUBLIC_URL`
 - `LAYERPILOT_CORS_ORIGINS`, only when an additional browser origin needs to call the API
-- `LAYERPILOT_ENABLE_PUBLIC_SIGNUP=false` unless self-service tenant registration is intentional
 - `LAYERPILOT_SESSION_TTL_HOURS`, defaults to `168`
 - `LAYERPILOT_SESSION_IDLE_TIMEOUT_HOURS`, defaults to `24`
 - `LAYERPILOT_AUTH_LOCK_THRESHOLD`, defaults to `5`
@@ -52,7 +51,8 @@ For customer production, also set:
 
 - `LAYERPILOT_DISABLE_DEFAULT_USERS=true`
 - `LAYERPILOT_DISABLE_DEMO_LOGIN=true`
-- leave `LAYERPILOT_ENABLE_PUBLIC_SIGNUP=false` unless the public signup route should create new Owner workspaces
+
+There is no self-service signup route; each customer gets its own environment. Use `scripts/provision-tenant.sh --slug <name> --admin-email <email>` to scaffold a new isolated customer deployment with a generated bootstrap Owner.
 
 ## Ubuntu VPS
 

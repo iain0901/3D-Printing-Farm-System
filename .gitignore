@@ -19,3 +19,4 @@ layerpilot-support-*
 layerpilot-data-*
 layerpilot-pre-restore-*
 *.tsbuildinfo
+tenants/
