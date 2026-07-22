@@ -40,6 +40,7 @@
 - v0.1.18: The public website quote lookup now exposes customer approval and rejection controls, completing the customer-facing quote decision loop from UI to API.
 - v0.1.19: Operators can generate, copy, and rotate customer quote portal links; public quote URLs can preload tracking credentials for direct customer review.
 - v0.1.20: Quote validity windows add operator-set expiration dates, customer-visible validity messaging, and expired-quote approval protection in the public portal.
+- v0.1.21: Customer quote revision requests let buyers ask for changes from the portal, return quotes to operator review, preserve customer notes, and avoid premature order conversion.
 
 ## Definition Of Done For A Real Release
 

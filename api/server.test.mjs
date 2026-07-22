@@ -2143,6 +2143,48 @@ endsolid s3_store`;
     });
   });
 
+  it("lets customers request quote changes without converting the order", async () => {
+    await withApp(async ({ app, dbPath }) => {
+      const quote = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        payload: {
+          customer: "Revision Buyer",
+          email: "revision@example.com",
+          project: "Fixture revision",
+          material: "PETG",
+          quantity: 2,
+          due: "2026-07-24",
+          budget: 140,
+          notes: "Needs operator review"
+        }
+      });
+      expect(quote.statusCode).toBe(201);
+      const { id, accessToken } = quote.json().quoteRequest;
+      const token = await login(app);
+      const quoted = await app.inject({
+        method: "PATCH",
+        url: `/api/quoteRequests/${id}`,
+        headers: auth(token),
+        payload: { status: "quoted", quotedValue: 128, validUntil: "2026-08-01" }
+      });
+      expect(quoted.statusCode).toBe(200);
+
+      const revision = await app.inject({
+        method: "POST",
+        url: `/api/public/quoteRequests/${id}/decision`,
+        payload: { token: accessToken, decision: "revision", note: "Please quote a black PETG version instead." }
+      });
+      expect(revision.statusCode).toBe(200);
+      expect(revision.json().quoteRequest).toMatchObject({ id, status: "reviewing", customerDecision: "revision", customerDecisionNote: "Please quote a black PETG version instead.", orderId: "" });
+
+      const persisted = JSON.parse(await readFile(dbPath, "utf8"));
+      expect(persisted.quoteRequests.find((item) => item.id === id)).toMatchObject({ status: "reviewing", customerDecision: "revision" });
+      expect(persisted.orders.some((order) => order.quoteRequestId === id)).toBe(false);
+      expect(persisted.events.some((event) => event.type === "quote_request.revision_requested" && event.data.quoteRequestId === id)).toBe(true);
+    });
+  });
+
   it("stores uploaded model files from public quote requests", async () => {
     await withApp(async ({ app, dbPath }) => {
       const boundary = "----layerpilot-quote-upload";

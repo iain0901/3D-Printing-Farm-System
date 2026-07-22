@@ -232,8 +232,8 @@ type SKU = { id: string; sku: string; title: string; parts: string[]; variants: 
 type ProductionTemplate = { id: string; name: string; sku?: string; fileId: string; material: string; color: string; priority: QueueItem["priority"]; stage: TaskStage; printerId?: string; process: string; dueOffsetDays: number; quantity: number; time: string; cost: number; notes?: string; runCount?: number; lastRunAt?: string; createdAt?: string; updatedAt?: string };
 type ProductionTemplateRunResult = { template: ProductionTemplate; jobs: QueueItem[]; dryRun: boolean; queue: QueueItem[]; todos: Todo[] };
 type Order = { id: string; source: "Shopify" | "Etsy" | "Manual" | "eBay"; externalId?: string; customer: string; items: string[]; status: "received" | "queued" | "printing" | "packed" | "shipped"; due: string; value: number };
-type QuoteRequest = { id: string; customer: string; email: string; company?: string; project: string; material: string; quantity: number; due: string; budget: number; notes?: string; fileName?: string; fileId?: string; fileType?: string; fileSize?: string; estimatedGrams?: number; estimatedMinutes?: number; estimatedQuote?: number; source: string; status: "new" | "reviewing" | "quoted" | "accepted" | "converted" | "rejected"; priority: QueueItem["priority"]; quotedValue?: number; validUntil?: string; internalNote?: string; orderId?: string; customerAccessToken?: string; portalLinkGeneratedAt?: string; createdAt?: string; updatedAt?: string };
-type PublicQuoteStatus = Pick<QuoteRequest, "id" | "status" | "project" | "material" | "quantity" | "due" | "budget" | "quotedValue" | "validUntil" | "fileName" | "fileType" | "fileSize" | "estimatedGrams" | "estimatedMinutes" | "estimatedQuote" | "orderId" | "createdAt" | "updatedAt"> & { customerDecision?: string; customerDecisionAt?: string };
+type QuoteRequest = { id: string; customer: string; email: string; company?: string; project: string; material: string; quantity: number; due: string; budget: number; notes?: string; fileName?: string; fileId?: string; fileType?: string; fileSize?: string; estimatedGrams?: number; estimatedMinutes?: number; estimatedQuote?: number; source: string; status: "new" | "reviewing" | "quoted" | "accepted" | "converted" | "rejected"; priority: QueueItem["priority"]; quotedValue?: number; validUntil?: string; internalNote?: string; orderId?: string; customerDecision?: string; customerDecisionNote?: string; customerAccessToken?: string; portalLinkGeneratedAt?: string; createdAt?: string; updatedAt?: string };
+type PublicQuoteStatus = Pick<QuoteRequest, "id" | "status" | "project" | "material" | "quantity" | "due" | "budget" | "quotedValue" | "validUntil" | "fileName" | "fileType" | "fileSize" | "estimatedGrams" | "estimatedMinutes" | "estimatedQuote" | "orderId" | "createdAt" | "updatedAt"> & { customerDecision?: string; customerDecisionAt?: string; customerDecisionNote?: string };
 type OrderJobGenerationResult = { order: Order; jobs: QueueItem[]; existingJobs?: QueueItem[]; missing?: Array<{ item: string; reason: string }>; skus?: SKU[]; todos?: Todo[]; dryRun?: boolean; duplicateBlocked?: boolean; stockChanges?: Array<{ sku: string; before: number; after: number; quantity: number }> };
 type CommerceConnector = { id: string; name: string; source: Order["source"] | "Generic"; url: string; enabled: boolean; hasToken?: boolean; lastStatus?: string; lastStatusCode?: number; lastError?: string; lastSyncAt?: string };
 type CommerceImport = { id: string; source: string; connectorId?: string; connectorName?: string; status: string; created: number; skipped: number; at: string; error?: string };
@@ -932,10 +932,12 @@ const zhTwTranslations: Record<string, string> = {
   "Quote request ID": "詢價單 ID",
   "Quote status lookup": "詢價狀態查詢",
   "Quote valid until": "報價有效至",
+  "Requesting quote changes...": "正在送出修改要求...",
   "Tracking token": "追蹤權杖",
   "Check status": "查詢狀態",
   "Approve quote": "接受報價",
   "Reject quote": "拒絕報價",
+  "Request changes": "要求修改",
   "Save the returned tracking token to check quote status after the operator reviews it.": "請保存回傳的追蹤權杖，操作員審核後可查詢詢價狀態。",
   "Quoting": "報價中",
   "Accept / order": "接受 / 轉訂單",
@@ -3175,22 +3177,22 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
       setQuoteLookupStatus("Quote status could not be loaded. Check the ID and tracking token.");
     }
   };
-  const decideQuote = async (decision: "accepted" | "rejected") => {
+  const decideQuote = async (decision: "accepted" | "rejected" | "revision") => {
     if (!quoteLookup.id.trim() || !quoteLookup.token.trim()) {
       setQuoteLookupStatus("Add the quote request ID and tracking token first.");
       return;
     }
-    setQuoteLookupStatus(decision === "accepted" ? "Approving quote..." : "Rejecting quote...");
+    setQuoteLookupStatus(decision === "accepted" ? "Approving quote..." : decision === "rejected" ? "Rejecting quote..." : "Requesting quote changes...");
     try {
       const response = await fetch(`${API_BASE}/api/public/quoteRequests/${encodeURIComponent(quoteLookup.id.trim())}/decision`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: quoteLookup.token.trim(), decision })
+        body: JSON.stringify({ token: quoteLookup.token.trim(), decision, note: decision === "revision" ? "Customer requested changes from the quote portal." : "" })
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result?.error || "Quote decision failed");
       setQuoteLookupResult(result.quoteRequest);
-      setQuoteLookupStatus(decision === "accepted" ? `${result.quoteRequest.id}: approved and converted to ${result.order?.id || "an order"}.` : `${result.quoteRequest.id}: rejected.`);
+      setQuoteLookupStatus(decision === "accepted" ? `${result.quoteRequest.id}: approved and converted to ${result.order?.id || "an order"}.` : decision === "revision" ? `${result.quoteRequest.id}: changes requested. The operator will review it again.` : `${result.quoteRequest.id}: rejected.`);
     } catch {
       setQuoteLookupStatus("Quote decision could not be saved. Check the ID and tracking token.");
     }
@@ -3429,7 +3431,7 @@ function MarketingSite({ onOpenApp }: { onOpenApp: () => void }) {
             <label>Tracking token<input value={quoteLookup.token} onChange={(event) => setQuoteLookup((draft) => ({ ...draft, token: event.target.value }))} /></label>
             <button className="primary" onClick={checkQuoteStatus}>Check status</button>
             {quoteLookupResult?.validUntil && <p className="quote-status wide">Quote valid until {quoteLookupResult.validUntil}</p>}
-            {quoteLookupResult?.status === "quoted" && <div className="quote-actions wide"><button className="primary" onClick={() => decideQuote("accepted")}>Approve quote</button><button onClick={() => decideQuote("rejected")}>Reject quote</button></div>}
+            {quoteLookupResult?.status === "quoted" && <div className="quote-actions wide"><button className="primary" onClick={() => decideQuote("accepted")}>Approve quote</button><button onClick={() => decideQuote("revision")}>Request changes</button><button onClick={() => decideQuote("rejected")}>Reject quote</button></div>}
             {quoteLookupStatus && <p className="quote-status wide">{quoteLookupStatus}</p>}
           </div>
         </section>
@@ -3971,7 +3973,7 @@ function OrdersPage({ orders, setOrders, quoteRequests, files, skus, commerceCon
         <DataTable headers={["Request", "Customer", "Material", "Qty", "Due", "Budget", "Status", "Actions"]}>
           {quoteRequests.map((quote) => {
             const attachment = quoteAttachment(quote);
-            return <tr key={quote.id}><td><b>{quote.project}</b><small>{quote.fileName || "No file attached"}{quote.fileSize ? ` - ${quote.fileSize}` : ""}{quote.estimatedGrams ? ` - ${quote.estimatedGrams}g estimate` : ""}</small><small>{quote.notes || "No notes"}</small>{attachment && <button onClick={() => downloadFile(attachment)}><Download size={14} />Download model</button>}</td><td>{quote.customer}<small>{quote.email}{quote.company ? ` - ${quote.company}` : ""}</small></td><td>{quote.material}</td><td>{quote.quantity}</td><td>{quote.due}<small>{quote.validUntil ? `Quote valid until ${quote.validUntil}` : "No quote expiry"}</small></td><td>${quoteValue(quote)}</td><td><StatusPill status={quote.status} /></td><td><button onClick={() => copyPortalLink(quote)} disabled={busy === `portal-${quote.id}`}>{busy === `portal-${quote.id}` ? "Creating" : "Copy portal link"}</button><button onClick={() => copyPortalLink(quote, true)} disabled={busy === `rotate-${quote.id}`}>{busy === `rotate-${quote.id}` ? "Rotating" : "Rotate link"}</button><button onClick={() => markQuoted(quote)} disabled={busy === `quote-${quote.id}` || quote.status === "converted"}>{busy === `quote-${quote.id}` ? "Quoting" : "Mark quoted"}</button><button className="primary" onClick={() => acceptQuote(quote)} disabled={busy === `convert-${quote.id}` || quote.status === "converted"}>{busy === `convert-${quote.id}` ? "Converting" : "Accept / order"}</button></td></tr>;
+            return <tr key={quote.id}><td><b>{quote.project}</b><small>{quote.fileName || "No file attached"}{quote.fileSize ? ` - ${quote.fileSize}` : ""}{quote.estimatedGrams ? ` - ${quote.estimatedGrams}g estimate` : ""}</small><small>{quote.customerDecisionNote || quote.notes || "No notes"}</small>{attachment && <button onClick={() => downloadFile(attachment)}><Download size={14} />Download model</button>}</td><td>{quote.customer}<small>{quote.email}{quote.company ? ` - ${quote.company}` : ""}</small></td><td>{quote.material}</td><td>{quote.quantity}</td><td>{quote.due}<small>{quote.validUntil ? `Quote valid until ${quote.validUntil}` : "No quote expiry"}</small></td><td>${quoteValue(quote)}</td><td><StatusPill status={quote.status} /></td><td><button onClick={() => copyPortalLink(quote)} disabled={busy === `portal-${quote.id}`}>{busy === `portal-${quote.id}` ? "Creating" : "Copy portal link"}</button><button onClick={() => copyPortalLink(quote, true)} disabled={busy === `rotate-${quote.id}`}>{busy === `rotate-${quote.id}` ? "Rotating" : "Rotate link"}</button><button onClick={() => markQuoted(quote)} disabled={busy === `quote-${quote.id}` || quote.status === "converted"}>{busy === `quote-${quote.id}` ? "Quoting" : "Mark quoted"}</button><button className="primary" onClick={() => acceptQuote(quote)} disabled={busy === `convert-${quote.id}` || quote.status === "converted"}>{busy === `convert-${quote.id}` ? "Converting" : "Accept / order"}</button></td></tr>;
           })}
         </DataTable>
         {!quoteRequests.length && <p className="muted">No quote requests yet. Website submissions will appear here.</p>}

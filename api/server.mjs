@@ -274,7 +274,7 @@ const quoteCustomerLinkSchema = z.object({
 }).default({});
 const publicQuoteDecisionSchema = z.object({
   token: z.string().min(12),
-  decision: z.enum(["accepted", "rejected"]),
+  decision: z.enum(["accepted", "rejected", "revision"]),
   note: z.string().max(1000).optional().default("")
 });
 const commerceConnectorSchema = z.object({
@@ -3624,6 +3624,7 @@ function publicQuoteSummary(quote) {
     orderId: quote.orderId || "",
     customerDecision: quote.customerDecision || "",
     customerDecisionAt: quote.customerDecisionAt || "",
+    customerDecisionNote: quote.customerDecisionNote || "",
     createdAt: quote.createdAt,
     updatedAt: quote.updatedAt
   };
@@ -5131,6 +5132,12 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (parsed.data.decision === "rejected") {
       Object.assign(quote, { status: "rejected", rejectedAt: now });
       await dispatchEvent(database, "quote_request.customer_rejected", `${quote.id} rejected by customer`, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, quoteRequestId: quote.id });
+      await database.write();
+      return { ok: true, quoteRequest: publicQuoteSummary(quote) };
+    }
+    if (parsed.data.decision === "revision") {
+      Object.assign(quote, { status: "reviewing", revisionRequestedAt: now, reviewedBy: quote.email });
+      await dispatchEvent(database, "quote_request.revision_requested", `${quote.id} revision requested by customer`, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, quoteRequestId: quote.id });
       await database.write();
       return { ok: true, quoteRequest: publicQuoteSummary(quote) };
     }
