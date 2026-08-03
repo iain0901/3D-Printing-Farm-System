@@ -40,6 +40,24 @@
           <el-tab-pane label="生產閘門" name="production">
             <el-alert :type="readiness && readiness.allowed ? 'success' : 'warning'" :closable="false" show-icon :title="readiness && readiness.allowed ? '已符合開始列印條件' : '仍有生產條件待完成'" />
             <ul class="checks"><li v-for="(value, key) in readiness && readiness.checks" :key="key"><i :class="value ? 'el-icon-success ok' : 'el-icon-warning-outline waiting'" />{{ readinessLabel(key) }}</li></ul>
+
+            <section class="orca-panel">
+              <div class="orca-heading"><div><h3>OrcaSlicer 切片</h3><p>設定檔由此系統的 `/profiles` 唯讀目錄提供；切片完成後仍需由人員核准 G-code。</p></div><el-tag type="info">Pinned OrcaSlicer</el-tag></div>
+              <el-form label-position="top" class="orca-form">
+                <el-form-item label="來源模型"><el-select v-model="orcaForm.sourceFileId" placeholder="選擇案件模型"><el-option v-for="file in sourceFiles" :key="file.id" :label="file.name" :value="file.id" /></el-select></el-form-item>
+                <el-form-item label="設定檔名稱"><el-input v-model.trim="orcaForm.profileId" placeholder="例如：corexy-pla-020" /></el-form-item>
+                <el-form-item label="印表機 ID"><el-input v-model.trim="orcaForm.printerId" placeholder="選填；預設使用案件印表機" /></el-form-item>
+                <el-form-item label="機台／製程設定"><el-input v-model.trim="orcaForm.settingsPath" placeholder="/profiles/machine.json;/profiles/process.json" /></el-form-item>
+                <el-form-item label="材料設定"><el-input v-model.trim="orcaForm.filamentPath" placeholder="/profiles/PLA.json" /></el-form-item>
+                <el-button type="primary" :loading="orcaSubmitting" :disabled="!orcaForm.sourceFileId || !orcaForm.profileId" @click="queueOrcaSlice">送往 OrcaSlicer</el-button>
+              </el-form>
+              <el-table v-if="selected.slicerJobs && selected.slicerJobs.length" :data="selected.slicerJobs" size="mini" class="orca-jobs">
+                <el-table-column prop="profileId" label="設定檔" min-width="130" />
+                <el-table-column prop="status" label="切片狀態" width="105" />
+                <el-table-column label="預估" width="130"><template slot-scope="{ row }">{{ row.estimatedMinutes || 0 }} 分／{{ row.estimatedGrams || 0 }} g</template></el-table-column>
+                <el-table-column label="核准" width="145"><template slot-scope="{ row }"><el-button v-if="row.status === 'completed' && !row.approvedAt" size="mini" type="success" @click="approveOrcaSlice(row)">核准 G-code</el-button><span v-else>{{ row.approvedAt ? '已核准' : '待完成' }}</span></template></el-table-column>
+              </el-table>
+            </section>
             <el-button type="success" :disabled="!readiness || !readiness.allowed" @click="createProduction">建立 FarmFlow 生產任務</el-button>
 
             <div class="operations-panel">
@@ -88,22 +106,24 @@
 </template>
 
 <script>
-  import { createCaseAfterSales, createCaseProductionJobs, createCaseQuote, confirmCaseSchedule, fetchCase, fetchCases, recordPrintAttempt, recordQualityCheck, suggestCaseScheduleAutomatically, transitionCase, updateCaseDelivery } from '@/api/cases'
+  import { approveCaseSlicerJob, createCaseAfterSales, createCaseOrcaSlice, createCaseProductionJobs, createCaseQuote, confirmCaseSchedule, fetchCase, fetchCases, recordPrintAttempt, recordQualityCheck, suggestCaseScheduleAutomatically, transitionCase, updateCaseDelivery } from '@/api/cases'
   const statuses = [
     ['new', '新案件'], ['under_review', '審核中'], ['supplement_requested', '等待補件'], ['awaiting_customer', '等待客戶回覆'], ['formal_quote_sent', '正式報價已送出'], ['accepted', '客戶已接受'], ['revision_requested', '客戶要求修改'], ['awaiting_payment', '等待付款'], ['paid', '已付款'], ['production_pending', '待生產確認'], ['ready_to_print', '可開始列印'], ['printing', '列印中'], ['quality_check', '品質檢查'], ['ready_for_delivery', '待交付'], ['completed', '已完成'], ['cancelled', '已取消'], ['aftersales', '售後處理'],
   ]
   const quoteForm = () => ({ scope: '', send: true, breakdown: { material: 0, machineTime: 0, setup: 0, modeling: 0, postProcessing: 0, multicolor: 0, packing: 0, shipping: 0, risk: 0, discount: 0, tax: 0 } })
   export default {
     name: 'Cases',
-    data() { return { loading: false, cases: [], query: { search: '', status: '' }, statuses: statuses.map(([value, label]) => ({ value, label })), drawerVisible: false, drawerTab: 'overview', selected: null, readiness: null, targetStatus: '', quoteDialog: false, quoteForm: quoteForm(), savingQuote: false, operations: { startAt: '', printerId: '', estimatedMinutes: 60 } } },
+    data() { return { loading: false, cases: [], query: { search: '', status: '' }, statuses: statuses.map(([value, label]) => ({ value, label })), drawerVisible: false, drawerTab: 'overview', selected: null, sourceFiles: [], readiness: null, targetStatus: '', quoteDialog: false, quoteForm: quoteForm(), savingQuote: false, orcaSubmitting: false, orcaForm: { sourceFileId: '', profileId: '', printerId: '', settingsPath: '', filamentPath: '' }, operations: { startAt: '', printerId: '', estimatedMinutes: 60 } } },
     created() { this.load() },
     methods: {
       async load() { this.loading = true; try { const result = await fetchCases(this.query); this.cases = result.cases || [] } finally { this.loading = false } },
-      async openCase(row) { const result = await fetchCase(row.id); this.selected = result.case; this.readiness = result.readiness; this.targetStatus = ''; this.operations = { startAt: result.case.schedule?.startAt || new Date(Date.now() + 3600000).toISOString(), printerId: result.case.printerId || '', estimatedMinutes: result.case.scheduleSuggestion?.estimatedMinutes || 60 }; this.drawerVisible = true },
-      async refreshSelected() { if (!this.selected) return; const result = await fetchCase(this.selected.id); this.selected = result.case; this.readiness = result.readiness; await this.load() },
+      async openCase(row) { const result = await fetchCase(row.id); this.selected = result.case; this.sourceFiles = result.sourceFiles || []; this.readiness = result.readiness; this.targetStatus = ''; this.orcaForm = { sourceFileId: (result.sourceFiles || [])[0]?.id || '', profileId: '', printerId: result.case.printerId || '', settingsPath: '', filamentPath: '' }; this.operations = { startAt: result.case.schedule?.startAt || new Date(Date.now() + 3600000).toISOString(), printerId: result.case.printerId || '', estimatedMinutes: result.case.scheduleSuggestion?.estimatedMinutes || 60 }; this.drawerVisible = true },
+      async refreshSelected() { if (!this.selected) return; const result = await fetchCase(this.selected.id); this.selected = result.case; this.sourceFiles = result.sourceFiles || []; this.readiness = result.readiness; await this.load() },
       async changeStatus() { try { await transitionCase(this.selected.id, this.targetStatus); this.$baseMessage('案件狀態已更新。', 'success'); await this.refreshSelected() } catch (_) {} },
       async saveQuote() { this.savingQuote = true; try { await createCaseQuote(this.selected.id, this.quoteForm); this.quoteDialog = false; this.quoteForm = quoteForm(); this.$baseMessage('報價版本已建立。', 'success'); await this.refreshSelected() } finally { this.savingQuote = false } },
       async createProduction() { try { const result = await createCaseProductionJobs(this.selected.id); this.$baseMessage(`已建立 ${result.jobs.length} 個生產任務。`, 'success'); await this.refreshSelected() } catch (_) {} },
+      async queueOrcaSlice() { this.orcaSubmitting = true; try { await createCaseOrcaSlice(this.selected.id, this.orcaForm); this.$baseMessage('OrcaSlicer 切片工作已排入獨立 worker。', 'success'); await this.refreshSelected() } finally { this.orcaSubmitting = false } },
+      async approveOrcaSlice(job) { try { await approveCaseSlicerJob(this.selected.id, job.id); this.$baseMessage('G-code 已核准，可繼續生產閘門。', 'success'); await this.refreshSelected() } catch (_) {} },
       async suggestSchedule() { try { const result = await suggestCaseScheduleAutomatically(this.selected.id); this.operations.startAt = result.scheduleSuggestion.suggestedStartAt; this.operations.printerId = result.scheduleSuggestion.suggestedPrinterId; this.operations.estimatedMinutes = result.scheduleSuggestion.estimatedMinutes; this.$baseMessage('系統建議已帶入，請由專員確認', 'success'); await this.refreshSelected() } catch (_) {} },
       async confirmSchedule() { try { await confirmCaseSchedule(this.selected.id, { startAt: this.operations.startAt, printerId: this.operations.printerId, note: `Estimated ${this.operations.estimatedMinutes} minutes` }); this.$baseMessage('排程已由專員確認', 'success'); await this.refreshSelected() } catch (_) {} },
       async recordAttempt(action) { try { const queueJobId = (this.selected.productionJobIds || [])[0] || ''; await recordPrintAttempt(this.selected.id, { action, queueJobId, note: action === 'completed' ? '列印完成' : action === 'failed' ? '列印失敗' : '開始列印' }); this.$baseMessage('列印紀錄已更新', 'success'); await this.refreshSelected() } catch (_) {} },
@@ -124,6 +144,6 @@
   .toolbar { display: flex; gap: 12px; margin-bottom: 18px; } .toolbar .el-input { max-width: 390px; } .toolbar .el-select { width: 160px; }
   .muted { color: #8992a3; font-size: 12px; margin-top: 4px; } .drawer-content { padding: 28px; } .drawer-head { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 18px; } .drawer-head h2 { margin: 3px 0; } .drawer-head p { margin: 4px 0; }
   .case-steps { margin: 22px 0; } .detail-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; } .detail-grid span, .detail-grid b { display: block; } .detail-grid span { color: #8992a3; font-size: 12px; margin-bottom: 4px; } h3 { margin: 22px 0 10px; } .notes { white-space: pre-wrap; color: #4b5563; }
-  .quote-version { display: flex; justify-content: space-between; padding: 15px 0; border-bottom: 1px solid #edf0f5; } .quote-version p { margin: 6px 0 0; color: #667085; } .checks { list-style: none; padding: 0; line-height: 2.1; } .checks i { margin-right: 8px; } .ok { color: #17a673; } .waiting { color: #e6a23c; } .operations-panel { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 18px; padding-top: 16px; border-top: 1px solid #edf0f5; } .operations-panel h3 { flex-basis: 100%; margin: 0 0 3px; } .operations-panel .el-input { width: 260px; } .actions { display: flex; gap: 10px; margin-top: 22px; padding-top: 18px; border-top: 1px solid #edf0f5; } .actions .el-select { width: 210px; }
+  .quote-version { display: flex; justify-content: space-between; padding: 15px 0; border-bottom: 1px solid #edf0f5; } .quote-version p { margin: 6px 0 0; color: #667085; } .checks { list-style: none; padding: 0; line-height: 2.1; } .checks i { margin-right: 8px; } .ok { color: #17a673; } .waiting { color: #e6a23c; } .orca-panel { margin: 20px 0; padding: 18px; border: 1px solid #dbe5f4; border-radius: 8px; background: #f8fbff; } .orca-heading { display: flex; justify-content: space-between; gap: 12px; } .orca-heading h3 { margin: 0; } .orca-heading p { color: #667085; font-size: 12px; line-height: 1.6; margin: 6px 0 14px; } .orca-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; } .orca-form .el-form-item { margin-bottom: 12px; } .orca-form .el-select { width: 100%; } .orca-form .el-button { align-self: end; justify-self: start; margin-bottom: 12px; } .orca-jobs { margin-top: 6px; } .operations-panel { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 18px; padding-top: 16px; border-top: 1px solid #edf0f5; } .operations-panel h3 { flex-basis: 100%; margin: 0 0 3px; } .operations-panel .el-input { width: 260px; } .actions { display: flex; gap: 10px; margin-top: 22px; padding-top: 18px; border-top: 1px solid #edf0f5; } .actions .el-select { width: 210px; }
   @media (max-width: 680px) { .toolbar { flex-wrap: wrap; } .toolbar .el-input { max-width: none; width: 100%; } .detail-grid { grid-template-columns: 1fr; } }
 </style>

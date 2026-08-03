@@ -51,6 +51,14 @@ export function recordCasePayment(id, data) {
   return request({ url: `/api/cases/${id}/payments`, method: 'post', data })
 }
 
+export function createCaseOrcaSlice(id, data) {
+  return request({ url: `/api/cases/${id}/orca-slice`, method: 'post', data })
+}
+
+export function approveCaseSlicerJob(id, jobId) {
+  return request({ url: `/api/cases/${id}/slicer-jobs/${jobId}/approve`, method: 'post', data: {} })
+}
+
 export function createCaseProductionJobs(id) {
   return request({ url: `/api/cases/${id}/production-jobs`, method: 'post', data: {} })
 }

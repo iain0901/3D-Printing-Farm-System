@@ -461,7 +461,13 @@ export async function registerCaseRoutes(app, options) {
   app.get("/api/cases/:id", async (request, reply) => {
     const caseRecord = findCase(database, request.params.id, request.user.workspaceId || DEFAULT_WORKSPACE_ID);
     if (!caseRecord) return reply.code(404).send({ error: "案件不存在" });
-    return { case: caseRecord, readiness: evaluateReadyToPrint(caseRecord) };
+    const sourceFiles = (caseRecord.fileIds || []).map((fileId) => database.data.files.find((file) => file.id === fileId && inWorkspace(file, caseRecord.workspaceId))).filter(Boolean).map((file) => ({
+      id: file.id,
+      name: file.name,
+      type: file.type,
+      size: file.size || ""
+    }));
+    return { case: caseRecord, readiness: evaluateReadyToPrint(caseRecord), sourceFiles };
   });
 
   app.patch("/api/cases/:id", async (request, reply) => {
@@ -580,6 +586,10 @@ export async function registerCaseRoutes(app, options) {
       filamentPath: z.string().trim().max(500).optional().default("")
     }).safeParse(request.body || {});
     if (!parsed.success) return reply.code(400).send({ error: "OrcaSlicer 工作格式錯誤", issues: parsed.error.issues });
+    const profilePaths = [parsed.data.settingsPath, parsed.data.filamentPath].filter(Boolean).flatMap((value) => value.split(";"));
+    if (profilePaths.some((value) => !value.startsWith("/profiles/") || value.includes(".."))) {
+      return reply.code(400).send({ error: "OrcaSlicer 設定檔必須位於 /profiles 目錄內" });
+    }
     const caseRecord = findCase(database, request.params.id, request.user.workspaceId || DEFAULT_WORKSPACE_ID);
     if (!caseRecord) return reply.code(404).send({ error: "案件不存在" });
     if (!caseRecord.fileIds.includes(parsed.data.sourceFileId)) return reply.code(409).send({ error: "切片來源檔案不屬於此案件" });

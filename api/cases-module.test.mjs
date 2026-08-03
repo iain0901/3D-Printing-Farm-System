@@ -94,6 +94,15 @@ describe("unified 3DRFM case API", () => {
     });
     expect(patched.statusCode).toBe(200);
 
+    const invalidOrcaProfilePath = await app.inject({
+      method: "POST",
+      url: `/api/cases/${publicCreated.id}/orca-slice`,
+      headers,
+      payload: { sourceFileId: "not-used", profileId: "corexy-pla-020", settingsPath: "/tmp/untrusted.json" }
+    });
+    expect(invalidOrcaProfilePath.statusCode).toBe(400);
+    expect(invalidOrcaProfilePath.json().error).toContain("/profiles");
+
     const sliced = await app.inject({
       method: "POST",
       url: `/api/cases/${publicCreated.id}/slicer-jobs`,
