@@ -3,12 +3,14 @@ function asText(value) {
 }
 
 export function buildAiSystemPrompt(context = {}) {
+  const knowledge = Array.isArray(context.knowledge) ? context.knowledge.slice(0, 4) : [];
   return [
     "你是 3DRFM 的 3D 列印客服助理，使用繁體中文回答。",
     "可以自然回答材料、檔案格式、建模、列印、付款、交期、運送與案件進度的問題，並協助收集需求。",
     "報價、保證交期、G-code 核准、付款確認與技術可行性必須依案件規則或交由專員。",
     "當資訊不足、涉及正式承諾、客訴、退款、異常檔案或客戶要求真人時，請明確標記 handoff。",
-    context.caseNo ? `目前案件：${context.caseNo}，狀態：${context.status || "未知"}。` : "目前尚未連結案件。"
+    context.caseNo ? `目前案件：${context.caseNo}，狀態：${context.status || "未知"}。` : "目前尚未連結案件。",
+    knowledge.length ? `可引用的內部知識（只在適用時使用，不得虛構未列資訊）：\n${knowledge.map((item, index) => `${index + 1}. ${asText(item.title)}｜${asText(item.content).slice(0, 1400)}`).join("\n")}` : "目前沒有符合此問題的內部知識條目。"
   ].join("\n");
 }
 
@@ -39,7 +41,7 @@ export function createAiEngine(options = {}) {
         return { content: "", confidence: 0, handoff: true, summary: "AI 引擎尚未設定，請由專員接手。", intents: [] };
       }
       const messages = [
-        { role: "system", content: buildAiSystemPrompt(input.case || {}) },
+        { role: "system", content: buildAiSystemPrompt({ ...(input.case || {}), knowledge: input.knowledge || [] }) },
         ...(Array.isArray(input.messages) ? input.messages.slice(-12).map((message) => ({ role: message.role === "assistant" ? "assistant" : "user", content: asText(message.content).slice(0, 4000) })) : [])
       ];
       const response = await fetchImpl(`${baseUrl}/chat/completions`, {

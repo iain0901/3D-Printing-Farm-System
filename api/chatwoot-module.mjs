@@ -23,7 +23,7 @@ function aiModeFor(settings, inboxId) {
 }
 
 export async function registerChatwootRoutes(app, options) {
-  const { database, aiEngine, chatwootClient, panelSecret } = options;
+  const { database, aiEngine, chatwootClient, panelSecret, knowledgeFor = () => [] } = options;
   const client = chatwootClient || createChatwootClient();
   const engine = aiEngine;
   const panelAllowed = (request) => {
@@ -74,7 +74,8 @@ export async function registerChatwootRoutes(app, options) {
       await database.write();
       return { ok: true, action: "human" };
     }
-    const answer = await engine.answer({ case: caseRecord ? { caseNo: caseRecord.caseNo, status: caseRecord.status } : {}, messages: [{ role: "user", content: context.content }] });
+    const knowledge = knowledgeFor(database.data, context, caseRecord);
+    const answer = await engine.answer({ case: caseRecord ? { caseNo: caseRecord.caseNo, status: caseRecord.status } : {}, knowledge, messages: [{ role: "user", content: context.content }] });
     const action = mode === "draft" || answer.handoff ? "draft" : "auto";
     if (action === "auto" && answer.content) await client.sendMessage(context.conversationId, answer.content);
     addEvent(database, action === "auto" ? "chatwoot.ai_replied" : "chatwoot.ai_drafted", action === "auto" ? "AI sent a Chatwoot reply" : "AI prepared a Chatwoot draft", {
@@ -84,7 +85,8 @@ export async function registerChatwootRoutes(app, options) {
       confidence: answer.confidence,
       handoff: answer.handoff,
       summary: answer.summary,
-      intents: answer.intents
+      intents: answer.intents,
+      knowledgeIds: knowledge.map((item) => item.id)
     }, caseRecord?.workspaceId || DEFAULT_WORKSPACE_ID);
     await database.write();
     return { ok: true, action, answer: action === "draft" ? answer : { confidence: answer.confidence, handoff: false } };

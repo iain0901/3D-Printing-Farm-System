@@ -27,12 +27,13 @@ import { solveScheduleAssignments } from "./schedule-solver.mjs";
 import { seedData } from "./seed.mjs";
 import { registerCaseRoutes } from "./cases-module.mjs";
 import { createAiEngine } from "./ai-engine.mjs";
+import { findRelevantAiKnowledge } from "./ai-knowledge.mjs";
 import { createChatwootClient } from "./chatwoot.mjs";
 import { registerChatwootRoutes } from "./chatwoot-module.mjs";
 
 const execFileAsync = promisify(execFile);
 
-const COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "cases", "caseStatusHistory", "chatwootCaseLinks", "afterSalesCases", "orders", "customers", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns", "coupons"];
+const COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "cases", "caseStatusHistory", "chatwootCaseLinks", "afterSalesCases", "orders", "customers", "profiles", "addons", "aiKnowledge", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns", "coupons"];
 const RESTORABLE_EXTRA_KEYS = ["users", "workspaces", "workspaceSettings", "costCatalog", "costCatalogs", "profileDefaults", "profileMatchingPolicy", "billingSessions", "invoices", "dataMeta"];
 const RESTORABLE_KEYS = [...COLLECTIONS, ...RESTORABLE_EXTRA_KEYS];
 const defaultCostCatalog = {
@@ -84,6 +85,7 @@ const API_KEY_GRANTABLE_SCOPES = [
   "actions:write",
   "admin:export",
   "admin:restore",
+  "ai:write",
   "catalog:write",
   "commerce:write",
   "files:write",
@@ -97,7 +99,7 @@ const API_KEY_GRANTABLE_SCOPES = [
   "webhooks:write"
 ];
 const apiKeyGrantableScopeSet = new Set(API_KEY_GRANTABLE_SCOPES);
-const TENANT_COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "cases", "caseStatusHistory", "chatwootCaseLinks", "afterSalesCases", "orders", "customers", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns", "billingSessions", "invoices", "coupons"];
+const TENANT_COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "cases", "caseStatusHistory", "chatwootCaseLinks", "afterSalesCases", "orders", "customers", "profiles", "addons", "aiKnowledge", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns", "billingSessions", "invoices", "coupons"];
 const printerStatusSchema = z.enum(["idle", "printing", "paused", "offline", "error", "maintenance"]);
 const jobStatusSchema = z.enum(["queued", "printing", "paused", "complete", "failed", "cancelled"]);
 const prioritySchema = z.enum(["Rush", "High", "Normal", "Low"]);
@@ -528,6 +530,14 @@ const addonPatchSchema = z.object({
   config: z.record(z.string(), addonConfigValueSchema).optional(),
   note: z.string().max(500).optional().default("")
 }).refine((value) => value.status !== undefined || value.enabled !== undefined || value.config !== undefined || Boolean(value.note), { message: "Provide status, enabled, config, or note" });
+const aiKnowledgeSchema = z.object({
+  title: z.string().trim().min(1).max(160),
+  content: z.string().trim().min(1).max(6000),
+  category: z.string().trim().min(1).max(80).default("general"),
+  tags: z.array(z.string().trim().min(1).max(80)).max(20).default([]),
+  enabled: z.boolean().default(true)
+});
+const aiKnowledgePatchSchema = aiKnowledgeSchema.partial();
 const skuSchema = z.object({
   sku: z.string().min(1),
   title: z.string().min(1),
@@ -765,7 +775,7 @@ const defaultSeedUserEmails = new Set([
 const rolePermissions = {
   Owner: new Set(["*"]),
   Admin: new Set(["*"]),
-  Operator: new Set(["files:write", "queue:write", "printers:control", "actions:write", "inventory:write", "maintenance:write", "orders:write", "catalog:write", "webhooks:write", "notifications:write", "commerce:write"]),
+  Operator: new Set(["files:write", "queue:write", "printers:control", "actions:write", "inventory:write", "maintenance:write", "orders:write", "catalog:write", "webhooks:write", "notifications:write", "commerce:write", "ai:write"]),
   Student: new Set(["files:write", "queue:write"]),
   Viewer: new Set([])
 };
@@ -1709,6 +1719,7 @@ async function ensureAuthData(database, options = {}) {
   database.data.mqttDeliveries ||= [];
   database.data.commerceConnectors ||= [];
   database.data.commerceImports ||= [];
+  database.data.aiKnowledge ||= [];
   database.data.apiKeys ||= [];
   database.data.slicerJobs ||= [];
   database.data.billingSessions ||= [];
@@ -1954,6 +1965,7 @@ const apiKeyReadScopeRules = [
   { pattern: /^\/api\/(?:webhooks|webhookDeliveries)$/, scopes: ["webhooks:write"] },
   { pattern: /^\/api\/(?:notificationChannels|notificationDeliveries)$/, scopes: ["notifications:write"] },
   { pattern: /^\/api\/(?:commerceConnectors|commerceImports)$/, scopes: ["commerce:write"] },
+  { pattern: /^\/api\/ai-knowledge$/, scopes: ["ai:write"] },
   { pattern: /^\/api\/admin\/restore$/, scopes: ["admin:restore"] }
 ];
 
@@ -2009,6 +2021,7 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "POST" && routePath === "/api/webhooks") return true;
   if (method === "POST" && routePath === "/api/notificationChannels") return true;
   if (method === "POST" && routePath === "/api/commerceConnectors") return true;
+  if (method === "POST" && routePath === "/api/ai-knowledge") return true;
   if (method === "POST" && routePath === "/api/bridges") return true;
   if (method === "POST" && routePath === "/api/public/quoteRequests") return true;
   if (method === "POST" && routePath === "/api/catalog/material-map") return true;
@@ -2029,6 +2042,7 @@ function idempotencyEligibleRoute(method, routePath) {
   if (method === "PATCH" && routePath === "/api/costCatalog") return true;
   if (method === "PATCH" && routePath === "/api/profile-policy") return true;
   if (method === "PATCH" && /^\/api\/addons\/[^/]+$/.test(routePath)) return true;
+  if (method === "PATCH" && /^\/api\/ai-knowledge\/[^/]+$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/webhooks\/[^/]+$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/notificationChannels\/[^/]+$/.test(routePath)) return true;
   if (method === "PATCH" && /^\/api\/commerceConnectors\/[^/]+$/.test(routePath)) return true;
@@ -6809,7 +6823,15 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     hasValidWorkerToken,
     customerFromRequest
   });
-  await registerChatwootRoutes(app, { database, aiEngine, chatwootClient });
+  await registerChatwootRoutes(app, {
+    database,
+    aiEngine,
+    chatwootClient,
+    knowledgeFor: (data, context, caseRecord) => findRelevantAiKnowledge(
+      (data.aiKnowledge || []).filter((item) => itemInWorkspace(item, caseRecord?.workspaceId || DEFAULT_WORKSPACE_ID)),
+      `${context.content || ""} ${caseRecord?.project || ""} ${(caseRecord?.parts || []).map((part) => `${part.material || ""} ${part.name || ""}`).join(" ")}`
+    )
+  });
 
   app.get("/api/health", async () => ({ ok: true, service: "layerpilot-api", persistence: database.persistenceLabel || "lowdb-json" }));
   app.get("/api/readiness", async (request, reply) => {
@@ -7491,6 +7513,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   app.get("/api/commerceConnectors", async (request) => (scopedWorkspaceData(database.data, request.user.workspaceId).commerceConnectors || []).map(sanitizeCommerceConnector));
   app.get("/api/apiKeys", async (request) => (scopedWorkspaceData(database.data, request.user.workspaceId).apiKeys || []).map(sanitizeApiKey));
   app.get("/api/addons", async (request) => (scopedWorkspaceData(database.data, request.user.workspaceId).addons || []).map(sanitizeAddon));
+  app.get("/api/ai-knowledge", async (request) => (scopedWorkspaceData(database.data, request.user.workspaceId).aiKnowledge || []));
   app.get("/api/workspaceSettings", async (request) => scopedWorkspaceData(database.data, request.user.workspaceId).workspaceSettings);
   app.get("/api/onboarding", async (request) => buildOnboarding(workspaceScopeForUser(database.data, request.user)));
   app.patch("/api/onboarding/:id", async (request, reply) => {
@@ -8258,6 +8281,39 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     await database.write();
     broadcastRealtime(database, "state", { reason: "addon.updated", state: realtimeState(database.data), addon: sanitizeAddon(addon) });
     return { addon: sanitizeAddon(addon), addons: workspaceScopeForUser(database.data, request.user).addons.map(sanitizeAddon) };
+  });
+
+  app.post("/api/ai-knowledge", async (request, reply) => {
+    if (!hasPermission(request.user, "ai:write")) return reply.code(403).send({ error: "Missing permission: ai:write" });
+    const parsed = aiKnowledgeSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid AI knowledge payload", issues: parsed.error.issues });
+    const item = { id: `ai-kb-${randomUUID().slice(0, 12)}`, workspaceId: request.user.workspaceId, ...parsed.data, tags: [...new Set(parsed.data.tags.map((tag) => tag.toLowerCase()))], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), updatedBy: request.user.email };
+    database.data.aiKnowledge.unshift(item);
+    await dispatchEvent(database, "ai.knowledge_created", `${item.title} added to AI knowledge`, { workspaceId: item.workspaceId, knowledgeId: item.id, category: item.category, enabled: item.enabled }, { actor: request.user });
+    await database.write();
+    return reply.code(201).send(item);
+  });
+
+  app.patch("/api/ai-knowledge/:id", async (request, reply) => {
+    if (!hasPermission(request.user, "ai:write")) return reply.code(403).send({ error: "Missing permission: ai:write" });
+    const parsed = aiKnowledgePatchSchema.safeParse(request.body || {});
+    if (!parsed.success || !Object.keys(parsed.data).length) return reply.code(400).send({ error: "Invalid AI knowledge update", issues: parsed.error?.issues || [] });
+    const item = database.data.aiKnowledge.find((entry) => entry.id === request.params.id && itemInWorkspace(entry, request.user.workspaceId));
+    if (!item) return reply.code(404).send({ error: "AI knowledge item not found" });
+    Object.assign(item, parsed.data, { tags: parsed.data.tags ? [...new Set(parsed.data.tags.map((tag) => tag.toLowerCase()))] : item.tags, updatedAt: new Date().toISOString(), updatedBy: request.user.email });
+    await dispatchEvent(database, "ai.knowledge_updated", `${item.title} updated in AI knowledge`, { workspaceId: item.workspaceId, knowledgeId: item.id, category: item.category, enabled: item.enabled }, { actor: request.user });
+    await database.write();
+    return item;
+  });
+
+  app.delete("/api/ai-knowledge/:id", async (request, reply) => {
+    if (!hasPermission(request.user, "ai:write")) return reply.code(403).send({ error: "Missing permission: ai:write" });
+    const index = database.data.aiKnowledge.findIndex((entry) => entry.id === request.params.id && itemInWorkspace(entry, request.user.workspaceId));
+    if (index === -1) return reply.code(404).send({ error: "AI knowledge item not found" });
+    const [item] = database.data.aiKnowledge.splice(index, 1);
+    await dispatchEvent(database, "ai.knowledge_deleted", `${item.title} removed from AI knowledge`, { workspaceId: item.workspaceId, knowledgeId: item.id }, { actor: request.user });
+    await database.write();
+    return reply.code(204).send();
   });
 
   app.post("/api/quotes", async (request, reply) => {

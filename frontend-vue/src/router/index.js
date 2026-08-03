@@ -362,6 +362,23 @@ export const asyncRoutes = [
     ],
   },
   {
+    path: '/ai-knowledge',
+    component: Layout,
+    redirect: '/ai-knowledge/index',
+    children: [
+      {
+        path: 'index',
+        name: 'AiKnowledge',
+        component: () => import('@/views/ai-knowledge/index'),
+        meta: {
+          title: 'AI 知識庫',
+          icon: 'comment-dots',
+          permissions: ['ai:write'],
+        },
+      },
+    ],
+  },
+  {
     path: '/addons',
     component: Layout,
     redirect: '/addons/index',
