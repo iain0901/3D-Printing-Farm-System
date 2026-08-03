@@ -10,7 +10,9 @@ COPY frontend-vue/package*.json ./
 # present before npm ci resolves the frontend lockfile inside Docker.
 COPY frontend-vue/layouts ./layouts
 COPY frontend-vue/vab-icon ./vab-icon
-RUN npm ci
+# Rspack publishes platform-specific optional peers. npm inside the Linux image
+# resolves those peers for its own target while retaining the committed lockfile.
+RUN npm install --include=dev --no-audit --no-fund
 
 COPY frontend-vue/. .
 RUN npm run build

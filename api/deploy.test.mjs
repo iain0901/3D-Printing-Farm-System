@@ -10,6 +10,7 @@ describe("3DSTU FarmFlow deployment packaging", () => {
     expect(dockerfile).toContain("FROM node:22-alpine AS runtime");
     expect(dockerfile).toContain("COPY frontend-vue/layouts ./layouts");
     expect(dockerfile).toContain("COPY frontend-vue/vab-icon ./vab-icon");
+    expect(dockerfile).toContain("npm install --include=dev --no-audit --no-fund");
     expect(dockerfile).toContain("npm ci --omit=dev");
     expect(dockerfile).toContain("COPY --chown=node:node api ./api");
     expect(dockerfile).toContain("COPY --chown=node:node --from=build /app/frontend-vue/dist ./dist");
