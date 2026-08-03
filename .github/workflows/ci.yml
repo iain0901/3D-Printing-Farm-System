@@ -57,8 +57,8 @@ jobs:
       LAYERPILOT_ADMIN_PASSWORD: ci-owner-password-please-change
       LAYERPILOT_DISABLE_DEFAULT_USERS: "true"
       LAYERPILOT_DISABLE_DEMO_LOGIN: "true"
-      LAYERPILOT_METRICS_TOKEN: ci-metrics-token-please-change
-      LAYERPILOT_WORKER_TOKEN: ci-worker-token-please-change
+      LAYERPILOT_METRICS_TOKEN: ci-metrics-token-for-compose-smoke-2026
+      LAYERPILOT_WORKER_TOKEN: ci-worker-token-for-compose-smoke-2026
 
     steps:
       - name: Check out repository
