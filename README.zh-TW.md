@@ -69,11 +69,12 @@
 ## 本機執行
 
 ```bash
-npm install
+npm ci
+npm run install:frontend
 npm run dev
 ```
 
-開啟終端機顯示的 Vite 本機網址，通常是 `http://127.0.0.1:5173`。
+開啟終端機顯示的 Vue/Rspack 本機網址，通常是 `http://127.0.0.1:5174`。
 
 另一個終端機啟動後端 API：
 

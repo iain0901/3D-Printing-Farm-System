@@ -20,12 +20,11 @@
     "farmflow",
     "scheduler",
     "slicer",
-    "manufacturing",
-    "saas"
+    "manufacturing"
   ],
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
+    "dev": "npm --prefix frontend-vue run dev",
     "api": "node api/server.mjs",
     "worker": "node api/worker.mjs",
     "worker:orca": "node api/orca-worker.mjs",
@@ -36,7 +35,8 @@
     "smoke:prod": "node scripts/prod-smoke.mjs",
     "migrate:postgres": "node scripts/migrate-to-postgres.mjs",
     "package:ubuntu": "node scripts/package-ubuntu.mjs package",
-    "qc": "npm run build && npm run test"
+    "qc": "npm run build && npm run test",
+    "install:frontend": "npm --prefix frontend-vue install --include=dev --no-audit --no-fund"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1068.0",

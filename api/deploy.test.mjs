@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 describe("3DSTU FarmFlow deployment packaging", () => {
@@ -84,6 +84,8 @@ describe("3DSTU FarmFlow deployment packaging", () => {
     expect(envExample).toContain("LAYERPILOT_PRE_RESTORE_BACKUP=true");
     expect(envExample).toContain("LAYERPILOT_DEPLOY_LOCK_DIR=/tmp/layerpilot-deploy.lock");
     expect(packageJson.scripts["package:ubuntu"]).toBe("node scripts/package-ubuntu.mjs package");
+    expect(packageJson.scripts.dev).toBe("npm --prefix frontend-vue run dev");
+    await expect(stat(new URL("../public/manifest.webmanifest", import.meta.url))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("provisions isolated single-tenant customer environments", async () => {

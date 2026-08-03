@@ -69,11 +69,12 @@
 ## 本地运行
 
 ```bash
-npm install
+npm ci
+npm run install:frontend
 npm run dev
 ```
 
-打开终端显示的 Vite 本地网址，通常是 `http://127.0.0.1:5173`。
+打开终端显示的 Vue/Rspack 本地网址，通常是 `http://127.0.0.1:5174`。
 
 另一个终端启动后端 API：
 

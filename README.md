@@ -99,11 +99,12 @@ These screenshots are captured from the working local demo UI in this repository
 ## Run Locally
 
 ```bash
-npm install
+npm ci
+npm run install:frontend
 npm run dev
 ```
 
-Then open the local Vite URL shown in the terminal, usually `http://127.0.0.1:5173`.
+Then open the single Vue/Rspack frontend at `http://127.0.0.1:5174`.
 
 To run the local backend API in another terminal:
 

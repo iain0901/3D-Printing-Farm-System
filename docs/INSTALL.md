@@ -5,7 +5,8 @@
 ## Local Development
 
 ```bash
-npm install
+npm ci
+npm run install:frontend
 npm run dev
 ```
 
@@ -15,7 +16,7 @@ In another terminal:
 npm run api
 ```
 
-The frontend runs on the Vite URL shown in the terminal. The API defaults to `http://127.0.0.1:8797` and stores local JSON data at `api/data/layerpilot.db.json`.
+The single maintained Vue/Rspack frontend runs at `http://127.0.0.1:5174`. The API defaults to `http://127.0.0.1:8797` and stores local JSON data at `api/data/layerpilot.db.json`.
 
 ## Docker Compose
 
