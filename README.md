@@ -146,7 +146,7 @@ scripts/ubuntu-deploy.sh deploy
 
 What `scripts/ubuntu-deploy.sh` does:
 
-- `deploy` creates `.env` with shell/Compose-safe quoted production values, generated worker/metrics tokens, a `LAYERPILOT_PUBLIC_URL` for smoke checks, and a localhost bind by default for Nginx proxying. It then runs a `doctor` preflight (deployment files, private `.env` permissions, production secrets, password/token strength, env value formats, optional S3/Stripe/MQTT config consistency, Compose config) before building services, waiting for readiness, and running smoke checks.
+- `deploy` creates `.env` with shell/Compose-safe quoted production values, generated worker/metrics tokens, a `LAYERPILOT_PUBLIC_URL` for smoke checks, and a localhost bind by default for Nginx proxying. It then runs a `doctor` preflight (deployment files, private `.env` permissions, production secrets, password/token strength, env value formats, optional S3/MQTT config consistency, Compose config) before building services, waiting for readiness, and running smoke checks.
 - `update` runs preflight, optional host QC, a verified volume backup, deploy, readiness, and smoke checks — use this for normal releases.
 - `rollback <archive.tgz>` restores a known-good volume backup, creating a pre-restore safeguard backup first, then runs readiness/smoke/ops checks automatically.
 - `ops-check` verifies services, health endpoints, authenticated state/audit access (when credentials are configured), metrics-token access, backup state, timer state, disk space, and log rotation. `layerpilot-ops-check.timer` can run this every 15 minutes through systemd.
@@ -218,10 +218,6 @@ This writes a private `tenants/<slug>/<slug>.env` (mode `600`) with a unique `CO
 - `LAYERPILOT_WORKER_TOKEN`, required for Docker worker-to-API state broadcasts; change the example value before real deployment. In production, worker broadcasts must send it with the `x-layerpilot-worker-token` header, not a URL query parameter.
 - `LAYERPILOT_WORKER_TELEMETRY` and `LAYERPILOT_WORKER_BRIDGE_POLLING`, enable or disable background worker jobs; when either is enabled in production, `/api/readiness` fails until the worker has reported a recent heartbeat
 - `LAYERPILOT_WORKER_TELEMETRY_INTERVAL_MS` and `LAYERPILOT_WORKER_BRIDGE_POLL_INTERVAL_MS`, background worker intervals used by readiness to calculate worker heartbeat freshness with a minimum 60-second tolerance
-- `LAYERPILOT_BILLING_PORTAL_URL`, optional external billing portal destination
-- `LAYERPILOT_STRIPE_SECRET_KEY`, optional Stripe API secret key for subscription checkout and billing portal sessions
-- `LAYERPILOT_STRIPE_WEBHOOK_SECRET`, required in production when `/api/billing/webhook/stripe` is exposed; direct Stripe calls are verified with the `Stripe-Signature` header, while trusted edge proxies may inject `x-layerpilot-billing-webhook-secret`
-- `LAYERPILOT_STRIPE_PRICE_STUDIO`, `LAYERPILOT_STRIPE_PRICE_FARM`, and `LAYERPILOT_STRIPE_PRICE_ENTERPRISE`, optional Stripe recurring price IDs mapped to 3DSTU FarmFlow plans
 - `LAYERPILOT_MQTT_URL`, optional MQTT broker URL used by the MQTT Event Stream add-on when it is enabled
 - `LAYERPILOT_MQTT_TOPIC_PREFIX`, optional MQTT topic prefix, default `layerpilot`
 - `LAYERPILOT_MQTT_USERNAME` and `LAYERPILOT_MQTT_PASSWORD`, optional MQTT broker credentials
@@ -239,14 +235,15 @@ This writes a private `tenants/<slug>/<slug>.env` (mode `600`) with a unique `CO
 
 ## Production Security And Audit Trail
 
-The production API enables security headers (`@fastify/helmet`) and route-level rate limiting (`@fastify/rate-limit`) for authentication, API key creation, billing sessions, and admin exports. This is a single-tenant deployment model: there is no self-service signup route, so each customer gets an independently provisioned environment (see [Hosting Multiple Customer Environments](#hosting-multiple-customer-environments-on-one-host)) with its own bootstrap Owner account; additional operators are added from the Team page by that Owner.
+FarmFlow is operated as a self-managed production system. Subscription plans, hosted billing portals, and Stripe webhooks are disabled by default; customer payment and order states are managed inside the unified case workflow.
+
+The production API enables security headers (`@fastify/helmet`) and route-level rate limiting (`@fastify/rate-limit`) for authentication, API key creation, customer payment records, and admin exports. This is a single-tenant deployment model: there is no self-service signup route, so each customer gets an independently provisioned environment (see [Hosting Multiple Customer Environments](#hosting-multiple-customer-environments-on-one-host)) with its own bootstrap Owner account; additional operators are added from the Team page by that Owner.
 
 - Production CORS reflects only `LAYERPILOT_PUBLIC_URL` plus explicit comma-separated `LAYERPILOT_CORS_ORIGINS`; wildcard and non-HTTP(S) origins fail readiness.
 - API-key IP allowlists accept only IPv4 addresses or IPv4 CIDR ranges; an empty or invalid allowlist with restrictions enabled fails production readiness.
 - User session and API-key credentials are rejected from URL query parameters in production; browser realtime clients use a short-lived one-time `/api/events/token` ticket for WebSocket/SSE instead of a long-lived bearer token in the URL.
-- Stripe billing webhooks are deduplicated by provider `event.id`; duplicate deliveries return `x-layerpilot-stripe-webhook-replay: true` instead of duplicate audit evidence.
-- Nearly every retry-prone write API (orders, queue, quotes, customer portal actions, files, printers, catalog, billing, admin, and more) accepts an `Idempotency-Key` header and replays the original response instead of repeating the side effect.
-- Every meaningful production action — auth, files, printers, bridges, quotes, orders, customer portal accounts, catalog, inventory, maintenance, integrations, billing, and admin/backup/restore — writes a workspace + operator-scoped audit event that omits secrets, tokens, file contents, and full endpoint URLs.
+- Nearly every retry-prone write API (orders, queue, quotes, customer portal actions, files, printers, catalog, customer payments, admin, and more) accepts an `Idempotency-Key` header and replays the original response instead of repeating the side effect.
+- Every meaningful production action — auth, files, printers, bridges, quotes, orders, customer portal accounts, catalog, inventory, maintenance, integrations, customer payments, and admin/backup/restore — writes a workspace + operator-scoped audit event that omits secrets, tokens, file contents, and full endpoint URLs.
 
 **For the full audit-event catalog, the complete `Idempotency-Key` route list, session/2FA lockout policy, and backup/restore evidence reference, see [docs/OPERATIONS.md](docs/OPERATIONS.md).** That is the canonical, kept-up-to-date reference; this README only summarizes it.
 

@@ -912,6 +912,14 @@ function envFlag(name, env = process.env) {
   return ["1", "true", "yes", "on"].includes(String(env[name] || "").trim().toLowerCase());
 }
 
+// This deployment is self-managed. Keep legacy subscription processing behind
+// an explicit compatibility switch so stale provider credentials stay inert.
+function saasBillingEnabled(env = process.env) {
+  const value = String(env.LAYERPILOT_ENABLE_SAAS_BILLING ?? "").trim();
+  if (value) return envFlag("LAYERPILOT_ENABLE_SAAS_BILLING", env);
+  return String(env.NODE_ENV || "").trim().toLowerCase() === "test";
+}
+
 function envFlagWithDefault(name, fallback, env = process.env) {
   const value = String(env[name] ?? "").trim();
   if (!value) return fallback;
@@ -4267,7 +4275,7 @@ function productionDependencyConfigIssues(env = process.env) {
     }
   }
 
-  if (String(env.LAYERPILOT_STRIPE_SECRET_KEY || "").trim() || String(env.LAYERPILOT_STRIPE_WEBHOOK_SECRET || "").trim()) {
+  if (saasBillingEnabled(env)) {
     for (const key of ["LAYERPILOT_STRIPE_SECRET_KEY", "LAYERPILOT_STRIPE_WEBHOOK_SECRET", "LAYERPILOT_STRIPE_PRICE_STUDIO", "LAYERPILOT_STRIPE_PRICE_FARM", "LAYERPILOT_STRIPE_PRICE_ENTERPRISE"]) {
       if (!String(env[key] || "").trim()) issues.push(`Missing ${key}`);
     }
@@ -6651,7 +6659,7 @@ export async function runTelemetryTick(database, options = {}) {
   return { changed: true, changedPrinters, completedJobs, todos: deriveTodos(stateData) };
 }
 
-export async function buildServer({ db, enableTelemetry = false, telemetryIntervalMs = 5000, enableBridgePolling = false, bridgePollingIntervalMs = 10000, serveStatic = process.env.LAYERPILOT_SERVE_STATIC === "true", authRateLimit = defaultAuthRateLimit, sensitiveRateLimit = defaultSensitiveRateLimit, mqttPublisher = null, stripeClient = createStripeClient(), objectStorageAdapter = createObjectStorage(), emailClient = createEmailClient(), aiEngine = createAiEngine(), chatwootClient = createChatwootClient() } = {}) {
+export async function buildServer({ db, enableTelemetry = false, telemetryIntervalMs = 5000, enableBridgePolling = false, bridgePollingIntervalMs = 10000, serveStatic = process.env.LAYERPILOT_SERVE_STATIC === "true", authRateLimit = defaultAuthRateLimit, sensitiveRateLimit = defaultSensitiveRateLimit, mqttPublisher = null, stripeClient = saasBillingEnabled() ? createStripeClient() : null, objectStorageAdapter = createObjectStorage(), emailClient = createEmailClient(), aiEngine = createAiEngine(), chatwootClient = createChatwootClient() } = {}) {
   const database = db || await openDatabase();
   activeObjectStorage = objectStorageAdapter;
   database.realtimeClients ||= new Set();
@@ -7504,7 +7512,10 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     await database.write();
     return snapshot;
   });
-  app.get("/api/billing", async (request) => buildBillingSummary(workspaceScopeForUser(database.data, request.user), { stripeClient }));
+  app.get("/api/billing", async (request, reply) => {
+    if (!saasBillingEnabled()) return reply.code(404).send({ error: "SaaS billing is disabled for this self-managed system" });
+    return buildBillingSummary(workspaceScopeForUser(database.data, request.user), { stripeClient });
+  });
   app.get("/api/costCatalog", async (request) => costCatalogForWorkspace(database.data, request.user.workspaceId));
 
   for (const collection of COLLECTIONS) {
@@ -8147,6 +8158,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   });
 
   app.patch("/api/billing/plan", async (request, reply) => {
+    if (!saasBillingEnabled()) return reply.code(404).send({ error: "SaaS billing is disabled for this self-managed system" });
     if (!hasPermission(request.user, "settings:write")) return reply.code(403).send({ error: "Missing permission: settings:write" });
     const parsed = billingPlanPatchSchema.safeParse(request.body || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid billing plan payload", issues: parsed.error.issues });
@@ -8176,6 +8188,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   });
 
   app.post("/api/billing/portal", { config: { rateLimit: { ...sensitiveRateLimit, groupId: "billing-portal" } } }, async (request, reply) => {
+    if (!saasBillingEnabled()) return reply.code(404).send({ error: "SaaS billing is disabled for this self-managed system" });
     if (!hasPermission(request.user, "settings:write")) return reply.code(403).send({ error: "Missing permission: settings:write" });
     const parsed = billingPortalSchema.safeParse(request.body || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid billing portal payload", issues: parsed.error.issues });
@@ -8190,6 +8203,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   });
 
   app.post("/api/billing/webhook/stripe", { config: { rateLimit: { ...sensitiveRateLimit, groupId: "billing-webhook" } } }, async (request, reply) => {
+    if (!saasBillingEnabled()) return reply.code(404).send({ error: "SaaS billing is disabled for this self-managed system" });
     const expectedSecret = process.env.LAYERPILOT_STRIPE_WEBHOOK_SECRET || "";
     if (!expectedSecret && process.env.NODE_ENV === "production") return reply.code(503).send({ error: "Stripe webhook secret is required in production" });
     const verified = stripeWebhookPayloadFromRequest(request, expectedSecret);

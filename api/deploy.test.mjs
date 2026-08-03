@@ -173,7 +173,7 @@ describe("3DSTU FarmFlow deployment packaging", () => {
     expect(script).not.toContain("LAYERPILOT_ADMIN_PASSWORD=${LAYERPILOT_ADMIN_PASSWORD}");
     expect(script).toContain("LAYERPILOT_BIND_ADDRESS");
     expect(script).toContain("LAYERPILOT_OBJECT_STORAGE_PROVIDER must be local or s3");
-    expect(script).toContain("LAYERPILOT_STRIPE_PRICE_STUDIO");
+    expect(script).not.toContain("LAYERPILOT_STRIPE_PRICE_STUDIO");
     expect(script).toContain("LAYERPILOT_MQTT_QOS must be 0, 1, or 2");
     expect(script).toContain("must start with mqtt:// or mqtts:// when set");
     expect(script).toContain("LAYERPILOT_BACKUP_RETENTION_DAYS");
@@ -369,9 +369,9 @@ describe("3DSTU FarmFlow deployment packaging", () => {
     expect(guide).toContain("run `newgrp docker` or reconnect");
     expect(guide).toContain("private `.env` permissions");
     expect(guide).toContain("non-default and minimum-length worker/metrics tokens");
-    expect(guide).toContain("public/billing URL formats");
+    expect(guide).toContain("public URL formats");
     expect(guide).toContain("S3 settings when object storage is enabled");
-    expect(guide).toContain("Stripe price/webhook settings when billing is configured");
+    expect(guide).toContain("self-managed billing stays disabled");
     expect(guide).toContain("MQTT URL/QoS/retain settings");
     expect(guide).toContain("required deployment files");
     expect(guide).toContain("LAYERPILOT_PUBLIC_URL");

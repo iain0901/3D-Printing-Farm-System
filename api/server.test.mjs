@@ -534,6 +534,7 @@ describe("3DSTU FarmFlow API", () => {
       LAYERPILOT_S3_REGION: "",
       LAYERPILOT_S3_ACCESS_KEY_ID: "s3-access-key",
       LAYERPILOT_S3_SECRET_ACCESS_KEY: "",
+      LAYERPILOT_ENABLE_SAAS_BILLING: "true",
       LAYERPILOT_STRIPE_SECRET_KEY: "sk_test_configured",
       LAYERPILOT_STRIPE_WEBHOOK_SECRET: "",
       LAYERPILOT_STRIPE_PRICE_STUDIO: "price_studio",
@@ -560,6 +561,16 @@ describe("3DSTU FarmFlow API", () => {
         expect(detail).toContain("LAYERPILOT_MQTT_QOS must be 0, 1, or 2");
         expect(detail).toContain("LAYERPILOT_MQTT_RETAIN must be true or false");
       }, { objectStorageAdapter: createFakeS3Storage() });
+    });
+  });
+
+  it("keeps legacy subscription billing endpoints disabled in a self-managed production deployment", async () => {
+    await withEnv({ NODE_ENV: "production", LAYERPILOT_ENABLE_SAAS_BILLING: "false" }, async () => {
+      await withApp(async ({ app }) => {
+        const webhook = await app.inject({ method: "POST", url: "/api/billing/webhook/stripe", payload: { id: "evt_disabled", type: "invoice.paid", data: { object: {} } } });
+        expect(webhook.statusCode).toBe(404);
+        expect(webhook.json()).toMatchObject({ error: "SaaS billing is disabled for this self-managed system" });
+      });
     });
   });
 

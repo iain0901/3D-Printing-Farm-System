@@ -113,7 +113,7 @@ LAYERPILOT_WORKSPACE_NAME='My Print Farm' \
 scripts/ubuntu-deploy.sh init-env
 ```
 
-The script creates `.env` with private permissions, shell/Compose-safe quoted values, a `LAYERPILOT_PUBLIC_URL` used by smoke checks and production CORS defaults, a blank `LAYERPILOT_CORS_ORIGINS` for optional extra browser origins, and random worker/metrics tokens. Edit `.env` if you need a separate quote portal/admin frontend origin, Stripe, MQTT, S3-compatible storage, or external slicer integration. Environment values may contain spaces and punctuation, but must not contain newlines.
+The script creates `.env` with private permissions, shell/Compose-safe quoted values, a `LAYERPILOT_PUBLIC_URL` used by smoke checks and production CORS defaults, a blank `LAYERPILOT_CORS_ORIGINS` for optional extra browser origins, and random worker/metrics tokens. Edit `.env` if you need a separate quote portal/admin frontend origin, MQTT, S3-compatible storage, or external slicer integration. Subscription billing settings are intentionally omitted. Environment values may contain spaces and punctuation, but must not contain newlines.
 
 By default, `.env` sets `LAYERPILOT_BIND_ADDRESS=127.0.0.1`. Keep that setting when using Nginx. Set it to `0.0.0.0` only if you intentionally want to expose `:8797` directly on the server network.
 
@@ -125,7 +125,7 @@ Run the production preflight first:
 scripts/ubuntu-deploy.sh doctor
 ```
 
-The doctor check verifies Docker Compose, current-user access to the Docker daemon, required deployment files, private `.env` permissions, required production secrets, demo/default user disabling, non-default and minimum-length worker/metrics tokens, password length, boolean/numeric environment values, public/billing URL formats, optional comma-separated `LAYERPILOT_CORS_ORIGINS` values without wildcards, S3 settings when object storage is enabled, Stripe price/webhook settings when billing is configured, MQTT URL/QoS/retain settings when event streaming is configured, and Compose config rendering. Live `/api/readiness` also validates production CORS trusted origins and fails when workspace API-key IP restrictions are enabled with an empty or invalid IPv4/CIDR allowlist. If Docker was just installed, run `newgrp docker` or reconnect before running deploy commands as a non-root user.
+The doctor check verifies Docker Compose, current-user access to the Docker daemon, required deployment files, private `.env` permissions, required production secrets, demo/default user disabling, non-default and minimum-length worker/metrics tokens, password length, boolean/numeric environment values, public URL formats, optional comma-separated `LAYERPILOT_CORS_ORIGINS` values without wildcards, S3 settings when object storage is enabled, self-managed billing stays disabled, MQTT URL/QoS/retain settings when event streaming is configured, and Compose config rendering. Live `/api/readiness` also validates production CORS trusted origins and fails when workspace API-key IP restrictions are enabled with an empty or invalid IPv4/CIDR allowlist. If Docker was just installed, run `newgrp docker` or reconnect before running deploy commands as a non-root user.
 
 ```bash
 scripts/ubuntu-deploy.sh deploy
@@ -312,5 +312,5 @@ Keep `.env` out of git. The production containers use `.env`, Docker named volum
 - Use a strong `LAYERPILOT_ADMIN_PASSWORD`.
 - Keep account lockout/backoff enabled with `LAYERPILOT_AUTH_LOCK_THRESHOLD` and `LAYERPILOT_AUTH_LOCK_MINUTES`; defaults are 5 failed known-account auth attempts and a 15-minute lock.
 - Keep `LAYERPILOT_BIND_ADDRESS=127.0.0.1` behind Nginx unless you intentionally expose port `8797`.
-- Configure Stripe only after you have real price IDs and webhook routing.
-- The current app supports workspace isolation on the JSON/SQLite document store. For larger public multi-tenant SaaS scale, migrate to Postgres with row-level security.
+- Subscription plans and hosted billing are disabled; manage customer payments in the internal order and case workflow.
+- PostgreSQL is the default deployment database; retain the paired database dump with each filesystem backup.
