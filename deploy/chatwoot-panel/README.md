@@ -5,7 +5,7 @@
 ## 設定
 
 1. 將 `index.html` 以同源或 HTTPS 靜態站點提供。
-2. 在 API 環境設定 `CHATWOOT_PANEL_SHARED_SECRET`（長隨機值）、`CHATWOOT_API_BASE_URL`、`CHATWOOT_ACCOUNT_ID`、`CHATWOOT_API_TOKEN` 與 `CHATWOOT_WEBHOOK_SECRET`。
+2. 在 API 環境設定 `CHATWOOT_PANEL_SECRET`（長隨機值）、`CHATWOOT_BASE_URL`、`CHATWOOT_ACCOUNT_ID`、`CHATWOOT_API_TOKEN` 與 `CHATWOOT_WEBHOOK_SECRET`。
 3. 在 Chatwoot 建立側欄／Dashboard App iframe，URL 使用：
 
 ```text
@@ -16,7 +16,7 @@ https://PANEL_HOST/index.html?apiBase=https%3A%2F%2FAPI_HOST&panelSecret=PANEL_S
 
 ## API 行為
 
-- `GET /api/integrations/chatwoot/context`：供側欄讀取關聯案件。
+- `POST /api/integrations/chatwoot/context`：供側欄讀取關聯案件；請送出 `account_id` 與 `conversation_id`，並帶 `x-chatwoot-panel-secret`。
 - `POST /api/integrations/chatwoot/webhook`：接收 Chatwoot 的入站事件，依 Inbox／案件階段套用 `auto`、`draft`、`hybrid`、`human` AI 模式。
 - `POST /api/cases/:id/chatwoot/notify`：所有主動發送訊息均經由 Chatwoot Conversation。
 
