@@ -41,7 +41,7 @@ cd /opt/layerpilot
 # git clone <your-private-repo-url> .
 ```
 
-If you copy a zip instead of using git, unpack it so `docker-compose.yml`, `Dockerfile`, `package.json`, `api/`, `src/`, `deploy/`, and `scripts/` are directly under `/opt/layerpilot`.
+If you copy a zip instead of using git, unpack it so `docker-compose.yml`, `Dockerfile`, `package.json`, `api/`, `frontend-vue/`, `deploy/`, and `scripts/` are directly under `/opt/layerpilot`.
 
 The included `.dockerignore` keeps local databases, uploaded files, support bundles, backup archives, `node_modules`, deployment docs, and other workspace-only files out of the Docker build context. Keep that file with the project when copying it to the server.
 

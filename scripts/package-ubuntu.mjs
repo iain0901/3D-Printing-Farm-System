@@ -19,7 +19,9 @@ const requiredFiles = [
   "docker-compose.yml",
   "README.zh-TW.md",
   "README.zh-CN.md",
-  "src/App.tsx",
+  "frontend-vue/package.json",
+  "frontend-vue/package-lock.json",
+  "frontend-vue/src/router/index.js",
   "api/server.mjs",
   "api/worker.mjs",
   "scripts/ops-auth-check.mjs",
@@ -56,7 +58,6 @@ const allowedEntries = [
   ".gitignore",
   "Dockerfile",
   "docker-compose.yml",
-  "index.html",
   "LICENSE.md",
   "LICENSE.zh-TW.md",
   "LICENSE.zh-CN.md",
@@ -65,13 +66,11 @@ const allowedEntries = [
   "README.md",
   "README.zh-TW.md",
   "README.zh-CN.md",
-  "tsconfig.json",
-  "vite.config.ts",
   "api",
   "deploy",
   "public",
   "scripts",
-  "src"
+  "frontend-vue"
 ];
 
 const forbiddenMemberPattern = /(^|\/)(node_modules|dist|release|work|coverage|\.git|api\/data|api\/storage)(\/|$)|(^|\/)\.env$|\.tgz$|\.tar$|\.tar\.gz$|layerpilot-(support|data|pre-restore)-/;

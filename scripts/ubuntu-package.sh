@@ -76,7 +76,9 @@ verify_archive() {
     package-lock.json \
     Dockerfile \
     docker-compose.yml \
-    src/App.tsx \
+    frontend-vue/package.json \
+    frontend-vue/package-lock.json \
+    frontend-vue/src/router/index.js \
     api/server.mjs \
     api/worker.mjs \
     scripts/ops-auth-check.mjs \
@@ -127,17 +129,14 @@ create_package() {
     .gitignore \
     Dockerfile \
     docker-compose.yml \
-    index.html \
     package-lock.json \
     package.json \
     README.md \
-    tsconfig.json \
-    vite.config.ts \
     api \
     deploy \
     public \
     scripts \
-    src
+    frontend-vue
   write_checksum "$target"
   verify_archive "$target"
   echo "Ubuntu release bundle written: $target"

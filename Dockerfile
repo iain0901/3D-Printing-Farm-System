@@ -1,7 +1,4 @@
-# Builds the Vue 2 / Element UI frontend (frontend-vue/) per the migration plan's Phase 7 cutover.
-# The React frontend (src/) is intentionally left untouched and unused by this Dockerfile until
-# the React source tree is retired post-rollback-window; see frontend-vue/README or the migration
-# plan for the coexistence rationale.
+# Builds the single maintained Vue 2 / Element UI frontend (frontend-vue/).
 FROM node:22-alpine AS build
 WORKDIR /app/frontend-vue
 

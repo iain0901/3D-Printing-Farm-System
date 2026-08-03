@@ -126,7 +126,7 @@ docker compose up --build
 Then open `http://127.0.0.1:8797`. A few things to know about the Compose setup:
 
 - Compose starts an API/web service plus a `layerpilot-worker` background service from the same image.
-- The web container serves the built React app and Fastify API, runs as the non-root `node` user, uses `no-new-privileges`, has a 30-second graceful stop window, per-service JSON log rotation, and a container healthcheck against `/api/health`.
+- The web container serves the built Vue app and Fastify API, runs as the non-root `node` user, uses `no-new-privileges`, has a 30-second graceful stop window, per-service JSON log rotation, and a container healthcheck against `/api/health`.
 - The worker runs telemetry ticks and OctoPrint/Moonraker/PrusaLink polling, then notifies the API over an internal worker-token endpoint so WebSocket/SSE clients receive fresh state.
 - Data is stored in the `layerpilot-data` Docker volume at `/data/layerpilot.db.json`, and uploaded model files are stored under `/data/storage` by default. Set `LAYERPILOT_OBJECT_STORAGE_PROVIDER=s3` to use S3-compatible object storage instead.
 
@@ -305,13 +305,13 @@ To run the QC suite:
 npm run qc
 ```
 
-This runs the TypeScript/Vite production build plus API tests. GitHub Actions runs the same QC gate on every push to `main` and every pull request. Release discipline and VPS deployment evidence are documented in `docs/RELEASE.md`.
+This runs the Vue/Rspack production build plus API tests. GitHub Actions runs the same QC gate on every push to `main` and every pull request. Release discipline and VPS deployment evidence are documented in `docs/RELEASE.md`.
 
 Before using a customer deployment for live production, complete the checklist in `docs/PRODUCTION_READINESS.md`.
 
 ## Open Source Stack
 
-- React, Vite, TypeScript, Recharts, and Lucide React for the app experience.
+- Vue 2, Element UI, and Rspack for the single maintained app experience.
 - Fastify and `@fastify/cors` for the backend API.
 - `@fastify/helmet` and `@fastify/rate-limit` for production security headers and sensitive-route throttling.
 - `@fastify/multipart` for production model uploads.
@@ -406,4 +406,4 @@ The API uses local bearer-token sessions, password hashes, optional TOTP two-fac
 
 ## Recommended GitHub Topics
 
-`print-farm`, `3d-printing`, `saas`, `self-hosted`, `manufacturing`, `production-planning`, `printer-tools`, `inventory-management`, `job-queue`, `docker`, `typescript`, `react`.
+`print-farm`, `3d-printing`, `self-hosted`, `manufacturing`, `production-planning`, `printer-tools`, `inventory-management`, `job-queue`, `docker`, `vue`.

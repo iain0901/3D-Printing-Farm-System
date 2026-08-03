@@ -32,6 +32,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install Vue frontend dependencies
+        run: npm --prefix frontend-vue install --include=dev --no-audit --no-fund
+
       - name: Run QC
         run: npm run qc
 
@@ -40,7 +43,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: dist-${{ github.sha }}
-          path: dist
+          path: frontend-vue/dist
           if-no-files-found: ignore
           retention-days: 7
 

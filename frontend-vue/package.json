@@ -2,7 +2,7 @@
   "name": "3dstu-farmflow-frontend-vue",
   "version": "0.1.0",
   "private": true,
-  "description": "3DSTU FarmFlow Vue 2 / Element UI frontend, replacing the React SPA in ../src. Architecture based on zxwk1998/vue-admin-better (MIT).",
+  "description": "3DSTU FarmFlow single maintained Vue 2 / Element UI frontend. Architecture based on zxwk1998/vue-admin-better (MIT).",
   "author": "3DSTU <support@3dstu.com>",
   "homepage": "https://github.com/iain0901/3D-Printing-Farm-System#readme",
   "scripts": {
