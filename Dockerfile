@@ -6,6 +6,10 @@ FROM node:22-alpine AS build
 WORKDIR /app/frontend-vue
 
 COPY frontend-vue/package*.json ./
+# These two local packages are declared through file: dependencies and must be
+# present before npm ci resolves the frontend lockfile inside Docker.
+COPY frontend-vue/layouts ./layouts
+COPY frontend-vue/vab-icon ./vab-icon
 RUN npm ci
 
 COPY frontend-vue/. .
