@@ -46,7 +46,7 @@ app_url() {
 
 random_secret() {
   if command -v openssl >/dev/null 2>&1; then
-    openssl rand -base64 36 | tr -d '\n'
+    openssl rand -base64 36 | tr -d '\r\n'
   else
     tr -dc 'A-Za-z0-9' </dev/urandom | head -c 48
   fi
@@ -220,13 +220,22 @@ check_optional_mqtt_url_env() {
 }
 
 check_integration_env() {
-  case "${LAYERPILOT_DB_ADAPTER:-json}" in
-    json|sqlite) ;;
+  case "${LAYERPILOT_DB_ADAPTER:-postgres}" in
+    postgres|postgresql|pg|json|sqlite) ;;
     *)
-      echo "LAYERPILOT_DB_ADAPTER must be json or sqlite." >&2
+      echo "LAYERPILOT_DB_ADAPTER must be postgres, json, or sqlite." >&2
       return 1
       ;;
   esac
+  if [ "${LAYERPILOT_DB_ADAPTER:-postgres}" = "postgres" ] || [ "${LAYERPILOT_DB_ADAPTER:-postgres}" = "postgresql" ] || [ "${LAYERPILOT_DB_ADAPTER:-postgres}" = "pg" ]; then
+    : "${POSTGRES_DB:?Missing POSTGRES_DB for PostgreSQL persistence}"
+    : "${POSTGRES_USER:?Missing POSTGRES_USER for PostgreSQL persistence}"
+    : "${POSTGRES_PASSWORD:?Missing POSTGRES_PASSWORD for PostgreSQL persistence}"
+    if [ "${#POSTGRES_PASSWORD}" -lt 16 ] || [ "$POSTGRES_PASSWORD" = "change-this-database-password" ]; then
+      echo "POSTGRES_PASSWORD must be a non-default value of at least 16 characters." >&2
+      return 1
+    fi
+  fi
   case "${LAYERPILOT_OBJECT_STORAGE_PROVIDER:-local}" in
     local|s3) ;;
     *)
@@ -367,9 +376,10 @@ write_env() {
   : "${LAYERPILOT_ADMIN_EMAIL:?Set LAYERPILOT_ADMIN_EMAIL before creating .env}"
   : "${LAYERPILOT_ADMIN_PASSWORD:?Set LAYERPILOT_ADMIN_PASSWORD before creating .env}"
   umask 077
-  local metrics_token worker_token
+  local metrics_token worker_token postgres_password
   metrics_token="${LAYERPILOT_METRICS_TOKEN:-$(random_secret)}"
   worker_token="${LAYERPILOT_WORKER_TOKEN:-$(random_secret)}"
+  postgres_password="${POSTGRES_PASSWORD:-$(random_secret)}"
   {
     write_env_line "LAYERPILOT_ADMIN_EMAIL" "$LAYERPILOT_ADMIN_EMAIL"
     write_env_line "LAYERPILOT_ADMIN_PASSWORD" "$LAYERPILOT_ADMIN_PASSWORD"
@@ -384,7 +394,12 @@ write_env() {
     write_env_line "LAYERPILOT_OPS_EMAIL" "${LAYERPILOT_OPS_EMAIL:-}"
     write_env_line "LAYERPILOT_OPS_PASSWORD" "${LAYERPILOT_OPS_PASSWORD:-}"
     write_env_line "LAYERPILOT_AUTO_BACKUP_ON_MIGRATE" "true"
-    write_env_line "LAYERPILOT_DB_ADAPTER" "${LAYERPILOT_DB_ADAPTER:-json}"
+    write_env_line "LAYERPILOT_DB_ADAPTER" "${LAYERPILOT_DB_ADAPTER:-postgres}"
+    write_env_line "POSTGRES_DB" "${POSTGRES_DB:-farmflow}"
+    write_env_line "POSTGRES_USER" "${POSTGRES_USER:-farmflow}"
+    write_env_line "POSTGRES_PASSWORD" "$postgres_password"
+    write_env_line "LAYERPILOT_POSTGRES_SCHEMA" "${LAYERPILOT_POSTGRES_SCHEMA:-public}"
+    write_env_line "LAYERPILOT_POSTGRES_SERVICE" "${LAYERPILOT_POSTGRES_SERVICE:-postgres}"
     write_env_line "LAYERPILOT_BACKUP_RETENTION_DAYS" "${LAYERPILOT_BACKUP_RETENTION_DAYS:-30}"
     write_env_line "LAYERPILOT_PRE_RESTORE_BACKUP" "true"
     write_env_line "LAYERPILOT_DEPLOY_LOCK_DIR" "${LAYERPILOT_DEPLOY_LOCK_DIR:-/tmp/layerpilot-deploy.lock}"
@@ -416,6 +431,22 @@ write_env() {
     write_env_line "LAYERPILOT_MQTT_RETAIN" "${LAYERPILOT_MQTT_RETAIN:-false}"
     write_env_line "LAYERPILOT_SLICER_CMD" "${LAYERPILOT_SLICER_CMD:-}"
     write_env_line "LAYERPILOT_SLICER_ARGS" "${LAYERPILOT_SLICER_ARGS:-}"
+    write_env_line "ORCA_SLICER_VERSION" "${ORCA_SLICER_VERSION:-2.4.2}"
+    write_env_line "ORCA_WORKER_ID" "${ORCA_WORKER_ID:-layerpilot-orca}"
+    write_env_line "ORCA_WORKER_INTERVAL_MS" "${ORCA_WORKER_INTERVAL_MS:-3000}"
+    write_env_line "ORCA_SLICER_TIMEOUT_MS" "${ORCA_SLICER_TIMEOUT_MS:-1200000}"
+    write_env_line "CHATWOOT_BASE_URL" "${CHATWOOT_BASE_URL:-}"
+    write_env_line "CHATWOOT_ACCOUNT_ID" "${CHATWOOT_ACCOUNT_ID:-}"
+    write_env_line "CHATWOOT_INBOX_ID" "${CHATWOOT_INBOX_ID:-}"
+    write_env_line "CHATWOOT_API_TOKEN" "${CHATWOOT_API_TOKEN:-}"
+    write_env_line "CHATWOOT_WEBHOOK_SECRET" "${CHATWOOT_WEBHOOK_SECRET:-}"
+    write_env_line "CHATWOOT_PANEL_SECRET" "${CHATWOOT_PANEL_SECRET:-}"
+    write_env_line "AI_PROVIDER" "${AI_PROVIDER:-disabled}"
+    write_env_line "AI_MODEL" "${AI_MODEL:-}"
+    write_env_line "AI_API_BASE_URL" "${AI_API_BASE_URL:-}"
+    write_env_line "AI_API_KEY" "${AI_API_KEY:-}"
+    write_env_line "AI_DEFAULT_MODE" "${AI_DEFAULT_MODE:-hybrid}"
+    write_env_line "AI_CONFIDENCE_THRESHOLD" "${AI_CONFIDENCE_THRESHOLD:-0.78}"
   } > "$ENV_FILE"
   echo "Created $ENV_FILE with 600-style permissions. Keep it private."
 }

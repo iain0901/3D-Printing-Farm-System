@@ -127,9 +127,23 @@ check_backups() {
   check_numeric_env "LAYERPILOT_MIN_FREE_MB" "$MIN_FREE_MB" || return 0
   local latest
   latest="$(find "$BACKUP_DIR" -maxdepth 1 -type f -name 'layerpilot-data-*.tgz' -printf '%T@ %p\n' 2>/dev/null | sort -nr | sed -n '1{s/^[^ ]* //;p;}')"
-  if [ -n "$latest" ]; then
-    ok "latest backup: $latest"
-  else
+    if [ -n "$latest" ]; then
+      ok "latest backup: $latest"
+      case "${LAYERPILOT_DB_ADAPTER:-postgres}" in
+        postgres|postgresql|pg)
+          local archive_name stamp postgres_dump
+          archive_name="$(basename "$latest")"
+          stamp="${archive_name#layerpilot-data-}"
+          stamp="${stamp%.tgz}"
+          postgres_dump="$BACKUP_DIR/layerpilot-postgres-$stamp.dump"
+          if [ -s "$postgres_dump" ]; then
+            ok "paired PostgreSQL dump: $postgres_dump"
+          else
+            fail "latest backup is missing its paired PostgreSQL dump: $postgres_dump"
+          fi
+          ;;
+      esac
+    else
     warn "no layerpilot-data backup archives found in $BACKUP_DIR"
   fi
   local free_mb

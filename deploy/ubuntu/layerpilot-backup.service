@@ -1,5 +1,5 @@
 [Unit]
-Description=3DSTU FarmFlow Docker volume backup
+Description=3DSTU FarmFlow application and PostgreSQL backup
 Requires=docker.service
 Wants=docker.service
 After=docker.service

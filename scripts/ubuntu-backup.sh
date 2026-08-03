@@ -18,9 +18,15 @@ load_env() {
 load_env
 
 BACKUP_DIR="${LAYERPILOT_BACKUP_DIR:-$HOME/layerpilot-backups}"
-VOLUME_NAME="${LAYERPILOT_VOLUME_NAME:-layerpilot_layerpilot-data}"
+PROJECT_NAME="${COMPOSE_PROJECT_NAME:-layerpilot}"
+# The default resolves to layerpilot_layerpilot-data for the standard deployment.
+VOLUME_NAME="${LAYERPILOT_VOLUME_NAME:-${PROJECT_NAME}_layerpilot-data}"
 RETENTION_DAYS="${LAYERPILOT_BACKUP_RETENTION_DAYS:-30}"
 LOCK_DIR="${LAYERPILOT_BACKUP_LOCK_DIR:-$BACKUP_DIR/.layerpilot-backup.lock}"
+DB_ADAPTER="${LAYERPILOT_DB_ADAPTER:-postgres}"
+POSTGRES_SERVICE="${LAYERPILOT_POSTGRES_SERVICE:-postgres}"
+POSTGRES_DB="${POSTGRES_DB:-farmflow}"
+POSTGRES_USER="${POSTGRES_USER:-farmflow}"
 
 usage() {
   cat <<'EOF'
@@ -35,10 +41,67 @@ Usage:
 Environment:
   LAYERPILOT_BACKUP_DIR             Backup destination, default ~/layerpilot-backups
   LAYERPILOT_VOLUME_NAME            Docker volume name, default layerpilot_layerpilot-data
+  LAYERPILOT_DB_ADAPTER              postgres (default), json, or sqlite; postgres dumps are included as a paired artifact
+  LAYERPILOT_POSTGRES_SERVICE        Compose PostgreSQL service, default postgres
   LAYERPILOT_BACKUP_RETENTION_DAYS  Delete backups older than this many days after backup/prune, default 30; set 0 to disable
   LAYERPILOT_BACKUP_LOCK_DIR        Directory lock used to prevent concurrent backup/restore jobs
   LAYERPILOT_PRE_RESTORE_BACKUP     Create a safeguard archive before destructive restore, default true
 EOF
+}
+
+postgres_enabled() {
+  [ "$DB_ADAPTER" = "postgres" ] || [ "$DB_ADAPTER" = "postgresql" ] || [ "$DB_ADAPTER" = "pg" ]
+}
+
+postgres_dump_for_archive() {
+  local archive="$1"
+  local name="$(basename "$archive")"
+  case "$name" in
+    layerpilot-data-*.tgz)
+      local stamp="${name#layerpilot-data-}"
+      stamp="${stamp%.tgz}"
+      printf '%s/layerpilot-postgres-%s.dump' "$(dirname "$archive")" "$stamp"
+      ;;
+    layerpilot-pre-restore-*.tgz)
+      local stamp="${name#layerpilot-pre-restore-}"
+      stamp="${stamp%.tgz}"
+      printf '%s/layerpilot-postgres-pre-restore-%s.dump' "$(dirname "$archive")" "$stamp"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+verify_postgres_dump() {
+  local dump="$1"
+  if [ ! -f "$dump" ]; then
+    echo "PostgreSQL backup artifact is missing: $dump" >&2
+    return 1
+  fi
+  if ! compose exec -T "$POSTGRES_SERVICE" pg_restore -l < "$dump" >/dev/null; then
+    echo "PostgreSQL backup artifact failed pg_restore validation: $dump" >&2
+    return 1
+  fi
+  echo "PostgreSQL backup artifact verified: $dump"
+}
+
+dump_postgres() {
+  local target="$1"
+  echo "Creating PostgreSQL custom-format dump..."
+  compose exec -T "$POSTGRES_SERVICE" pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom --no-owner --no-privileges > "$target"
+  if [ ! -s "$target" ]; then
+    echo "PostgreSQL dump is empty: $target" >&2
+    return 1
+  fi
+  verify_postgres_dump "$target"
+}
+
+restore_postgres() {
+  local dump="$1"
+  verify_postgres_dump "$dump"
+  echo "Restoring PostgreSQL database from $dump..."
+  compose exec -T "$POSTGRES_SERVICE" pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists --no-owner --no-privileges < "$dump"
 }
 
 compose() {
@@ -130,6 +193,9 @@ verify_archive() {
   else
     echo "Warning: backup archive does not contain a storage/ directory; this is expected only when using external object storage or no uploaded files exist." >&2
   fi
+  if postgres_enabled; then
+    verify_postgres_dump "$(postgres_dump_for_archive "$archive")"
+  fi
   echo "Backup archive verified: $archive"
 }
 
@@ -155,9 +221,13 @@ restore_drill() {
     -v "$drill_volume:/data" \
     -v "$(dirname "$archive"):/backup:ro" \
     alpine sh -c 'tar xzf "/backup/$LAYERPILOT_ARCHIVE_NAME" -C /data'
-  docker run --rm \
-    -v "$drill_volume:/data:ro" \
-    alpine sh -c "test -f /data/layerpilot.db.json -o -f /data/layerpilot.sqlite"
+  if postgres_enabled; then
+    verify_postgres_dump "$(postgres_dump_for_archive "$archive")"
+  else
+    docker run --rm \
+      -v "$drill_volume:/data:ro" \
+      alpine sh -c "test -f /data/layerpilot.db.json -o -f /data/layerpilot.sqlite"
+  fi
   cleanup_drill
   trap - RETURN
   echo "Restore drill passed; temporary Docker volume removed: $drill_volume"
@@ -172,6 +242,7 @@ prune_backups() {
   fi
   echo "Pruning 3DSTU FarmFlow backups older than $RETENTION_DAYS day(s) from $BACKUP_DIR..."
   find "$BACKUP_DIR" -maxdepth 1 -type f -name 'layerpilot-data-*.tgz' -mtime +"$RETENTION_DAYS" -print -delete
+  find "$BACKUP_DIR" -maxdepth 1 -type f -name 'layerpilot-postgres-*.dump' -mtime +"$RETENTION_DAYS" -print -delete
   find "$BACKUP_DIR" -maxdepth 1 -type f -name 'layerpilot-pre-restore-*.tgz' -mtime +"$RETENTION_DAYS" -print -delete
 }
 
@@ -204,6 +275,9 @@ create_pre_restore_backup() {
     -v "$VOLUME_NAME:/data:ro" \
     -v "$BACKUP_DIR:/backup" \
     alpine sh -c "tar czf /backup/$(basename "$target") -C /data ."
+  if postgres_enabled; then
+    dump_postgres "$BACKUP_DIR/layerpilot-postgres-pre-restore-$stamp.dump"
+  fi
   verify_archive "$target"
   echo "Pre-restore safeguard backup written: $target"
 }
@@ -214,6 +288,7 @@ backup() {
   local stamp
   stamp="$(date +%Y%m%d-%H%M%S)"
   local target="$BACKUP_DIR/layerpilot-data-$stamp.tgz"
+  local postgres_dump="$BACKUP_DIR/layerpilot-postgres-$stamp.dump"
   local services_stopped=0
   restart_services() {
     if [ "$services_stopped" = "1" ]; then
@@ -222,9 +297,12 @@ backup() {
     fi
   }
   trap restart_services RETURN
-  echo "Stopping services for a consistent volume snapshot..."
-  compose stop
+  echo "Stopping application services for a consistent volume snapshot..."
+  compose stop layerpilot layerpilot-worker orca-worker
   services_stopped=1
+  if postgres_enabled; then
+    dump_postgres "$postgres_dump"
+  fi
   docker run --rm \
     -v "$VOLUME_NAME:/data:ro" \
     -v "$BACKUP_DIR:/backup" \
@@ -244,8 +322,10 @@ restore() {
     exit 2
   fi
   verify_archive "$archive"
-  echo "Stopping services before restore..."
-  compose stop
+  local postgres_dump
+  postgres_dump="$(postgres_dump_for_archive "$archive")"
+  echo "Stopping application services before restore..."
+  compose stop layerpilot layerpilot-worker orca-worker
   create_pre_restore_backup
   local archive_name
   archive_name="$(basename "$archive")"
@@ -254,6 +334,9 @@ restore() {
     -v "$VOLUME_NAME:/data" \
     -v "$(dirname "$archive"):/backup:ro" \
     alpine sh -c 'rm -rf /data/* /data/.[!.]* /data/..?* 2>/dev/null || true; tar xzf "/backup/$LAYERPILOT_ARCHIVE_NAME" -C /data'
+  if postgres_enabled; then
+    restore_postgres "$postgres_dump"
+  fi
   compose up -d
   echo "Restore complete from: $archive"
 }

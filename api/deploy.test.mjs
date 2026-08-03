@@ -208,6 +208,10 @@ describe("3DSTU FarmFlow deployment packaging", () => {
     expect(backup).toContain("LAYERPILOT_BACKUP_RETENTION_DAYS");
     expect(backup).toContain("LAYERPILOT_BACKUP_LOCK_DIR");
     expect(backup).toContain("LAYERPILOT_PRE_RESTORE_BACKUP");
+    expect(backup).toContain("POSTGRES_SERVICE");
+    expect(backup).toContain("pg_dump");
+    expect(backup).toContain("pg_restore");
+    expect(backup).toContain("layerpilot-postgres-*.dump");
     expect(backup).toContain("validate_lock_dir");
     expect(backup).toContain("LAYERPILOT_BACKUP_LOCK_DIR is unsafe");
     expect(backup).toContain("acquire_lock");
@@ -372,10 +376,10 @@ describe("3DSTU FarmFlow deployment packaging", () => {
     expect(guide).toContain("scripts/ubuntu-backup.sh backup");
     expect(guide).toContain("scripts/ubuntu-backup.sh verify");
     expect(guide).toContain("scripts/ubuntu-backup.sh restore-drill");
-    expect(guide).toContain("verifies the newly written archive");
+    expect(guide).toContain("creates and validates the PostgreSQL dump");
     expect(guide).toContain("temporary Docker volume");
     expect(guide).toContain("Run a restore drill periodically");
-    expect(guide).toContain("verifies the archive before stopping services");
+    expect(guide).toContain("verifies both paired artifacts before stopping API/worker writes");
     expect(guide).toContain("scripts/ubuntu-backup.sh prune");
     expect(guide).toContain("renders the systemd unit with the current project path");
     expect(guide).toContain("update `WorkingDirectory` and `ExecStart`");

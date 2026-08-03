@@ -209,7 +209,7 @@ sudo certbot --nginx -d your-domain.example --agree-tos --email owner@example.co
 
 ## 6. Backups
 
-Compose sets the project name to `layerpilot`, so the persistent Docker volume is deterministically materialized as `layerpilot_layerpilot-data`. It contains the JSON/SQLite database and local model storage. Back it up before upgrades:
+Compose sets the project name to `layerpilot`, so the persistent Docker volume is deterministically materialized as `layerpilot_layerpilot-data`. It contains local model storage. The production PostgreSQL document store is backed up as a paired `layerpilot-postgres-YYYYmmdd-HHMMSS.dump` custom-format dump. Keep each `.tgz` and its same-timestamp `.dump` together before upgrades:
 
 ```bash
 chmod +x scripts/ubuntu-backup.sh
@@ -220,9 +220,9 @@ scripts/ubuntu-backup.sh prune
 scripts/ubuntu-backup.sh list
 ```
 
-`backup` verifies the newly written archive before pruning old backups. `verify` runs a tar integrity check and warns if the archive does not contain a database file or local `storage/` payloads. `restore-drill` extracts an archive into a temporary Docker volume, confirms a 3DSTU FarmFlow database file is present, then removes the temporary volume without touching production data.
+`backup` stops API and worker writes, creates and validates the PostgreSQL dump, then snapshots local storage. `verify` runs the tar integrity check plus `pg_restore -l` validation for the paired dump. `restore-drill` extracts the storage archive into a temporary Docker volume and validates the paired PostgreSQL dump without touching production data.
 
-The backup script reads `.env` before applying defaults, so production values such as `LAYERPILOT_BACKUP_RETENTION_DAYS`, `LAYERPILOT_BACKUP_DIR`, and `LAYERPILOT_VOLUME_NAME` can be kept with the rest of the deployment configuration. `LAYERPILOT_BACKUP_RETENTION_DAYS` defaults to `30`. Set it to another whole number before running `backup` or `prune`, or set it to `0` to disable automatic pruning. Pruning covers normal `layerpilot-data-*.tgz` archives and pre-restore safeguard backups.
+The backup script reads `.env` before applying defaults, so production values such as `LAYERPILOT_BACKUP_RETENTION_DAYS`, `LAYERPILOT_BACKUP_DIR`, `LAYERPILOT_VOLUME_NAME`, and `LAYERPILOT_POSTGRES_SERVICE` can be kept with the rest of the deployment configuration. `LAYERPILOT_BACKUP_RETENTION_DAYS` defaults to `30`. Set it to another whole number before running `backup` or `prune`, or set it to `0` to disable automatic pruning. Pruning covers storage archives, PostgreSQL dump artifacts, and pre-restore safeguard backups.
 
 Backup, prune, restore, and restore-drill commands use a directory lock to avoid overlapping with the nightly timer or an update-time backup. The default lock is stored inside the backup directory; override it with `LAYERPILOT_BACKUP_LOCK_DIR` only if your backup storage path cannot host lock directories.
 
@@ -246,7 +246,7 @@ scripts/ubuntu-backup.sh restore ~/layerpilot-backups/layerpilot-data-YYYYmmdd-H
 scripts/ubuntu-deploy.sh smoke
 ```
 
-`restore` verifies the archive before stopping services and replacing the Docker volume. By default it also writes a pre-restore safeguard backup named `layerpilot-pre-restore-YYYYmmdd-HHMMSS.tgz` from the current production volume after services are stopped and before the volume is replaced. Keep this enabled unless you intentionally set `LAYERPILOT_PRE_RESTORE_BACKUP=false` for a controlled recovery drill.
+`restore` verifies both paired artifacts before stopping API/worker writes, replacing local storage, and restoring PostgreSQL. By default it also writes paired pre-restore safeguard artifacts from the current production storage and database. Keep this enabled unless you intentionally set `LAYERPILOT_PRE_RESTORE_BACKUP=false` for a controlled recovery drill.
 
 Run a restore drill periodically, especially after changing storage settings or before major upgrades.
 
