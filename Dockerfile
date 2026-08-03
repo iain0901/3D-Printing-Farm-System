@@ -1,10 +1,14 @@
+# Builds the Vue 2 / Element UI frontend (frontend-vue/) per the migration plan's Phase 7 cutover.
+# The React frontend (src/) is intentionally left untouched and unused by this Dockerfile until
+# the React source tree is retired post-rollback-window; see frontend-vue/README or the migration
+# plan for the coexistence rationale.
 FROM node:22-alpine AS build
-WORKDIR /app
+WORKDIR /app/frontend-vue
 
-COPY package*.json ./
+COPY frontend-vue/package*.json ./
 RUN npm ci
 
-COPY . .
+COPY frontend-vue/. .
 RUN npm run build
 
 FROM node:22-alpine AS runtime
@@ -21,7 +25,7 @@ COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --chown=node:node api ./api
-COPY --chown=node:node --from=build /app/dist ./dist
+COPY --chown=node:node --from=build /app/frontend-vue/dist ./dist
 
 RUN mkdir -p /data/storage && chown -R node:node /app /data
 VOLUME ["/data"]

@@ -10,7 +10,7 @@ describe("3DSTU FarmFlow deployment packaging", () => {
     expect(dockerfile).toContain("FROM node:22-alpine AS runtime");
     expect(dockerfile).toContain("npm ci --omit=dev");
     expect(dockerfile).toContain("COPY --chown=node:node api ./api");
-    expect(dockerfile).toContain("COPY --chown=node:node --from=build /app/dist ./dist");
+    expect(dockerfile).toContain("COPY --chown=node:node --from=build /app/frontend-vue/dist ./dist");
     expect(dockerfile).toContain("chown -R node:node /app /data");
     expect(dockerfile).toContain('VOLUME ["/data"]');
     expect(dockerfile).toContain("USER node");

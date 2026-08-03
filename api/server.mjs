@@ -20,18 +20,22 @@ import nodemailer from "nodemailer";
 import { diagnoseBridge, fetchBridgeStatus, sendBridgeCommand } from "./hardware-bridge.mjs";
 import { formatBytes, parseModelMetadata } from "./model-metadata.mjs";
 import { createObjectStorage, defaultStorageRoot } from "./object-storage.mjs";
+import { createPaymentProvider, listPaymentProviders } from "./payment-providers.mjs";
+import { createLogisticsProvider } from "./logistics-tracking.mjs";
 import { createPersistenceAdapter } from "./persistence.mjs";
 import { solveScheduleAssignments } from "./schedule-solver.mjs";
 import { seedData } from "./seed.mjs";
 
 const execFileAsync = promisify(execFile);
 
-const COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "orders", "customers", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns"];
+const COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "orders", "customers", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns", "coupons"];
 const RESTORABLE_EXTRA_KEYS = ["users", "workspaces", "workspaceSettings", "costCatalog", "costCatalogs", "profileDefaults", "profileMatchingPolicy", "billingSessions", "invoices", "dataMeta"];
 const RESTORABLE_KEYS = [...COLLECTIONS, ...RESTORABLE_EXTRA_KEYS];
 const defaultCostCatalog = {
   currency: "USD",
-  materialRates: { PLA: 0.82, PETG: 1.05, ASA: 1.28, TPU: 1.5, Resin: 2.1 },
+  // 相對倍率參考業界公開報價計算器（3dprintcost.us、future3d.com.tw 等）：PLA/PETG/ABS 同一價格帶，
+  // ASA/TPU 因材料特性略貴，樹脂(SLA)因材料+後處理成本明顯較高，Nylon(SLS) 因粉末材料+雷射燒結機時最貴。
+  materialRates: { PLA: 0.82, PETG: 1.05, ABS: 1.0, ASA: 1.28, TPU: 1.5, Resin: 2.1, Nylon: 2.4 },
   machineHourlyRate: 18,
   laborPerOrder: 35,
   failureReservePercent: 6,
@@ -89,7 +93,7 @@ const API_KEY_GRANTABLE_SCOPES = [
   "webhooks:write"
 ];
 const apiKeyGrantableScopeSet = new Set(API_KEY_GRANTABLE_SCOPES);
-const TENANT_COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "orders", "customers", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns", "billingSessions", "invoices"];
+const TENANT_COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "orders", "customers", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns", "billingSessions", "invoices", "coupons"];
 const printerStatusSchema = z.enum(["idle", "printing", "paused", "offline", "error", "maintenance"]);
 const jobStatusSchema = z.enum(["queued", "printing", "paused", "complete", "failed", "cancelled"]);
 const prioritySchema = z.enum(["Rush", "High", "Normal", "Low"]);
@@ -300,6 +304,7 @@ const orderSchema = z.object({
   source: z.enum(["Shopify", "Etsy", "Manual", "eBay"]).default("Manual"),
   externalId: z.string().optional(),
   customer: z.string().min(1),
+  customerId: z.string().optional().default(""),
   items: z.array(z.string().min(1)).min(1),
   status: orderStatusSchema.default("received"),
   due: z.string().min(1).default("Tomorrow 17:00"),
@@ -336,8 +341,32 @@ const publicQuoteRequestSchema = z.object({
   rush: z.boolean().optional().default(false),
   useCase: z.string().max(60).optional().default(""),
   formMode: z.enum(["quick", "expert"]).optional().default("quick"),
-  clientEstimate: z.number().nonnegative().optional().default(0)
+  clientEstimate: z.number().nonnegative().optional().default(0),
+  // 每個零件（多零件檔案偵測到的殼/物件）指定的顏色，用於多色列印（如 3MF 多材料檔、多零件 STL 分色列印）
+  partColors: z.array(z.object({ index: z.number().int().min(0), color: z.string().regex(/^#[0-9a-fA-F]{6}$/) })).max(64).optional().default([])
 });
+const publicPricingEstimateSchema = z.object({
+  material: z.string().min(1).default("PLA"),
+  quality: z.enum(["Draft", "Standard", "Fine"]).default("Standard"),
+  infill: z.number().min(0).max(100).optional().default(15),
+  walls: z.number().int().min(1).max(6).optional().default(2),
+  support: z.boolean().optional().default(false),
+  postProcessing: z.array(z.enum(["sanding", "painting", "dyeing", "polishing"])).max(4).optional().default([]),
+  quantity: z.number().int().positive().max(10000).default(1),
+  rush: z.boolean().optional().default(false),
+  // 預估要用到幾種顏色（多材料/多色列印，例如 AMS/MMU 換料），1 代表單色，不加價
+  colors: z.number().int().min(1).max(8).optional().default(1)
+});
+const POST_PROCESSING_FEES = { sanding: 5, painting: 15, dyeing: 10, polishing: 8 };
+// 每多一種顏色（超過第一種）就多收的加工費，對應多材料/多色列印實際需要的換料與清料時間（比照 AMS/MMU 換料機制）
+const MULTI_COLOR_SURCHARGE_PER_EXTRA_COLOR = 6;
+// 依常見代工報價的階梯折扣（JLCPCB/Xometry 之類平台常見的量產折扣曲線）
+function bulkDiscountFactor(quantity) {
+  if (quantity >= 100) return 0.85;
+  if (quantity >= 50) return 0.9;
+  if (quantity >= 10) return 0.95;
+  return 1;
+}
 const customerSchema = z.object({
   name: z.string().min(1).max(120),
   company: z.string().max(120).optional().default(""),
@@ -349,6 +378,29 @@ const customerSchema = z.object({
   source: z.string().max(60).optional().default("Manual")
 });
 const customerPatchSchema = customerSchema.partial();
+const customerAddressSchema = z.object({
+  label: z.string().min(1).max(60).default("預設地址"),
+  recipient: z.string().min(1).max(120),
+  phone: z.string().min(1).max(60),
+  line1: z.string().min(1).max(200),
+  line2: z.string().max(200).optional().default(""),
+  city: z.string().min(1).max(100),
+  postalCode: z.string().min(1).max(20),
+  isDefault: z.boolean().optional().default(false)
+});
+const customerAddressPatchSchema = customerAddressSchema.partial();
+const couponSchema = z.object({
+  code: z.string().min(3).max(40).transform((value) => value.trim().toUpperCase()),
+  type: z.enum(["percent", "fixed"]),
+  value: z.number().positive(),
+  minOrderValue: z.number().nonnegative().optional().default(0),
+  validUntil: z.string().optional().default(""),
+  usageLimit: z.number().int().nonnegative().optional().default(0),
+  enabled: z.boolean().optional().default(true)
+});
+// 1 點 = NT$0.10（100 點折 NT$10），完成訂單依實付金額每 $10 累積 1 點，見 order status -> completed 的 hook
+const POINTS_PER_DOLLAR_SPENT = 0.1;
+const POINT_REDEMPTION_VALUE = 0.1;
 const quoteRequestPatchSchema = z.object({
   status: quoteStatusSchema.optional(),
   priority: prioritySchema.optional(),
@@ -1484,7 +1536,8 @@ function bootstrapAdminFromEnv(data, now) {
 function sanitizeUser(user) {
   if (!user) return null;
   const { passwordHash, twoFactorSecret, twoFactorRecoveryCodeHashes, ...safeUser } = user;
-  return { ...safeUser, twoFactor: twoFactorStatus(user), twoFactorEnabled: twoFactorStatus(user).enabled };
+  const scopes = Array.from(rolePermissions[user.role] || rolePermissions.Viewer);
+  return { ...safeUser, twoFactor: twoFactorStatus(user), twoFactorEnabled: twoFactorStatus(user).enabled, scopes };
 }
 
 function sanitizeDataMeta(meta = {}) {
@@ -3929,6 +3982,8 @@ async function createStoredModelFile(database, payload, options = {}) {
     estimateMinutes: metadata.estimateMinutes,
     quote: quote.total,
     quoteBreakdown: quote,
+    // 只有偵測到單檔內含多個獨立零件（例如一次匯出多個鑰匙圈）時才會有這兩個欄位，見 model-metadata.mjs 的 detectShells()
+    ...(metadata.parts ? { parts: metadata.parts, partCount: metadata.partCount } : {}),
     storagePath: stored.storagePath,
     storageProvider: stored.storageProvider,
     storageKey: stored.storageKey,
@@ -5007,6 +5062,16 @@ function createJobFromPart({ order, sku, part, file, printer, copyIndex }) {
   };
 }
 
+// 把報價需求記錄的顏色資訊（單色 quote.color，或多零件分色 quote.partColors）換成人可讀的顯示字串，
+// 讓生產端（訂單列表、任務佇列）能實際看到客戶指定的顏色，而不是原本硬編碼的 "Any"。
+function summarizeQuoteColor(quote) {
+  if (Array.isArray(quote.partColors) && quote.partColors.length) {
+    const distinct = Array.from(new Set(quote.partColors.map((item) => item.color)));
+    return distinct.length > 1 ? `Multi-color (${distinct.join(", ")})` : distinct[0];
+  }
+  return quote.color || "Any";
+}
+
 function createJobFromQuote({ quote, order, file, printer, workspaceData }) {
   const job = {
     id: randomUUID(),
@@ -5019,7 +5084,9 @@ function createJobFromQuote({ quote, order, file, printer, workspaceData }) {
     priority: quote.priority || "Normal",
     stage: file.sliced ? "needs scheduling" : "needs slicing",
     material: quote.material || file.material || "PLA",
-    color: "Any",
+    color: summarizeQuoteColor(quote),
+    partColors: Array.isArray(quote.partColors) ? quote.partColors : [],
+    filePartCount: quote.filePartCount || 0,
     due: order.due || quote.due || "Flexible",
     dimensions: file.dimensions || [100, 100, 50],
     assignee: "Scheduler",
@@ -5029,7 +5096,19 @@ function createJobFromQuote({ quote, order, file, printer, workspaceData }) {
     sourceOrderId: order.id,
     sourceQuoteRequestId: quote.id,
     estimateGrams: file.estimateGrams || file.usage || quote.estimatedGrams || 0,
-    estimateMinutes: file.estimateMinutes || quote.estimatedMinutes || 0
+    estimateMinutes: file.estimateMinutes || quote.estimatedMinutes || 0,
+    // 客戶在報價表單指定的列印參數與後製需求，讓生產現場（排程/佇列）不用回頭查報價需求就能看到
+    postProcessing: Array.isArray(quote.postProcessing) ? quote.postProcessing : [],
+    notes: quote.notes || "",
+    settings: {
+      quality: quote.quality || "",
+      layerHeight: quote.layerHeight || "",
+      infill: quote.infill ?? 0,
+      walls: quote.walls ?? 0,
+      support: quote.support || "",
+      inspection: quote.inspection || "",
+      inserts: quote.inserts || 0
+    }
   };
   job.scheduleWarnings = getScheduleWarnings(workspaceData, job, printer);
   return job;
@@ -5084,9 +5163,12 @@ function publicQuoteSummary(quote) {
     quality: quote.quality || "",
     layerHeight: quote.layerHeight || "",
     infill: quote.infill ?? 0,
+    walls: quote.walls ?? 0,
     support: quote.support || "",
     postProcessing: Array.isArray(quote.postProcessing) ? quote.postProcessing : [],
     inspection: quote.inspection || "",
+    inserts: quote.inserts || 0,
+    notes: quote.notes || "",
     rush: Boolean(quote.rush),
     due: quote.due,
     budget: quote.budget,
@@ -5098,6 +5180,10 @@ function publicQuoteSummary(quote) {
     estimatedGrams: quote.estimatedGrams || 0,
     estimatedMinutes: quote.estimatedMinutes || 0,
     estimatedQuote: quote.estimatedQuote || 0,
+    fileParts: Array.isArray(quote.fileParts) ? quote.fileParts : [],
+    filePartCount: quote.filePartCount || 0,
+    partColors: Array.isArray(quote.partColors) ? quote.partColors : [],
+    colorSurcharge: quote.colorSurcharge || 0,
     orderId: quote.orderId || "",
     customerDecision: quote.customerDecision || "",
     customerDecisionAt: quote.customerDecisionAt || "",
@@ -5156,6 +5242,15 @@ function convertQuoteToProduction(data, quote, { workspaceId, due, value, create
     due: due || quote.due || "Flexible",
     value: Number(value ?? quote.quotedValue ?? quote.budget ?? 0),
     quoteRequestId: quote.id,
+    // 讓生產端在訂單列表就能直接看到專案/材料/顏色/多零件資訊，不用另外去查關聯的報價需求
+    project: quote.project || "",
+    material: quote.material || "",
+    quantity: quote.quantity || 1,
+    color: summarizeQuoteColor(quote),
+    partColors: Array.isArray(quote.partColors) ? quote.partColors : [],
+    filePartCount: quote.filePartCount || 0,
+    postProcessing: Array.isArray(quote.postProcessing) ? quote.postProcessing : [],
+    notes: quote.notes || "",
     updatedAt: now
   };
   data.orders.push(order);
@@ -5353,6 +5448,16 @@ function applyOrderStatusChange(data, order, status) {
   }
   if (status === "completed") {
     order.completedAt = now;
+    // 訂單完成時依實付金額（扣除已套用的折扣/點數折抵）累積會員點數，見 POINTS_PER_DOLLAR_SPENT
+    const customer = order.customerId ? (data.customers || []).find((item) => item.id === order.customerId) : null;
+    if (customer && !order.pointsEarned) {
+      const payable = Math.max(0, Number(order.value || 0) - Number(order.discount || 0));
+      const earned = Math.floor(payable * POINTS_PER_DOLLAR_SPENT);
+      if (earned > 0) {
+        customer.loyaltyPoints = Math.max(0, Number(customer.loyaltyPoints || 0)) + earned;
+        order.pointsEarned = earned;
+      }
+    }
   }
   return { order, jobs: changedJobs, materialChanges, spools: workspaceData.spools, todos: deriveTodos(workspaceData) };
 }
@@ -6185,10 +6290,20 @@ async function parsePublicQuoteRequestPayload(request) {
       rush: fieldValue("rush") === "true",
       useCase: fieldValue("useCase"),
       formMode: fieldValue("formMode") === "expert" ? "expert" : "quick",
-      clientEstimate: Number(fieldValue("clientEstimate", "0"))
+      clientEstimate: Number(fieldValue("clientEstimate", "0")),
+      partColors: parseJsonField(fieldValue("partColors", "[]"), [])
     },
     upload: buffer.length ? { filename, buffer } : null
   };
+}
+
+function parseJsonField(raw, fallback) {
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed ?? fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 function publicQuoteIntakeDigest(incoming = {}) {
@@ -6388,7 +6503,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
 
   app.addHook("preHandler", async (request, reply) => {
     const routePath = request.url.split("?")[0];
-    const publicRoute = routePath === "/api/health" || routePath === "/api/readiness" || routePath === "/api/metrics" && hasValidMetricsToken(request) || routePath === "/api/internal/worker-broadcast" && hasValidWorkerToken(request) || routePath === "/api/billing/webhook/stripe" || routePath === "/api/public/quoteRequests" || routePath.startsWith("/api/public/quoteRequests/") || routePath.startsWith("/api/auth/") || routePath.startsWith("/api/customer-auth/") || routePath.startsWith("/api/customer/") || routePath === "/api/events/stream" || routePath === "/api/events/ws" || serveStatic && !routePath.startsWith("/api/");
+    const publicRoute = routePath === "/api/health" || routePath === "/api/readiness" || routePath === "/api/metrics" && hasValidMetricsToken(request) || routePath === "/api/internal/worker-broadcast" && hasValidWorkerToken(request) || routePath === "/api/billing/webhook/stripe" || routePath === "/api/public/quoteRequests" || routePath.startsWith("/api/public/quoteRequests/") || routePath === "/api/public/pricing-estimate" || routePath === "/api/public/model-preview" || routePath.startsWith("/api/auth/") || routePath.startsWith("/api/customer-auth/") || routePath.startsWith("/api/customer/") || routePath === "/api/events/stream" || routePath === "/api/events/ws" || serveStatic && !routePath.startsWith("/api/");
     if (publicRoute) return;
     if (await replayCommittedRestoreRequest(database, request, reply)) return;
     const { session, user, apiKey } = userFromRequest(database, request);
@@ -6818,11 +6933,224 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     return customerLinkedQuotes(database, customer).map(sanitizeQuoteRequest);
   });
 
+  function customerOwnedOrder(database, customer, orderId) {
+    const quoteOrderIds = new Set(customerLinkedQuotes(database, customer).map((quote) => quote.orderId).filter(Boolean));
+    return (database.data.orders || []).find((order) => order.id === orderId && itemInWorkspace(order, customer.workspaceId) && (order.customerId === customer.id || quoteOrderIds.has(order.id)));
+  }
+
   app.get("/api/customer/orders", async (request, reply) => {
     const { customer } = customerFromRequest(database, request);
     if (!customer) return reply.code(401).send({ error: "Authentication required" });
     const quoteOrderIds = new Set(customerLinkedQuotes(database, customer).map((quote) => quote.orderId).filter(Boolean));
     return (database.data.orders || []).filter((order) => itemInWorkspace(order, customer.workspaceId) && (order.customerId === customer.id || quoteOrderIds.has(order.id)));
+  });
+
+  // 三個金流供應商（街口支付/LINE Pay/PayUni）目前都是「已備妥串接點但無正式商店憑證」的狀態，
+  // 見 api/payment-providers.mjs 開頭註解。configured=false 代表對應的 env 變數還沒設，前端應顯示為「即將推出」。
+  app.get("/api/customer/payment-methods", async (request, reply) => {
+    const { customer } = customerFromRequest(database, request);
+    if (!customer) return reply.code(401).send({ error: "Authentication required" });
+    return { methods: listPaymentProviders(process.env) };
+  });
+
+  app.post("/api/customer/orders/:id/checkout", { config: { rateLimit: customerAuthRateLimit } }, async (request, reply) => {
+    const { customer } = customerFromRequest(database, request);
+    if (!customer) return reply.code(401).send({ error: "Authentication required" });
+    const parsed = z.object({ paymentMethod: z.enum(["jkopay", "linepay", "payuni"]) }).safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid checkout payload", issues: parsed.error.issues });
+    const order = customerOwnedOrder(database, customer, request.params.id);
+    if (!order) return reply.code(404).send({ error: "Order not found" });
+    const provider = createPaymentProvider(parsed.data.paymentMethod, process.env);
+    if (!provider) return reply.code(400).send({ error: "Unknown payment method" });
+    const publicUrl = String(process.env.LAYERPILOT_PUBLIC_URL || "").replace(/\/$/, "");
+    const result = await provider.createPayment({
+      orderId: order.id,
+      amount: Number(order.value || 0),
+      currency: "TWD",
+      returnUrl: `${publicUrl}/#/portal/dashboard`,
+      notifyUrl: `${publicUrl}/api/customer/orders/${order.id}/checkout/callback`
+    });
+    order.payment = {
+      provider: provider.id,
+      status: result.status,
+      providerOrderId: result.providerOrderId || "",
+      redirectUrl: result.redirectUrl || "",
+      message: result.message || "",
+      updatedAt: new Date().toISOString()
+    };
+    await dispatchEvent(database, "order.checkout_initiated", `${order.id} checkout via ${provider.name}`, { workspaceId: order.workspaceId, orderId: order.id, provider: provider.id, status: result.status }, { actor: null });
+    await database.write();
+    return { ok: result.ok, payment: order.payment };
+  });
+
+  // Track.TW 尚未有正式 API 憑證，這個端點回傳的是「串接點已備妥、尚未實際查詢」的佔位結果，
+  // 見 api/logistics-tracking.mjs 開頭註解。
+  app.get("/api/customer/orders/:id/tracking", async (request, reply) => {
+    const { customer } = customerFromRequest(database, request);
+    if (!customer) return reply.code(401).send({ error: "Authentication required" });
+    const order = customerOwnedOrder(database, customer, request.params.id);
+    if (!order) return reply.code(404).send({ error: "Order not found" });
+    if (!order.trackingNumber) return { ok: true, status: "not_shipped", carrier: order.carrier || "", trackingNumber: "" };
+    const provider = createLogisticsProvider("tracktw", process.env);
+    const result = await provider.queryStatus({ carrier: order.carrier || "", trackingNumber: order.trackingNumber });
+    return result;
+  });
+
+  // 地址簿存在 customer.addresses 陣列上（不另開一個頂層集合），因為地址天生就是客戶的子資源，
+  // 存取一律先驗證 customerFromRequest()，不會有跨客戶讀到別人地址的問題。
+  app.get("/api/customer/addresses", async (request, reply) => {
+    const { customer } = customerFromRequest(database, request);
+    if (!customer) return reply.code(401).send({ error: "Authentication required" });
+    return customer.addresses || [];
+  });
+
+  app.post("/api/customer/addresses", async (request, reply) => {
+    const { customer } = customerFromRequest(database, request);
+    if (!customer) return reply.code(401).send({ error: "Authentication required" });
+    const parsed = customerAddressSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid address payload", issues: parsed.error.issues });
+    customer.addresses ||= [];
+    const now = new Date().toISOString();
+    const address = { id: randomUUID(), ...parsed.data, createdAt: now, updatedAt: now };
+    if (address.isDefault) customer.addresses.forEach((item) => { item.isDefault = false; });
+    if (!customer.addresses.length) address.isDefault = true;
+    customer.addresses.push(address);
+    customer.updatedAt = now;
+    await database.write();
+    return reply.code(201).send(address);
+  });
+
+  app.patch("/api/customer/addresses/:id", async (request, reply) => {
+    const { customer } = customerFromRequest(database, request);
+    if (!customer) return reply.code(401).send({ error: "Authentication required" });
+    const parsed = customerAddressPatchSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid address update", issues: parsed.error.issues });
+    const address = (customer.addresses || []).find((item) => item.id === request.params.id);
+    if (!address) return reply.code(404).send({ error: "Address not found" });
+    if (parsed.data.isDefault) customer.addresses.forEach((item) => { item.isDefault = false; });
+    Object.assign(address, parsed.data, { updatedAt: new Date().toISOString() });
+    await database.write();
+    return address;
+  });
+
+  app.delete("/api/customer/addresses/:id", async (request, reply) => {
+    const { customer } = customerFromRequest(database, request);
+    if (!customer) return reply.code(401).send({ error: "Authentication required" });
+    const index = (customer.addresses || []).findIndex((item) => item.id === request.params.id);
+    if (index === -1) return reply.code(404).send({ error: "Address not found" });
+    customer.addresses.splice(index, 1);
+    await database.write();
+    return { ok: true };
+  });
+
+  app.post("/api/customer/orders/:id/reorder", { config: { rateLimit: customerAuthRateLimit } }, async (request, reply) => {
+    const { customer } = customerFromRequest(database, request);
+    if (!customer) return reply.code(401).send({ error: "Authentication required" });
+    const source = customerOwnedOrder(database, customer, request.params.id);
+    if (!source) return reply.code(404).send({ error: "Order not found" });
+    const now = new Date().toISOString();
+    const order = {
+      id: `ord-${1000 + database.data.orders.length + 1}`,
+      workspaceId: source.workspaceId,
+      source: "Manual",
+      customer: source.customer,
+      customerId: customer.id,
+      items: [...(source.items || [])],
+      status: "received",
+      due: "Flexible",
+      value: source.value,
+      reorderedFromOrderId: source.id,
+      updatedAt: now
+    };
+    database.data.orders.push(order);
+    await dispatchEvent(database, "order.reordered", `${order.id} reordered from ${source.id} by ${customer.email}`, { workspaceId: order.workspaceId, orderId: order.id, sourceOrderId: source.id, customerId: customer.id });
+    await database.write();
+    return reply.code(201).send(order);
+  });
+
+  app.post("/api/customer/orders/:id/apply-coupon", { config: { rateLimit: customerAuthRateLimit } }, async (request, reply) => {
+    const { customer } = customerFromRequest(database, request);
+    if (!customer) return reply.code(401).send({ error: "Authentication required" });
+    const order = customerOwnedOrder(database, customer, request.params.id);
+    if (!order) return reply.code(404).send({ error: "Order not found" });
+    const parsed = z.object({ code: z.string().min(1).max(40) }).safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid coupon payload", issues: parsed.error.issues });
+    const code = parsed.data.code.trim().toUpperCase();
+    const coupon = (database.data.coupons || []).find((item) => item.code === code && itemInWorkspace(item, order.workspaceId));
+    if (!coupon || !coupon.enabled) return reply.code(404).send({ error: "Coupon not found or disabled" });
+    if (coupon.validUntil && Date.parse(coupon.validUntil) < Date.now()) return reply.code(400).send({ error: "Coupon has expired" });
+    if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit) return reply.code(400).send({ error: "Coupon usage limit reached" });
+    if (Number(order.value || 0) < coupon.minOrderValue) return reply.code(400).send({ error: `Order must be at least $${coupon.minOrderValue} to use this coupon` });
+    const discount = coupon.type === "percent" ? Math.round(Number(order.value || 0) * coupon.value) / 100 : Math.min(coupon.value, Number(order.value || 0));
+    order.discount = discount;
+    order.appliedCouponCode = coupon.code;
+    order.updatedAt = new Date().toISOString();
+    coupon.usedCount = (coupon.usedCount || 0) + 1;
+    await dispatchEvent(database, "order.coupon_applied", `${coupon.code} applied to ${order.id}`, { workspaceId: order.workspaceId, orderId: order.id, couponId: coupon.id, discount });
+    await database.write();
+    return { ok: true, order, discount };
+  });
+
+  app.post("/api/customer/orders/:id/redeem-points", { config: { rateLimit: customerAuthRateLimit } }, async (request, reply) => {
+    const { customer } = customerFromRequest(database, request);
+    if (!customer) return reply.code(401).send({ error: "Authentication required" });
+    const order = customerOwnedOrder(database, customer, request.params.id);
+    if (!order) return reply.code(404).send({ error: "Order not found" });
+    const parsed = z.object({ points: z.number().int().positive() }).safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid points redemption payload", issues: parsed.error.issues });
+    const available = Math.max(0, Number(customer.loyaltyPoints || 0));
+    if (parsed.data.points > available) return reply.code(400).send({ error: "Not enough points", available });
+    const payable = Math.max(0, Number(order.value || 0) - Number(order.discount || 0));
+    const redemptionValue = Math.min(payable, Math.round(parsed.data.points * POINT_REDEMPTION_VALUE * 100) / 100);
+    customer.loyaltyPoints = available - parsed.data.points;
+    order.discount = Math.round((Number(order.discount || 0) + redemptionValue) * 100) / 100;
+    order.pointsRedeemed = (order.pointsRedeemed || 0) + parsed.data.points;
+    order.updatedAt = new Date().toISOString();
+    await dispatchEvent(database, "order.points_redeemed", `${parsed.data.points} points redeemed on ${order.id}`, { workspaceId: order.workspaceId, orderId: order.id, customerId: customer.id, points: parsed.data.points, redemptionValue });
+    await database.write();
+    return { ok: true, order, remainingPoints: customer.loyaltyPoints };
+  });
+
+  // 客戶端專用的檔案預覽/DFM 檢查：只能看自己報價需求連結到的檔案，重用內部 buildFilePreview()
+  // 同一套邏輯（尺寸、建構板佔用率、相容打印機、警告訊息），與 /api/files/:id/preview 給員工用的版本行為一致。
+  app.get("/api/customer/quotes/:id/file-preview", async (request, reply) => {
+    const { customer } = customerFromRequest(database, request);
+    if (!customer) return reply.code(401).send({ error: "Authentication required" });
+    const quote = customerLinkedQuotes(database, customer).find((item) => item.id === request.params.id);
+    if (!quote) return reply.code(404).send({ error: "Quote request not found" });
+    if (!quote.fileId) return reply.code(404).send({ error: "This quote request has no uploaded file" });
+    const file = (database.data.files || []).find((item) => item.id === quote.fileId && itemInWorkspace(item, customer.workspaceId));
+    if (!file) return reply.code(404).send({ error: "File not found" });
+    let buffer = null;
+    if (file.storagePath || file.storageKey) {
+      try {
+        buffer = await readStoredObject(file);
+      } catch {
+        buffer = null;
+      }
+    }
+    const preview = await buildFilePreview(file, buffer, scopedWorkspaceData(database.data, customer.workspaceId));
+    return preview;
+  });
+
+  // 客戶端專用的原始檔案下載：給前端 3D 檢視器（three.js STL/3MF loader）直接載入真實網格用，
+  // 跟 /api/files/:id/download 給員工用的版本邏輯一致，僅所有權檢查換成客戶自己連結的報價需求。
+  app.get("/api/customer/quotes/:id/file-raw", async (request, reply) => {
+    const { customer } = customerFromRequest(database, request);
+    if (!customer) return reply.code(401).send({ error: "Authentication required" });
+    const quote = customerLinkedQuotes(database, customer).find((item) => item.id === request.params.id);
+    if (!quote) return reply.code(404).send({ error: "Quote request not found" });
+    if (!quote.fileId) return reply.code(404).send({ error: "This quote request has no uploaded file" });
+    const file = (database.data.files || []).find((item) => item.id === quote.fileId && itemInWorkspace(item, customer.workspaceId));
+    if (!file || !file.storagePath) return reply.code(404).send({ error: "File not found" });
+    try {
+      const bytes = await readStoredObject(file);
+      reply.header("content-disposition", `attachment; filename="${path.basename(file.name || "model.stl").replace(/"/g, "")}"`);
+      reply.type("application/octet-stream");
+      return bytes;
+    } catch {
+      return reply.code(404).send({ error: "Stored file bytes are unavailable" });
+    }
   });
 
   app.post("/api/customer/quotes/:id/decision", { config: { rateLimit: customerAuthRateLimit } }, async (request, reply) => {
@@ -6985,6 +7313,64 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     return { action, todo: todos.find((todo) => todo.id === existing.id) || null, todos, todoActions: workspaceScopeForUser(database.data, request.user).todoActions };
   });
 
+  app.post("/api/public/pricing-estimate", { config: { rateLimit: { max: 120, timeWindow: "1 minute", groupId: "pricing-estimate" } } }, async (request, reply) => {
+    const parsed = publicPricingEstimateSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid pricing estimate payload", issues: parsed.error.issues });
+    const catalog = costCatalogForWorkspace(database.data, DEFAULT_WORKSPACE_ID);
+    // 還沒有真正上傳的檔案時，用一個中等尺寸的參考件讓使用者能「依材質/品質/填充率/牆數/支撐/後處理/數量/急件」
+    // 比較相對報價，不代表實際模型的真實用量；精準報價仍需上傳檔案讓後端解析（見 /api/public/quoteRequests 的 fileParts）。
+    // 參考件的材料量/工時模型參考業界公開計算器（3dprintcost.us 等）：外殼隨牆數線性增加、內部材料隨填充率線性增加、
+    // 品質（層高）只影響工時不影響材料量、支撐會額外增加材料與拆除工時。
+    const REFERENCE_SHELL_GRAMS = 20;
+    const REFERENCE_INFILL_GRAMS = 35;
+    const REFERENCE_SUPPORT_GRAMS = 8;
+    const REFERENCE_BASE_MINUTES = 55;
+    const REFERENCE_INFILL_MINUTES = 35;
+    const REFERENCE_WALL_MINUTES_PER_EXTRA_WALL = 6;
+    const REFERENCE_SUPPORT_MINUTES = 12;
+
+    const qualityFactor = { Draft: 0.85, Standard: 1, Fine: 1.25 }[parsed.data.quality] ?? 1;
+    const infillRatio = parsed.data.infill / 100;
+    const wallsFactor = parsed.data.walls / 2;
+
+    const grams = REFERENCE_SHELL_GRAMS * wallsFactor + REFERENCE_INFILL_GRAMS * infillRatio + (parsed.data.support ? REFERENCE_SUPPORT_GRAMS : 0);
+    const minutes = (REFERENCE_BASE_MINUTES + REFERENCE_INFILL_MINUTES * infillRatio + REFERENCE_WALL_MINUTES_PER_EXTRA_WALL * (parsed.data.walls - 1) + (parsed.data.support ? REFERENCE_SUPPORT_MINUTES : 0)) * qualityFactor;
+
+    const baseEstimate = calculateQuote(catalog, { material: parsed.data.material, grams, minutes, quantity: parsed.data.quantity });
+    // 急件是加急插單的服務費，不代表印得更快，所以是價格加成而不是縮短工時
+    const rushFee = parsed.data.rush ? Math.round(baseEstimate.total * 0.25 * 100) / 100 : 0;
+    const postProcessingFee = parsed.data.postProcessing.reduce((sum, key) => sum + (POST_PROCESSING_FEES[key] || 0), 0) * parsed.data.quantity;
+    const colorSurcharge = parsed.data.colors > 1 ? (parsed.data.colors - 1) * MULTI_COLOR_SURCHARGE_PER_EXTRA_COLOR * parsed.data.quantity : 0;
+    const discountFactor = bulkDiscountFactor(parsed.data.quantity);
+    const total = Math.round((baseEstimate.total + rushFee + postProcessingFee + colorSurcharge) * discountFactor * 100) / 100;
+
+    return {
+      ok: true,
+      reference: { grams: Math.round(grams * 10) / 10, minutes: Math.round(minutes), note: "Reference-part estimate for comparison, not a real file-based quote" },
+      estimate: { ...baseEstimate, rushFee, postProcessingFee, colorSurcharge, bulkDiscountFactor: discountFactor, total },
+      materialOptions: Object.keys(catalog.materialRates),
+      postProcessingOptions: Object.keys(POST_PROCESSING_FEES)
+    };
+  });
+
+  // 送出報價需求前的無狀態預覽：只解析檔案（尺寸/重量/工時/多零件偵測），不建立任何報價需求記錄，
+  // 讓使用者在填完表單、送出前就能先看到模型解析結果與 3D 預覽。
+  app.post("/api/public/model-preview", { config: { rateLimit: { max: 30, timeWindow: "1 minute", groupId: "model-preview" } } }, async (request, reply) => {
+    if (!request.isMultipart?.()) return reply.code(400).send({ error: "Expected a multipart file upload" });
+    const part = await request.file();
+    if (!part) return reply.code(400).send({ error: "No file was uploaded" });
+    const filename = path.basename(part.filename || "model.stl");
+    const material = typeof part.fields?.material?.value === "string" ? part.fields.material.value : "PLA";
+    const buffer = await part.toBuffer();
+    if (!buffer.length) return reply.code(400).send({ error: "Uploaded file is empty" });
+    const metadata = await parseModelMetadata({ buffer, filename, material });
+    const plate = { width: 256, depth: 256, height: 256 };
+    const [width, depth, height] = metadata.dimensions;
+    const warnings = [];
+    if (width > plate.width || depth > plate.depth || height > plate.height) warnings.push("Model exceeds the default 256 x 256 x 256 mm build plate.");
+    return { ok: true, filename, metadata, plate, warnings };
+  });
+
   app.post("/api/public/quoteRequests", { config: { rateLimit: { max: 20, timeWindow: "1 minute", groupId: "quote-intake" } } }, async (request, reply) => {
     const incoming = await parsePublicQuoteRequestPayload(request);
     const publicIdempotency = publicIdempotencyContext("POST", "/api/public/quoteRequests");
@@ -7004,6 +7390,9 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       source: "Quote request",
       quoteRequestId: quoteId
     }, { workspaceId: workspace.id }) : null;
+    // 多色列印加價：每多一種顏色（超過第一種）加收換料/清料費，比照 AMS/MMU 多材料換色的實際成本
+    const distinctColorCount = new Set(parsed.data.partColors.map((item) => item.color.toLowerCase())).size;
+    const colorSurcharge = distinctColorCount > 1 ? (distinctColorCount - 1) * MULTI_COLOR_SURCHARGE_PER_EXTRA_COLOR * parsed.data.quantity : 0;
     const quote = {
       id: quoteId,
       workspaceId: workspace.id,
@@ -7015,10 +7404,15 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       fileSize: uploaded?.file?.size || "",
       estimatedGrams: uploaded?.file?.estimateGrams || 0,
       estimatedMinutes: uploaded?.file?.estimateMinutes || 0,
-      estimatedQuote: uploaded?.file?.quote || 0,
+      estimatedQuote: (uploaded?.file?.quote || 0) + colorSurcharge,
+      // 單檔內偵測到多個獨立零件時（例如一次匯出多個鑰匙圈），一併回傳給前端顯示分件明細
+      fileParts: uploaded?.file?.parts || [],
+      filePartCount: uploaded?.file?.partCount || 0,
+      colorSurcharge,
       status: "new",
-      priority: "Normal",
-      quotedValue: uploaded?.file?.quote || 0,
+      // 客戶勾選急件並付了加急服務費，排程優先級要跟著提升，否則排程器永遠不會真的提前排這張單
+      priority: parsed.data.rush ? "Rush" : "Normal",
+      quotedValue: (uploaded?.file?.quote || 0) + colorSurcharge,
       internalNote: "",
       createdAt: now,
       updatedAt: now
@@ -8322,6 +8716,10 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!hasPermission(request.user, "orders:write")) return reply.code(403).send({ error: "Missing permission: orders:write" });
     const parsed = orderSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Invalid order payload", issues: parsed.error.issues });
+    if (parsed.data.customerId) {
+      const linkedCustomer = (database.data.customers || []).find((item) => item.id === parsed.data.customerId && itemInWorkspace(item, request.user.workspaceId));
+      if (!linkedCustomer) return reply.code(400).send({ error: "Customer not found", customerId: parsed.data.customerId });
+    }
     const order = { id: `ord-${1000 + database.data.orders.length + 1}`, workspaceId: request.user.workspaceId, ...parsed.data, updatedAt: new Date().toISOString() };
     database.data.orders.push(order);
     await dispatchEvent(database, "order.created", `${order.id} from ${order.source}`, {
@@ -8335,6 +8733,34 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     }, { actor: request.user, at: order.updatedAt });
     await database.write();
     return reply.code(201).send(order);
+  });
+
+  app.post("/api/coupons", async (request, reply) => {
+    if (!hasPermission(request.user, "orders:write")) return reply.code(403).send({ error: "Missing permission: orders:write" });
+    const parsed = couponSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid coupon payload", issues: parsed.error.issues });
+    database.data.coupons ||= [];
+    if (database.data.coupons.some((item) => itemInWorkspace(item, request.user.workspaceId) && item.code === parsed.data.code)) {
+      return reply.code(409).send({ error: "Coupon code already exists" });
+    }
+    const now = new Date().toISOString();
+    const coupon = { id: randomUUID(), workspaceId: request.user.workspaceId, ...parsed.data, usedCount: 0, createdAt: now, updatedAt: now };
+    database.data.coupons.push(coupon);
+    await dispatchEvent(database, "coupon.created", `${coupon.code} coupon created`, { workspaceId: request.user.workspaceId, couponId: coupon.id, type: coupon.type, value: coupon.value }, { actor: request.user });
+    await database.write();
+    return reply.code(201).send(coupon);
+  });
+
+  app.patch("/api/coupons/:id", async (request, reply) => {
+    if (!hasPermission(request.user, "orders:write")) return reply.code(403).send({ error: "Missing permission: orders:write" });
+    const parsed = couponSchema.partial().safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid coupon update", issues: parsed.error.issues });
+    const coupon = (database.data.coupons || []).find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
+    if (!coupon) return reply.code(404).send({ error: "Coupon not found" });
+    Object.assign(coupon, parsed.data, { updatedAt: new Date().toISOString() });
+    await dispatchEvent(database, "coupon.updated", `${coupon.code} coupon updated`, { workspaceId: request.user.workspaceId, couponId: coupon.id, enabled: coupon.enabled }, { actor: request.user });
+    await database.write();
+    return coupon;
   });
 
   app.post("/api/customers", async (request, reply) => {

@@ -187,6 +187,39 @@ describe("3DSTU FarmFlow API", () => {
     });
   });
 
+  it("includes role-derived scopes on login and /api/auth/me responses", async () => {
+    await withApp(async ({ app }) => {
+      const ownerLogin = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "owner@layerpilot.test", password: "layerpilot" } });
+      expect(ownerLogin.statusCode).toBe(200);
+      expect(ownerLogin.json().user).toMatchObject({ role: "Owner", scopes: ["*"] });
+
+      const ownerToken = ownerLogin.json().token;
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/users",
+        headers: auth(ownerToken),
+        payload: { name: "Scopes Viewer", email: "scopes.viewer@layerpilot.test", role: "Viewer", location: "HQ" }
+      });
+      expect(created.statusCode).toBe(201);
+      expect(created.json().user.scopes).toEqual([]);
+
+      const reset = await app.inject({
+        method: "POST",
+        url: `/api/users/${created.json().user.id}/reset-password`,
+        headers: auth(ownerToken)
+      });
+      expect(reset.statusCode).toBe(200);
+
+      const viewerLogin = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "scopes.viewer@layerpilot.test", password: reset.json().temporaryPassword } });
+      expect(viewerLogin.statusCode).toBe(200);
+      expect(viewerLogin.json().user).toMatchObject({ role: "Viewer", scopes: [] });
+
+      const me = await app.inject({ method: "GET", url: "/api/auth/me", headers: auth(viewerLogin.json().token) });
+      expect(me.statusCode).toBe(200);
+      expect(me.json().user).toMatchObject({ role: "Viewer", scopes: [] });
+    });
+  });
+
   it("issues one-time realtime tickets without accepting production bearer query auth", async () => {
     await withEnv({
       NODE_ENV: "production",
@@ -633,6 +666,77 @@ describe("3DSTU FarmFlow API", () => {
         expect(sanitized.body).not.toContain("responseBody");
         expect(sanitized.body).not.toContain(first.json().quoteRequest.accessToken);
       }
+    });
+  });
+
+  it("returns a comparison pricing estimate driven by material/quality/infill/walls/support/post-processing/quantity/rush", async () => {
+    await withApp(async ({ app }) => {
+      const baseline = await app.inject({ method: "POST", url: "/api/public/pricing-estimate", payload: { material: "PLA", quality: "Standard", quantity: 1 } });
+      expect(baseline.statusCode).toBe(200);
+      expect(baseline.json()).toMatchObject({ ok: true, estimate: { material: "PLA", rushFee: 0, postProcessingFee: 0, bulkDiscountFactor: 1 } });
+      expect(baseline.json().materialOptions).toEqual(expect.arrayContaining(["PLA", "PETG", "ABS", "ASA", "TPU", "Resin", "Nylon"]));
+      expect(baseline.json().postProcessingOptions).toEqual(expect.arrayContaining(["sanding", "painting", "dyeing", "polishing"]));
+
+      // Nylon + Fine + rush + 樹脂等級的高填充/多牆/支撐/後處理，全部因子疊加後應該遠貴於 PLA 基準
+      const loaded = await app.inject({
+        method: "POST",
+        url: "/api/public/pricing-estimate",
+        payload: { material: "Nylon", quality: "Fine", infill: 80, walls: 5, support: true, postProcessing: ["sanding", "painting"], quantity: 1, rush: true }
+      });
+      expect(loaded.statusCode).toBe(200);
+      expect(loaded.json().estimate.total).toBeGreaterThan(baseline.json().estimate.total);
+      expect(loaded.json().estimate.rushFee).toBeGreaterThan(0);
+      expect(loaded.json().estimate.postProcessingFee).toBe(20); // sanding $5 + painting $15
+
+      // 填充率越高參考件材料量越大
+      const lowInfill = await app.inject({ method: "POST", url: "/api/public/pricing-estimate", payload: { material: "PLA", infill: 5 } });
+      const highInfill = await app.inject({ method: "POST", url: "/api/public/pricing-estimate", payload: { material: "PLA", infill: 95 } });
+      expect(highInfill.json().reference.grams).toBeGreaterThan(lowInfill.json().reference.grams);
+
+      // 大量訂購應套用階梯折扣
+      const bulk = await app.inject({ method: "POST", url: "/api/public/pricing-estimate", payload: { material: "PLA", quantity: 100 } });
+      expect(bulk.json().estimate.bulkDiscountFactor).toBe(0.85);
+
+      const invalid = await app.inject({ method: "POST", url: "/api/public/pricing-estimate", payload: { quality: "NotARealQuality" } });
+      expect(invalid.statusCode).toBe(400);
+    });
+  });
+
+  it("detects multiple parts in a single uploaded STL for a public quote request", async () => {
+    await withApp(async ({ app }) => {
+      const stl = `solid batch
+facet normal 0 0 0
+outer loop
+vertex 0 0 0
+vertex 10 0 0
+vertex 0 10 0
+endloop
+endfacet
+facet normal 0 0 0
+outer loop
+vertex 200 200 200
+vertex 210 200 200
+vertex 200 210 200
+endloop
+endfacet
+endsolid batch`;
+      const boundary = "layerpilot-quote-multipart";
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        headers: { "content-type": `multipart/form-data; boundary=${boundary}` },
+        payload: multipartPayload({
+          boundary,
+          filename: "keychain-batch.stl",
+          content: stl,
+          fields: { customer: "Batch Buyer", email: "batch-buyer@example.com", project: "Keychain batch", material: "PLA", quantity: "2" }
+        })
+      });
+      expect(response.statusCode).toBe(201);
+      const { quoteRequest } = response.json();
+      expect(quoteRequest.filePartCount).toBe(2);
+      expect(quoteRequest.fileParts).toHaveLength(2);
+      expect(quoteRequest.fileParts[0]).toMatchObject({ dimensions: [10, 10, 1] });
     });
   });
 
@@ -5359,6 +5463,261 @@ endsolid s3_store`;
 
       const unauthorized = await app.inject({ method: "GET", url: "/api/customers" });
       expect(unauthorized.statusCode).toBe(401);
+    });
+  });
+
+  it("lets a customer preview the model file attached to their own quote request but not someone else's", async () => {
+    await withApp(async ({ app }) => {
+      const stl = `solid part
+facet normal 0 0 0
+outer loop
+vertex 0 0 0
+vertex 40 0 0
+vertex 0 20 10
+endloop
+endfacet
+endsolid part`;
+      const boundary = "layerpilot-preview-quote";
+      const quote = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        headers: { "content-type": `multipart/form-data; boundary=${boundary}` },
+        payload: multipartPayload({
+          boundary,
+          filename: "preview-part.stl",
+          content: stl,
+          fields: { customer: "Preview Buyer", email: "preview.buyer@example.com", project: "Preview part" }
+        })
+      });
+      expect(quote.statusCode).toBe(201);
+      const quoteId = quote.json().quoteRequest.id;
+
+      const register = await app.inject({ method: "POST", url: "/api/customer-auth/register", payload: { name: "Preview Buyer", email: "preview.buyer@example.com", password: "preview-secret-1" } });
+      const customerToken = register.json().token;
+
+      const preview = await app.inject({ method: "GET", url: `/api/customer/quotes/${quoteId}/file-preview`, headers: auth(customerToken) });
+      expect(preview.statusCode).toBe(200);
+      expect(preview.json()).toMatchObject({ name: "preview-part.stl", summary: { dimensions: [40, 20, 10] } });
+
+      const otherRegister = await app.inject({ method: "POST", url: "/api/customer-auth/register", payload: { name: "Other Preview", email: "other.preview@example.com", password: "other-secret-1" } });
+      const forbidden = await app.inject({ method: "GET", url: `/api/customer/quotes/${quoteId}/file-preview`, headers: auth(otherRegister.json().token) });
+      expect(forbidden.statusCode).toBe(404);
+    });
+  });
+
+  it("lets staff link a manually created order to an existing customer record via customerId", async () => {
+    await withApp(async ({ app }) => {
+      const token = await login(app);
+      const customer = await app.inject({
+        method: "POST",
+        url: "/api/customers",
+        headers: auth(token),
+        payload: { name: "Linked Buyer", email: "linked.buyer@example.com" }
+      });
+      expect(customer.statusCode).toBe(201);
+      const customerId = customer.json().id;
+
+      const linked = await app.inject({
+        method: "POST",
+        url: "/api/orders",
+        headers: auth(token),
+        payload: { source: "Manual", customer: "Linked Buyer", customerId, items: ["Custom part x1"], due: "Tomorrow 09:00", value: 120 }
+      });
+      expect(linked.statusCode).toBe(201);
+      expect(linked.json()).toMatchObject({ customer: "Linked Buyer", customerId });
+
+      const rejected = await app.inject({
+        method: "POST",
+        url: "/api/orders",
+        headers: auth(token),
+        payload: { source: "Manual", customer: "Nobody", customerId: "cus-does-not-exist", items: ["Custom part x1"] }
+      });
+      expect(rejected.statusCode).toBe(400);
+      expect(rejected.json()).toMatchObject({ error: "Customer not found" });
+
+      // customerId 選填：完全沒帶時仍要能建立訂單（維持舊行為，向後相容未建檔客戶）
+      const unlinked = await app.inject({
+        method: "POST",
+        url: "/api/orders",
+        headers: auth(token),
+        payload: { source: "Manual", customer: "Walk-in", items: ["Custom part x1"] }
+      });
+      expect(unlinked.statusCode).toBe(201);
+      expect(unlinked.json().customerId).toBe("");
+    });
+  });
+
+  it("supports customer address book CRUD, reorder, coupon redemption, and loyalty points earn/redeem", async () => {
+    await withApp(async ({ app }) => {
+      const quote = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        payload: { customer: "Loyalty Buyer", email: "loyalty.buyer@example.com", project: "Loyalty batch", material: "PLA", quantity: 4 }
+      });
+      const staffToken = await login(app);
+      // value 明確指定，方便斷言折扣/點數計算（沒上傳檔案時 quote.quotedValue 預設是 0）
+      const converted = await app.inject({ method: "POST", url: `/api/quoteRequests/${quote.json().quoteRequest.id}/convert-order`, headers: auth(staffToken), payload: { value: 240 } });
+      expect(converted.statusCode).toBe(201);
+      const orderId = converted.json().order.id;
+
+      const register = await app.inject({ method: "POST", url: "/api/customer-auth/register", payload: { name: "Loyalty Buyer", email: "loyalty.buyer@example.com", password: "loyalty-secret-1" } });
+      const customerToken = register.json().token;
+
+      // 地址簿 CRUD
+      const noAddresses = await app.inject({ method: "GET", url: "/api/customer/addresses", headers: auth(customerToken) });
+      expect(noAddresses.statusCode).toBe(200);
+      expect(noAddresses.json()).toEqual([]);
+
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/customer/addresses",
+        headers: auth(customerToken),
+        payload: { recipient: "Loyalty Buyer", phone: "0912345678", line1: "1 Test Rd", city: "Taipei", postalCode: "100" }
+      });
+      expect(created.statusCode).toBe(201);
+      expect(created.json()).toMatchObject({ recipient: "Loyalty Buyer", isDefault: true });
+      const addressId = created.json().id;
+
+      const updated = await app.inject({ method: "PATCH", url: `/api/customer/addresses/${addressId}`, headers: auth(customerToken), payload: { city: "New Taipei" } });
+      expect(updated.statusCode).toBe(200);
+      expect(updated.json()).toMatchObject({ city: "New Taipei" });
+
+      const removed = await app.inject({ method: "DELETE", url: `/api/customer/addresses/${addressId}`, headers: auth(customerToken) });
+      expect(removed.statusCode).toBe(200);
+      const afterDelete = await app.inject({ method: "GET", url: "/api/customer/addresses", headers: auth(customerToken) });
+      expect(afterDelete.json()).toEqual([]);
+
+      // Reorder：複製一筆新訂單，狀態重置為 received
+      const reordered = await app.inject({ method: "POST", url: `/api/customer/orders/${orderId}/reorder`, headers: auth(customerToken) });
+      expect(reordered.statusCode).toBe(201);
+      expect(reordered.json()).toMatchObject({ status: "received", reorderedFromOrderId: orderId, customerId: register.json().customer.id });
+      expect(reordered.json().id).not.toBe(orderId);
+
+      // 優惠券：建立、套用、驗證折扣、超過額度/停用/不存在的情況
+      const coupon = await app.inject({
+        method: "POST",
+        url: "/api/coupons",
+        headers: auth(staffToken),
+        payload: { code: "welcome10", type: "percent", value: 10 }
+      });
+      expect(coupon.statusCode).toBe(201);
+      expect(coupon.json()).toMatchObject({ code: "WELCOME10", usedCount: 0 });
+
+      const originalOrder = converted.json().order;
+      const applied = await app.inject({ method: "POST", url: `/api/customer/orders/${orderId}/apply-coupon`, headers: auth(customerToken), payload: { code: "welcome10" } });
+      expect(applied.statusCode).toBe(200);
+      expect(applied.json().discount).toBeCloseTo(originalOrder.value * 0.1, 2);
+
+      const missingCoupon = await app.inject({ method: "POST", url: `/api/customer/orders/${orderId}/apply-coupon`, headers: auth(customerToken), payload: { code: "NOPE" } });
+      expect(missingCoupon.statusCode).toBe(404);
+
+      // 點數：訂單完成前沒有點數可用；標記完成後應依實付金額累積點數，接著測試贖回
+      const zeroPoints = await app.inject({ method: "POST", url: `/api/customer/orders/${orderId}/redeem-points`, headers: auth(customerToken), payload: { points: 1 } });
+      expect(zeroPoints.statusCode).toBe(400);
+
+      const completed = await app.inject({ method: "PATCH", url: `/api/orders/${orderId}/status`, headers: auth(staffToken), payload: { status: "completed" } });
+      expect(completed.statusCode).toBe(200);
+      expect(completed.json().order.pointsEarned).toBeGreaterThan(0);
+
+      const me = await app.inject({ method: "GET", url: "/api/customer-auth/me", headers: auth(customerToken) });
+      const earnedPoints = me.json().customer.loyaltyPoints;
+      expect(earnedPoints).toBeGreaterThan(0);
+
+      const redeemTooMany = await app.inject({ method: "POST", url: `/api/customer/orders/${orderId}/redeem-points`, headers: auth(customerToken), payload: { points: earnedPoints + 1000 } });
+      expect(redeemTooMany.statusCode).toBe(400);
+
+      const redeem = await app.inject({ method: "POST", url: `/api/customer/orders/${orderId}/redeem-points`, headers: auth(customerToken), payload: { points: earnedPoints } });
+      expect(redeem.statusCode).toBe(200);
+      expect(redeem.json().remainingPoints).toBe(0);
+      expect(redeem.json().order.pointsRedeemed).toBe(earnedPoints);
+    });
+  });
+
+  it("lets a customer check out with a stubbed payment provider and query stubbed logistics tracking for their own order", async () => {
+    await withApp(async ({ app }) => {
+      const quote = await app.inject({
+        method: "POST",
+        url: "/api/public/quoteRequests",
+        payload: { customer: "Checkout Buyer", email: "checkout.buyer@example.com", project: "Checkout batch", material: "PLA", quantity: 3 }
+      });
+      expect(quote.statusCode).toBe(201);
+      const quoteId = quote.json().quoteRequest.id;
+
+      const staffToken = await login(app);
+      const converted = await app.inject({ method: "POST", url: `/api/quoteRequests/${quoteId}/convert-order`, headers: auth(staffToken) });
+      expect(converted.statusCode).toBe(201);
+      const orderId = converted.json().order.id;
+
+      const register = await app.inject({
+        method: "POST",
+        url: "/api/customer-auth/register",
+        payload: { name: "Checkout Buyer", email: "checkout.buyer@example.com", password: "checkout-secret-1" }
+      });
+      expect(register.statusCode).toBe(201);
+      const customerToken = register.json().token;
+
+      // 沒有設定任何金流環境變數時，所有供應商都應回報 configured:false（見 api/payment-providers.mjs）
+      const methods = await app.inject({ method: "GET", url: "/api/customer/payment-methods", headers: auth(customerToken) });
+      expect(methods.statusCode).toBe(200);
+      expect(methods.json().methods).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: "jkopay", configured: false }),
+          expect.objectContaining({ id: "linepay", configured: false }),
+          expect.objectContaining({ id: "payuni", configured: false })
+        ])
+      );
+
+      const checkout = await app.inject({
+        method: "POST",
+        url: `/api/customer/orders/${orderId}/checkout`,
+        headers: auth(customerToken),
+        payload: { paymentMethod: "jkopay" }
+      });
+      expect(checkout.statusCode).toBe(200);
+      expect(checkout.json()).toMatchObject({ ok: false, payment: { provider: "jkopay", status: "not_configured" } });
+
+      const invalidMethod = await app.inject({
+        method: "POST",
+        url: `/api/customer/orders/${orderId}/checkout`,
+        headers: auth(customerToken),
+        payload: { paymentMethod: "credit-card" }
+      });
+      expect(invalidMethod.statusCode).toBe(400);
+
+      // 還沒出貨的訂單查貨態應回報 not_shipped，不會去呼叫 Track.TW
+      const beforeShip = await app.inject({ method: "GET", url: `/api/customer/orders/${orderId}/tracking`, headers: auth(customerToken) });
+      expect(beforeShip.statusCode).toBe(200);
+      expect(beforeShip.json()).toMatchObject({ ok: true, status: "not_shipped" });
+
+      const shipped = await app.inject({
+        method: "PATCH",
+        url: `/api/orders/${orderId}/tracking`,
+        headers: auth(staffToken),
+        payload: { trackingNumber: "TW1234567890", carrier: "黑貓宅急便" }
+      });
+      expect(shipped.statusCode).toBe(200);
+
+      // 有追蹤號碼但 Track.TW 沒有 API 金鑰時，應回報 not_configured 而不是假裝查到貨態（見 api/logistics-tracking.mjs）
+      const afterShip = await app.inject({ method: "GET", url: `/api/customer/orders/${orderId}/tracking`, headers: auth(customerToken) });
+      expect(afterShip.statusCode).toBe(200);
+      expect(afterShip.json()).toMatchObject({ ok: false, status: "not_configured", carrier: "黑貓宅急便", trackingNumber: "TW1234567890" });
+
+      // 別的客戶不能查/結這張訂單
+      const otherRegister = await app.inject({
+        method: "POST",
+        url: "/api/customer-auth/register",
+        payload: { name: "Other Buyer", email: "other.buyer@example.com", password: "other-secret-1" }
+      });
+      const otherToken = otherRegister.json().token;
+      const forbiddenCheckout = await app.inject({
+        method: "POST",
+        url: `/api/customer/orders/${orderId}/checkout`,
+        headers: auth(otherToken),
+        payload: { paymentMethod: "jkopay" }
+      });
+      expect(forbiddenCheckout.statusCode).toBe(404);
+      const forbiddenTracking = await app.inject({ method: "GET", url: `/api/customer/orders/${orderId}/tracking`, headers: auth(otherToken) });
+      expect(forbiddenTracking.statusCode).toBe(404);
     });
   });
 
