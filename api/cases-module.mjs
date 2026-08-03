@@ -252,11 +252,11 @@ function customerOwnsCase(caseRecord, customer) {
 }
 
 function applyCustomerDecision(database, caseRecord, customer, decision, note) {
-  const target = decision === "accepted" ? "accepted" : decision === "revision" ? "revision_requested" : "cancelled";
+  const target = decision === "accepted" ? "accepted" : "revision_requested";
   const result = transitionCase(database, caseRecord, target, { id: customer.id, name: customer.name, email: customer.email }, note);
   if (!result.allowed) return result;
   const quote = (caseRecord.quoteVersions || []).find((version) => version.id === caseRecord.currentQuoteVersionId);
-  if (quote) quote.status = decision === "accepted" ? "accepted" : decision === "revision" ? "revision_requested" : "rejected";
+  if (quote) quote.status = decision === "accepted" ? "accepted" : "revision_requested";
   return { allowed: true };
 }
 
@@ -410,7 +410,7 @@ export async function registerCaseRoutes(app, options) {
   app.post("/api/public/cases/:id/decision", async (request, reply) => {
     const parsed = z.object({
       token: z.string().min(20),
-      decision: z.enum(["accepted", "revision", "rejected"]),
+      decision: z.enum(["accepted", "revision"]),
       note: z.string().trim().max(1000).optional().default("")
     }).safeParse(request.body || {});
     if (!parsed.success) return reply.code(400).send({ error: "客戶決定格式錯誤", issues: parsed.error.issues });
@@ -424,7 +424,7 @@ export async function registerCaseRoutes(app, options) {
 
   if (customerFromRequest) {
     const decisionSchema = z.object({
-      decision: z.enum(["accepted", "revision", "rejected"]),
+      decision: z.enum(["accepted", "revision"]),
       note: z.string().trim().max(1000).optional().default("")
     });
 

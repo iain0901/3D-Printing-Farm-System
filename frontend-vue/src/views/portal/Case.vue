@@ -7,8 +7,8 @@
       <div class="summary-grid"><div><span>目前總價</span><strong>{{ caseRecord.quote ? `NT$ ${Number(caseRecord.quote.total).toLocaleString()}` : '專員確認中' }}</strong></div><div><span>付款狀態</span><b>{{ paymentLabel }}</b></div><div><span>交付方式</span><b>{{ caseRecord.delivery ? caseRecord.delivery.method : '待確認' }}</b></div></div>
       <el-alert v-if="caseRecord.quote" type="info" :closable="false" show-icon :title="`報價 V${caseRecord.quote.versionNo} 有效至 ${formatDate(caseRecord.quote.validUntil)}`" :description="caseRecord.quote.scope || '專員將依案件範圍執行。'" />
       <h2>零件</h2><el-table :data="caseRecord.parts" size="small"><el-table-column prop="name" label="零件" /><el-table-column prop="material" label="材料" /><el-table-column prop="color" label="顏色" /><el-table-column prop="quantity" label="數量" width="80" /></el-table>
-      <div v-if="caseRecord.status === 'formal_quote_sent'" class="decision-actions"><el-button type="primary" :loading="deciding" @click="decide('accepted')">接受報價</el-button><el-button :loading="deciding" @click="decide('revision')">要求修改</el-button><el-button type="danger" plain :loading="deciding" @click="decide('rejected')">暫不製作</el-button></div>
-      <p class="help">需要補件或詢問進度時，請透過原本的 LINE 對話聯絡我們；所有客服對話會保留在 Chatwoot。</p>
+      <div v-if="caseRecord.status === 'formal_quote_sent'" class="decision-actions"><el-button type="primary" :loading="deciding" @click="decide('accepted')">接受報價</el-button><el-button :loading="deciding" @click="decide('revision')">要求修改</el-button></div>
+      <p class="help">需要補件、詢問進度、取消或終止製作時，請透過原本的 LINE 對話由專員處理；所有客服對話會保留在 Chatwoot。</p>
     </section>
     <el-result v-else-if="error" icon="warning" title="案件連結無效或已失效" sub-title="請由原本的 LINE 對話取得最新案件連結。" />
   </main>

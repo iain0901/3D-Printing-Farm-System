@@ -16,7 +16,7 @@ export function fetchMyOrders() {
   return customerRequest({ url: '/api/customer/orders', method: 'get' })
 }
 
-// decision: 'accepted' | 'rejected' | 'revision'
+// decision: 'accepted' | 'revision'; cancellation requests stay in Chatwoot
 export function decideQuote(quoteId, decision, note = '') {
   return customerRequest({ url: `/api/customer/quotes/${quoteId}/decision`, method: 'post', data: { decision, note } })
 }

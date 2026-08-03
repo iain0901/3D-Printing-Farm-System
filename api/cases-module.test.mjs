@@ -66,6 +66,14 @@ describe("unified 3DRFM case API", () => {
     expect(quoted.statusCode).toBe(201);
     expect(quoted.json().quoteVersion).toMatchObject({ versionNo: 1, status: "sent", customerTotal: 1638 });
 
+    const cancellationRequest = await app.inject({
+      method: "POST",
+      url: `/api/public/cases/${publicCreated.id}/decision`,
+      payload: { token: accessToken, decision: "rejected" }
+    });
+    expect(cancellationRequest.statusCode).toBe(400);
+    expect(db.data.cases.find((item) => item.id === publicCreated.id).status).not.toBe("cancelled");
+
     const accepted = await app.inject({
       method: "POST",
       url: `/api/public/cases/${publicCreated.id}/decision`,

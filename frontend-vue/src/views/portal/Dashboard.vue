@@ -19,7 +19,7 @@
             <div v-if="caseItem.status === 'formal_quote_sent'" class="quote-actions">
               <el-button size="mini" type="primary" @click="decideUnifiedCase(caseItem, 'accepted')">接受報價</el-button>
               <el-button size="mini" @click="decideUnifiedCase(caseItem, 'revision')">要求修改</el-button>
-              <el-button size="mini" type="danger" @click="decideUnifiedCase(caseItem, 'rejected')">婉拒</el-button>
+              <el-button size="mini" @click="contactSpecialist">取消請聯絡專員</el-button>
             </div>
             <p class="hint">聯絡與補件請在原 LINE 對話中進行。</p>
           </div>
@@ -40,7 +40,7 @@
               <template v-if="quote.status === 'quoted'">
                 <el-button size="mini" type="primary" @click="decide(quote, 'accepted')">接受</el-button>
                 <el-button size="mini" @click="decide(quote, 'revision')">要求修改</el-button>
-                <el-button size="mini" type="danger" @click="decide(quote, 'rejected')">拒絕</el-button>
+                <el-button size="mini" @click="contactSpecialist">取消請聯絡專員</el-button>
               </template>
             </div>
             <div class="quote-messages">
@@ -266,6 +266,9 @@
         const index = this.cases.findIndex((item) => item.id === caseItem.id)
         if (index !== -1) this.cases.splice(index, 1, result.case)
         this.$baseMessage('案件決定已送出', 'success')
+      },
+      contactSpecialist() {
+        this.$baseMessage('請在原本的 LINE／Chatwoot 對話聯絡專員，由專員處理取消或終止製作。', 'info')
       },
       async sendMessage(quote) {
         const body = (this.messageDrafts[quote.id] || '').trim()
