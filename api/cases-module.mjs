@@ -247,6 +247,52 @@ const paymentInputSchema = z.object({
   note: z.string().trim().max(1000).optional().default("")
 });
 
+const schedulingSuggestionSchema = z.object({
+  suggestedStartAt: z.string().datetime(),
+  suggestedPrinterId: z.string().trim().min(1).max(100),
+  estimatedMinutes: z.coerce.number().int().min(1).max(60 * 24 * 30),
+  reason: z.string().trim().max(1000).optional().default("")
+});
+
+const scheduleConfirmationSchema = z.object({
+  startAt: z.string().datetime(),
+  printerId: z.string().trim().min(1).max(100),
+  note: z.string().trim().max(1000).optional().default("")
+});
+
+const printAttemptSchema = z.object({
+  action: z.enum(["started", "completed", "failed"]),
+  queueJobId: z.string().trim().max(100).optional().default(""),
+  partIds: z.array(z.string().trim().min(1).max(100)).min(1).max(256).optional(),
+  note: z.string().trim().max(4000).optional().default(""),
+  telemetry: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional().default({})
+});
+
+const qualityCheckSchema = z.object({
+  parts: z.array(z.object({
+    partId: z.string().trim().min(1).max(100),
+    result: z.enum(["passed", "failed"]),
+    notes: z.string().trim().max(2000).optional().default(""),
+    photoFileIds: z.array(z.string().trim().min(1).max(100)).max(30).optional().default([])
+  })).min(1).max(256),
+  reprint: z.boolean().optional().default(false),
+  note: z.string().trim().max(4000).optional().default("")
+});
+
+const deliverySchema = z.object({
+  method: z.enum(["pickup", "courier", "internal_delivery"]),
+  status: z.enum(["pending", "ready", "shipped", "delivered", "returned"]),
+  carrier: z.string().trim().max(100).optional().default(""),
+  trackingNumber: z.string().trim().max(200).optional().default(""),
+  note: z.string().trim().max(2000).optional().default("")
+});
+
+const afterSalesSchema = z.object({
+  type: z.enum(["reprint", "defect", "delivery", "refund", "other"]),
+  description: z.string().trim().min(1).max(4000),
+  reopenProduction: z.boolean().optional().default(false)
+});
+
 const preliminaryEstimateSchema = z.object({
   material: z.string().trim().min(1).max(80).default("PLA"),
   quantity: z.coerce.number().int().min(1).max(10000).default(1),
@@ -321,6 +367,7 @@ export async function registerCaseRoutes(app, options) {
       slicerJobs: [],
       approvedSlicerJobId: "",
       printerId: "",
+      productionJobIds: [],
       printAttempts: [],
       qcChecks: [],
       delivery: null,
@@ -686,10 +733,164 @@ export async function registerCaseRoutes(app, options) {
       updatedAt: createdAt
     }));
     database.data.queue.push(...jobs);
+    caseRecord.productionJobIds ||= [];
+    caseRecord.productionJobIds.push(...jobs.map((job) => job.id));
     if (caseRecord.status === "production_pending") transitionCase(database, caseRecord, "ready_to_print", request.user, "生產條件已通過");
     appendEvent(database, "case.production_jobs_created", `${caseRecord.caseNo} created ${jobs.length} production jobs`, { caseId: caseRecord.id, jobIds: jobs.map((job) => job.id) }, request.user, caseRecord.workspaceId);
     await database.write();
     return reply.code(201).send({ jobs, case: caseRecord });
+  });
+
+  app.post("/api/cases/:id/scheduling-suggestion", async (request, reply) => {
+    const parsed = schedulingSuggestionSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid scheduling suggestion", issues: parsed.error.issues });
+    const caseRecord = findCase(database, request.params.id, request.user.workspaceId || DEFAULT_WORKSPACE_ID);
+    if (!caseRecord) return reply.code(404).send({ error: "Case not found" });
+    caseRecord.scheduleSuggestion = { ...parsed.data, suggestedBy: request.user.email, suggestedAt: nowIso(), confirmedAt: "", confirmedBy: "" };
+    caseRecord.updatedAt = caseRecord.scheduleSuggestion.suggestedAt;
+    appendEvent(database, "case.schedule_suggested", `${caseRecord.caseNo} received a scheduling suggestion`, { caseId: caseRecord.id, ...parsed.data }, request.user, caseRecord.workspaceId);
+    await database.write();
+    return { scheduleSuggestion: caseRecord.scheduleSuggestion };
+  });
+
+  app.post("/api/cases/:id/schedule/suggest", async (request, reply) => {
+    const caseRecord = findCase(database, request.params.id, request.user.workspaceId || DEFAULT_WORKSPACE_ID);
+    if (!caseRecord) return reply.code(404).send({ error: "Case not found" });
+    if (caseRecord.status !== "ready_to_print") return reply.code(409).send({ error: "Case must be ready to print before scheduling" });
+    const materials = new Set(caseRecord.parts.map((part) => String(part.material || "").toLowerCase()).filter(Boolean));
+    const candidates = (database.data.printers || [])
+      .filter((printer) => inWorkspace(printer, caseRecord.workspaceId))
+      .filter((printer) => !["offline", "maintenance", "error"].includes(String(printer.status || "").toLowerCase()))
+      .filter((printer) => !materials.size || [...materials].every((material) => (printer.compatibleMaterials || []).map((value) => String(value).toLowerCase()).includes(material)))
+      .map((printer) => ({ printer, active: (database.data.queue || []).filter((job) => job.printerId === printer.id && ["queued", "printing", "paused"].includes(job.status)).length }))
+      .sort((a, b) => a.active - b.active || String(a.printer.id).localeCompare(String(b.printer.id)));
+    const selected = candidates[0];
+    if (!selected) return reply.code(409).send({ error: "No compatible available printer found" });
+    const estimate = (caseRecord.slicerJobs || []).find((job) => job.id === caseRecord.approvedSlicerJobId)?.estimatedMinutes || 60;
+    const suggestedStartAt = new Date(Date.now() + selected.active * Math.max(estimate, 30) * 60000).toISOString();
+    caseRecord.scheduleSuggestion = { suggestedStartAt, suggestedPrinterId: selected.printer.id, estimatedMinutes: estimate, reason: `Least-loaded compatible printer (${selected.active} active job(s))`, suggestedBy: "system", suggestedAt: nowIso(), confirmedAt: "", confirmedBy: "" };
+    caseRecord.updatedAt = caseRecord.scheduleSuggestion.suggestedAt;
+    appendEvent(database, "case.schedule_suggested", `${caseRecord.caseNo} system schedule suggestion created`, { caseId: caseRecord.id, ...caseRecord.scheduleSuggestion }, { email: "scheduler" }, caseRecord.workspaceId);
+    await database.write();
+    return { scheduleSuggestion: caseRecord.scheduleSuggestion };
+  });
+
+  app.post("/api/cases/:id/schedule/confirm", async (request, reply) => {
+    const parsed = scheduleConfirmationSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid schedule confirmation", issues: parsed.error.issues });
+    const caseRecord = findCase(database, request.params.id, request.user.workspaceId || DEFAULT_WORKSPACE_ID);
+    if (!caseRecord) return reply.code(404).send({ error: "Case not found" });
+    if (!["ready_to_print", "printing"].includes(caseRecord.status)) return reply.code(409).send({ error: "Case must be ready to print before confirming its schedule" });
+    caseRecord.printerId = parsed.data.printerId;
+    caseRecord.schedule = { ...parsed.data, confirmedAt: nowIso(), confirmedBy: request.user.email };
+    caseRecord.updatedAt = caseRecord.schedule.confirmedAt;
+    appendEvent(database, "case.schedule_confirmed", `${caseRecord.caseNo} schedule was confirmed`, { caseId: caseRecord.id, ...caseRecord.schedule }, request.user, caseRecord.workspaceId);
+    await database.write();
+    return { schedule: caseRecord.schedule, case: caseRecord };
+  });
+
+  app.post("/api/cases/:id/print-attempts", async (request, reply) => {
+    const parsed = printAttemptSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid print attempt", issues: parsed.error.issues });
+    const caseRecord = findCase(database, request.params.id, request.user.workspaceId || DEFAULT_WORKSPACE_ID);
+    if (!caseRecord) return reply.code(404).send({ error: "Case not found" });
+    const partIds = parsed.data.partIds?.length ? parsed.data.partIds : caseRecord.parts.map((part) => part.id);
+    if (partIds.some((id) => !caseRecord.parts.some((part) => part.id === id))) return reply.code(400).send({ error: "Print attempt includes an unknown part" });
+    const queueJob = parsed.data.queueJobId ? database.data.queue.find((item) => item.id === parsed.data.queueJobId && item.sourceCaseId === caseRecord.id) : null;
+    if (parsed.data.queueJobId && !queueJob) return reply.code(404).send({ error: "Production job not found for this case" });
+
+    let attempt = (caseRecord.printAttempts || []).find((item) => item.queueJobId === parsed.data.queueJobId && item.status === "printing");
+    if (parsed.data.action === "started") {
+      if (caseRecord.status !== "ready_to_print") return reply.code(409).send({ error: "Case is not ready to print" });
+      if (!caseRecord.schedule?.confirmedAt) return reply.code(409).send({ error: "A specialist must confirm the schedule before print start" });
+      if (attempt) return reply.code(409).send({ error: "A print attempt is already running" });
+      attempt = { id: `attempt-${randomUUID().slice(0, 12)}`, queueJobId: parsed.data.queueJobId, partIds, printerId: caseRecord.printerId, status: "printing", startedAt: nowIso(), startedBy: request.user.email, completedAt: "", outcome: "", note: parsed.data.note, telemetry: parsed.data.telemetry };
+      caseRecord.printAttempts.unshift(attempt);
+      if (queueJob) Object.assign(queueJob, { status: "printing", stage: "printing", startedAt: attempt.startedAt, updatedAt: attempt.startedAt });
+      transitionCase(database, caseRecord, "printing", request.user, parsed.data.note || "Print attempt started");
+    } else {
+      if (!attempt) return reply.code(409).send({ error: "No running print attempt found" });
+      attempt.status = parsed.data.action === "completed" ? "completed" : "failed";
+      attempt.outcome = attempt.status;
+      attempt.completedAt = nowIso();
+      attempt.completedBy = request.user.email;
+      attempt.note = parsed.data.note || attempt.note;
+      attempt.telemetry = { ...attempt.telemetry, ...parsed.data.telemetry };
+      if (queueJob) Object.assign(queueJob, { status: attempt.status, stage: attempt.status === "completed" ? "quality check" : "failed", completedAt: attempt.completedAt, updatedAt: attempt.completedAt });
+      if (caseRecord.status === "printing") transitionCase(database, caseRecord, "quality_check", request.user, attempt.status === "completed" ? "Print completed; QC required" : "Print failed; QC/reprint decision required");
+    }
+    caseRecord.updatedAt = nowIso();
+    appendEvent(database, "case.print_attempt_updated", `${caseRecord.caseNo} print attempt ${attempt.status}`, { caseId: caseRecord.id, attemptId: attempt.id, action: parsed.data.action, queueJobId: attempt.queueJobId, partIds }, request.user, caseRecord.workspaceId);
+    await database.write();
+    return reply.code(201).send({ printAttempt: attempt, case: caseRecord });
+  });
+
+  app.post("/api/cases/:id/quality-checks", async (request, reply) => {
+    const parsed = qualityCheckSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid quality check", issues: parsed.error.issues });
+    const caseRecord = findCase(database, request.params.id, request.user.workspaceId || DEFAULT_WORKSPACE_ID);
+    if (!caseRecord) return reply.code(404).send({ error: "Case not found" });
+    if (caseRecord.status !== "quality_check") return reply.code(409).send({ error: "Case is not awaiting quality check" });
+    if (parsed.data.parts.some((check) => !caseRecord.parts.some((part) => part.id === check.partId))) return reply.code(400).send({ error: "Quality check includes an unknown part" });
+    const failedPartIds = parsed.data.parts.filter((check) => check.result === "failed").map((check) => check.partId);
+    if (parsed.data.reprint && !failedPartIds.length) return reply.code(400).send({ error: "Reprint requires at least one failed part" });
+    const qcCheck = { id: `qc-${randomUUID().slice(0, 12)}`, ...parsed.data, failedPartIds, checkedAt: nowIso(), checkedBy: request.user.email };
+    caseRecord.qcChecks.unshift(qcCheck);
+    for (const check of parsed.data.parts) {
+      const part = caseRecord.parts.find((item) => item.id === check.partId);
+      part.qcStatus = check.result;
+      part.qcNotes = check.notes;
+      part.qcPhotoFileIds = check.photoFileIds;
+      part.readiness = check.result === "passed" ? "ready" : "blocked";
+    }
+    if (parsed.data.reprint) {
+      for (const partId of failedPartIds) {
+        const part = caseRecord.parts.find((item) => item.id === partId);
+        database.data.queue.push({ id: `job-${randomUUID().slice(0, 12)}`, workspaceId: caseRecord.workspaceId, source: "3DRFM", sourceCaseId: caseRecord.id, sourceCaseNo: caseRecord.caseNo, sourcePartId: part.id, fileId: (caseRecord.slicerJobs || []).find((job) => job.id === caseRecord.approvedSlicerJobId)?.gcodeFileId || "", file: `${caseRecord.caseNo}-${part.name}-reprint.gcode`, printerId: caseRecord.printerId, material: part.material, color: part.color, quantity: part.quantity, status: "queued", stage: "reprint", priority: caseRecord.priority, reprintOfQcId: qcCheck.id, createdAt: qcCheck.checkedAt, updatedAt: qcCheck.checkedAt });
+        part.readiness = "ready";
+      }
+      transitionCase(database, caseRecord, "ready_to_print", request.user, `QC reprint: ${failedPartIds.length} part(s)`);
+    } else if (!failedPartIds.length && caseRecord.parts.every((part) => part.qcStatus === "passed")) {
+      transitionCase(database, caseRecord, "ready_for_delivery", request.user, "All parts passed quality check");
+    }
+    caseRecord.updatedAt = nowIso();
+    appendEvent(database, "case.quality_checked", `${caseRecord.caseNo} quality check recorded`, { caseId: caseRecord.id, qcCheckId: qcCheck.id, failedPartIds, reprint: parsed.data.reprint }, request.user, caseRecord.workspaceId);
+    await database.write();
+    return reply.code(201).send({ qualityCheck: qcCheck, case: caseRecord });
+  });
+
+  app.post("/api/cases/:id/delivery", async (request, reply) => {
+    const parsed = deliverySchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid delivery update", issues: parsed.error.issues });
+    const caseRecord = findCase(database, request.params.id, request.user.workspaceId || DEFAULT_WORKSPACE_ID);
+    if (!caseRecord) return reply.code(404).send({ error: "Case not found" });
+    if (!["ready_for_delivery", "completed"].includes(caseRecord.status)) return reply.code(409).send({ error: "Case is not ready for delivery" });
+    caseRecord.delivery = { ...parsed.data, updatedAt: nowIso(), updatedBy: request.user.email };
+    if (parsed.data.status === "delivered" && caseRecord.status === "ready_for_delivery") transitionCase(database, caseRecord, "completed", request.user, parsed.data.note || "Delivery completed");
+    caseRecord.updatedAt = nowIso();
+    appendEvent(database, "case.delivery_updated", `${caseRecord.caseNo} delivery ${parsed.data.status}`, { caseId: caseRecord.id, delivery: caseRecord.delivery }, request.user, caseRecord.workspaceId);
+    await database.write();
+    return { delivery: caseRecord.delivery, case: caseRecord };
+  });
+
+  app.post("/api/cases/:id/aftersales", async (request, reply) => {
+    const parsed = afterSalesSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid after-sales case", issues: parsed.error.issues });
+    const caseRecord = findCase(database, request.params.id, request.user.workspaceId || DEFAULT_WORKSPACE_ID);
+    if (!caseRecord) return reply.code(404).send({ error: "Case not found" });
+    if (!["ready_for_delivery", "completed", "aftersales"].includes(caseRecord.status)) return reply.code(409).send({ error: "Case is not eligible for after-sales handling" });
+    const afterSales = { id: `as-${randomUUID().slice(0, 12)}`, caseId: caseRecord.id, workspaceId: caseRecord.workspaceId, ...parsed.data, status: parsed.data.reopenProduction ? "production_reopened" : "open", createdAt: nowIso(), createdBy: request.user.email };
+    database.data.afterSalesCases.unshift(afterSales);
+    caseRecord.afterSalesCaseIds ||= [];
+    caseRecord.afterSalesCaseIds.unshift(afterSales.id);
+    if (parsed.data.reopenProduction) {
+      if (caseRecord.status !== "aftersales") transitionCase(database, caseRecord, "aftersales", request.user, `After-sales ${afterSales.type}`);
+      transitionCase(database, caseRecord, "production_pending", request.user, `After-sales ${afterSales.type}: production reopened`);
+    } else if (caseRecord.status !== "aftersales") transitionCase(database, caseRecord, "aftersales", request.user, `After-sales ${afterSales.type}`);
+    caseRecord.updatedAt = nowIso();
+    appendEvent(database, "case.aftersales_created", `${caseRecord.caseNo} after-sales case created`, { caseId: caseRecord.id, afterSalesId: afterSales.id, type: afterSales.type, reopenProduction: afterSales.reopenProduction }, request.user, caseRecord.workspaceId);
+    await database.write();
+    return reply.code(201).send({ afterSales, case: caseRecord });
   });
 
   app.post("/api/integrations/chatwoot/cases", async (request, reply) => {

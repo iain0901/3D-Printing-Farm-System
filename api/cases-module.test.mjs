@@ -185,4 +185,49 @@ describe("unified 3DRFM case API", () => {
     expect(decision.json().case.status).toBe("accepted");
     await app.close();
   });
+
+  it("tracks confirmed scheduling, print attempts, QC, delivery, and after-sales reprint", async () => {
+    const { app, db } = await createApp();
+    const created = await app.inject({
+      method: "POST", url: "/api/public/cases",
+      payload: { mode: "agent", source: "website", hasModel: false, customer: { name: "Operations Buyer", email: "operations@example.com" }, project: "Operations workflow", purpose: "Print, QC, delivery", defaults: { material: "PLA", color: "Black", quantity: 1 } }
+    });
+    const caseId = created.json().case.id;
+    const accessToken = created.json().accessToken;
+    const headers = await login(app);
+    const transition = (status) => app.inject({ method: "POST", url: `/api/cases/${caseId}/transition`, headers, payload: { status } });
+    expect((await transition("under_review")).statusCode).toBe(200);
+    expect((await app.inject({ method: "POST", url: `/api/cases/${caseId}/quotes`, headers, payload: { send: true, breakdown: { material: 350 } } })).statusCode).toBe(201);
+    expect((await app.inject({ method: "POST", url: `/api/public/cases/${caseId}/decision`, payload: { token: accessToken, decision: "accepted" } })).statusCode).toBe(200);
+    expect((await transition("awaiting_payment")).statusCode).toBe(200);
+    expect((await app.inject({ method: "POST", url: `/api/cases/${caseId}/payments`, headers, payload: { status: "paid", method: "cash", amount: 350 } })).statusCode).toBe(201);
+    expect((await transition("production_pending")).statusCode).toBe(200);
+    const storedCase = db.data.cases.find((item) => item.id === caseId);
+    expect((await app.inject({ method: "PATCH", url: `/api/cases/${caseId}`, headers, payload: { printerId: "p-01", parts: storedCase.parts.map((part) => ({ id: part.id, readiness: "ready" })) } })).statusCode).toBe(200);
+    expect((await app.inject({ method: "POST", url: `/api/cases/${caseId}/slicer-jobs`, headers, payload: { status: "completed", gcodeFileId: "gcode-1", profileId: "orca-production", approve: true } })).statusCode).toBe(201);
+    const production = await app.inject({ method: "POST", url: `/api/cases/${caseId}/production-jobs`, headers, payload: {} });
+    expect(production.statusCode).toBe(201);
+    const jobId = production.json().jobs[0].id;
+
+    db.data.printers.push({ id: "p-01", workspaceId: "ws-default", status: "idle", compatibleMaterials: ["PLA"] });
+    const suggested = await app.inject({ method: "POST", url: `/api/cases/${caseId}/schedule/suggest`, headers, payload: {} });
+    expect(suggested.statusCode).toBe(200);
+    expect(suggested.json().scheduleSuggestion).toMatchObject({ suggestedPrinterId: "p-01", suggestedBy: "system" });
+    expect((await app.inject({ method: "POST", url: `/api/cases/${caseId}/schedule/confirm`, headers, payload: { startAt: suggested.json().scheduleSuggestion.suggestedStartAt, printerId: "p-01" } })).statusCode).toBe(200);
+    expect((await app.inject({ method: "POST", url: `/api/cases/${caseId}/print-attempts`, headers, payload: { action: "started", queueJobId: jobId } })).statusCode).toBe(201);
+    const printed = await app.inject({ method: "POST", url: `/api/cases/${caseId}/print-attempts`, headers, payload: { action: "completed", queueJobId: jobId } });
+    expect(printed.statusCode).toBe(201);
+    expect(printed.json().case.status).toBe("quality_check");
+    const partId = db.data.cases.find((item) => item.id === caseId).parts[0].id;
+    const qc = await app.inject({ method: "POST", url: `/api/cases/${caseId}/quality-checks`, headers, payload: { parts: [{ partId, result: "passed", notes: "Measurements within tolerance" }] } });
+    expect(qc.statusCode).toBe(201);
+    expect(qc.json().case.status).toBe("ready_for_delivery");
+    const delivery = await app.inject({ method: "POST", url: `/api/cases/${caseId}/delivery`, headers, payload: { method: "courier", status: "delivered", carrier: "Local carrier", trackingNumber: "TRACK-001" } });
+    expect(delivery.statusCode).toBe(200);
+    expect(delivery.json().case.status).toBe("completed");
+    const afterSales = await app.inject({ method: "POST", url: `/api/cases/${caseId}/aftersales`, headers, payload: { type: "reprint", description: "Customer requested a replacement", reopenProduction: true } });
+    expect(afterSales.statusCode).toBe(201);
+    expect(afterSales.json().case.status).toBe("production_pending");
+    await app.close();
+  });
 });

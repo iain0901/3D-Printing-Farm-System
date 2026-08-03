@@ -41,7 +41,37 @@
             <el-alert :type="readiness && readiness.allowed ? 'success' : 'warning'" :closable="false" show-icon :title="readiness && readiness.allowed ? '已符合開始列印條件' : '仍有生產條件待完成'" />
             <ul class="checks"><li v-for="(value, key) in readiness && readiness.checks" :key="key"><i :class="value ? 'el-icon-success ok' : 'el-icon-warning-outline waiting'" />{{ readinessLabel(key) }}</li></ul>
             <el-button type="success" :disabled="!readiness || !readiness.allowed" @click="createProduction">建立 FarmFlow 生產任務</el-button>
-          </el-tab-pane>
+
+            <div class="operations-panel">
+              <template v-if="selected.status === 'ready_to_print'">
+                <el-button size="small" @click="suggestSchedule">System scheduling suggestion</el-button>
+                <h3>?????</h3>
+                <el-input v-model="operations.startAt" placeholder="???? ISO??? 2026-08-05T01:00:00.000Z" />
+                <el-input v-model="operations.printerId" placeholder="??? ID" />
+                <el-input-number v-model="operations.estimatedMinutes" :min="1" :max="43200" />
+                <el-button size="small" @click="confirmSchedule">????</el-button>
+                <el-button v-if="selected.schedule && selected.schedule.confirmedAt" size="small" type="primary" @click="recordAttempt('started')">????</el-button>
+              </template>
+              <template v-if="selected.status === 'printing'">
+                <h3>????</h3>
+                <el-button size="small" type="success" @click="recordAttempt('completed')">????????</el-button>
+                <el-button size="small" type="danger" @click="recordAttempt('failed')">????????</el-button>
+              </template>
+              <template v-if="selected.status === 'quality_check'">
+                <h3>??</h3>
+                <el-button size="small" type="success" @click="quickQualityCheck(false)">??????</el-button>
+                <el-button size="small" type="warning" @click="quickQualityCheck(true)">??????</el-button>
+              </template>
+              <template v-if="selected.status === 'ready_for_delivery'">
+                <h3>??</h3>
+                <el-button size="small" type="primary" @click="markDelivered">?????</el-button>
+              </template>
+              <template v-if="selected.status === 'completed'">
+                <h3>??</h3>
+                <el-button size="small" @click="openAfterSales">????????</el-button>
+              </template>
+            </div>
+</el-tab-pane>
           <el-tab-pane label="歷程" name="history">
             <el-timeline><el-timeline-item v-for="item in selected.statusHistory" :key="item.id" :timestamp="formatDate(item.at)">{{ statusLabel(item.from) || '建立' }} → {{ statusLabel(item.to) }} {{ item.reason ? `：${item.reason}` : '' }}</el-timeline-item></el-timeline>
           </el-tab-pane>
@@ -58,22 +88,28 @@
 </template>
 
 <script>
-  import { createCaseProductionJobs, createCaseQuote, fetchCase, fetchCases, transitionCase } from '@/api/cases'
+  import { createCaseAfterSales, createCaseProductionJobs, createCaseQuote, confirmCaseSchedule, fetchCase, fetchCases, recordPrintAttempt, recordQualityCheck, suggestCaseScheduleAutomatically, transitionCase, updateCaseDelivery } from '@/api/cases'
   const statuses = [
     ['new', '新案件'], ['under_review', '審核中'], ['supplement_requested', '等待補件'], ['awaiting_customer', '等待客戶回覆'], ['formal_quote_sent', '正式報價已送出'], ['accepted', '客戶已接受'], ['revision_requested', '客戶要求修改'], ['awaiting_payment', '等待付款'], ['paid', '已付款'], ['production_pending', '待生產確認'], ['ready_to_print', '可開始列印'], ['printing', '列印中'], ['quality_check', '品質檢查'], ['ready_for_delivery', '待交付'], ['completed', '已完成'], ['cancelled', '已取消'], ['aftersales', '售後處理'],
   ]
   const quoteForm = () => ({ scope: '', send: true, breakdown: { material: 0, machineTime: 0, setup: 0, modeling: 0, postProcessing: 0, multicolor: 0, packing: 0, shipping: 0, risk: 0, discount: 0, tax: 0 } })
   export default {
     name: 'Cases',
-    data() { return { loading: false, cases: [], query: { search: '', status: '' }, statuses: statuses.map(([value, label]) => ({ value, label })), drawerVisible: false, drawerTab: 'overview', selected: null, readiness: null, targetStatus: '', quoteDialog: false, quoteForm: quoteForm(), savingQuote: false } },
+    data() { return { loading: false, cases: [], query: { search: '', status: '' }, statuses: statuses.map(([value, label]) => ({ value, label })), drawerVisible: false, drawerTab: 'overview', selected: null, readiness: null, targetStatus: '', quoteDialog: false, quoteForm: quoteForm(), savingQuote: false, operations: { startAt: '', printerId: '', estimatedMinutes: 60 } } },
     created() { this.load() },
     methods: {
       async load() { this.loading = true; try { const result = await fetchCases(this.query); this.cases = result.cases || [] } finally { this.loading = false } },
-      async openCase(row) { const result = await fetchCase(row.id); this.selected = result.case; this.readiness = result.readiness; this.targetStatus = ''; this.drawerVisible = true },
+      async openCase(row) { const result = await fetchCase(row.id); this.selected = result.case; this.readiness = result.readiness; this.targetStatus = ''; this.operations = { startAt: result.case.schedule?.startAt || new Date(Date.now() + 3600000).toISOString(), printerId: result.case.printerId || '', estimatedMinutes: result.case.scheduleSuggestion?.estimatedMinutes || 60 }; this.drawerVisible = true },
       async refreshSelected() { if (!this.selected) return; const result = await fetchCase(this.selected.id); this.selected = result.case; this.readiness = result.readiness; await this.load() },
       async changeStatus() { try { await transitionCase(this.selected.id, this.targetStatus); this.$baseMessage('案件狀態已更新。', 'success'); await this.refreshSelected() } catch (_) {} },
       async saveQuote() { this.savingQuote = true; try { await createCaseQuote(this.selected.id, this.quoteForm); this.quoteDialog = false; this.quoteForm = quoteForm(); this.$baseMessage('報價版本已建立。', 'success'); await this.refreshSelected() } finally { this.savingQuote = false } },
       async createProduction() { try { const result = await createCaseProductionJobs(this.selected.id); this.$baseMessage(`已建立 ${result.jobs.length} 個生產任務。`, 'success'); await this.refreshSelected() } catch (_) {} },
+      async suggestSchedule() { try { const result = await suggestCaseScheduleAutomatically(this.selected.id); this.operations.startAt = result.scheduleSuggestion.suggestedStartAt; this.operations.printerId = result.scheduleSuggestion.suggestedPrinterId; this.operations.estimatedMinutes = result.scheduleSuggestion.estimatedMinutes; this.$baseMessage('系統建議已帶入，請由專員確認', 'success'); await this.refreshSelected() } catch (_) {} },
+      async confirmSchedule() { try { await confirmCaseSchedule(this.selected.id, { startAt: this.operations.startAt, printerId: this.operations.printerId, note: `Estimated ${this.operations.estimatedMinutes} minutes` }); this.$baseMessage('排程已由專員確認', 'success'); await this.refreshSelected() } catch (_) {} },
+      async recordAttempt(action) { try { const queueJobId = (this.selected.productionJobIds || [])[0] || ''; await recordPrintAttempt(this.selected.id, { action, queueJobId, note: action === 'completed' ? '列印完成' : action === 'failed' ? '列印失敗' : '開始列印' }); this.$baseMessage('列印紀錄已更新', 'success'); await this.refreshSelected() } catch (_) {} },
+      async quickQualityCheck(reprint) { try { const parts = this.selected.parts.map((part) => ({ partId: part.id, result: reprint ? 'failed' : 'passed', notes: reprint ? '需重印' : '快速品管通過' })); await recordQualityCheck(this.selected.id, { parts, reprint, note: reprint ? '建立重印工作' : '全部零件通過' }); this.$baseMessage(reprint ? '已建立重印工作' : '品管已通過', 'success'); await this.refreshSelected() } catch (_) {} },
+      async markDelivered() { try { await updateCaseDelivery(this.selected.id, { method: 'pickup', status: 'delivered', note: '內部交付確認' }); this.$baseMessage('案件已完成交付', 'success'); await this.refreshSelected() } catch (_) {} },
+      async openAfterSales() { try { await createCaseAfterSales(this.selected.id, { type: 'reprint', description: '由內部案件面板建立的售後重印', reopenProduction: true }); this.$baseMessage('售後重印案件已建立', 'success'); await this.refreshSelected() } catch (_) {} },
       statusLabel(status) { return (this.statuses.find((item) => item.value === status) || {}).label || status || '' },
       statusType(status) { return ['completed', 'ready_to_print', 'paid'].includes(status) ? 'success' : ['cancelled'].includes(status) ? 'danger' : ['supplement_requested', 'revision_requested', 'awaiting_payment'].includes(status) ? 'warning' : 'info' },
       paymentLabel(status) { return { paid: '已付款', monthly_terms: '月結', waived: '免付款', refunded: '已退款', unpaid: '未付款' }[status] || status },
@@ -88,6 +124,6 @@
   .toolbar { display: flex; gap: 12px; margin-bottom: 18px; } .toolbar .el-input { max-width: 390px; } .toolbar .el-select { width: 160px; }
   .muted { color: #8992a3; font-size: 12px; margin-top: 4px; } .drawer-content { padding: 28px; } .drawer-head { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 18px; } .drawer-head h2 { margin: 3px 0; } .drawer-head p { margin: 4px 0; }
   .case-steps { margin: 22px 0; } .detail-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; } .detail-grid span, .detail-grid b { display: block; } .detail-grid span { color: #8992a3; font-size: 12px; margin-bottom: 4px; } h3 { margin: 22px 0 10px; } .notes { white-space: pre-wrap; color: #4b5563; }
-  .quote-version { display: flex; justify-content: space-between; padding: 15px 0; border-bottom: 1px solid #edf0f5; } .quote-version p { margin: 6px 0 0; color: #667085; } .checks { list-style: none; padding: 0; line-height: 2.1; } .checks i { margin-right: 8px; } .ok { color: #17a673; } .waiting { color: #e6a23c; } .actions { display: flex; gap: 10px; margin-top: 22px; padding-top: 18px; border-top: 1px solid #edf0f5; } .actions .el-select { width: 210px; }
+  .quote-version { display: flex; justify-content: space-between; padding: 15px 0; border-bottom: 1px solid #edf0f5; } .quote-version p { margin: 6px 0 0; color: #667085; } .checks { list-style: none; padding: 0; line-height: 2.1; } .checks i { margin-right: 8px; } .ok { color: #17a673; } .waiting { color: #e6a23c; } .operations-panel { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 18px; padding-top: 16px; border-top: 1px solid #edf0f5; } .operations-panel h3 { flex-basis: 100%; margin: 0 0 3px; } .operations-panel .el-input { width: 260px; } .actions { display: flex; gap: 10px; margin-top: 22px; padding-top: 18px; border-top: 1px solid #edf0f5; } .actions .el-select { width: 210px; }
   @media (max-width: 680px) { .toolbar { flex-wrap: wrap; } .toolbar .el-input { max-width: none; width: 100%; } .detail-grid { grid-template-columns: 1fr; } }
 </style>

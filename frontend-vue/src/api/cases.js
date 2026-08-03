@@ -54,3 +54,31 @@ export function recordCasePayment(id, data) {
 export function createCaseProductionJobs(id) {
   return request({ url: `/api/cases/${id}/production-jobs`, method: 'post', data: {} })
 }
+
+export function suggestCaseSchedule(id, data) {
+  return request({ url: `/api/cases/${id}/scheduling-suggestion`, method: 'post', data })
+}
+
+export function confirmCaseSchedule(id, data) {
+  return request({ url: `/api/cases/${id}/schedule/confirm`, method: 'post', data })
+}
+
+export function suggestCaseScheduleAutomatically(id) {
+  return request({ url: `/api/cases/${id}/schedule/suggest`, method: 'post', data: {} })
+}
+
+export function recordPrintAttempt(id, data) {
+  return request({ url: `/api/cases/${id}/print-attempts`, method: 'post', data })
+}
+
+export function recordQualityCheck(id, data) {
+  return request({ url: `/api/cases/${id}/quality-checks`, method: 'post', data })
+}
+
+export function updateCaseDelivery(id, data) {
+  return request({ url: `/api/cases/${id}/delivery`, method: 'post', data })
+}
+
+export function createCaseAfterSales(id, data) {
+  return request({ url: `/api/cases/${id}/aftersales`, method: 'post', data })
+}
