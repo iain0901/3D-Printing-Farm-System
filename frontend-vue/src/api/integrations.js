@@ -32,3 +32,11 @@ export function updateWebhook(id, patch) {
 export function testWebhook(id) {
   return request({ url: `/api/webhooks/${id}/test`, method: 'post' })
 }
+
+export function fetchChatwootStatus() {
+  return request({ url: '/api/integrations/chatwoot/status', method: 'get' })
+}
+
+export function testChatwootHealth() {
+  return request({ url: '/api/integrations/chatwoot/health', method: 'get' })
+}

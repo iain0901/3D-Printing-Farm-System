@@ -48,6 +48,9 @@ describe("Chatwoot panel contract", () => {
         case: { id: "case-1", caseNo: "3DRFM-20260804-001", quoteTotal: 860 },
         ai: { configured: true, mode: "draft" }
       });
+      const status = await app.inject({ method: "GET", url: "/api/integrations/chatwoot/status" });
+      expect(status.statusCode).toBe(200);
+      expect(status.json()).toMatchObject({ ai: { configured: true } });
     } finally {
       await app.close();
     }

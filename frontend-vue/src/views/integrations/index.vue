@@ -42,6 +42,18 @@
         </el-table>
         <div v-if="!webhooks.length" class="empty-hint">尚無 Webhook 設定</div>
       </el-tab-pane>
+
+      <el-tab-pane label="Chatwoot 與 AI" name="chatwoot">
+        <p class="hint">LINE 客戶對話持續保留在既有 Chatwoot；此處只確認案件側欄、AI 路由與團隊知識庫是否可用。</p>
+        <el-descriptions v-if="chatwootStatus" :column="1" border size="small" class="chatwoot-status">
+          <el-descriptions-item label="Chatwoot API"><el-tag :type="chatwootStatus.chatwoot.configured ? 'success' : 'warning'">{{ chatwootStatus.chatwoot.configured ? '已設定' : '未設定' }}</el-tag></el-descriptions-item>
+          <el-descriptions-item label="AI 引擎"><el-tag :type="chatwootStatus.ai.configured ? 'success' : 'info'">{{ chatwootStatus.ai.configured ? `${chatwootStatus.ai.provider} 已設定` : '未設定，將轉人工' }}</el-tag></el-descriptions-item>
+          <el-descriptions-item label="預設模式">{{ chatwootStatus.ai.defaultMode }}</el-descriptions-item>
+          <el-descriptions-item label="啟用知識條目">{{ chatwootStatus.knowledgeEntries }}</el-descriptions-item>
+          <el-descriptions-item label="最近連線測試"><span :class="chatwootHealth && !chatwootHealth.ok ? 'failed' : ''">{{ chatwootHealth ? (chatwootHealth.ok ? '成功' : chatwootHealth.error || '尚未成功') : '尚未測試' }}</span></el-descriptions-item>
+        </el-descriptions>
+        <div class="quickbar"><el-button :loading="testingChatwoot" @click="testChatwoot">測試 Chatwoot 連線</el-button><el-button type="primary" @click="$router.push('/ai-knowledge/index')">管理 AI 知識庫</el-button></div>
+      </el-tab-pane>
     </el-tabs>
 
     <el-dialog title="新增橋接" :visible.sync="bridgeDialogVisible" width="420px">
@@ -86,13 +98,16 @@
 <script>
   import { mapGetters } from 'vuex'
   import { fetchState } from '@/api/realtime'
-  import { createBridge, testBridge, createWebhook, updateWebhook, testWebhook } from '@/api/integrations'
+  import { createBridge, testBridge, createWebhook, updateWebhook, testWebhook, fetchChatwootStatus, testChatwootHealth } from '@/api/integrations'
 
   export default {
     name: 'Integrations',
     data() {
       return {
         tab: 'bridges',
+        chatwootStatus: null,
+        chatwootHealth: null,
+        testingChatwoot: false,
         bridges: [],
         webhooks: [],
         testBusy: '',
@@ -120,6 +135,7 @@
         const data = await fetchState()
         this.bridges = data.bridges || []
         this.webhooks = data.webhooks || []
+        this.chatwootStatus = await fetchChatwootStatus()
       },
       async testBridgeConn(row) {
         this.testBusy = row.id
@@ -161,6 +177,16 @@
           this.testWebhookBusy = ''
         }
       },
+      async testChatwoot() {
+        this.testingChatwoot = true
+        try {
+          this.chatwootHealth = await testChatwootHealth()
+          this.$baseMessage(this.chatwootHealth.ok ? 'Chatwoot 連線測試成功' : 'Chatwoot 尚未完成設定', this.chatwootHealth.ok ? 'success' : 'warning')
+        } catch (error) {
+          this.chatwootHealth = error?.response?.data || { ok: false, error: 'Chatwoot health check failed' }
+          this.$baseMessage('Chatwoot 連線測試失敗', 'error')
+        } finally { this.testingChatwoot = false }
+      },
       async submitWebhook() {
         if (!this.webhookForm.name.trim() || !this.webhookForm.url.trim()) {
           this.$baseMessage('請填寫名稱與 URL', 'warning')
@@ -200,4 +226,5 @@
     padding: 20px 0;
     text-align: center;
   }
+  .chatwoot-status { margin-bottom: 16px; max-width: 680px; } .failed { color: #f56c6c; }
 </style>

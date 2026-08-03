@@ -31,7 +31,19 @@ export async function registerChatwootRoutes(app, options) {
     return Boolean(expected) && String(request.headers["x-chatwoot-panel-secret"] || request.query?.panelSecret || "") === expected;
   };
 
-  app.get("/api/integrations/chatwoot/health", async () => client.health());
+  app.get("/api/integrations/chatwoot/health", async (_request, reply) => {
+    try {
+      return await client.health();
+    } catch {
+      return reply.code(502).send({ ok: false, configured: Boolean(client.configured), error: "Chatwoot health check failed" });
+    }
+  });
+
+  app.get("/api/integrations/chatwoot/status", async () => ({
+    chatwoot: { configured: Boolean(client.configured), accountId: client.accountId || "" },
+    ai: { configured: Boolean(engine?.configured), provider: engine?.provider || "disabled", defaultMode: aiModeFor(database.data.workspaceSettings, "") },
+    knowledgeEntries: (database.data.aiKnowledge || []).filter((item) => item.enabled !== false).length
+  }));
 
   app.post("/api/integrations/chatwoot/context", async (request, reply) => {
     if (!request.user && !panelAllowed(request)) return reply.code(403).send({ error: "Chatwoot panel authentication required" });
