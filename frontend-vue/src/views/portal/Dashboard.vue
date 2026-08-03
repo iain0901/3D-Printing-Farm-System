@@ -6,6 +6,26 @@
     </div>
 
     <el-tabs v-model="tab">
+      <el-tab-pane label="3D 列印案件" name="cases">
+        <el-card shadow="never" class="portal-card">
+          <div v-for="caseItem in cases" :key="caseItem.id" class="quote-item">
+            <div class="quote-head">
+              <b>{{ caseItem.project }}</b>
+              <el-tag size="mini">{{ caseItem.status }}</el-tag>
+            </div>
+            <p class="quote-meta">案件編號：{{ caseItem.caseNo }} · {{ caseItem.parts.length }} 個零件</p>
+            <p v-if="caseItem.quote" class="quote-meta">報價總額：NT$ {{ caseItem.quote.total }}</p>
+            <p v-if="caseItem.delivery && caseItem.delivery.trackingNumber" class="quote-meta">物流追蹤：{{ caseItem.delivery.trackingNumber }}</p>
+            <div v-if="caseItem.status === 'formal_quote_sent'" class="quote-actions">
+              <el-button size="mini" type="primary" @click="decideUnifiedCase(caseItem, 'accepted')">接受報價</el-button>
+              <el-button size="mini" @click="decideUnifiedCase(caseItem, 'revision')">要求修改</el-button>
+              <el-button size="mini" type="danger" @click="decideUnifiedCase(caseItem, 'rejected')">婉拒</el-button>
+            </div>
+            <p class="hint">聯絡與補件請在原 LINE 對話中進行。</p>
+          </div>
+          <div v-if="!cases.length" class="empty-hint">尚無 3D 列印案件</div>
+        </el-card>
+      </el-tab-pane>
       <el-tab-pane label="報價需求" name="quotes">
         <el-card shadow="never" class="portal-card">
           <div v-for="quote in quotes" :key="quote.id" class="quote-item">
@@ -153,8 +173,10 @@
   import { mapGetters } from 'vuex'
   import {
     fetchMyQuotes,
+    fetchMyCases,
     fetchMyOrders,
     decideQuote,
+    decideCase,
     sendQuoteMessage,
     fetchQuoteFilePreview,
     fetchQuoteFileRaw,
@@ -179,6 +201,7 @@
       return {
         tab: 'quotes',
         quotes: [],
+        cases: [],
         orders: [],
         addresses: [],
         messageDrafts: {},
@@ -226,6 +249,8 @@
         return { id: '', label: '預設地址', recipient: '', phone: '', line1: '', line2: '', city: '', postalCode: '', isDefault: false }
       },
       async load() {
+        const caseResult = await fetchMyCases()
+        this.cases = caseResult.cases || []
         this.quotes = await fetchMyQuotes()
         this.orders = await fetchMyOrders()
         this.addresses = await fetchAddresses()
@@ -235,6 +260,12 @@
         const index = this.quotes.findIndex((q) => q.id === quote.id)
         if (index !== -1) this.quotes.splice(index, 1, result.quoteRequest || result)
         this.$baseMessage('已送出您的決定', 'success')
+      },
+      async decideUnifiedCase(caseItem, decision) {
+        const result = await decideCase(caseItem.id, decision)
+        const index = this.cases.findIndex((item) => item.id === caseItem.id)
+        if (index !== -1) this.cases.splice(index, 1, result.case)
+        this.$baseMessage('案件決定已送出', 'success')
       },
       async sendMessage(quote) {
         const body = (this.messageDrafts[quote.id] || '').trim()

@@ -4,6 +4,14 @@ export function fetchMyQuotes() {
   return customerRequest({ url: '/api/customer/quotes', method: 'get' })
 }
 
+export function fetchMyCases() {
+  return customerRequest({ url: '/api/customer/cases', method: 'get' })
+}
+
+export function decideCase(caseId, decision, note = '') {
+  return customerRequest({ url: `/api/customer/cases/${caseId}/decision`, method: 'post', data: { decision, note } })
+}
+
 export function fetchMyOrders() {
   return customerRequest({ url: '/api/customer/orders', method: 'get' })
 }

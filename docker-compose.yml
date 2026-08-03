@@ -1,6 +1,25 @@
 name: layerpilot
 
 services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: ${LAYERPILOT_CONTAINER_NAME:-layerpilot}-postgres
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-farmflow}
+      POSTGRES_USER: ${POSTGRES_USER:-farmflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-this-database-password}
+    volumes:
+      - layerpilot-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-farmflow} -d ${POSTGRES_DB:-farmflow}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
   layerpilot:
     build:
       context: .
@@ -9,6 +28,9 @@ services:
     init: true
     restart: unless-stopped
     stop_grace_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
     security_opt:
       - no-new-privileges:true
     logging:
@@ -22,7 +44,9 @@ services:
       LAYERPILOT_API_PORT: 8797
       LAYERPILOT_SERVE_STATIC: "true"
       LAYERPILOT_DB_PATH: /data/layerpilot.db.json
-      LAYERPILOT_DB_ADAPTER: ${LAYERPILOT_DB_ADAPTER:-json}
+      LAYERPILOT_DB_ADAPTER: ${LAYERPILOT_DB_ADAPTER:-postgres}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-farmflow}:${POSTGRES_PASSWORD:-change-this-database-password}@postgres:5432/${POSTGRES_DB:-farmflow}
+      LAYERPILOT_POSTGRES_SCHEMA: ${LAYERPILOT_POSTGRES_SCHEMA:-public}
       LAYERPILOT_STORAGE_DIR: /data/storage
       LAYERPILOT_ADMIN_EMAIL: ${LAYERPILOT_ADMIN_EMAIL:-}
       LAYERPILOT_ADMIN_PASSWORD: ${LAYERPILOT_ADMIN_PASSWORD:-}
@@ -57,6 +81,18 @@ services:
       LAYERPILOT_MQTT_RETAIN: ${LAYERPILOT_MQTT_RETAIN:-false}
       LAYERPILOT_SLICER_CMD: ${LAYERPILOT_SLICER_CMD:-}
       LAYERPILOT_SLICER_ARGS: ${LAYERPILOT_SLICER_ARGS:-}
+      CHATWOOT_BASE_URL: ${CHATWOOT_BASE_URL:-}
+      CHATWOOT_ACCOUNT_ID: ${CHATWOOT_ACCOUNT_ID:-}
+      CHATWOOT_INBOX_ID: ${CHATWOOT_INBOX_ID:-}
+      CHATWOOT_API_TOKEN: ${CHATWOOT_API_TOKEN:-}
+      CHATWOOT_WEBHOOK_SECRET: ${CHATWOOT_WEBHOOK_SECRET:-}
+      CHATWOOT_PANEL_SECRET: ${CHATWOOT_PANEL_SECRET:-}
+      AI_PROVIDER: ${AI_PROVIDER:-disabled}
+      AI_MODEL: ${AI_MODEL:-}
+      AI_API_BASE_URL: ${AI_API_BASE_URL:-}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_DEFAULT_MODE: ${AI_DEFAULT_MODE:-hybrid}
+      AI_CONFIDENCE_THRESHOLD: ${AI_CONFIDENCE_THRESHOLD:-0.78}
       LAYERPILOT_ENABLE_INTERNAL_TELEMETRY: "false"
       LAYERPILOT_ENABLE_INTERNAL_BRIDGE_POLLING: "false"
     ports:
@@ -92,7 +128,9 @@ services:
     environment:
       NODE_ENV: production
       LAYERPILOT_DB_PATH: /data/layerpilot.db.json
-      LAYERPILOT_DB_ADAPTER: ${LAYERPILOT_DB_ADAPTER:-json}
+      LAYERPILOT_DB_ADAPTER: ${LAYERPILOT_DB_ADAPTER:-postgres}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-farmflow}:${POSTGRES_PASSWORD:-change-this-database-password}@postgres:5432/${POSTGRES_DB:-farmflow}
+      LAYERPILOT_POSTGRES_SCHEMA: ${LAYERPILOT_POSTGRES_SCHEMA:-public}
       LAYERPILOT_STORAGE_DIR: /data/storage
       LAYERPILOT_WORKER_ID: ${LAYERPILOT_WORKER_ID:-layerpilot-worker}
       LAYERPILOT_WORKER_TELEMETRY: ${LAYERPILOT_WORKER_TELEMETRY:-true}
@@ -110,5 +148,35 @@ services:
     volumes:
       - layerpilot-data:/data
 
+  orca-worker:
+    build:
+      context: .
+      dockerfile: deploy/orcaslicer/Dockerfile
+      args:
+        ORCA_SLICER_VERSION: ${ORCA_SLICER_VERSION:-2.4.2}
+    image: layerpilot-orca:${ORCA_SLICER_VERSION:-2.4.2}
+    container_name: ${LAYERPILOT_CONTAINER_NAME:-layerpilot}-orca
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      layerpilot:
+        condition: service_healthy
+    environment:
+      LAYERPILOT_API_INTERNAL_URL: http://layerpilot:8797
+      LAYERPILOT_WORKER_TOKEN: ${LAYERPILOT_WORKER_TOKEN:-change-this-worker-token}
+      ORCA_WORKER_ID: ${ORCA_WORKER_ID:-layerpilot-orca}
+      ORCA_SLICER_CMD: /usr/local/bin/orca-slicer
+      ORCA_SLICER_VERSION: ${ORCA_SLICER_VERSION:-2.4.2}
+      ORCA_SLICER_SETTINGS_PATH: ${ORCA_SLICER_SETTINGS_PATH:-}
+      ORCA_SLICER_FILAMENT_PATH: ${ORCA_SLICER_FILAMENT_PATH:-}
+      ORCA_WORKER_INTERVAL_MS: ${ORCA_WORKER_INTERVAL_MS:-3000}
+      ORCA_SLICER_TIMEOUT_MS: ${ORCA_SLICER_TIMEOUT_MS:-1200000}
+    volumes:
+      - ./deploy/orcaslicer/profiles:/profiles:ro
+
 volumes:
   layerpilot-data:
+  layerpilot-postgres:

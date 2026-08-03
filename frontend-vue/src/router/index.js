@@ -16,8 +16,18 @@ export const constantRoutes = [
     // 行销首页：公开，不需要任何登入态，因此放在 constantRoutes（一律注册），
     // 且必须在 src/config/permission.js 的守卫里明确放行，见该档案开头注释。
     path: '/',
-    name: 'Marketing',
-    component: () => import('@/views/marketing/Index'),
+    name: 'QuoteWizard',
+    component: () => import('@/views/quote/Wizard'),
+    hidden: true,
+  },
+  {
+    path: '/quote/new',
+    component: () => import('@/views/quote/Wizard'),
+    hidden: true,
+  },
+  {
+    path: '/customer/cases/:id',
+    component: () => import('@/views/portal/Case'),
     hidden: true,
   },
   {
@@ -61,6 +71,23 @@ export const constantRoutes = [
 ]
 
 export const asyncRoutes = [
+  {
+    path: '/cases',
+    component: Layout,
+    redirect: '/cases/index',
+    children: [
+      {
+        path: 'index',
+        name: 'Cases',
+        component: () => import('@/views/cases/index'),
+        meta: {
+          title: '3DRFM 案件中心',
+          icon: 'clipboard-list',
+          permissions: ['orders:write'],
+        },
+      },
+    ],
+  },
   {
     path: '/dashboard',
     component: Layout,

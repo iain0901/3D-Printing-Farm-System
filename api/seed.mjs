@@ -138,6 +138,10 @@ export const seedData = {
   quoteRequests: [
     { id: "qr-demo-1", customerId: "cus-demo-1", customer: "Jamie Park", email: "jamie@example.com", company: "Prototype Studio", project: "PETG enclosure prototype", material: "PETG", quantity: 4, due: "Next Friday", budget: 520, notes: "Needs threaded inserts after printing", fileName: "enclosure-v2.step", source: "Website", status: "new", priority: "Normal", quotedValue: 0, process: "FDM", color: "Black", quality: "Standard", layerHeight: "0.20 mm", infill: 30, walls: 3, support: "Auto", postProcessing: ["Heat-set inserts x4"], inserts: 4, inspection: "Photo confirmation", rush: false, useCase: "functional", formMode: "expert" }
   ],
+  cases: [],
+  caseStatusHistory: [],
+  chatwootCaseLinks: [],
+  afterSalesCases: [],
   profiles: [
     { id: "prof-1", name: "CoreXY Pro 300", kind: "Machine", target: "Forge A1", source: "Manual", updated: "Today" },
     { id: "prof-2", name: "0.20mm Production", kind: "Process", target: "FDM fleet", source: "Orca import", updated: "Yesterday" }
@@ -198,7 +202,7 @@ export const seedData = {
     timezone: "Asia/Taipei",
     theme: "system",
     requireAdmin2fa: true,
-    auditLogRetention: true,
+    auditLogRetention: false,
     restrictApiByIp: false,
     allowedApiIps: [],
     storageLimitGb: 10,

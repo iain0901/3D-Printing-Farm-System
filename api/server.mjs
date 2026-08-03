@@ -25,10 +25,14 @@ import { createLogisticsProvider } from "./logistics-tracking.mjs";
 import { createPersistenceAdapter } from "./persistence.mjs";
 import { solveScheduleAssignments } from "./schedule-solver.mjs";
 import { seedData } from "./seed.mjs";
+import { registerCaseRoutes } from "./cases-module.mjs";
+import { createAiEngine } from "./ai-engine.mjs";
+import { createChatwootClient } from "./chatwoot.mjs";
+import { registerChatwootRoutes } from "./chatwoot-module.mjs";
 
 const execFileAsync = promisify(execFile);
 
-const COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "orders", "customers", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns", "coupons"];
+const COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "cases", "caseStatusHistory", "chatwootCaseLinks", "afterSalesCases", "orders", "customers", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns", "coupons"];
 const RESTORABLE_EXTRA_KEYS = ["users", "workspaces", "workspaceSettings", "costCatalog", "costCatalogs", "profileDefaults", "profileMatchingPolicy", "billingSessions", "invoices", "dataMeta"];
 const RESTORABLE_KEYS = [...COLLECTIONS, ...RESTORABLE_EXTRA_KEYS];
 const defaultCostCatalog = {
@@ -62,7 +66,7 @@ const defaultAuthRateLimit = { max: 8, timeWindow: "1 minute", groupId: "auth" }
 const defaultSensitiveRateLimit = { max: 30, timeWindow: "1 minute" };
 const customerAuthRateLimit = { max: 8, timeWindow: "1 minute", groupId: "customer-auth" };
 const customerMessageRateLimit = { max: 20, timeWindow: "1 minute", groupId: "quote-message" };
-const CURRENT_SCHEMA_VERSION = 6;
+const CURRENT_SCHEMA_VERSION = 7;
 const DEFAULT_WORKSPACE_ID = "ws-default";
 const IDEMPOTENCY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const IDEMPOTENCY_MAX_RECORDS = 500;
@@ -93,7 +97,7 @@ const API_KEY_GRANTABLE_SCOPES = [
   "webhooks:write"
 ];
 const apiKeyGrantableScopeSet = new Set(API_KEY_GRANTABLE_SCOPES);
-const TENANT_COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "orders", "customers", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns", "billingSessions", "invoices", "coupons"];
+const TENANT_COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "cases", "caseStatusHistory", "chatwootCaseLinks", "afterSalesCases", "orders", "customers", "profiles", "addons", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns", "billingSessions", "invoices", "coupons"];
 const printerStatusSchema = z.enum(["idle", "printing", "paused", "offline", "error", "maintenance"]);
 const jobStatusSchema = z.enum(["queued", "printing", "paused", "complete", "failed", "cancelled"]);
 const prioritySchema = z.enum(["Rush", "High", "Normal", "Low"]);
@@ -671,7 +675,8 @@ const workspaceSettingsBaseSchema = z.object({
   timezone: z.string().min(1).default("Asia/Taipei"),
   theme: z.enum(["system", "light", "dark"]).default("system"),
   requireAdmin2fa: z.boolean().default(true),
-  auditLogRetention: z.boolean().default(true),
+  // 自管部署預設保留所有稽核紀錄；清除必須由管理員在後台手動執行。
+  auditLogRetention: z.boolean().default(false),
   auditLogRetentionDays: z.number().int().min(7).max(3650).default(365),
   restrictApiByIp: z.boolean().default(false),
   allowedApiIps: z.array(z.string().trim().min(1).refine(isValidIpAllowlistRule, { message: "Must be an IPv4 address or IPv4 CIDR range" })).default([]),
@@ -1355,6 +1360,88 @@ function applyDataMigrations(data) {
     }
     applied.push({ version: 6, name: "customer portal accounts", appliedAt: now });
   }
+  if (fromVersion < 7) {
+    for (const key of ["cases", "caseStatusHistory", "chatwootCaseLinks", "afterSalesCases"]) ensureArray(data, key);
+    const existingLegacyIds = new Set(data.cases.map((item) => item.legacyQuoteRequestId).filter(Boolean));
+    const statusMap = {
+      new: "new",
+      reviewing: "under_review",
+      quoted: "formal_quote_sent",
+      accepted: "accepted",
+      converted: "production_pending",
+      rejected: "cancelled"
+    };
+    let migratedCases = 0;
+    for (const quote of ensureArray(data, "quoteRequests")) {
+      if (existingLegacyIds.has(quote.id)) continue;
+      const createdAt = quote.createdAt || now;
+      const caseId = `case-${randomUUID().slice(0, 12)}`;
+      const accessToken = quote.customerAccessToken || randomBytes(24).toString("base64url");
+      const quoteVersion = Number(quote.quotedValue || 0) > 0 ? {
+        id: `qv-${randomUUID().slice(0, 12)}`,
+        versionNo: 1,
+        status: quote.status === "accepted" || quote.status === "converted" ? "accepted" : quote.status === "quoted" ? "sent" : "draft",
+        currency: "TWD",
+        breakdown: { material: 0, machineTime: 0, setup: 0, modeling: 0, postProcessing: 0, multicolor: Number(quote.colorSurcharge || 0), packing: 0, shipping: 0, risk: 0, discount: 0, tax: 0, subtotal: Number(quote.quotedValue || 0), total: Number(quote.quotedValue || 0) },
+        customerTotal: Number(quote.quotedValue || 0),
+        scope: quote.project || "Legacy quote",
+        validUntil: quote.validUntil || "",
+        approvedBy: "migration",
+        createdAt,
+        sentAt: quote.status === "quoted" ? quote.updatedAt || createdAt : ""
+      } : null;
+      const caseRecord = {
+        id: caseId,
+        caseNo: `LEGACY-${quote.id}`,
+        legacyQuoteRequestId: quote.id,
+        workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID,
+        customerId: quote.customerId || "",
+        customerSnapshot: { name: quote.customer || "Legacy customer", email: quote.email || "", phone: quote.phone || "", company: quote.company || "", lineUserId: "" },
+        project: quote.project || "Legacy quote request",
+        purpose: quote.useCase || quote.project || "",
+        mode: quote.formMode === "expert" ? "agent" : "estimate",
+        source: String(quote.source || "website").toLowerCase() === "website" ? "website" : "manual",
+        hasModel: Boolean(quote.fileId || quote.fileName),
+        dueDate: quote.due || "",
+        budget: Number(quote.budget || 0),
+        notes: quote.notes || "",
+        defaults: { material: quote.material || "PLA", color: quote.color || "", quantity: Number(quote.quantity || 1), quality: quote.quality || "Standard", layerHeight: quote.layerHeight || "", infill: Number(quote.infill || 15), walls: Number(quote.walls || 2), support: quote.support || "Auto", postProcessing: quote.postProcessing || [] },
+        modeling: { sketches: [], criticalDimensions: "", requirements: "" },
+        fileIds: quote.fileId ? [quote.fileId] : [],
+        parts: [{ id: `part-${randomUUID().slice(0, 12)}`, name: quote.project || quote.fileName || "Legacy part", fileId: quote.fileId || "", sourcePartIndexes: [], material: quote.material || "PLA", color: quote.color || "", quantity: Number(quote.quantity || 1), quality: quote.quality || "Standard", layerHeight: quote.layerHeight || "", infill: Number(quote.infill || 15), walls: Number(quote.walls || 2), support: quote.support || "Auto", postProcessing: quote.postProcessing || [], notes: "", readiness: "pending" }],
+        status: statusMap[quote.status] || "new",
+        priority: quote.priority || "Normal",
+        assigneeId: "",
+        quoteVersions: quoteVersion ? [quoteVersion] : [],
+        currentQuoteVersionId: quoteVersion?.id || "",
+        quotedValue: Number(quote.quotedValue || 0),
+        payments: [],
+        paymentStatus: quote.status === "converted" ? "paid" : "unpaid",
+        slicerJobs: [],
+        approvedSlicerJobId: "",
+        printerId: "",
+        printAttempts: [],
+        qcChecks: [],
+        delivery: null,
+        afterSalesCaseIds: [],
+        chatwoot: null,
+        technicalReviewRequired: false,
+        technicalReviewReasons: [],
+        publicAccessTokenHash: createHash("sha256").update(accessToken).digest("hex"),
+        createdAt,
+        updatedAt: quote.updatedAt || createdAt,
+        statusHistory: []
+      };
+      data.cases.push(caseRecord);
+      const history = { id: `csh-${randomUUID().slice(0, 12)}`, workspaceId: caseRecord.workspaceId, caseId, from: "", to: caseRecord.status, reason: "Migrated from quoteRequests", actorId: "", actorName: "migration", at: now };
+      data.caseStatusHistory.push(history);
+      caseRecord.statusHistory.push(history);
+      quote.migratedCaseId = caseId;
+      quote.customerAccessToken ||= accessToken;
+      migratedCases += 1;
+    }
+    applied.push({ version: 7, name: "3DRFM unified case workflow", migratedCases, appliedAt: now });
+  }
   data.dataMeta = {
     ...meta,
     schemaVersion: CURRENT_SCHEMA_VERSION,
@@ -1543,6 +1630,11 @@ function sanitizeUser(user) {
 function sanitizeDataMeta(meta = {}) {
   const { idempotencyKeys, stripeWebhookEvents, ...safeMeta } = meta || {};
   return safeMeta;
+}
+
+function sanitizeCase(caseRecord = {}) {
+  const { publicAccessTokenHash, ...safeCase } = caseRecord;
+  return safeCase;
 }
 
 function endpointHost(value) {
@@ -2272,6 +2364,7 @@ function publicState(data) {
     commerceConnectors: (data.commerceConnectors || []).map(sanitizeCommerceConnector),
     apiKeys: (data.apiKeys || []).map(sanitizeApiKey),
     quoteRequests: (data.quoteRequests || []).map(sanitizeQuoteRequest),
+    cases: (data.cases || []).map(sanitizeCase),
     customers: (data.customers || []).map(sanitizeCustomer),
     addons: (data.addons || []).map(sanitizeAddon)
   };
@@ -3997,6 +4090,134 @@ async function createStoredModelFile(database, payload, options = {}) {
   return { file, folder: folderResult.folder, metadata };
 }
 
+async function createStoredCaseFile(database, payload, options = {}) {
+  const workspaceId = options.workspaceId || payload.workspaceId || DEFAULT_WORKSPACE_ID;
+  const filename = path.basename(payload.filename || "model.stl");
+  const extension = path.extname(filename).slice(1).toUpperCase();
+  const accepted = new Set(["STL", "3MF", "STEP", "STP", "PNG", "JPG", "JPEG", "WEBP", "PDF"]);
+  if (!accepted.has(extension)) throw new Error("模型接受 STL、3MF、STEP／STP；需求附件接受 PNG、JPG、WEBP 或 PDF");
+  if (!payload.buffer?.length) throw new Error("上傳檔案是空的");
+  if (["PNG", "JPG", "JPEG", "WEBP", "PDF"].has(extension)) {
+    const id = randomUUID();
+    const folderResult = ensureFileFolder(database.data, { name: "3DRFM Cases", purpose: "case-intake", workspaceId });
+    const stored = await storeObject(`uploads/${id}/${filename}`, payload.buffer, { filename, type: extension });
+    const file = {
+      id,
+      workspaceId,
+      name: filename,
+      type: extension,
+      folder: folderResult.folder.name,
+      size: formatBytes(payload.buffer.length),
+      material: payload.material || "",
+      tags: ["3drfm", "customer-attachment"],
+      sliced: false,
+      status: "uploaded",
+      version: 1,
+      dimensions: [0, 0, 0],
+      thumbnail: filename,
+      printTime: "",
+      cost: 0,
+      usage: 0,
+      estimateGrams: 0,
+      estimateMinutes: 0,
+      quote: 0,
+      storagePath: stored.storagePath,
+      storageProvider: stored.storageProvider,
+      storageKey: stored.storageKey,
+      source: "3DRFM case attachment",
+      createdAt: new Date().toISOString()
+    };
+    database.data.files.push(file);
+    folderResult.folder.fileCount = database.data.files.filter((item) => item.folder === folderResult.folder.name).length;
+    folderResult.folder.updatedAt = new Date().toISOString();
+    return { file, metadata: null };
+  }
+  try {
+    return await createStoredModelFile(database, {
+      ...payload,
+      folder: "3DRFM Cases",
+      folderPurpose: "case-intake",
+      tags: ["3drfm", "customer-upload", "parsed"],
+      source: "3DRFM case"
+    }, { workspaceId });
+  } catch (error) {
+    const id = randomUUID();
+    const folderResult = ensureFileFolder(database.data, { name: "3DRFM Cases", purpose: "case-intake", workspaceId });
+    const stored = await storeObject(`uploads/${id}/${filename}`, payload.buffer, { filename, type: extension });
+    const file = {
+      id,
+      workspaceId,
+      name: filename,
+      type: extension,
+      folder: folderResult.folder.name,
+      size: formatBytes(payload.buffer.length),
+      material: payload.material || "PLA",
+      tags: ["3drfm", "customer-upload", "needs-review"],
+      sliced: false,
+      status: "needs_review",
+      version: 1,
+      dimensions: [0, 0, 0],
+      thumbnail: filename,
+      printTime: "",
+      cost: 0,
+      usage: 0,
+      estimateGrams: 0,
+      estimateMinutes: 0,
+      quote: 0,
+      storagePath: stored.storagePath,
+      storageProvider: stored.storageProvider,
+      storageKey: stored.storageKey,
+      source: "3DRFM case",
+      technicalReviewReason: error.message,
+      createdAt: new Date().toISOString()
+    };
+    database.data.files.push(file);
+    folderResult.folder.fileCount = database.data.files.filter((item) => item.folder === folderResult.folder.name).length;
+    folderResult.folder.updatedAt = new Date().toISOString();
+    return { file, metadata: null, technicalReviewReason: error.message };
+  }
+}
+
+async function createStoredGcodeFile(database, payload) {
+  const workspaceId = payload.workspaceId || DEFAULT_WORKSPACE_ID;
+  const id = randomUUID();
+  const filename = path.basename(payload.filename || `${payload.caseId || "case"}.gcode`).replace(/\.(gcode\.3mf|3mf)$/i, ".gcode");
+  const folderResult = ensureFileFolder(database.data, { name: "OrcaSlicer G-code", purpose: "production-gcode", workspaceId });
+  const stored = await storeObject(`slices/${id}/${filename}`, payload.buffer, { filename, type: "GCODE" });
+  const file = {
+    id,
+    workspaceId,
+    name: filename,
+    type: "GCODE",
+    folder: folderResult.folder.name,
+    size: formatBytes(payload.buffer.length),
+    material: "",
+    tags: ["orca-slicer", "generated-gcode", "requires-approval"],
+    sliced: true,
+    status: "generated",
+    version: 1,
+    dimensions: [0, 0, 0],
+    thumbnail: filename,
+    printTime: "",
+    cost: 0,
+    usage: 0,
+    estimateGrams: 0,
+    estimateMinutes: 0,
+    quote: 0,
+    storagePath: stored.storagePath,
+    storageProvider: stored.storageProvider,
+    storageKey: stored.storageKey,
+    source: "OrcaSlicer",
+    caseId: payload.caseId,
+    slicerJobId: payload.slicerJobId,
+    createdAt: new Date().toISOString()
+  };
+  database.data.files.push(file);
+  folderResult.folder.fileCount = database.data.files.filter((item) => item.folder === folderResult.folder.name).length;
+  folderResult.folder.updatedAt = new Date().toISOString();
+  return { file, folder: folderResult.folder };
+}
+
 async function storedFileBytes(file) {
   if (file.storagePath) {
     try {
@@ -4032,7 +4253,10 @@ const productionDefaultSecretValues = new Map([
 function productionDependencyConfigIssues(env = process.env) {
   const issues = [];
   const dbAdapter = String(env.LAYERPILOT_DB_ADAPTER || "json").trim();
-  if (!["json", "sqlite"].includes(dbAdapter)) issues.push("LAYERPILOT_DB_ADAPTER must be json or sqlite");
+  if (!["json", "sqlite", "postgres", "postgresql", "pg"].includes(dbAdapter)) issues.push("LAYERPILOT_DB_ADAPTER must be json, sqlite, or postgres");
+  if (["postgres", "postgresql", "pg"].includes(dbAdapter) && !String(env.DATABASE_URL || env.LAYERPILOT_DATABASE_URL || "").trim()) {
+    issues.push("DATABASE_URL is required for PostgreSQL persistence");
+  }
 
   const storageProvider = String(env.LAYERPILOT_OBJECT_STORAGE_PROVIDER || "local").trim().toLowerCase();
   if (!["local", "s3"].includes(storageProvider)) {
@@ -6427,7 +6651,7 @@ export async function runTelemetryTick(database, options = {}) {
   return { changed: true, changedPrinters, completedJobs, todos: deriveTodos(stateData) };
 }
 
-export async function buildServer({ db, enableTelemetry = false, telemetryIntervalMs = 5000, enableBridgePolling = false, bridgePollingIntervalMs = 10000, serveStatic = process.env.LAYERPILOT_SERVE_STATIC === "true", authRateLimit = defaultAuthRateLimit, sensitiveRateLimit = defaultSensitiveRateLimit, mqttPublisher = null, stripeClient = createStripeClient(), objectStorageAdapter = createObjectStorage(), emailClient = createEmailClient() } = {}) {
+export async function buildServer({ db, enableTelemetry = false, telemetryIntervalMs = 5000, enableBridgePolling = false, bridgePollingIntervalMs = 10000, serveStatic = process.env.LAYERPILOT_SERVE_STATIC === "true", authRateLimit = defaultAuthRateLimit, sensitiveRateLimit = defaultSensitiveRateLimit, mqttPublisher = null, stripeClient = createStripeClient(), objectStorageAdapter = createObjectStorage(), emailClient = createEmailClient(), aiEngine = createAiEngine(), chatwootClient = createChatwootClient() } = {}) {
   const database = db || await openDatabase();
   activeObjectStorage = objectStorageAdapter;
   database.realtimeClients ||= new Set();
@@ -6473,7 +6697,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     hook: "preHandler"
   });
   await app.register(websocket);
-  await app.register(multipart, { limits: { fileSize: 200 * 1024 * 1024, files: 1 } });
+  await app.register(multipart, { limits: { fileSize: 200 * 1024 * 1024, files: 20 } });
   if (serveStatic) {
     await app.register(fastifyStatic, {
       root: path.join(process.cwd(), "dist"),
@@ -6503,7 +6727,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
 
   app.addHook("preHandler", async (request, reply) => {
     const routePath = request.url.split("?")[0];
-    const publicRoute = routePath === "/api/health" || routePath === "/api/readiness" || routePath === "/api/metrics" && hasValidMetricsToken(request) || routePath === "/api/internal/worker-broadcast" && hasValidWorkerToken(request) || routePath === "/api/billing/webhook/stripe" || routePath === "/api/public/quoteRequests" || routePath.startsWith("/api/public/quoteRequests/") || routePath === "/api/public/pricing-estimate" || routePath === "/api/public/model-preview" || routePath.startsWith("/api/auth/") || routePath.startsWith("/api/customer-auth/") || routePath.startsWith("/api/customer/") || routePath === "/api/events/stream" || routePath === "/api/events/ws" || serveStatic && !routePath.startsWith("/api/");
+    const publicRoute = routePath === "/api/health" || routePath === "/api/readiness" || routePath === "/api/metrics" && hasValidMetricsToken(request) || routePath === "/api/internal/worker-broadcast" && hasValidWorkerToken(request) || routePath.startsWith("/api/internal/orca/") || routePath === "/api/integrations/chatwoot/webhook" || routePath === "/api/integrations/chatwoot/context" || routePath === "/api/billing/webhook/stripe" || routePath === "/api/public/quoteRequests" || routePath.startsWith("/api/public/quoteRequests/") || routePath === "/api/public/cases" || routePath.startsWith("/api/public/cases/") || routePath === "/api/public/pricing-estimate" || routePath === "/api/public/model-preview" || routePath.startsWith("/api/auth/") || routePath.startsWith("/api/customer-auth/") || routePath.startsWith("/api/customer/") || routePath === "/api/events/stream" || routePath === "/api/events/ws" || serveStatic && !routePath.startsWith("/api/");
     if (publicRoute) return;
     if (await replayCommittedRestoreRequest(database, request, reply)) return;
     const { session, user, apiKey } = userFromRequest(database, request);
@@ -6568,6 +6792,16 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     await database.write();
     return payload;
   });
+
+  await registerCaseRoutes(app, {
+    database,
+    storeCaseFile: (payload) => createStoredCaseFile(database, payload, { workspaceId: payload.workspaceId || DEFAULT_WORKSPACE_ID }),
+    storeGcodeFile: (payload) => createStoredGcodeFile(database, payload),
+    readCaseFile: (file) => objectStorage().get(file),
+    hasValidWorkerToken,
+    customerFromRequest
+  });
+  await registerChatwootRoutes(app, { database, aiEngine, chatwootClient });
 
   app.get("/api/health", async () => ({ ok: true, service: "layerpilot-api", persistence: database.persistenceLabel || "lowdb-json" }));
   app.get("/api/readiness", async (request, reply) => {
@@ -7274,7 +7508,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   app.get("/api/costCatalog", async (request) => costCatalogForWorkspace(database.data, request.user.workspaceId));
 
   for (const collection of COLLECTIONS) {
-    if (collection === "bridges" || collection === "webhooks" || collection === "webhookDeliveries" || collection === "notificationChannels" || collection === "notificationDeliveries" || collection === "commerceConnectors" || collection === "apiKeys" || collection === "addons" || collection === "quoteRequests" || collection === "customers") continue;
+    if (collection === "bridges" || collection === "webhooks" || collection === "webhookDeliveries" || collection === "notificationChannels" || collection === "notificationDeliveries" || collection === "commerceConnectors" || collection === "apiKeys" || collection === "addons" || collection === "quoteRequests" || collection === "cases" || collection === "caseStatusHistory" || collection === "chatwootCaseLinks" || collection === "afterSalesCases" || collection === "customers") continue;
     app.get(`/api/${collection}`, async (request) => scopedWorkspaceData(database.data, request.user.workspaceId)[collection] || []);
   }
 

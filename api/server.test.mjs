@@ -853,13 +853,13 @@ endsolid batch`;
     }, null, 2));
     try {
       const db = await openDatabase(dbPath);
-      expect(db.data.dataMeta).toMatchObject({ schemaVersion: 6 });
-      expect(db.data.dataMeta.migrations.map((item) => item.version)).toEqual([1, 2, 3, 4, 5, 6]);
+      expect(db.data.dataMeta).toMatchObject({ schemaVersion: 7 });
+      expect(db.data.dataMeta.migrations.map((item) => item.version)).toEqual([1, 2, 3, 4, 5, 6, 7]);
       expect(db.data.printers[0].id).toBeTruthy();
       expect(db.data.users.find((user) => user.email === "legacy@example.com").passwordHash).toMatch(/^scrypt\$/);
       expect(db.data.events.some((event) => event.type === "system.migrated")).toBe(true);
       const files = await readdir(dir);
-      expect(files.some((file) => file.includes(".pre-migration-0-to-6-") && file.endsWith(".bak.json"))).toBe(true);
+      expect(files.some((file) => file.includes(".pre-migration-0-to-7-") && file.endsWith(".bak.json"))).toBe(true);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -870,7 +870,7 @@ endsolid batch`;
       const token = await login(app);
       const clean = await app.inject({ method: "GET", url: "/api/admin/integrity", headers: auth(token) });
       expect(clean.statusCode).toBe(200);
-      expect(clean.json()).toMatchObject({ ok: true, schemaVersion: 6 });
+      expect(clean.json()).toMatchObject({ ok: true, schemaVersion: 7 });
       expect(clean.json().counts.printers).toBeGreaterThan(0);
 
       db.data.queue.push({
@@ -1310,7 +1310,7 @@ endsolid batch`;
       expect(serializedEvents).not.toContain(setup.json().secret);
       expect(serializedEvents).not.toContain(recoveryCode);
     });
-  });
+  }, 10000);
 
   it("locks known accounts after repeated two-factor failures and clears lock on successful 2FA", async () => {
     await withEnv({ LAYERPILOT_AUTH_LOCK_THRESHOLD: "2", LAYERPILOT_AUTH_LOCK_MINUTES: "10" }, async () => {

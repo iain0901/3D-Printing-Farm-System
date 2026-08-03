@@ -63,7 +63,13 @@ describe("3DSTU FarmFlow deployment packaging", () => {
     expect(envExample).toContain("LAYERPILOT_ADMIN_EMAIL=owner@example.com");
     expect(envExample).toContain("LAYERPILOT_PUBLIC_URL=http://127.0.0.1:8797");
     expect(envExample).toContain("LAYERPILOT_BIND_ADDRESS=127.0.0.1");
-    expect(envExample).toContain("LAYERPILOT_DB_ADAPTER=json");
+    expect(envExample).toContain("LAYERPILOT_DB_ADAPTER=postgres");
+    expect(envExample).toContain("DATABASE_URL=postgresql://farmflow:");
+    expect(envExample).toContain("ORCA_SLICER_VERSION=2.4.2");
+    expect(envExample).toContain("CHATWOOT_BASE_URL=");
+    expect(envExample).toContain("AI_PROVIDER=disabled");
+    expect(compose).toContain("postgres:17-alpine");
+    expect(compose).toContain("orca-worker:");
     expect(envExample).toContain("LAYERPILOT_DISABLE_DEFAULT_USERS=true");
     expect(envExample).toContain("LAYERPILOT_METRICS_TOKEN=change-this-metrics-token");
     expect(envExample).toContain("LAYERPILOT_OPS_EMAIL=");
