@@ -53,7 +53,7 @@ export function chatwootMessageContext(payload = {}) {
     content: String(payload.content || payload.message?.content || "").trim(),
     accountId: String(payload.account?.id || payload.account_id || conversation.account_id || "").trim(),
     conversationId: String(conversation.id || payload.conversation_id || "").trim(),
-    contactId: String(contact.id || "").trim(),
+    contactId: String(contact.id || payload.contact_id || "").trim(),
     contactName: String(contact.name || "").trim(),
     inboxId: String(conversation.inbox_id || payload.inbox?.id || "").trim(),
     email: String(contact.email || "").trim(),

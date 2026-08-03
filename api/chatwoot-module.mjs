@@ -1,5 +1,7 @@
 import { createChatwootClient, chatwootMessageContext, verifyChatwootWebhook } from "./chatwoot.mjs";
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
+import { createCaseFromIntake, publicCase } from "./cases-module.mjs";
 
 const DEFAULT_WORKSPACE_ID = "ws-default";
 const inWorkspace = (item, workspaceId) => (item.workspaceId || DEFAULT_WORKSPACE_ID) === workspaceId;
@@ -44,6 +46,47 @@ export async function registerChatwootRoutes(app, options) {
     ai: { configured: Boolean(engine?.configured), provider: engine?.provider || "disabled", defaultMode: aiModeFor(database.data.workspaceSettings, "") },
     knowledgeEntries: (database.data.aiKnowledge || []).filter((item) => item.enabled !== false).length
   }));
+
+  const chatwootCaseSchema = z.object({
+    account_id: z.string().trim().min(1),
+    conversation_id: z.string().trim().min(1),
+    contact_id: z.string().trim().max(80).optional().default(""),
+    customer: z.object({
+      name: z.string().trim().min(1).max(120),
+      email: z.string().trim().email().optional().or(z.literal("")).default(""),
+      phone: z.string().trim().max(60).optional().default("")
+    }),
+    project: z.string().trim().min(1).max(160),
+    purpose: z.string().trim().min(1).max(2000),
+    material: z.string().trim().max(80).optional().default("PLA"),
+    quantity: z.coerce.number().int().min(1).max(10000).optional().default(1)
+  });
+
+  app.post("/api/integrations/chatwoot/cases", async (request, reply) => {
+    if (!request.user && !panelAllowed(request)) return reply.code(403).send({ error: "Chatwoot panel authentication required" });
+    if (request.user && !["Owner", "Admin", "Operator"].includes(request.user.role)) return reply.code(403).send({ error: "Case creation permission required" });
+    const parsed = chatwootCaseSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Chatwoot case payload is incomplete", issues: parsed.error.issues });
+    const context = chatwootMessageContext(parsed.data);
+    const existing = linkedCase(database.data, context);
+    if (existing) return reply.code(409).send({ error: "Conversation already has a linked case", case: publicCase(existing) });
+    const workspaceId = request.user?.workspaceId || DEFAULT_WORKSPACE_ID;
+    const created = createCaseFromIntake(database, {
+      mode: "agent",
+      source: "chatwoot",
+      hasModel: false,
+      customer: { ...parsed.data.customer, lineUserId: context.contactId || `chatwoot-${context.conversationId}` },
+      project: parsed.data.project,
+      purpose: parsed.data.purpose,
+      defaults: { material: parsed.data.material, color: "", quantity: parsed.data.quantity, quality: "Standard", layerHeight: "", infill: 15, walls: 2, support: "Auto", postProcessing: [] },
+      parts: [],
+      fileIds: [],
+      modeling: { sketches: [], criticalDimensions: "", requirements: parsed.data.purpose },
+      chatwoot: { accountId: context.accountId, conversationId: context.conversationId, contactId: context.contactId || `chatwoot-${context.conversationId}`, inboxId: context.inboxId }
+    }, { workspaceId, actor: request.user || { name: "Chatwoot" } });
+    await database.write();
+    return reply.code(201).send({ ok: true, case: publicCase(created.caseRecord) });
+  });
 
   app.post("/api/integrations/chatwoot/context", async (request, reply) => {
     if (!request.user && !panelAllowed(request)) return reply.code(403).send({ error: "Chatwoot panel authentication required" });

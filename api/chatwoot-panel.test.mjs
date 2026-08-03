@@ -56,6 +56,32 @@ describe("Chatwoot panel contract", () => {
     }
   });
 
+  it("creates exactly one agent-assisted case from an unlinked Chatwoot conversation", async () => {
+    const app = await makePanelApp();
+    try {
+      const payload = {
+        account_id: "9",
+        conversation_id: "88",
+        contact_id: "contact-88",
+        customer: { name: "New Chat Buyer", email: "new.chat@example.com", phone: "0912000000" },
+        project: "Chatwoot intake part",
+        purpose: "Need an assisted quotation"
+      };
+      const denied = await app.inject({ method: "POST", url: "/api/integrations/chatwoot/cases", payload });
+      expect(denied.statusCode).toBe(403);
+      const created = await app.inject({ method: "POST", url: "/api/integrations/chatwoot/cases", headers: { "x-chatwoot-panel-secret": "panel-secret" }, payload });
+      expect(created.statusCode).toBe(201);
+      expect(created.json()).toMatchObject({ ok: true, case: { source: "chatwoot", project: "Chatwoot intake part", paymentStatus: "unpaid" } });
+      expect(created.json().case).not.toHaveProperty("publicAccessTokenHash");
+      const context = await app.inject({ method: "POST", url: "/api/integrations/chatwoot/context", headers: { "x-chatwoot-panel-secret": "panel-secret" }, payload: { account_id: "9", conversation_id: "88" } });
+      expect(context.json().case).toMatchObject({ id: created.json().case.id, customer: { name: "New Chat Buyer" } });
+      const duplicate = await app.inject({ method: "POST", url: "/api/integrations/chatwoot/cases", headers: { "x-chatwoot-panel-secret": "panel-secret" }, payload });
+      expect(duplicate.statusCode).toBe(409);
+    } finally {
+      await app.close();
+    }
+  });
+
   it("ships a panel that uses the signed POST contract and reads the AI object returned by the API", async () => {
     const panel = await readFile(new URL("../deploy/chatwoot-panel/index.html", import.meta.url), "utf8");
     const guide = await readFile(new URL("../deploy/chatwoot-panel/README.md", import.meta.url), "utf8");
@@ -63,9 +89,13 @@ describe("Chatwoot panel contract", () => {
     expect(panel).toContain('account_id: config.accountId');
     expect(panel).toContain('conversation_id: config.conversationId');
     expect(panel).toContain('({ case: record, ai })');
+    expect(panel).toContain('record.customer?.name');
+    expect(panel).toContain('/api/integrations/chatwoot/cases');
+    expect(panel).toContain('renderCreateForm');
     expect(panel).toContain('ai?.mode || "human"');
     expect(guide).toContain("CHATWOOT_PANEL_SECRET");
     expect(guide).toContain("CHATWOOT_BASE_URL");
     expect(guide).toContain("POST /api/integrations/chatwoot/context");
+    expect(guide).toContain("POST /api/integrations/chatwoot/cases");
   });
 });

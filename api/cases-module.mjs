@@ -151,7 +151,7 @@ function upsertCustomer(data, input, workspaceId) {
   return customer;
 }
 
-function publicCase(caseRecord) {
+export function publicCase(caseRecord) {
   const currentQuote = (caseRecord.quoteVersions || []).find((version) => version.id === caseRecord.currentQuoteVersionId);
   return {
     id: caseRecord.id,
@@ -180,6 +180,69 @@ function publicCase(caseRecord) {
     createdAt: caseRecord.createdAt,
     updatedAt: caseRecord.updatedAt
   };
+}
+
+export function createCaseFromIntake(database, intake, { workspaceId = DEFAULT_WORKSPACE_ID, uploadResults = [], actor = null } = {}) {
+  ensureCollections(database.data);
+  const customer = upsertCustomer(database.data, intake.customer, workspaceId);
+  const now = new Date();
+  const accessToken = randomBytes(24).toString("base64url");
+  const sourceParts = intake.parts.length ? intake.parts : [{ name: intake.project, fileId: intake.fileIds[0] || "" }];
+  const technicalReviewReasons = uploadResults.flatMap((result) => result.technicalReviewReason ? [result.technicalReviewReason] : []);
+  const caseRecord = {
+    id: `case-${randomUUID().slice(0, 12)}`,
+    caseNo: nextCaseNumber(database.data, workspaceId, now),
+    workspaceId,
+    customerId: customer.id,
+    customerSnapshot: { name: customer.name, email: customer.email, phone: customer.phone, company: customer.company || "", lineUserId: customer.lineUserId || "" },
+    project: intake.project,
+    purpose: intake.purpose,
+    mode: intake.mode,
+    source: intake.source,
+    hasModel: intake.hasModel,
+    dueDate: intake.dueDate,
+    budget: intake.budget,
+    notes: intake.notes,
+    defaults: intake.defaults,
+    modeling: intake.modeling,
+    fileIds: intake.fileIds,
+    parts: sourceParts.map((part, index) => normalizePart(part, intake.defaults, index, intake.fileIds)),
+    status: technicalReviewReasons.length ? "under_review" : "new",
+    priority: "Normal",
+    assigneeId: "",
+    quoteVersions: [],
+    currentQuoteVersionId: "",
+    payments: [],
+    paymentStatus: "unpaid",
+    slicerJobs: [],
+    approvedSlicerJobId: "",
+    printerId: "",
+    productionJobIds: [],
+    printAttempts: [],
+    qcChecks: [],
+    delivery: null,
+    afterSalesCaseIds: [],
+    chatwoot: intake.chatwoot || null,
+    technicalReviewRequired: technicalReviewReasons.length > 0,
+    technicalReviewReasons,
+    publicAccessTokenHash: tokenDigest(accessToken),
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+    statusHistory: []
+  };
+  database.data.cases.unshift(caseRecord);
+  appendStatusHistory(database, caseRecord, "", caseRecord.status, actor, technicalReviewReasons.join("; "));
+  if (intake.chatwoot) {
+    database.data.chatwootCaseLinks.unshift({
+      id: `cwl-${randomUUID().slice(0, 12)}`,
+      workspaceId,
+      caseId: caseRecord.id,
+      ...intake.chatwoot,
+      linkedAt: now.toISOString()
+    });
+  }
+  appendEvent(database, "case.created", `${caseRecord.caseNo} created`, { caseId: caseRecord.id, source: caseRecord.source, customerId: customer.id }, actor, workspaceId);
+  return { caseRecord, customer, accessToken };
 }
 
 function customerOwnsCase(caseRecord, customer) {
@@ -333,67 +396,9 @@ export async function registerCaseRoutes(app, options) {
     }
     const parsed = caseIntakeSchema.safeParse(parsedIncoming.input);
     if (!parsed.success) return reply.code(400).send({ error: "案件資料未完成", issues: parsed.error.issues });
-    const intake = parsed.data;
-    const customer = upsertCustomer(database.data, intake.customer, workspaceId);
-    const now = new Date();
-    const accessToken = randomBytes(24).toString("base64url");
-    const sourceParts = intake.parts.length ? intake.parts : [{ name: intake.project, fileId: intake.fileIds[0] || "" }];
-    const technicalReviewReasons = parsedIncoming.uploadResults.flatMap((result) => result.technicalReviewReason ? [result.technicalReviewReason] : []);
-    const caseRecord = {
-      id: `case-${randomUUID().slice(0, 12)}`,
-      caseNo: nextCaseNumber(database.data, workspaceId, now),
-      workspaceId,
-      customerId: customer.id,
-      customerSnapshot: { name: customer.name, email: customer.email, phone: customer.phone, company: customer.company || "", lineUserId: customer.lineUserId || "" },
-      project: intake.project,
-      purpose: intake.purpose,
-      mode: intake.mode,
-      source: intake.source,
-      hasModel: intake.hasModel,
-      dueDate: intake.dueDate,
-      budget: intake.budget,
-      notes: intake.notes,
-      defaults: intake.defaults,
-      modeling: intake.modeling,
-      fileIds: intake.fileIds,
-      parts: sourceParts.map((part, index) => normalizePart(part, intake.defaults, index, intake.fileIds)),
-      status: technicalReviewReasons.length ? "under_review" : "new",
-      priority: "Normal",
-      assigneeId: "",
-      quoteVersions: [],
-      currentQuoteVersionId: "",
-      payments: [],
-      paymentStatus: "unpaid",
-      slicerJobs: [],
-      approvedSlicerJobId: "",
-      printerId: "",
-      productionJobIds: [],
-      printAttempts: [],
-      qcChecks: [],
-      delivery: null,
-      afterSalesCaseIds: [],
-      chatwoot: intake.chatwoot || null,
-      technicalReviewRequired: technicalReviewReasons.length > 0,
-      technicalReviewReasons,
-      publicAccessTokenHash: tokenDigest(accessToken),
-      createdAt: now.toISOString(),
-      updatedAt: now.toISOString(),
-      statusHistory: []
-    };
-    database.data.cases.unshift(caseRecord);
-    appendStatusHistory(database, caseRecord, "", caseRecord.status, null, technicalReviewReasons.join("; "));
-    if (intake.chatwoot) {
-      database.data.chatwootCaseLinks.unshift({
-        id: `cwl-${randomUUID().slice(0, 12)}`,
-        workspaceId,
-        caseId: caseRecord.id,
-        ...intake.chatwoot,
-        linkedAt: now.toISOString()
-      });
-    }
-    appendEvent(database, "case.created", `${caseRecord.caseNo} created`, { caseId: caseRecord.id, source: caseRecord.source, customerId: customer.id }, null, workspaceId);
+    const created = createCaseFromIntake(database, parsed.data, { workspaceId, uploadResults: parsedIncoming.uploadResults });
     await database.write();
-    return reply.code(201).send({ ok: true, case: publicCase(caseRecord), accessToken });
+    return reply.code(201).send({ ok: true, case: publicCase(created.caseRecord), accessToken: created.accessToken });
   });
 
   app.get("/api/public/cases/:id", async (request, reply) => {
@@ -903,25 +908,5 @@ export async function registerCaseRoutes(app, options) {
     return reply.code(201).send({ afterSales, case: caseRecord });
   });
 
-  app.post("/api/integrations/chatwoot/cases", async (request, reply) => {
-    let context;
-    try {
-      context = normalizeChatwootContext(request.body?.context || request.body || {});
-    } catch (error) {
-      return reply.code(400).send({ error: error.message });
-    }
-    const workspaceId = request.user.workspaceId || DEFAULT_WORKSPACE_ID;
-    const link = database.data.chatwootCaseLinks.find((item) => inWorkspace(item, workspaceId) && item.accountId === context.accountId && item.conversationId === context.conversationId);
-    if (link) return { created: false, case: findCase(database, link.caseId, workspaceId), context };
-    return { created: false, case: null, context, suggestedIntake: {
-      mode: "agent",
-      source: "chatwoot",
-      hasModel: false,
-      customer: { name: context.contactName || "LINE 客戶", email: context.email, phone: context.phone },
-      project: String(request.body?.summary || "Chatwoot 新案件").slice(0, 160),
-      purpose: String(request.body?.summary || "等待專員整理需求"),
-      defaults: { material: "PLA", color: "待確認", quantity: 1, quality: "Standard" },
-      chatwoot: { accountId: context.accountId, conversationId: context.conversationId, contactId: context.contactId, inboxId: context.inboxId }
-    } };
-  });
+
 }

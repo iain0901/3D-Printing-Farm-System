@@ -17,7 +17,8 @@ https://PANEL_HOST/index.html?apiBase=https%3A%2F%2FAPI_HOST&panelSecret=PANEL_S
 ## API 行為
 
 - `POST /api/integrations/chatwoot/context`：供側欄讀取關聯案件；請送出 `account_id` 與 `conversation_id`，並帶 `x-chatwoot-panel-secret`。
+- `POST /api/integrations/chatwoot/cases`：側欄為未關聯的 Conversation 建立一筆 3DRFM 案件，使用已簽署的側欄 Header，並且不複製對話逐字稿。
 - `POST /api/integrations/chatwoot/webhook`：接收 Chatwoot 的入站事件，依 Inbox／案件階段套用 `auto`、`draft`、`hybrid`、`human` AI 模式。
 - `POST /api/cases/:id/chatwoot/notify`：所有主動發送訊息均經由 Chatwoot Conversation。
 
-未找到關聯時，側欄只提示建立或連結案件；不會自行建立重複對話。
+未找到關聯時，客服可在側欄填寫案件摘要以建立案件；同一 Conversation 再次建立時 API 會回傳既有關聯，不會建立重複案件。

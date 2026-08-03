@@ -9,7 +9,7 @@
       body { margin: 0; padding: 16px; } .card { padding: 14px; border: 1px solid #e4e8ef; border-radius: 10px; background: #fff; box-shadow: 0 2px 8px #1824320c; }
       h1 { font-size: 16px; margin: 0 0 12px; } dl { margin: 0; display: grid; grid-template-columns: 78px 1fr; gap: 8px; font-size: 13px; }
       dt { color: #6a7280; } dd { margin: 0; overflow-wrap: anywhere; } .status { display: inline-block; border-radius: 999px; padding: 3px 8px; background: #edf4ff; color: #2057a5; }
-      a { display: inline-block; margin-top: 14px; color: #fff; background: #246bce; border-radius: 6px; padding: 8px 10px; text-decoration: none; font-size: 13px; }
+      input, textarea { box-sizing: border-box; width: 100%; margin-top: 6px; border: 1px solid #d7dde7; border-radius: 6px; padding: 8px; font: inherit; } label { display: block; margin-top: 10px; font-size: 13px; color: #475569; } button { margin-top: 14px; border: 0; color: #fff; background: #246bce; border-radius: 6px; padding: 8px 10px; font: inherit; cursor: pointer; } a { display: inline-block; margin-top: 14px; color: #fff; background: #246bce; border-radius: 6px; padding: 8px 10px; text-decoration: none; font-size: 13px; }
       .muted { color: #6a7280; font-size: 13px; line-height: 1.55; } .error { color: #b42318; }
     </style>
   </head>
@@ -21,24 +21,48 @@
         apiBase: panel.get("apiBase") || "",
         panelSecret: panel.get("panelSecret") || "",
         accountId: panel.get("accountId") || "",
-        conversationId: panel.get("conversationId") || ""
+        conversationId: panel.get("conversationId") || "",
+        contactId: panel.get("contactId") || "",
+        contactName: panel.get("contactName") || "",
+        contactEmail: panel.get("contactEmail") || "",
+        contactPhone: panel.get("contactPhone") || ""
       };
       const root = document.querySelector("main");
-      const text = (value) => String(value || "—").replace(/[&<>"']/g, (letter) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[letter]));
+      const text = (value) => String(value || "").replace(/[&<>"']/g, (letter) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[letter]));
+      const endpoint = `${config.apiBase.replace(/\/$/, "")}/api/integrations/chatwoot/context`;
+      const headers = { "content-type": "application/json", "x-chatwoot-panel-secret": config.panelSecret };
+      const renderCase = (record, ai) => {
+        root.innerHTML = `<h1>3DRFM 案件助手</h1><dl><dt>案件</dt><dd>${text(record.caseNo)} · ${text(record.project)}</dd><dt>狀態</dt><dd><span class="status">${text(record.status)}</span></dd><dt>AI 模式</dt><dd>${text(ai?.mode || "human")}</dd><dt>客戶</dt><dd>${text(record.customer?.name)}</dd></dl><a href="${text(config.apiBase.replace(/\/$/, ""))}/#/cases?id=${encodeURIComponent(record.id)}" target="_blank" rel="noopener">在內部系統開啟案件</a>`;
+      };
+      const renderCreateForm = () => {
+        root.innerHTML = `<h1>3DRFM 案件助手</h1><p class="muted">此對話尚未關聯列印案件。建立後仍由 Chatwoot 保留對話紀錄。</p><form id="case-form"><label>專案名稱<input name="project" required maxlength="160" value="3D print request" /></label><label>客戶名稱<input name="name" required maxlength="120" value="${text(config.contactName)}" /></label><label>Email<input name="email" type="email" value="${text(config.contactEmail)}" /></label><label>電話<input name="phone" maxlength="60" value="${text(config.contactPhone)}" /></label><label>需求說明<textarea name="purpose" required maxlength="2000" rows="4"></textarea></label><button type="submit">建立案件</button></form>`;
+        root.querySelector("form").addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          const button = event.currentTarget.querySelector("button");
+          button.disabled = true;
+          button.textContent = "建立中…";
+          try {
+            const response = await fetch(`${config.apiBase.replace(/\/$/, "")}/api/integrations/chatwoot/cases`, {
+              method: "POST", headers,
+              body: JSON.stringify({ account_id: config.accountId, conversation_id: config.conversationId, contact_id: config.contactId, customer: { name: form.get("name"), email: form.get("email"), phone: form.get("phone") }, project: form.get("project"), purpose: form.get("purpose") })
+            });
+            const body = await response.json();
+            if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
+            renderCase(body.case, { mode: "human" });
+          } catch (error) {
+            button.disabled = false;
+            button.textContent = "建立案件";
+            root.insertAdjacentHTML("beforeend", `<p class="error">${text(error.message)}</p>`);
+          }
+        });
+      };
       if (!config.apiBase || !config.panelSecret || !config.accountId || !config.conversationId) {
         root.innerHTML = '<p class="muted">此元件需要 apiBase、panelSecret、accountId 與 conversationId。</p>';
       } else {
-        const endpoint = `${config.apiBase.replace(/\/$/, "")}/api/integrations/chatwoot/context`;
-        fetch(endpoint, {
-          method: "POST",
-          headers: { "content-type": "application/json", "x-chatwoot-panel-secret": config.panelSecret },
-          body: JSON.stringify({ account_id: config.accountId, conversation_id: config.conversationId })
-        })
+        fetch(endpoint, { method: "POST", headers, body: JSON.stringify({ account_id: config.accountId, conversation_id: config.conversationId }) })
           .then(async (response) => response.ok ? response.json() : Promise.reject(new Error((await response.json()).error || `HTTP ${response.status}`)))
-          .then(({ case: record, ai }) => {
-            if (!record) { root.innerHTML = '<p class="muted">此對話尚未關聯 3D 列印案件。</p>'; return; }
-            root.innerHTML = `<h1>3DRFM 案件助手</h1><dl><dt>案件</dt><dd>${text(record.caseNo)} · ${text(record.project)}</dd><dt>狀態</dt><dd><span class="status">${text(record.status)}</span></dd><dt>AI 模式</dt><dd>${text(ai?.mode || "human")}</dd><dt>客戶</dt><dd>${text(record.customerSnapshot?.name)}</dd></dl><a href="${text(config.apiBase.replace(/\/$/, ""))}/#/cases?id=${encodeURIComponent(record.id)}" target="_blank" rel="noopener">在內部系統開啟案件</a>`;
-          })
+          .then(({ case: record, ai }) => record ? renderCase(record, ai) : renderCreateForm())
           .catch((error) => { root.innerHTML = `<p class="error">案件助手載入失敗：${text(error.message)}</p>`; });
       }
     </script>
