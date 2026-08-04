@@ -180,6 +180,11 @@ describe("3DSTU FarmFlow deployment packaging", () => {
     expect(script).not.toContain("LAYERPILOT_STRIPE_PRICE_STUDIO");
     expect(script).toContain("LAYERPILOT_MQTT_QOS must be 0, 1, or 2");
     expect(script).toContain("must start with mqtt:// or mqtts:// when set");
+    expect(script).toContain("Missing CHATWOOT_BASE_URL when Chatwoot integration is enabled");
+    expect(script).toContain("Chatwoot webhook and panel secrets should be at least 32 characters.");
+    expect(script).toContain("Missing AI_MODEL when AI_PROVIDER is enabled");
+    expect(script).toContain("AI_CONFIDENCE_THRESHOLD must be between 0 and 1.");
+    expect(script).toContain("Orca profile paths must be mounted below /profiles/.");
     expect(script).toContain("LAYERPILOT_BACKUP_RETENTION_DAYS");
     expect(script).toContain("check_boolean_env \"LAYERPILOT_PRE_RESTORE_BACKUP\"");
     expect(script).toContain("write_env_line \"LAYERPILOT_PRE_RESTORE_BACKUP\" \"true\"");

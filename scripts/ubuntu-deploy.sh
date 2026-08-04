@@ -261,6 +261,59 @@ check_integration_env() {
     esac
     check_boolean_env "LAYERPILOT_MQTT_RETAIN" "${LAYERPILOT_MQTT_RETAIN:-false}"
   fi
+
+  local chatwoot_enabled=""
+  local chatwoot_key
+  for chatwoot_key in CHATWOOT_BASE_URL CHATWOOT_ACCOUNT_ID CHATWOOT_API_TOKEN CHATWOOT_WEBHOOK_SECRET CHATWOOT_PANEL_SECRET; do
+    if [ -n "${!chatwoot_key:-}" ]; then
+      chatwoot_enabled="true"
+      break
+    fi
+  done
+  if [ -n "$chatwoot_enabled" ]; then
+    : "${CHATWOOT_BASE_URL:?Missing CHATWOOT_BASE_URL when Chatwoot integration is enabled}"
+    : "${CHATWOOT_ACCOUNT_ID:?Missing CHATWOOT_ACCOUNT_ID when Chatwoot integration is enabled}"
+    : "${CHATWOOT_API_TOKEN:?Missing CHATWOOT_API_TOKEN when Chatwoot integration is enabled}"
+    : "${CHATWOOT_WEBHOOK_SECRET:?Missing CHATWOOT_WEBHOOK_SECRET when Chatwoot integration is enabled}"
+    : "${CHATWOOT_PANEL_SECRET:?Missing CHATWOOT_PANEL_SECRET when Chatwoot integration is enabled}"
+    check_optional_url_env "CHATWOOT_BASE_URL" "$CHATWOOT_BASE_URL"
+    if [ "${#CHATWOOT_WEBHOOK_SECRET}" -lt 32 ] || [ "${#CHATWOOT_PANEL_SECRET}" -lt 32 ]; then
+      echo "Chatwoot webhook and panel secrets should be at least 32 characters." >&2
+      return 1
+    fi
+  fi
+
+  if [ "${AI_PROVIDER:-disabled}" != "disabled" ]; then
+    : "${AI_MODEL:?Missing AI_MODEL when AI_PROVIDER is enabled}"
+    : "${AI_API_BASE_URL:?Missing AI_API_BASE_URL when AI_PROVIDER is enabled}"
+    : "${AI_API_KEY:?Missing AI_API_KEY when AI_PROVIDER is enabled}"
+    check_optional_url_env "AI_API_BASE_URL" "$AI_API_BASE_URL"
+    if ! printf "%s" "${AI_CONFIDENCE_THRESHOLD:-0.78}" | grep -Eq '^(0(\.[0-9]+)?|1(\.0+)?)$'; then
+      echo "AI_CONFIDENCE_THRESHOLD must be between 0 and 1." >&2
+      return 1
+    fi
+  fi
+
+  if [ -n "${ORCA_SLICER_SETTINGS_PATH:-}${ORCA_SLICER_FILAMENT_PATH:-}" ]; then
+    : "${ORCA_SLICER_SETTINGS_PATH:?Missing ORCA_SLICER_SETTINGS_PATH when Orca profiles are configured}"
+    : "${ORCA_SLICER_FILAMENT_PATH:?Missing ORCA_SLICER_FILAMENT_PATH when Orca profiles are configured}"
+    local orca_path
+    for orca_path in "$ORCA_SLICER_SETTINGS_PATH" "$ORCA_SLICER_FILAMENT_PATH"; do
+      case "$orca_path" in
+        /profiles/*) ;;
+        *)
+          echo "Orca profile paths must be mounted below /profiles/." >&2
+          return 1
+          ;;
+      esac
+      case "$orca_path" in
+        *..*)
+          echo "Orca profile paths must not contain parent traversal." >&2
+          return 1
+          ;;
+      esac
+    done
+  fi
 }
 
 doctor() {

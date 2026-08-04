@@ -44,6 +44,8 @@ In production, `LAYERPILOT_WORKER_TOKEN` is accepted only through the `x-layerpi
 
 In production, browser CORS is limited to the origin from `LAYERPILOT_PUBLIC_URL` plus comma-separated `LAYERPILOT_CORS_ORIGINS`. Leave `LAYERPILOT_CORS_ORIGINS` blank for same-origin app/API deployments. Add only explicit `http://` or `https://` origins for separate public quote portals or admin frontends; wildcard origins are rejected.
 
+When enabling the existing Chatwoot panel, set all `CHATWOOT_*` values as a group and include the panel host in `LAYERPILOT_CORS_ORIGINS` when it is served from a separate origin. When enabling AI, set `AI_PROVIDER`, `AI_MODEL`, `AI_API_BASE_URL`, and `AI_API_KEY` together. If Orca profile paths are set, both paths must be mounted below `/profiles/`. `scripts/ubuntu-deploy.sh doctor` validates these combinations without printing secret values.
+
 If `LAYERPILOT_WORKER_TELEMETRY` or `LAYERPILOT_WORKER_BRIDGE_POLLING` is enabled in production, `/api/readiness` expects the background worker to write a recent heartbeat to the shared data store. Keep the API and worker services on the same volume/database path and check the worker logs if readiness reports a stale or missing `worker` check.
 
 If workspace API-key IP restrictions are enabled, use only IPv4 addresses or IPv4 CIDR ranges in `allowedApiIps`, for example `203.0.113.25` or `203.0.113.0/24`. Production `/api/readiness` fails when the persisted allowlist is empty or invalid.
