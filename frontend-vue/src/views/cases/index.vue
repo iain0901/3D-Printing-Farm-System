@@ -64,31 +64,31 @@
 
             <div class="operations-panel">
               <template v-if="selected.status === 'ready_to_print'">
-                <el-button size="small" @click="suggestSchedule">System scheduling suggestion</el-button>
-                <h3>?????</h3>
-                <el-input v-model="operations.startAt" placeholder="???? ISO??? 2026-08-05T01:00:00.000Z" />
-                <el-input v-model="operations.printerId" placeholder="??? ID" />
+                <el-button size="small" @click="suggestSchedule">帶入系統排程建議</el-button>
+                <h3>列印排程</h3>
+                <el-input v-model="operations.startAt" placeholder="開始時間（ISO 格式，例如：2026-08-05T01:00:00.000Z）" />
+                <el-input v-model="operations.printerId" placeholder="印表機 ID" />
                 <el-input-number v-model="operations.estimatedMinutes" :min="1" :max="43200" />
-                <el-button size="small" @click="confirmSchedule">????</el-button>
-                <el-button v-if="selected.schedule && selected.schedule.confirmedAt" size="small" type="primary" @click="recordAttempt('started')">????</el-button>
+                <el-button size="small" @click="confirmSchedule">確認排程</el-button>
+                <el-button v-if="selected.schedule && selected.schedule.confirmedAt" size="small" type="primary" @click="recordAttempt('started')">開始列印</el-button>
               </template>
               <template v-if="selected.status === 'printing'">
-                <h3>????</h3>
-                <el-button size="small" type="success" @click="recordAttempt('completed')">????????</el-button>
-                <el-button size="small" type="danger" @click="recordAttempt('failed')">????????</el-button>
+                <h3>列印作業</h3>
+                <el-button size="small" type="success" @click="recordAttempt('completed')">記錄列印完成</el-button>
+                <el-button size="small" type="danger" @click="recordAttempt('failed')">記錄列印失敗</el-button>
               </template>
               <template v-if="selected.status === 'quality_check'">
-                <h3>??</h3>
-                <el-button size="small" type="success" @click="quickQualityCheck(false)">??????</el-button>
-                <el-button size="small" type="warning" @click="quickQualityCheck(true)">??????</el-button>
+                <h3>品質檢查</h3>
+                <el-button size="small" type="success" @click="quickQualityCheck(false)">品管通過</el-button>
+                <el-button size="small" type="warning" @click="quickQualityCheck(true)">品管失敗，建立重印</el-button>
               </template>
               <template v-if="selected.status === 'ready_for_delivery'">
                 <h3>交付</h3>
                 <el-button size="small" type="primary" @click="deliveryDialog = true">登錄交付</el-button>
               </template>
               <template v-if="selected.status === 'completed'">
-                <h3>??</h3>
-                <el-button size="small" @click="openAfterSales">????????</el-button>
+                <h3>售後服務</h3>
+                <el-button size="small" @click="openAfterSales">建立售後重印案件</el-button>
               </template>
             </div>
 </el-tab-pane>
