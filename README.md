@@ -91,6 +91,7 @@ These screenshots are captured from the working local demo UI in this repository
 | Release and go-live flow | [docs/RELEASE.md](docs/RELEASE.md) |
 | Product direction | [docs/ROADMAP.md](docs/ROADMAP.md) |
 | Platform wiki | [docs/wiki/README.md](docs/wiki/README.md) |
+| Integration traceability | [docs/INTEGRATION_TRACEABILITY.md](docs/INTEGRATION_TRACEABILITY.md) |
 
 ## License
 
