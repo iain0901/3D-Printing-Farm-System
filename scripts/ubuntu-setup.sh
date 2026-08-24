@@ -117,7 +117,25 @@ install_deps() {
   fi
   docker compose version >/dev/null || sudo docker compose version >/dev/null
   configure_docker_group
+  install_slicer_cli
   echo "Base dependencies are installed."
+}
+
+# 安裝 CLI 切片器（自動報價與切片管線用）。Ubuntu 23.04+/24.04 universe 提供 prusa-slicer 套件；
+# 較舊版本請改用官方 AppImage（--appimage-extract 後把 bin 指向 LAYERPILOT_SLICER_CMD）。
+install_slicer_cli() {
+  if command -v prusa-slicer >/dev/null 2>&1; then
+    echo "prusa-slicer already installed: $(command -v prusa-slicer)"
+    return 0
+  fi
+  if apt-cache show prusa-slicer >/dev/null 2>&1; then
+    sudo apt install -y prusa-slicer
+    echo "prusa-slicer installed for server-side slicing and real gram/minute quoting."
+  else
+    echo "WARNING: prusa-slicer is not in apt repos for this Ubuntu release." >&2
+    echo "         Install the official AppImage headless (e.g. --appimage-extract) and set" >&2
+    echo "         LAYERPILOT_SLICER_CMD to the extracted binary to enable real slicing." >&2
+  fi
 }
 
 install_firewall() {

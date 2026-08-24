@@ -71,6 +71,29 @@ scripts/ubuntu-deploy.sh deploy
 
 For public HTTPS deployment, follow `deploy/ubuntu/README.md` to install Docker, Nginx, UFW rules, Certbot, backup timers, and ops-check timers.
 
+## Slicer CLI (real slicing + real gram/minute quotes)
+
+The API can slice models server-side with a real CLI slicer. When a slicer is
+available, slicer jobs run `--auto-orient` + `--arrange` with a generated
+support/layer/infill config, then quote from the **actual G-code** grams and
+minutes (feeding the auto-quote pricing engine) instead of rough estimates.
+
+Ubuntu install (23.04+/24.04 universe; `scripts/ubuntu-setup.sh` does this
+automatically during `install-deps`):
+
+```bash
+sudo apt update && sudo apt install -y prusa-slicer
+```
+
+Older Ubuntu releases: use the official PrusaSlicer AppImage headless
+(`./PrusaSlicer-*.AppImage --appimage-extract`) and point
+`LAYERPILOT_SLICER_CMD` at the extracted binary.
+
+Behavior when no CLI slicer is found: jobs fall back to the internal adapter
+(estimate-based), exactly as before. OrcaSlicer/Bambu Studio are also detected
+but are meant to run through the dedicated `orca-worker` process. Model checks
+(dimensions vs build volume, triangle sanity, format) run before every job and
+block slicing with a clear reason when they fail.
 ## Verification
 
 Before go-live:

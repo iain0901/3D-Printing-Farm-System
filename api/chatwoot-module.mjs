@@ -25,8 +25,11 @@ function aiModeFor(settings, inboxId) {
 }
 
 export async function registerChatwootRoutes(app, options) {
-  const { database, aiEngine, chatwootClient, panelSecret, knowledgeFor = () => [] } = options;
+  const { database, aiEngine, chatwootClient, panelSecret, knowledgeFor = () => [], storeQuoteAttachment = null } = options;
   const client = chatwootClient || createChatwootClient();
+  const attachmentStore = storeQuoteAttachment;
+  const matchAttachmentExtension = (contentType) =>
+    ({ 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp', 'image/gif': '.gif' })[String(contentType || '').toLowerCase()] || '.bin';
   const engine = aiEngine;
   const panelAllowed = (request) => {
     const expected = String(panelSecret || process.env.CHATWOOT_PANEL_SECRET || "");
@@ -120,7 +123,39 @@ export async function registerChatwootRoutes(app, options) {
     const directMatch = secret && provided === secret;
     if (!directMatch && !verifyChatwootWebhook(secret, provided, request.body || {})) return reply.code(403).send({ error: "Invalid Chatwoot webhook signature" });
     const context = chatwootMessageContext(request.body || {});
-    if (context.messageType && context.messageType !== "incoming") return { ok: true, ignored: "outgoing" };
+    // outgoing = 客服在 Chatwoot 後台回覆 → 鏡像寫回 Portal 報價對話串（含附件）。
+    // 我方 API 推送的訊息以 pushedIds 比對，避免回環。
+    if (context.messageType === "outgoing") {
+      const quote = (database.data.quoteRequests || []).find((item) => item.chatwoot?.conversationId === context.conversationId);
+      if (!quote) return { ok: true, ignored: "no_linked_quote" };
+      if (context.messageId && (quote.chatwoot.pushedIds || []).includes(context.messageId)) return { ok: true, ignored: "self_echo" };
+      let attachments = [];
+      for (const [index, url] of context.attachments.entries()) {
+        try {
+          const remote = await client.fetchRemoteFile(url);
+          const extension = matchAttachmentExtension(remote.contentType);
+          const stored = await attachmentStore( `${context.messageId || Date.now()}-${index}${extension}`, remote);
+          attachments.push({ index, name: `attachment-${index + 1}${extension}`, contentType: remote.contentType, size: remote.buffer.length, ...stored });
+        } catch {
+          // 單一附件下載失敗不阻斷文字鏡像
+        }
+      }
+      const message = {
+        id: randomUUID(),
+        author: "operator",
+        authorName: context.senderName || "客服",
+        body: context.content || (attachments.length ? "（傳送了附件）" : ""),
+        createdAt: new Date().toISOString()
+      };
+      if (attachments.length) message.attachments = attachments;
+      quote.messages ||= [];
+      quote.messages.push(message);
+      quote.updatedAt = message.createdAt;
+      addEvent(database, "quote_request.message_added", `${message.authorName} replied from Chatwoot on ${quote.id}`, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, quoteRequestId: quote.id, author: "operator", via: "chatwoot" }, quote.workspaceId || DEFAULT_WORKSPACE_ID);
+      await database.write();
+      return { ok: true, action: "mirrored_to_portal" };
+    }
+    if (context.messageType && context.messageType !== "incoming") return { ok: true, ignored: "unsupported_message_type" };
     if (!context.conversationId || !context.accountId || !context.content) return { ok: true, ignored: "unsupported_payload" };
     const caseRecord = linkedCase(database.data, context);
     const mode = aiModeFor(database.data.workspaceSettings, context.inboxId);

@@ -28,6 +28,11 @@ function auth(token) {
   return { authorization: `Bearer ${token}` };
 }
 
+// 動態產生未來日期，避免報價有效期限寫死造成時間炸彈（quoteExpired 只攔 accepted 決策）
+function futureDate(days = 30) {
+  return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
 function createWebSocketCollector() {
   const messages = [];
   const waiters = [];
@@ -6142,7 +6147,7 @@ endsolid part`;
       const id = quote.json().quoteRequest.id;
       const token = await login(app);
       const headers = { ...auth(token), "idempotency-key": "quote-update-retry-001" };
-      const payload = { status: "quoted", priority: "High", quotedValue: 625, validUntil: "2026-08-30", internalNote: "Retry-safe update" };
+      const payload = { status: "quoted", priority: "High", quotedValue: 625, validUntil: futureDate(), internalNote: "Retry-safe update" };
 
       const updated = await app.inject({
         method: "PATCH",
@@ -6298,7 +6303,7 @@ endsolid part`;
           status: "quoted",
           priority: "High",
           quotedValue: 410,
-          validUntil: "2026-08-30",
+          validUntil: futureDate(),
           internalNote: "Internal quote note that should stay out of audit metadata"
         }
       });
@@ -6393,7 +6398,7 @@ endsolid part`;
         status: "quoted",
         priority: "High",
         quotedValue: 410,
-        validUntil: "2026-08-30"
+        validUntil: futureDate()
       });
       expect(eventFor("quote_request.portal_link_rotated", (event) => event.data?.quoteRequestId === quoteId).data).toMatchObject({
         quoteRequestId: quoteId,
@@ -6481,7 +6486,7 @@ endsolid part`;
         method: "PATCH",
         url: `/api/quoteRequests/${id}`,
         headers: auth(token),
-        payload: { status: "quoted", quotedValue: 500, validUntil: "2026-08-15" }
+        payload: { status: "quoted", quotedValue: 500, validUntil: futureDate() }
       });
       expect(quoted.statusCode).toBe(200);
       const headers = { "idempotency-key": "public-quote-decision-001" };
@@ -6553,7 +6558,7 @@ endsolid part`;
         method: "PATCH",
         url: `/api/quoteRequests/${id}`,
         headers: auth(token),
-        payload: { status: "quoted", quotedValue: 275, validUntil: "2026-08-20" }
+        payload: { status: "quoted", quotedValue: 275, validUntil: futureDate() }
       });
       expect(quoted.statusCode).toBe(200);
       const headers = { "idempotency-key": "public-quote-revision-001" };
@@ -6654,7 +6659,7 @@ endsolid part`;
         method: "PATCH",
         url: `/api/quoteRequests/${id}`,
         headers: auth(token),
-        payload: { status: "quoted", quotedValue: 128, validUntil: "2026-08-01" }
+        payload: { status: "quoted", quotedValue: 128, validUntil: futureDate() }
       });
       expect(quoted.statusCode).toBe(200);
 

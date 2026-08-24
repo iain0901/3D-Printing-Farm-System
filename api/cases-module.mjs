@@ -10,6 +10,7 @@ import {
   normalizeChatwootContext,
   publicQuoteVersion
 } from "./case-domain.mjs";
+import { computeAutoQuote, defaultAutoQuoteConfig, referencePartUsage } from "./pricing-engine.mjs";
 
 const DEFAULT_WORKSPACE_ID = "ws-default";
 const tokenDigest = (value) => createHash("sha256").update(String(value || "")).digest("hex");
@@ -365,25 +366,58 @@ const preliminaryEstimateSchema = z.object({
   support: z.boolean().default(false),
   postProcessing: z.array(z.string().trim().max(80)).max(20).default([]),
   hasModel: z.boolean().default(true),
-  rush: z.boolean().default(false)
+  rush: z.boolean().default(false),
+  // 客戶選的顏色數（分件選色後 ≥1）；自動報價以「分開多色」前 N 色免費規則計
+  colors: z.coerce.number().int().min(1).max(64).optional()
 });
 
 export async function registerCaseRoutes(app, options) {
-  const { database, storeCaseFile, storeGcodeFile, readCaseFile, hasValidWorkerToken, customerFromRequest } = options;
+  const { database, storeCaseFile, storeGcodeFile, readCaseFile, hasValidWorkerToken, customerFromRequest, costCatalogForWorkspace } = options;
   ensureCollections(database.data);
 
   app.post("/api/public/cases/estimate", { config: { rateLimit: { max: 120, timeWindow: "1 minute", groupId: "case-estimate" } } }, async (request, reply) => {
     const parsed = preliminaryEstimateSchema.safeParse(request.body || {});
     if (!parsed.success) return reply.code(400).send({ error: "估價條件格式錯誤", issues: parsed.error.issues });
     const value = parsed.data;
-    const materialFactor = { PLA: 1, PETG: 1.18, ABS: 1.2, ASA: 1.35, TPU: 1.65, Resin: 1.8, Nylon: 2.1 }[value.material] || 1.25;
-    const qualityFactor = { Draft: 0.85, Standard: 1, Fine: 1.35 }[value.quality];
-    const geometryFactor = 1 + value.infill / 180 + Math.max(0, value.walls - 2) * 0.08 + (value.support ? 0.18 : 0);
-    const processingAmount = value.postProcessing.length * 120 * value.quantity;
-    const modelingAmount = value.hasModel ? 0 : 800;
-    const base = 220 * value.quantity * materialFactor * qualityFactor * geometryFactor + processingAmount + modelingAmount;
-    const total = Math.max(300, Math.round(base * (value.rush ? 1.25 : 1)));
-    return { ok: true, estimate: { currency: "TWD", total, kind: "preliminary", requiresSpecialistApproval: true } };
+    // 自動報價引擎：參考件用量模型 → 階梯價/機時/最低消費取高 + 多色/急件/風險規則。
+    // 這是「未切片前的初步估計」，正式報價仍由專員以實際切片數據確認。
+    const catalog = costCatalogForWorkspace?.(database.data) || {};
+    const autoConfig = catalog.autoQuote || defaultAutoQuoteConfig;
+    const usage = referencePartUsage({ infill: value.infill, walls: value.walls, support: value.support, quality: value.quality });
+    const materialDensity = { PLA: 1, PETG: 1.08, ABS: 0.98, ASA: 1, TPU: 1.1, Resin: 1.15, Nylon: 1.05 }[value.material] || 1;
+    const services = [];
+    if (!value.hasModel) services.push("modeling");
+    const engineResult = computeAutoQuote(autoConfig, {
+      scope: "order",
+      grams: usage.grams * materialDensity * value.quantity,
+      minutes: usage.minutes * value.quantity,
+      quantity: 1,
+      material: value.material,
+      colorMode: (value.colors || 1) > 1 ? "separated" : "single",
+      colorCount: value.colors || 1,
+      dueInHours: value.rush ? 48 : null,
+      services
+    });
+    const escalations = [...engineResult.escalationReasons];
+    if (!value.hasModel) escalations.push({ code: "modeling", message: "需要建模協助，正式報價由專員提供" });
+    if (engineResult.total <= 0) {
+      // 引擎不可用時的保守底線（不應發生；防禦式回退）
+      const legacyBase = Math.max(300, Math.round(220 * value.quantity * (value.rush ? 1.25 : 1)));
+      return { ok: true, estimate: { currency: "TWD", total: legacyBase, kind: "preliminary", requiresSpecialistApproval: true } };
+    }
+    return {
+      ok: true,
+      engine: "auto-quote",
+      reference: { grams: usage.grams, minutes: usage.minutes, note: "Reference-part estimate before slicing; final price confirmed by specialist with real slice data" },
+      estimate: {
+        currency: engineResult.currency,
+        total: engineResult.total,
+        kind: "preliminary",
+        requiresSpecialistApproval: engineResult.escalated || !value.hasModel,
+        lines: engineResult.lines.filter((line) => line.amount !== 0),
+        escalations
+      }
+    };
   });
 
   app.post("/api/public/cases", { config: { rateLimit: { max: 20, timeWindow: "1 minute", groupId: "case-intake" } } }, async (request, reply) => {

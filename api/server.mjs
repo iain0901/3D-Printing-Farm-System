@@ -30,6 +30,9 @@ import { createAiEngine } from "./ai-engine.mjs";
 import { findRelevantAiKnowledge } from "./ai-knowledge.mjs";
 import { createChatwootClient } from "./chatwoot.mjs";
 import { registerChatwootRoutes } from "./chatwoot-module.mjs";
+import { autoQuoteConfigSchema, computeAutoQuote, defaultAutoQuoteConfig } from "./pricing-engine.mjs";
+import { buildModelChecks, detectSlicerCommand, parseGcodeStats, runPrusaSlicePipeline, summarizeModelChecks } from "./slicer-pipeline.mjs";
+import { createLineClient, operatorMessageText, quoteReadyText, resolveLineTarget, shippedText } from "./line-notify.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -134,6 +137,18 @@ const customerClaimSchema = z.object({
 const customerMessageSchema = z.object({
   body: z.string().min(1).max(2000)
 });
+// 案件確認清單：列印前逐項與客戶確認（材料/顏色/尺寸/擺向/交期…），取代零散的文字來回
+const confirmationItemInputSchema = z.object({
+  label: z.string().trim().min(1).max(80),
+  value: z.string().trim().max(200).optional().default(""),
+  note: z.string().trim().max(500).optional().default("")
+});
+const confirmationCreateSchema = z.object({ items: z.array(confirmationItemInputSchema).min(1).max(12) });
+const confirmationDecisionSchema = z.object({
+  decision: z.enum(["confirmed", "issue"]),
+  note: z.string().trim().max(500).optional().default("")
+});
+const QUOTE_MESSAGE_ATTACHMENT_LIMITS = { maxFiles: 3, maxBytes: 5 * 1024 * 1024 };
 const customerResetRequestSchema = z.object({
   email: z.string().email()
 });
@@ -735,7 +750,9 @@ const costCatalogSchema = z.object({
   laborPerOrder: z.number().nonnegative().default(defaultCostCatalog.laborPerOrder),
   failureReservePercent: z.number().min(0).max(100).default(defaultCostCatalog.failureReservePercent),
   minimumQuote: z.number().nonnegative().default(defaultCostCatalog.minimumQuote),
-  overheadPercent: z.number().min(0).max(100).default(defaultCostCatalog.overheadPercent)
+  overheadPercent: z.number().min(0).max(100).default(defaultCostCatalog.overheadPercent),
+  // 自動報價引擎設定（階梯價/倍率/多色/風險/量產折扣/轉專員門檻），供 /api/quotes/auto 與切片後自動估價使用
+  autoQuote: autoQuoteConfigSchema.optional().default(defaultAutoQuoteConfig)
 });
 const costCatalogPatchSchema = costCatalogSchema.partial();
 const quoteRequestSchema = z.object({
@@ -4616,6 +4633,60 @@ function emailConfigFromEnv(env = process.env) {
   };
 }
 
+async function readQuoteMessageParts(request) {
+  let body = "";
+  const files = [];
+  for await (const part of request.parts()) {
+    if (part.type === "file") {
+      const buffer = await part.toBuffer();
+      files.push({ filename: path.basename(part.filename || "image"), contentType: part.mimetype || "", buffer });
+    } else if (part.fieldname === "body") {
+      body = String(part.value || "");
+    }
+  }
+  return { body: body.trim(), files };
+}
+
+function quoteAttachmentExtension(filename, contentType) {
+  const fromName = String(filename || "").match(/\.(png|jpe?g|webp|gif)$/i);
+  if (fromName) return fromName[1].toLowerCase();
+  const map = { "image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "image/gif": ".gif" };
+  return map[String(contentType || "").toLowerCase()] || ".bin";
+}
+
+function validateQuoteMessageFiles(files = []) {
+  if (files.length > QUOTE_MESSAGE_ATTACHMENT_LIMITS.maxFiles) {
+    return `最多附帶 ${QUOTE_MESSAGE_ATTACHMENT_LIMITS.maxFiles} 張圖片`;
+  }
+  for (const file of files) {
+    if (!isQuoteImageFile(file)) return `${file.filename} 不是支援的圖片格式（PNG/JPG/WEBP/GIF）`;
+    if (file.buffer.length > QUOTE_MESSAGE_ATTACHMENT_LIMITS.maxBytes) return `${file.filename} 超過 5MB 上限`;
+  }
+  return "";
+}
+
+function isQuoteImageFile(file) {
+  return /^image\/(png|jpe?g|webp|gif)$/i.test(String(file.contentType || "")) || /.(png|jpe?g|webp|gif)$/i.test(String(file.filename || ""));
+}
+
+async function storeQuoteMessageAttachments(database, quoteId, messageId, files = []) {
+  const attachments = [];
+  for (const [index, file] of files.entries()) {
+    const extension = quoteAttachmentExtension(file.filename, file.contentType);
+    const stored = await storeObject(`quote-messages/${quoteId}/${messageId}-${index}${extension}`, file.buffer, { filename: file.filename, type: "IMAGE" });
+    attachments.push({
+      index,
+      name: file.filename,
+      contentType: file.contentType || "application/octet-stream",
+      size: file.buffer.length,
+      storagePath: stored.storagePath,
+      storageProvider: stored.storageProvider,
+      storageKey: stored.storageKey
+    });
+  }
+  return attachments;
+}
+
 function createEmailClient(env = process.env) {
   const config = emailConfigFromEnv(env);
   if (!config) return null;
@@ -4950,6 +5021,12 @@ async function runSlicerJob(database, payload) {
   const printer = database.data.printers.find((item) => item.id === payload.printerId && itemInWorkspace(item, workspaceId));
   if (!printer) return { error: "Printer not found", statusCode: 404 };
   const profile = resolveSlicerProfile(database.data, payload, printer);
+  // 送切前模型檢查（尺寸/三角面/格式/估重），失敗直接擋下不進切片
+  const modelChecks = buildModelChecks(
+    { dimensions: file.dimensions, triangleCount: file.triangleCount || file.partCount, estimateGrams: file.estimateGrams, type: file.type },
+    { buildVolume: printer.buildVolume }
+  );
+  const checkSummary = summarizeModelChecks(modelChecks);
   const now = new Date().toISOString();
   const job = {
     id: randomUUID(),
@@ -4962,11 +5039,21 @@ async function runSlicerJob(database, payload) {
     profile: profile?.name || "Default",
     status: "running",
     engine: process.env.LAYERPILOT_SLICER_CMD ? "external" : "internal",
+    modelChecks,
     settings: payload,
     createdAt: now,
     updatedAt: now
   };
   database.data.slicerJobs.unshift(job);
+  if (!checkSummary.ok) {
+    Object.assign(job, {
+      status: "blocked",
+      blockedReason: `模型檢查未通過：${checkSummary.failed.map((check) => `${check.label}（${check.detail}）`).join("；")}`,
+      completedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    return { job, file, blocked: true };
+  }
   const outputDir = path.join(storageRoot(), "slices", job.id);
   await mkdir(outputDir, { recursive: true });
   const outputName = `${path.basename(file.name, path.extname(file.name))}.gcode`;
@@ -4978,19 +5065,87 @@ async function runSlicerJob(database, payload) {
   estimates.quoteBreakdown = quote;
   await writeFile(configPath, JSON.stringify({ file, printer, profile, settings: payload, estimates }, null, 2));
   try {
-    if (process.env.LAYERPILOT_SLICER_CMD && file.storagePath) {
+    // 切片器解析：env 明確設定 > PATH 自動偵測（Ubuntu 部署預期裝 prusa-slicer）> internal fallback
+    const envSlicerCmd = String(process.env.LAYERPILOT_SLICER_CMD || "").trim();
+    const envTemplateArgs = Boolean(process.env.LAYERPILOT_SLICER_ARGS);
+    let slicer = null;
+    if (envSlicerCmd) slicer = { available: true, family: "prusa", command: envSlicerCmd, source: "env" };
+    else if (file.storagePath) slicer = await detectSlicerCommand();
+
+    let measured = null;
+    if (slicer?.available && slicer.family === "prusa" && file.storagePath) {
+      const inputBuffer = await readStoredObject(file);
+      const sliceSettings = {
+        material: payload.material,
+        layerHeight: payload.layerHeight,
+        infill: payload.infill,
+        walls: payload.walls,
+        supports: payload.supports !== false && payload.support !== "None",
+        brim: Boolean(payload.brim)
+      };
+      const pipelineResult = await runPrusaSlicePipeline({
+        command: slicer.command,
+        inputBuffer,
+        filename: file.name || `${file.id}.stl`,
+        settings: sliceSettings,
+        timeoutMs: Number(process.env.LAYERPILOT_SLICER_TIMEOUT_MS || 15 * 60 * 1000)
+      });
+      await writeFile(outputPath, pipelineResult.buffer);
+      job.engine = slicer.source === "env" ? "external" : `external-auto:${path.basename(slicer.command)}`;
+      job.slicerActions = { autoOriented: pipelineResult.autoOriented, arranged: pipelineResult.arranged, supportsEnabled: pipelineResult.supportsEnabled };
+      job.stdout = pipelineResult.stdout;
+      job.stderr = pipelineResult.warnings.join("\n");
+      // 真實切片統計優先於估算值
+      if (pipelineResult.estimatedGrams > 0 || pipelineResult.estimatedMinutes > 0) {
+        measured = { grams: pipelineResult.estimatedGrams, minutes: pipelineResult.estimatedMinutes, source: "gcode" };
+      }
+    } else if (slicer?.available && slicer.family === "orca") {
+      // Orca 系由獨立 worker（api/orca-worker.mjs）認領處理，這裡不重複執行
+      job.warning = `Orca-family slicer (${slicer.command}) is handled by the orca-worker process; internal adapter used for this job`;
+      await writeFile(outputPath, buildInternalGcode({ file, printer, profile, settings: payload, estimates }));
+    } else if (slicer?.available && file.storagePath) {
+      // env 指定但無 template args 以外的情境：沿用舊模板路徑以相容既有部署
       let inputPath = file.storagePath;
       if (file.storageProvider === "s3" || file.storageKey || String(file.storagePath || "").startsWith("s3://")) {
         inputPath = path.join(outputDir, path.basename(file.name || `${file.id}.model`));
         await writeFile(inputPath, await readStoredObject(file));
       }
-      const args = slicerArgsFromTemplate({ inputPath, outputPath, configPath });
-      const result = await execFileAsync(process.env.LAYERPILOT_SLICER_CMD, args, { timeout: Number(process.env.LAYERPILOT_SLICER_TIMEOUT_MS || 120000), maxBuffer: 1024 * 1024 });
+      const args = envTemplateArgs
+        ? slicerArgsFromTemplate({ inputPath, outputPath, configPath })
+        : buildPrusaSliceArgs({ inputPath, outputPath, configPath });
+      const result = await execFileAsync(slicer.command, args, { timeout: Number(process.env.LAYERPILOT_SLICER_TIMEOUT_MS || 120000), maxBuffer: 1024 * 1024 });
       job.stdout = result.stdout?.slice(0, 4000) || "";
       job.stderr = result.stderr?.slice(0, 4000) || "";
+      const produced = await readFile(outputPath).catch(() => null);
+      if (produced) {
+        const stats = parseGcodeStats(produced.toString("utf8"));
+        if (stats.grams > 0 || stats.minutes > 0) measured = { ...stats, source: "gcode" };
+      }
     } else {
       await writeFile(outputPath, buildInternalGcode({ file, printer, profile, settings: payload, estimates }));
       job.warning = file.storagePath ? "" : "Internal slicer adapter used because no external slicer command is configured";
+    }
+    // 真實數據覆寫估算，並用自動報價引擎重算指示價
+    if (measured) {
+      estimates.estimateGrams = measured.grams > 0 ? measured.grams : estimates.estimateGrams;
+      estimates.estimateMinutes = measured.minutes > 0 ? measured.minutes : estimates.estimateMinutes;
+      estimates.measured = measured;
+    }
+    const catalogForAutoQuote = costCatalogForWorkspace(database.data, workspaceId);
+    try {
+      const engineResult = computeAutoQuote(catalogForAutoQuote.autoQuote || defaultAutoQuoteConfig, {
+        scope: "unit",
+        grams: estimates.estimateGrams,
+        minutes: estimates.estimateMinutes,
+        quantity: 1,
+        material: payload.material || file.material || "PETG"
+      });
+      estimates.autoQuoteTotal = engineResult.total;
+      estimates.autoQuoteEscalated = engineResult.escalated;
+      estimates.autoQuoteLines = engineResult.lines.filter((line) => line.amount !== 0 || line.key.startsWith("base_"));
+      job.autoQuote = { total: engineResult.total, escalated: engineResult.escalated, escalationReasons: engineResult.escalationReasons, currency: engineResult.currency };
+    } catch {
+      // 自動報價設定異常時不阻斷切片成果
     }
     const output = await readFile(outputPath);
     const stored = await storeObject(`slices/${job.id}/${outputName}`, output, { filename: outputName, type: "GCODE" });
@@ -6673,7 +6828,7 @@ export async function runTelemetryTick(database, options = {}) {
   return { changed: true, changedPrinters, completedJobs, todos: deriveTodos(stateData) };
 }
 
-export async function buildServer({ db, enableTelemetry = false, telemetryIntervalMs = 5000, enableBridgePolling = false, bridgePollingIntervalMs = 10000, serveStatic = process.env.LAYERPILOT_SERVE_STATIC === "true", authRateLimit = defaultAuthRateLimit, sensitiveRateLimit = defaultSensitiveRateLimit, mqttPublisher = null, stripeClient = saasBillingEnabled() ? createStripeClient() : null, objectStorageAdapter = createObjectStorage(), emailClient = createEmailClient(), aiEngine = createAiEngine(), chatwootClient = createChatwootClient() } = {}) {
+export async function buildServer({ db, enableTelemetry = false, telemetryIntervalMs = 5000, enableBridgePolling = false, bridgePollingIntervalMs = 10000, serveStatic = process.env.LAYERPILOT_SERVE_STATIC === "true", authRateLimit = defaultAuthRateLimit, sensitiveRateLimit = defaultSensitiveRateLimit, mqttPublisher = null, stripeClient = saasBillingEnabled() ? createStripeClient() : null, objectStorageAdapter = createObjectStorage(), emailClient = createEmailClient(), lineClient = createLineClient(), aiEngine = createAiEngine(), chatwootClient = createChatwootClient() } = {}) {
   const database = db || await openDatabase();
   activeObjectStorage = objectStorageAdapter;
   database.realtimeClients ||= new Set();
@@ -6821,12 +6976,14 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     storeGcodeFile: (payload) => createStoredGcodeFile(database, payload),
     readCaseFile: (file) => objectStorage().get(file),
     hasValidWorkerToken,
-    customerFromRequest
+    customerFromRequest,
+    costCatalogForWorkspace: (data) => costCatalogForWorkspace(data || database.data)
   });
   await registerChatwootRoutes(app, {
     database,
     aiEngine,
     chatwootClient,
+    storeQuoteAttachment: (key, buffer, meta) => storeObject(key, buffer, meta),
     knowledgeFor: (data, context, caseRecord) => findRelevantAiKnowledge(
       (data.aiKnowledge || []).filter((item) => itemInWorkspace(item, caseRecord?.workspaceId || DEFAULT_WORKSPACE_ID)),
       `${context.content || ""} ${caseRecord?.project || ""} ${(caseRecord?.parts || []).map((part) => `${part.material || ""} ${part.name || ""}`).join(" ")}`
@@ -7428,19 +7585,130 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const result = await applyQuoteDecision(database, quote, { decision: parsed.data.decision, note: parsed.data.note });
     return reply.code(result.statusCode).send(result.body);
   });
+  // ---- 案件確認清單：專員建立待確認項目，客戶逐項確認 ----
+  app.post("/api/quoteRequests/:id/confirmations", async (request, reply) => {
+    if (!hasPermission(request.user, "orders:write")) return reply.code(403).send({ error: "Missing permission: orders:write" });
+    const parsed = confirmationCreateSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid confirmation payload", issues: parsed.error.issues });
+    const quote = database.data.quoteRequests.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
+    if (!quote) return reply.code(404).send({ error: "Quote request not found" });
+    quote.confirmations ||= [];
+    const now = new Date().toISOString();
+    for (const item of parsed.data.items) {
+      // 已確認（confirmed）的項目視為定案，不重複要求；「有問題」的項目允許專員更新內容後重新開啟協商
+      const decidedRow = quote.confirmations.find((row) => row.label === item.label && row.status === "confirmed");
+      if (decidedRow) continue;
+      const pendingRow = quote.confirmations.find((row) => row.label === item.label && row.status === "pending");
+      if (pendingRow) { Object.assign(pendingRow, { value: item.value, note: item.note }); continue; }
+      const issueRow = quote.confirmations.find((row) => row.label === item.label && row.status === "issue");
+      if (issueRow) {
+        Object.assign(issueRow, { value: item.value || issueRow.value, note: item.note || issueRow.note, status: "pending", decidedNote: "", decidedAt: "" });
+        quote.messages ||= [];
+        quote.messages.push({ id: randomUUID(), author: "system", authorName: "系統", body: `專員依您的回覆調整了「${item.label}」，請再次確認。`, createdAt: now });
+        continue;
+      }
+      quote.confirmations.push({ id: randomUUID(), label: item.label, value: item.value || "", note: item.note || "", status: "pending", createdAt: now });
+    }
+    const pendingCount = quote.confirmations.filter((row) => row.status === "pending").length;
+    quote.messages ||= [];
+    quote.messages.push({ id: randomUUID(), author: "system", authorName: "系統", body: `專員請求確認 ${pendingCount} 項生產細節，請在下方清單逐項確認。`, createdAt: now });
+    quote.updatedAt = now;
+    await dispatchEvent(database, "quote_request.confirmation_requested", `${pendingCount} confirmation items requested on ${quote.id}`, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, quoteRequestId: quote.id, pendingCount }, { actor: request.user });
+    await notifyCustomerByLine(quote, operatorMessageText({ author: request.user.name || "3DRFM", project: quote.project, excerpt: "有新的生產細節需要您確認，請進入客戶入口逐項確認。", url: customerPortalUrl(request) }), `Confirmations requested on ${quote.project}`);
+    await database.write();
+    return reply.code(201).send({ ok: true, confirmations: quote.confirmations, quoteRequest: quote });
+  });
+
+  async function decideQuoteConfirmation(database, quote, itemId, decisionInput) {
+    quote.confirmations ||= [];
+    const item = quote.confirmations.find((row) => row.id === itemId);
+    if (!item) return { statusCode: 404, body: { error: "Confirmation item not found" } };
+    if (item.status !== "pending") return { statusCode: 409, body: { error: "Confirmation already decided", status: item.status } };
+    item.status = decisionInput.decision;
+    item.decidedNote = decisionInput.note || "";
+    item.decidedAt = new Date().toISOString();
+    const text = decisionInput.decision === "confirmed"
+      ? `客戶已確認「${item.label}」${item.value ? `：${item.value}` : ""}。${decisionInput.note ? `備註：${decisionInput.note}` : ""}`
+      : `客戶對「${item.label}」提出問題${decisionInput.note ? `：${decisionInput.note}` : ""}。`;
+    quote.messages ||= [];
+    quote.messages.push({ id: randomUUID(), author: "system", authorName: "系統", body: text, createdAt: item.decidedAt });
+    quote.updatedAt = item.decidedAt;
+    await dispatchEvent(database, decisionInput.decision === "confirmed" ? "quote_request.confirmation_confirmed" : "quote_request.confirmation_issue", text, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, quoteRequestId: quote.id, itemId }, { actorType: "customer" });
+    await database.write();
+    return { statusCode: 200, body: { ok: true, confirmation: item, quoteRequest: quote } };
+  }
+
+  app.post("/api/public/quoteRequests/:id/confirmations/:itemId", { config: { rateLimit: customerMessageRateLimit } }, async (request, reply) => {
+    const parsed = confirmationDecisionSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid confirmation decision", issues: parsed.error.issues });
+    const quote = database.data.quoteRequests.find((item) => item.id === request.params.id);
+    if (!quote || !quoteTokenMatches(quote, String(request.query?.token || request.body?.token || ""))) return reply.code(404).send({ error: "Quote request not found" });
+    const result = await decideQuoteConfirmation(database, quote, request.params.itemId, parsed.data);
+    return reply.code(result.statusCode).send(result.body);
+  });
+
+  app.post("/api/customer/quotes/:id/confirmations/:itemId", { config: { rateLimit: customerMessageRateLimit } }, async (request, reply) => {
+    const { customer } = customerFromRequest(database, request);
+    if (!customer) return reply.code(401).send({ error: "Authentication required" });
+    const parsed = confirmationDecisionSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid confirmation decision", issues: parsed.error.issues });
+    const quote = customerLinkedQuotes(database, customer).find((item) => item.id === request.params.id);
+    if (!quote) return reply.code(404).send({ error: "Quote request not found" });
+    const result = await decideQuoteConfirmation(database, quote, request.params.itemId, parsed.data);
+    return reply.code(result.statusCode).send(result.body);
+  });
+
+  // ---- 訊息圖片附件下載：員工 / 客戶帳號 / 入口 token 三種授權擇一 ----
+  app.get("/api/quote-messages/:quoteId/:messageId/attachments/:index", async (request, reply) => {
+    const quote = database.data.quoteRequests.find((item) => item.id === request.params.quoteId);
+    if (!quote) return reply.code(404).send({ error: "Quote request not found" });
+    let authorized = false;
+    if (request.user && request.user.email && itemInWorkspace(quote, request.user.workspaceId)) authorized = true;
+    if (!authorized) {
+      const { customer } = customerFromRequest(database, request);
+      if (customer && customerLinkedQuotes(database, customer).some((item) => item.id === quote.id)) authorized = true;
+    }
+    if (!authorized && quoteTokenMatches(quote, String(request.query?.token || ""))) authorized = true;
+    if (!authorized) return reply.code(401).send({ error: "Authentication required" });
+    const message = (quote.messages || []).find((row) => row.id === request.params.messageId);
+    const attachment = message?.attachments?.find((row) => row.index === Number(request.params.index));
+    if (!attachment) return reply.code(404).send({ error: "Attachment not found" });
+    const bytes = await readStoredObject(attachment);
+    reply.type(attachment.contentType || "application/octet-stream");
+    return reply.send(bytes);
+  });
 
   app.post("/api/customer/quotes/:id/messages", { config: { rateLimit: customerMessageRateLimit } }, async (request, reply) => {
     const { customer } = customerFromRequest(database, request);
     if (!customer) return reply.code(401).send({ error: "Authentication required" });
-    const parsed = customerMessageSchema.safeParse(request.body || {});
-    if (!parsed.success) return reply.code(400).send({ error: "Invalid message payload", issues: parsed.error.issues });
+    let messageBody = "";
+    let attachmentError = "";
+    let uploadedFiles = [];
+    if (request.isMultipart?.()) {
+      const parts = await readQuoteMessageParts(request);
+      messageBody = parts.body;
+      uploadedFiles = parts.files;
+      attachmentError = validateQuoteMessageFiles(uploadedFiles);
+    } else {
+      const parsed = customerMessageSchema.safeParse(request.body || {});
+      if (!parsed.success) return reply.code(400).send({ error: "Invalid message payload", issues: parsed.error.issues });
+      messageBody = parsed.data.body;
+    }
+    if (!messageBody) return reply.code(400).send({ error: "Message body is required" });
+    if (attachmentError) return reply.code(400).send({ error: attachmentError });
     const quote = customerLinkedQuotes(database, customer).find((item) => item.id === request.params.id);
     if (!quote) return reply.code(404).send({ error: "Quote request not found" });
-    if (await prepareIdempotentRequest(database, request, reply, { workspaceId: customer.workspaceId, actorId: `customer:${customer.id}`, bodyDigest: requestBodyDigest(parsed.data) })) return;
-    const message = { id: randomUUID(), author: "customer", authorName: customer.name, body: parsed.data.body, createdAt: new Date().toISOString() };
+    if (await prepareIdempotentRequest(database, request, reply, { workspaceId: customer.workspaceId, actorId: `customer:${customer.id}`, bodyDigest: requestBodyDigest({ body: messageBody }) })) return;
+    const message = { id: randomUUID(), author: "customer", authorName: customer.name, body: messageBody, createdAt: new Date().toISOString() };
+    if (uploadedFiles.length) {
+      message.attachments = await storeQuoteMessageAttachments(database, quote.id, message.id, uploadedFiles);
+      // 暫存位元組供同步到 Chatwoot 使用（推播後由 push helper 清除）
+      for (const [index, attachment] of message.attachments.entries()) attachment._buffer = uploadedFiles[index].buffer;
+    }
     quote.messages ||= [];
     quote.messages.push(message);
     quote.updatedAt = message.createdAt;
+    await pushQuoteMessageToChatwoot(quote, message, "incoming");
     await dispatchEvent(database, "quote_request.message_added", `${customer.name} sent a message on ${quote.id}`, { workspaceId: quote.workspaceId || DEFAULT_WORKSPACE_ID, quoteRequestId: quote.id, author: "customer" });
     await database.write();
     return reply.code(201).send({ ok: true, quoteRequest: sanitizeQuoteRequest(quote) });
@@ -8322,6 +8590,23 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     return calculateQuote(costCatalogForWorkspace(database.data, request.user.workspaceId), parsed.data);
   });
 
+  // 專員自動估價：完整輸入（切片克重/時間、範圍、多色模式、風險、服務），伺服器端計價，
+  // 內部價格參數不落地到前端。回傳逐項明細與轉專員原因，供案件中心報價版本帶入。
+  app.post("/api/quotes/auto", async (request, reply) => {
+    if (!hasPermission(request.user, "quotes:write") && !hasPermission(request.user, "orders:write")) {
+      return reply.code(403).send({ error: "Missing permission: quotes:write" });
+    }
+    const result = computeAutoQuote(costCatalogForWorkspace(database.data, request.user.workspaceId).autoQuote || defaultAutoQuoteConfig, request.body || {});
+    createAuditEvent(database, "quote.auto_computed", `auto quote ${result.total} ${result.currency}${result.escalated ? " (escalated)" : ""}`, {
+      workspaceId: request.user.workspaceId,
+      total: result.total,
+      escalated: result.escalated,
+      escalationCodes: result.escalationReasons.map((reason) => reason.code)
+    }, { actor: request.user });
+    await database.write();
+    return result;
+  });
+
   app.post("/api/printers", async (request, reply) => {
     if (!hasPermission(request.user, "printers:control")) return reply.code(403).send({ error: "Missing permission: printers:control" });
     const parsed = printerSchema.safeParse(request.body);
@@ -9122,6 +9407,66 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     return { ok: true, customer: sanitizeCustomer(removed) };
   });
 
+  // LINE 客戶通知（notify-only）：解析客戶 LINE userId 後推播；未設定或無對象時靜默略過。
+  // 對話一律走 Chatwoot（網站 widget / LINE inbox / email），LINE 在此僅是提醒通道。
+  const notifyCustomerByLine = async (record, text, eventLabel) => {
+    if (!lineClient?.configured) return { sent: false, reason: "not_configured" };
+    const userId = resolveLineTarget(database.data, record || {});
+    if (!userId) return { sent: false, reason: "no_line_target" };
+    const result = await lineClient.push(userId, text);
+    createAuditEvent(database, "customer.line_notified", `${eventLabel} via LINE (${result.sent ? "sent" : result.reason})`, {
+      workspaceId: record.workspaceId || DEFAULT_WORKSPACE_ID,
+      target: record.id || "",
+      ok: Boolean(result.sent),
+      reason: result.reason || ""
+    });
+    return result;
+  };
+
+  // ---- Portal 對話串 ⇄ Chatwoot 橋接 ----
+  // 客戶/專員在入口的每則訊息會同步到 Chatwoot 對話（客服在後台收發）；
+  // Chatwoot 端的回覆經 webhook 回寫進同一對話串（見 chatwoot-module outgoing 處理）。
+  const portalInboxId = () => String(process.env.CHATWOOT_PORTAL_INBOX_ID || "").trim();
+
+  const ensureQuoteChatwootConversation = async (quote) => {
+    if (!chatwootClient?.configured || !portalInboxId()) return "";
+    quote.chatwoot ||= {};
+    if (quote.chatwoot.conversationId) return quote.chatwoot.conversationId;
+    try {
+      const contactId = await chatwootClient.ensureContact({ email: quote.email, name: quote.customer });
+      if (!contactId) return "";
+      const conversationId = await chatwootClient.createContactConversation(contactId, portalInboxId());
+      if (!conversationId) return "";
+      quote.chatwoot.accountId = chatwootClient.accountId;
+      quote.chatwoot.conversationId = conversationId;
+      quote.chatwoot.contactId = contactId;
+      quote.chatwoot.pushedIds = [];
+      return conversationId;
+    } catch {
+      return ""; // Chatwoot 不可用時不阻斷站內對話
+    }
+  };
+
+  const pushQuoteMessageToChatwoot = async (quote, message, authorType) => {
+    try {
+      const conversationId = await ensureQuoteChatwootConversation(quote);
+      if (!conversationId) return;
+      const files = (message.attachments || []).map((attachment) => ({
+        buffer: attachment._buffer,
+        filename: attachment.name,
+        contentType: attachment.contentType
+      })).filter((file) => Buffer.isBuffer(file.buffer));
+      const result = await chatwootClient.sendMessageWithAttachments(conversationId, message.body, files, { messageType: authorType });
+      const pushedId = String(result?.id || "");
+      if (pushedId) {
+        quote.chatwoot.pushedIds = [...(quote.chatwoot.pushedIds || []), pushedId].slice(-50);
+      }
+      for (const attachment of message.attachments || []) delete attachment._buffer;
+    } catch {
+      // 同步失敗不影響站內對話；webhook 端也不會收到，因此無回環風險
+    }
+  };
+
   app.patch("/api/quoteRequests/:id", async (request, reply) => {
     if (!hasPermission(request.user, "orders:write")) return reply.code(403).send({ error: "Missing permission: orders:write" });
     const parsed = quoteRequestPatchSchema.safeParse(request.body || {});
@@ -9147,20 +9492,41 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
         text: `Hi ${quote.customer},\n\nYour quote for "${quote.project}" is ready to review${quote.quotedValue ? ` ($${quote.quotedValue})` : ""}.\n\nSign in to your customer account to review and approve it: ${portalUrl}`
       });
     }
+    if (quote.status === "quoted" && previousStatus !== "quoted") {
+      await notifyCustomerByLine(quote, quoteReadyText({ customer: quote.customer, project: quote.project, quotedValue: quote.quotedValue, url: customerPortalUrl(request) }), `Quote ${quote.project} ready`);
+    }
     await database.write();
     return quote;
   });
 
   app.post("/api/quoteRequests/:id/messages", { config: { rateLimit: customerMessageRateLimit } }, async (request, reply) => {
     if (!hasPermission(request.user, "orders:write")) return reply.code(403).send({ error: "Missing permission: orders:write" });
-    const parsed = customerMessageSchema.safeParse(request.body || {});
-    if (!parsed.success) return reply.code(400).send({ error: "Invalid message payload", issues: parsed.error.issues });
+    let messageBody = "";
+    let uploadedFiles = [];
+    if (request.isMultipart?.()) {
+      const parts = await readQuoteMessageParts(request);
+      messageBody = parts.body;
+      uploadedFiles = parts.files;
+      const attachmentError = validateQuoteMessageFiles(uploadedFiles);
+      if (attachmentError) return reply.code(400).send({ error: attachmentError });
+    } else {
+      const parsed = customerMessageSchema.safeParse(request.body || {});
+      if (!parsed.success) return reply.code(400).send({ error: "Invalid message payload", issues: parsed.error.issues });
+      messageBody = parsed.data.body;
+    }
+    if (!messageBody) return reply.code(400).send({ error: "Message body is required" });
     const quote = database.data.quoteRequests.find((item) => item.id === request.params.id && itemInWorkspace(item, request.user.workspaceId));
     if (!quote) return reply.code(404).send({ error: "Quote request not found" });
-    const message = { id: randomUUID(), author: "operator", authorName: request.user.name || request.user.email, body: parsed.data.body, createdAt: new Date().toISOString() };
+    const message = { id: randomUUID(), author: "operator", authorName: request.user.name || request.user.email, body: messageBody, createdAt: new Date().toISOString() };
+    if (uploadedFiles.length) {
+      message.attachments = await storeQuoteMessageAttachments(database, quote.id, message.id, uploadedFiles);
+      // 暫存位元組供同步到 Chatwoot 使用（推播後由 push helper 清除）
+      for (const [index, attachment] of message.attachments.entries()) attachment._buffer = uploadedFiles[index].buffer;
+    }
     quote.messages ||= [];
     quote.messages.push(message);
     quote.updatedAt = message.createdAt;
+    await pushQuoteMessageToChatwoot(quote, message, "outgoing");
     await dispatchEvent(database, "quote_request.message_added", `${message.authorName} replied on ${quote.id}`, { workspaceId: request.user.workspaceId, quoteRequestId: quote.id, author: "operator" }, { actor: request.user });
     if (quote.email) {
       const portalUrl = customerPortalUrl(request);
@@ -9170,6 +9536,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
         text: `Hi ${quote.customer},\n\n${message.authorName} sent a new message about "${quote.project}":\n\n"${message.body}"\n\nSign in to your customer account to reply: ${portalUrl}`
       });
     }
+    await notifyCustomerByLine(quote, operatorMessageText({ author: message.authorName, project: quote.project, excerpt: message.body, url: customerPortalUrl(request) }), `New operator message on ${quote.project}`);
     await database.write();
     return reply.code(201).send({ ok: true, quoteRequest: quote });
   });
@@ -9256,6 +9623,15 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       carrier: order.carrier || "",
       hasTrackingNumber: Boolean(order.trackingNumber)
     }, { actor: request.user });
+    // 出貨通知：email 原本就沒有；LINE 是客戶收到追蹤號碼的主要提醒
+    const linkedQuote = database.data.quoteRequests.find((item) => item.id === order.quoteRequestId) || {};
+    if (order.trackingNumber) {
+      await notifyCustomerByLine(
+        { ...linkedQuote, workspaceId: order.workspaceId },
+        shippedText({ project: linkedQuote.project || "", carrier: order.carrier || "", trackingNumber: order.trackingNumber, url: customerPortalUrl(request) }),
+        `Order ${order.id} shipped`
+      );
+    }
     await database.write();
     return order;
   });
