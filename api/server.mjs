@@ -9427,6 +9427,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   // 客戶/專員在入口的每則訊息會同步到 Chatwoot 對話（客服在後台收發）；
   // Chatwoot 端的回覆經 webhook 回寫進同一對話串（見 chatwoot-module outgoing 處理）。
   const portalInboxId = () => String(process.env.CHATWOOT_PORTAL_INBOX_ID || "").trim();
+  const portalChannelIdentifier = () => String(process.env.CHATWOOT_API_CHANNEL_IDENTIFIER || "").trim();
 
   const ensureQuoteChatwootConversation = async (quote) => {
     if (!chatwootClient?.configured || !portalInboxId()) return "";
@@ -9435,14 +9436,20 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     try {
       const contactId = await chatwootClient.ensureContact({ email: quote.email, name: quote.customer });
       if (!contactId) return "";
-      const conversationId = await chatwootClient.createContactConversation(contactId, portalInboxId());
+      // source_id 需在 inbox 內唯一且對同一客戶穩定（對話連續性）；
+      // 實測 c.3dstu.com 舊版路由以 channel identifier 開頭的格式可正常關聯。
+      const emailHash = createHash("sha256").update(String(quote.email || "").toLowerCase()).digest("hex").slice(0, 24);
+      const channelId = portalChannelIdentifier();
+      const sourceId = `${channelId ? `${channelId}-` : ""}portal-${emailHash}`;
+      const conversationId = await chatwootClient.createContactConversation(contactId, portalInboxId(), sourceId);
       if (!conversationId) return "";
       quote.chatwoot.accountId = chatwootClient.accountId;
       quote.chatwoot.conversationId = conversationId;
       quote.chatwoot.contactId = contactId;
       quote.chatwoot.pushedIds = [];
       return conversationId;
-    } catch {
+    } catch (error) {
+      console.error("[chatwoot-bridge] ensure conversation failed:", error instanceof Error ? error.message : error);
       return ""; // Chatwoot 不可用時不阻斷站內對話
     }
   };
@@ -9462,8 +9469,8 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
         quote.chatwoot.pushedIds = [...(quote.chatwoot.pushedIds || []), pushedId].slice(-50);
       }
       for (const attachment of message.attachments || []) delete attachment._buffer;
-    } catch {
-      // 同步失敗不影響站內對話；webhook 端也不會收到，因此無回環風險
+    } catch (error) {
+      console.error("[chatwoot-bridge] push message failed:", error instanceof Error ? error.message : error);
     }
   };
 

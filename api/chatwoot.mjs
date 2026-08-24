@@ -27,30 +27,64 @@ export function createChatwootClient(options = {}) {
         body: JSON.stringify({ content, message_type: options.messageType || "outgoing", private: Boolean(options.private) })
       });
     },
-    // Portal 對話橋接用：找或建 contact（以 email 為 identifier），回傳 contactId
+    // Portal 對話橋接用：找或建 contact（以 email 為 identifier），回傳 contactId。
+    // 注意：Chatwoot 搜尋端點的參數是 q=（全文搜尋），不是 email=。
     async ensureContact({ email, name }) {
       const normalizedEmail = String(email || "").trim();
       if (!normalizedEmail) throw new Error("Email is required to ensure a Chatwoot contact");
+      const findExisting = async () => {
+        try {
+          const found = await request(`/contacts/search?q=${encodeURIComponent(normalizedEmail)}`);
+          const candidates = Array.isArray(found?.payload) ? found.payload : found?.payload?.contacts || [];
+          const hit = candidates.find((item) => String(item.email || "").toLowerCase() === normalizedEmail.toLowerCase())
+            || candidates.find((item) => String(item.identifier || "").toLowerCase() === normalizedEmail.toLowerCase());
+          if (hit?.id) return String(hit.id);
+        } catch {
+          // 搜尋失敗就往下嘗試建立
+        }
+        return "";
+      };
+      const existingId = await findExisting();
+      if (existingId) return existingId;
       try {
-        const found = await request(`/contacts/search?email=${encodeURIComponent(normalizedEmail)}&sort=-last_activity_at`);
-        const hit = Array.isArray(found?.payload) ? found.payload[0] : found?.payload?.contact;
-        if (hit?.id) return String(hit.id);
+        const created = await request("/contacts", {
+          method: "POST",
+          body: JSON.stringify({ identifier: normalizedEmail, email: normalizedEmail, name: String(name || normalizedEmail) })
+        });
+        return String(created?.payload?.contact?.id || created?.payload?.id || "");
       } catch {
-        // 搜尋失敗就往下嘗試建立
+        // 併發或重複建立時會 422，再搜尋一次拿既有 id
+        const retryId = await findExisting();
+        if (retryId) return retryId;
+        throw new Error("Unable to find or create Chatwoot contact");
       }
-      const created = await request("/contacts", {
-        method: "POST",
-        body: JSON.stringify({ identifier: normalizedEmail, email: normalizedEmail, name: String(name || normalizedEmail) })
-      });
-      return String(created?.payload?.contact?.id || created?.payload?.id || "");
     },
-    // 在指定 inbox 建立對話（portal 對話串專用收件匣），回傳 conversationId
-    async createContactConversation(contactId, inboxId) {
-      const created = await request(`/contacts/${encodeURIComponent(contactId)}/conversations`, {
+    // 在指定 inbox 建立對話（portal 對話串專用收件匣），回傳 conversationId。
+    // 相容多版本：優先新版 /contacts/:id/conversations；404 時退回舊版
+    // POST /conversations { inbox_id, contact_id, source_id }（c.3dstu.com 實例採此路徑）。
+    async createContactConversation(contactId, inboxId, sourceId) {
+      if (sourceId) {
+        try {
+          const created = await request(`/contacts/${encodeURIComponent(contactId)}/conversations`, {
+            method: "POST",
+            body: JSON.stringify({ inbox_id: Number(inboxId), source_id: String(sourceId) })
+          });
+          return String(created?.conversation_id || created?.id || "");
+        } catch (error) {
+          const status = Number(error?.message?.match(/returned (\d+)/)?.[1] || 0);
+          if (status !== 404) throw error;
+          // 404 → 舊版路由不存在，落到下方相容路徑
+        }
+      }
+      const legacy = await request("/conversations", {
         method: "POST",
-        body: JSON.stringify({ inbox_id: Number(inboxId) })
+        body: JSON.stringify({
+          inbox_id: Number(inboxId),
+          contact_id: String(contactId),
+          source_id: String(sourceId || `${inboxId}-${contactId}`)
+        })
       });
-      return String(created?.conversation_id || created?.id || "");
+      return String(legacy?.conversation_id || legacy?.id || "");
     },
     // 送出帶圖片/檔案的訊息（multipart attachments[]），messageType: 'incoming' | 'outgoing'
     async sendMessageWithAttachments(conversationId, content, files = [], options = {}) {
