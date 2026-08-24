@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fdf3e7"/><stop offset="1" stop-color="#f9e4c8"/>
+    </linearGradient>
+    <linearGradient id="vase" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#e07b28"/><stop offset=".5" stop-color="#f0975a"/><stop offset="1" stop-color="#d96a15"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="300" fill="url(#bg)"/>
+  <ellipse cx="200" cy="258" rx="95" ry="13" fill="#eed3ae"/>
+  <!-- 螺旋花瓶 -->
+  <path d="M170 70 C150 110 148 150 160 190 C168 218 232 218 240 190 C252 150 250 110 230 70 Z" fill="url(#vase)"/>
+  <ellipse cx="200" cy="70" rx="30" ry="8" fill="#c05a10"/>
+  <path d="M166 100 C185 92 215 92 234 100 M162 130 C186 121 214 121 238 130 M158 160 C188 150 212 150 242 160"
+        stroke="#fff" stroke-opacity=".35" stroke-width="6" fill="none" stroke-linecap="round"/>
+</svg>

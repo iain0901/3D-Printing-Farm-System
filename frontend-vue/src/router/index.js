@@ -7,17 +7,28 @@
 
 import { createRouter, createWebHashHistory, createWebHistory } from 'vue-router'
 import Layout from '@/layouts'
+import PublicLayout from '@/layouts/PublicLayout'
 import { publicPath, routerMode } from '@/config'
 export const constantRoutes = [
   {
-    // 品牌落地頁：公開行銷首頁（服務、流程、方案、FAQ），CTA 導向 /quote 估價。
+    // 官網（品牌落地 + 內頁）：共用 PublicLayout 表頭/表尾，全部公開不需員工登入。
     path: '/',
-    name: 'Landing',
-    component: () => import('@/views/landing/Index'),
+    component: PublicLayout,
+    children: [
+      { path: '', name: 'Landing', component: () => import('@/views/landing/Index') },
+      { path: 'services', name: 'SiteServices', component: () => import('@/views/site/Services') },
+      { path: 'gallery', name: 'SiteGallery', component: () => import('@/views/site/Gallery') },
+      { path: 'pricing', name: 'SitePricing', component: () => import('@/views/site/Pricing') },
+      { path: 'about', name: 'SiteAbout', component: () => import('@/views/site/About') },
+      { path: 'faq', name: 'SiteFaq', component: () => import('@/views/site/Faq') },
+      { path: 'contact', name: 'SiteContact', component: () => import('@/views/site/Contact') },
+      { path: 'terms', name: 'SiteTerms', component: () => import('@/views/site/Terms') },
+      { path: 'privacy', name: 'SitePrivacy', component: () => import('@/views/site/Privacy') },
+    ],
     hidden: true,
   },
   {
-    // 估價精靈：公開，客戶從落地頁 CTA 進入；/quote/new 為相容重導向。
+    // 估價精靈：公開；/quote/new 為相容重導向。
     path: '/quote',
     name: 'QuoteWizard',
     component: () => import('@/views/quote/Wizard'),
@@ -437,8 +448,7 @@ export const asyncRoutes = [
 ]
 
 const router = createRouter({
-  history:
-    routerMode === 'history' ? createWebHistory(publicPath) : createWebHashHistory(publicPath),
+  history: routerMode === 'history' ? createWebHistory(publicPath) : createWebHashHistory(publicPath),
   scrollBehavior: () => ({
     top: 0,
     left: 0,

@@ -2,7 +2,8 @@
   <div class="model-viewer">
     <div ref="canvasHost" class="model-viewer-canvas" :style="{ height: height + 'px' }" />
     <div v-if="loading" class="model-viewer-overlay">
-      <el-icon><Loading /></el-icon> 載入模型中…
+      <el-icon><Loading /></el-icon>
+      載入模型中…
     </div>
     <div v-else-if="errorMessage" class="model-viewer-overlay error">
       {{ errorMessage }}
@@ -217,7 +218,9 @@
         })
         const parts = []
         meshes.forEach((mesh, index) => {
-          const existingColor = mesh.material?.color ? mesh.material.color.clone() : new THREE.Color(DEFAULT_PALETTE[index % DEFAULT_PALETTE.length])
+          const existingColor = mesh.material?.color
+            ? mesh.material.color.clone()
+            : new THREE.Color(DEFAULT_PALETTE[index % DEFAULT_PALETTE.length])
           const material = new THREE.MeshStandardMaterial({ color: existingColor, roughness: 0.6 })
           mesh.material = material
           this.partsGroup.add(mesh)

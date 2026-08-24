@@ -11,7 +11,12 @@ export function createSpool(payload) {
 
 export function updateSpool(spoolId, patch) {
   const key = `spool-update:${spoolId}`
-  return request({ url: `/api/spools/${spoolId}`, method: 'patch', data: patch, headers: idempotencyHeaders(key, { spoolId, patch }) }).then((r) => {
+  return request({
+    url: `/api/spools/${spoolId}`,
+    method: 'patch',
+    data: patch,
+    headers: idempotencyHeaders(key, { spoolId, patch }),
+  }).then((r) => {
     clearIdempotency(key)
     return r
   })
@@ -19,7 +24,12 @@ export function updateSpool(spoolId, patch) {
 
 export function logSpoolUsage(spoolId, grams = 20) {
   const key = `spool-usage:${spoolId}`
-  return request({ url: `/api/spools/${spoolId}/usage`, method: 'patch', data: { grams }, headers: idempotencyHeaders(key, { spoolId, grams }) }).then((r) => {
+  return request({
+    url: `/api/spools/${spoolId}/usage`,
+    method: 'patch',
+    data: { grams },
+    headers: idempotencyHeaders(key, { spoolId, grams }),
+  }).then((r) => {
     clearIdempotency(key)
     return r
   })
@@ -35,7 +45,12 @@ export function createPurchaseRequest(payload) {
 
 export function receivePurchaseRequest(requestId, location = 'Rack Receiving') {
   const key = `purchase-request-receive:${requestId}`
-  return request({ url: `/api/purchaseRequests/${requestId}/receive`, method: 'post', data: { location }, headers: idempotencyHeaders(key, { requestId, location }) }).then((r) => {
+  return request({
+    url: `/api/purchaseRequests/${requestId}/receive`,
+    method: 'post',
+    data: { location },
+    headers: idempotencyHeaders(key, { requestId, location }),
+  }).then((r) => {
     clearIdempotency(key)
     return r
   })

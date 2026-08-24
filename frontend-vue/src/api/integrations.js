@@ -23,10 +23,12 @@ export function createWebhook(payload) {
 
 export function updateWebhook(id, patch) {
   const key = `webhook-update:${id}`
-  return request({ url: `/api/webhooks/${id}`, method: 'patch', data: patch, headers: idempotencyHeaders(key, { id, patch }) }).then((r) => {
-    clearIdempotency(key)
-    return r
-  })
+  return request({ url: `/api/webhooks/${id}`, method: 'patch', data: patch, headers: idempotencyHeaders(key, { id, patch }) }).then(
+    (r) => {
+      clearIdempotency(key)
+      return r
+    }
+  )
 }
 
 export function testWebhook(id) {

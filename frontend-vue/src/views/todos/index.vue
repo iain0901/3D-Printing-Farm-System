@@ -1,7 +1,7 @@
 <template>
   <div class="todos-container">
     <el-row :gutter="16" class="metric-row">
-      <el-col :xs="12" :sm="8" :md="4" v-for="metric in metrics" :key="metric.label">
+      <el-col v-for="metric in metrics" :key="metric.label" :xs="12" :sm="8" :md="4">
         <el-card shadow="never" class="metric-card">
           <div class="metric-label">{{ metric.label }}</div>
           <div class="metric-value">{{ metric.value }}</div>
@@ -20,17 +20,30 @@
       <el-table-column prop="source" label="來源任務" width="160" />
       <el-table-column prop="kind" label="類型" width="110" />
       <el-table-column label="嚴重度" width="100">
-        <template #default="{ row }"><el-tag size="small" :type="severityTagType(row.severity)">{{ row.severity }}</el-tag></template>
+        <template #default="{ row }">
+          <el-tag size="small" :type="severityTagType(row.severity)">{{ row.severity }}</el-tag>
+        </template>
       </el-table-column>
       <el-table-column label="狀態" width="100">
-        <template #default="{ row }"><el-tag size="small">{{ row.status || 'open' }}</el-tag></template>
+        <template #default="{ row }">
+          <el-tag size="small">{{ row.status || 'open' }}</el-tag>
+        </template>
       </el-table-column>
       <el-table-column prop="due" label="到期" width="120" />
-      <el-table-column label="操作" width="220" v-permissions="['queue:write']">
+      <el-table-column v-permissions="['queue:write']" label="操作" width="220">
         <template #default="{ row }">
-          <el-button size="small" :disabled="row.status === 'claimed'" :loading="busy === row.id + '-claim'" @click="runAction(row, 'claim')">認領</el-button>
+          <el-button
+            size="small"
+            :disabled="row.status === 'claimed'"
+            :loading="busy === row.id + '-claim'"
+            @click="runAction(row, 'claim')"
+          >
+            認領
+          </el-button>
           <el-button size="small" :loading="busy === row.id + '-snooze'" @click="runAction(row, 'snooze')">延後</el-button>
-          <el-button size="small" type="primary" :loading="busy === row.id + '-complete'" @click="runAction(row, 'complete')">完成</el-button>
+          <el-button size="small" type="primary" :loading="busy === row.id + '-complete'" @click="runAction(row, 'complete')">
+            完成
+          </el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -70,9 +83,10 @@
       },
       async runAction(todo, action) {
         this.busy = `${todo.id}-${action}`
-        const payload = action === 'claim'
-          ? { owner: this.username || 'Operator', note: 'Claimed from Auto Todos' }
-          : action === 'snooze'
+        const payload =
+          action === 'claim'
+            ? { owner: this.username || 'Operator', note: 'Claimed from Auto Todos' }
+            : action === 'snooze'
             ? { snoozeUntil: 'Tomorrow 09:00', note: 'Snoozed for next shift' }
             : { note: 'Resolved from Auto Todos' }
         try {
@@ -99,7 +113,7 @@
   .metric-card {
     margin-bottom: 12px;
 
-    ::v-deep .el-card__body {
+    :deep(.el-card__body) {
       padding: 12px;
     }
 

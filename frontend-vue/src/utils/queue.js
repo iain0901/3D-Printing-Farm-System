@@ -5,5 +5,9 @@
  */
 export function isDueRisk(job) {
   const hour = Number((job.due || '').match(/\b(\d{1,2}):\d{2}\b/)?.[1])
-  return job.status !== 'complete' && job.status !== 'cancelled' && (job.priority === 'Rush' || ((job.due || '').includes('Today') && (job.priority === 'High' || (Number.isFinite(hour) && hour <= 18))))
+  return (
+    job.status !== 'complete' &&
+    job.status !== 'cancelled' &&
+    (job.priority === 'Rush' || ((job.due || '').includes('Today') && (job.priority === 'High' || (Number.isFinite(hour) && hour <= 18))))
+  )
 }

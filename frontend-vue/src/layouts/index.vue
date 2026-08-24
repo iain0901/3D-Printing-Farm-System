@@ -160,35 +160,31 @@
         padding-top: $base-top-bar-height;
       }
 
-      ::v-deep {
-        .vab-main {
+      
+:deep(.vab-main) {
           width: 88%;
           margin: auto;
         }
-
-        .fixed-header {
+:deep(.fixed-header) {
           @include fix-header;
         }
-
-        .tag-view-show {
+:deep(.tag-view-show) {
           background: $base-color-white;
           box-shadow: $base-box-shadow;
         }
-
-        .nav-container {
+:deep(.nav-container) {
           .fold-unfold {
             display: none;
           }
         }
-
-        .main-padding {
+:deep(.main-padding) {
           .app-main-container {
             margin-top: $base-padding;
             margin-bottom: $base-padding;
             background: $base-color-white;
           }
         }
-      }
+
     }
 
     .layout-container-vertical {
@@ -223,8 +219,8 @@
         background: #f6f8f9;
         transition: $base-transition;
 
-        ::v-deep {
-          .fixed-header {
+        
+:deep(.fixed-header) {
             @include fix-header;
 
             left: $base-left-menu-width;
@@ -232,46 +228,42 @@
             box-shadow: $base-box-shadow;
             transition: $base-transition;
           }
-
-          .nav-container {
+:deep(.nav-container) {
             position: relative;
             box-sizing: border-box;
           }
-
-          .tabs-container {
+:deep(.tabs-container) {
             box-sizing: border-box;
           }
-
-          .app-main-container {
+:deep(.app-main-container) {
             width: calc(100% - #{$base-padding} - #{$base-padding});
             margin: $base-padding auto;
             background: $base-color-white;
             border-radius: $base-border-radius;
           }
-        }
+
 
         &.is-collapse-main {
           margin-left: $base-left-menu-width-min;
 
-          ::v-deep {
-            .fixed-header {
+          
+:deep(.fixed-header) {
               left: $base-left-menu-width-min;
               width: calc(100% - 65px);
             }
-          }
+
         }
       }
     }
 
     /* 手机端开始 */
     &.mobile {
-      ::v-deep {
-        .el-pager,
-        .el-pagination__jump {
+      
+:deep(.el-pager,
+        .el-pagination__jump) {
           display: none;
         }
-
-        .layout-container-vertical {
+:deep(.layout-container-vertical) {
           .el-scrollbar.side-container.is-collapse {
             width: 0;
           }
@@ -281,14 +273,13 @@
             margin-left: 0;
           }
         }
-
-        .vab-main {
+:deep(.vab-main) {
           .fixed-header {
             left: 0 !important;
             width: 100% !important;
           }
         }
-      }
+
     }
 
     /* 手机端结束 */

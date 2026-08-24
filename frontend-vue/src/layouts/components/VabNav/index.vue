@@ -99,11 +99,11 @@
       height: $base-nav-bar-height;
     }
 
-    ::v-deep {
-      .fold-unfold {
+    
+:deep(.fold-unfold) {
         margin-right: 12px;
       }
-      svg {
+:deep(svg) {
         width: 1em;
         height: 1em;
         padding: 9px;
@@ -129,8 +129,7 @@
           box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.05);
         }
       }
-
-      button {
+:deep(button) {
         svg {
           margin-right: 0;
           color: rgba(255, 255, 255, 0.95);
@@ -146,8 +145,7 @@
           }
         }
       }
-
-      .el-badge {
+:deep(.el-badge) {
         margin-right: 0;
 
         .el-button {
@@ -165,13 +163,11 @@
           }
         }
       }
-
-      .user-name {
+:deep(.user-name) {
         color: rgba(0, 0, 0, 0.8);
         font-weight: 500;
       }
-
-      .user-avatar {
+:deep(.user-avatar) {
         border: 2px solid rgba(255, 255, 255, 0.8);
         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -181,7 +177,7 @@
           transform: translateY(-1px);
         }
       }
-    }
+
 
     .right-panel {
       position: relative;

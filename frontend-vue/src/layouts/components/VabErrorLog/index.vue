@@ -115,8 +115,8 @@
 </script>
 
 <style lang="scss" scoped>
-  ::v-deep {
-    .el-badge {
+  
+:deep(.el-badge) {
       .el-button {
         display: flex;
         align-items: center;
@@ -124,5 +124,5 @@
         height: 28px;
       }
     }
-  }
+
 </style>

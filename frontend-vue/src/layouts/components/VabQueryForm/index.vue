@@ -28,19 +28,17 @@
   .vab-query-form {
     margin-bottom: 10px;
 
-    ::v-deep {
-      .top-panel {
+    
+:deep(.top-panel) {
         @include panel;
       }
-
-      .bottom-panel {
+:deep(.bottom-panel) {
         @include panel;
 
         padding-top: 14px;
         border-top: 1px solid #dcdfe6;
       }
-
-      .left-panel {
+:deep(.left-panel) {
         @include panel;
 
         > .el-button,
@@ -48,8 +46,7 @@
           margin: 5px;
         }
       }
-
-      .right-panel {
+:deep(.right-panel) {
         @include panel;
 
         justify-content: flex-end;
@@ -58,6 +55,6 @@
           margin: 5px;
         }
       }
-    }
+
   }
 </style>

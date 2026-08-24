@@ -11,16 +11,18 @@
       <el-table-column label="預設" width="90">
         <template #default="{ row }"><el-tag v-if="isDefault(row)" size="small" type="success">預設</el-tag></template>
       </el-table-column>
-      <el-table-column label="操作" width="200" v-permissions="['catalog:write']">
+      <el-table-column v-permissions="['catalog:write']" label="操作" width="200">
         <template #default="{ row }">
-          <el-button size="small" :disabled="isDefault(row)" :loading="defaultBusy === row.id" @click="makeDefault(row)">設為預設</el-button>
+          <el-button size="small" :disabled="isDefault(row)" :loading="defaultBusy === row.id" @click="makeDefault(row)">
+            設為預設
+          </el-button>
           <el-button size="small" type="danger" @click="archive(row)">封存</el-button>
         </template>
       </el-table-column>
     </el-table>
     <div v-if="!profiles.length" class="empty-hint">尚無設定檔</div>
 
-    <el-dialog title="新增設定檔" v-model="dialogVisible" width="420px">
+    <el-dialog v-model="dialogVisible" title="新增設定檔" width="420px">
       <el-form label-width="90px" size="small">
         <el-form-item label="名稱"><el-input v-model="form.name" /></el-form-item>
         <el-form-item label="類型">
@@ -32,10 +34,12 @@
         </el-form-item>
         <el-form-item label="適用對象"><el-input v-model="form.target" /></el-form-item>
       </el-form>
-      <template #footer><div>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submit">新增</el-button>
-      </div></template>
+      <template #footer>
+        <div>
+          <el-button @click="dialogVisible = false">取消</el-button>
+          <el-button type="primary" :loading="saving" @click="submit">新增</el-button>
+        </div>
+      </template>
     </el-dialog>
   </div>
 </template>

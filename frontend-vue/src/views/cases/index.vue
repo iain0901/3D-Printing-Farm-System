@@ -3,64 +3,206 @@
     <vab-page-header title="3DRFM 案件中心" content="客戶案件、報價版本、付款與生產準備都在同一個工作流程內。" />
     <el-card shadow="never">
       <div class="toolbar">
-        <el-input v-model="query.search" clearable placeholder="搜尋案件編號、客戶、Email 或案件名稱" prefix-icon="Search" @keyup.enter="load" />
-        <el-select v-model="query.status" clearable placeholder="全部狀態" @change="load"><el-option v-for="item in statuses" :key="item.value" :label="item.label" :value="item.value" /></el-select>
+        <el-input
+          v-model="query.search"
+          clearable
+          placeholder="搜尋案件編號、客戶、Email 或案件名稱"
+          prefix-icon="Search"
+          @keyup.enter="load"
+        />
+        <el-select v-model="query.status" clearable placeholder="全部狀態" @change="load">
+          <el-option v-for="item in statuses" :key="item.value" :label="item.label" :value="item.value" />
+        </el-select>
         <el-button type="primary" icon="Refresh" @click="load">更新</el-button>
       </div>
       <el-table v-loading="loading" :data="cases" row-key="id" @row-click="openCase">
-        <el-table-column label="案件" min-width="185"><template #default="{ row }"><b>{{ row.caseNo }}</b><div class="muted">{{ row.project }}</div></template></el-table-column>
-        <el-table-column label="客戶" min-width="150"><template #default="{ row }">{{ row.customerSnapshot.name }}<div class="muted">{{ row.customerSnapshot.email }}</div></template></el-table-column>
-        <el-table-column label="狀態" width="150"><template #default="{ row }"><el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag></template></el-table-column>
-        <el-table-column label="報價總額" width="130"><template #default="{ row }">{{ row.quotedValue ? `NT$ ${Number(row.quotedValue).toLocaleString()}` : '—' }}</template></el-table-column>
-        <el-table-column label="付款" width="110"><template #default="{ row }">{{ paymentLabel(row.paymentStatus) }}</template></el-table-column>
-        <el-table-column label="更新時間" width="170"><template #default="{ row }">{{ formatDate(row.updatedAt) }}</template></el-table-column>
+        <el-table-column label="案件" min-width="185">
+          <template #default="{ row }">
+            <b>{{ row.caseNo }}</b>
+            <div class="muted">{{ row.project }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="客戶" min-width="150">
+          <template #default="{ row }">
+            {{ row.customerSnapshot.name }}
+            <div class="muted">{{ row.customerSnapshot.email }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="狀態" width="150">
+          <template #default="{ row }">
+            <el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="報價總額" width="130">
+          <template #default="{ row }">{{ row.quotedValue ? `NT$ ${Number(row.quotedValue).toLocaleString()}` : '—' }}</template>
+        </el-table-column>
+        <el-table-column label="付款" width="110">
+          <template #default="{ row }">{{ paymentLabel(row.paymentStatus) }}</template>
+        </el-table-column>
+        <el-table-column label="更新時間" width="170">
+          <template #default="{ row }">{{ formatDate(row.updatedAt) }}</template>
+        </el-table-column>
       </el-table>
     </el-card>
 
     <el-drawer v-model="drawerVisible" size="700px" :with-header="false" @closed="selected = null">
       <div v-if="selected" class="drawer-content">
         <div class="drawer-head">
-          <div><p class="muted">{{ selected.caseNo }}</p><h2>{{ selected.project }}</h2><p>{{ selected.customerSnapshot.name }} · {{ selected.customerSnapshot.phone || selected.customerSnapshot.email }}</p></div>
+          <div>
+            <p class="muted">{{ selected.caseNo }}</p>
+            <h2>{{ selected.project }}</h2>
+            <p>{{ selected.customerSnapshot.name }} · {{ selected.customerSnapshot.phone || selected.customerSnapshot.email }}</p>
+          </div>
           <el-tag :type="statusType(selected.status)">{{ statusLabel(selected.status) }}</el-tag>
         </div>
-        <el-alert v-if="selected.technicalReviewRequired" type="warning" :closable="false" show-icon title="此案件有檔案解析或尺寸異常，需由專員確認。" :description="selected.technicalReviewReasons.join('；')" />
-        <el-steps :active="workflowIndex(selected.status)" finish-status="success" simple class="case-steps"><el-step title="審核" /><el-step title="報價" /><el-step title="付款" /><el-step title="生產" /><el-step title="交付" /></el-steps>
+        <el-alert
+          v-if="selected.technicalReviewRequired"
+          type="warning"
+          :closable="false"
+          show-icon
+          title="此案件有檔案解析或尺寸異常，需由專員確認。"
+          :description="selected.technicalReviewReasons.join('；')"
+        />
+        <el-steps :active="workflowIndex(selected.status)" finish-status="success" simple class="case-steps">
+          <el-step title="審核" />
+          <el-step title="報價" />
+          <el-step title="付款" />
+          <el-step title="生產" />
+          <el-step title="交付" />
+        </el-steps>
 
         <el-tabs v-model="drawerTab">
           <el-tab-pane label="案件內容" name="overview">
-            <div class="detail-grid"><div><span>服務方式</span><b>{{ selected.mode === 'estimate' ? '快速估價' : '專員協助' }}</b></div><div><span>來源</span><b>{{ selected.source }}</b></div><div><span>希望日期</span><b>{{ selected.dueDate || '未指定' }}</b></div><div><span>預算</span><b>NT$ {{ selected.budget || 0 }}</b></div></div>
+            <div class="detail-grid">
+              <div>
+                <span>服務方式</span>
+                <b>{{ selected.mode === 'estimate' ? '快速估價' : '專員協助' }}</b>
+              </div>
+              <div>
+                <span>來源</span>
+                <b>{{ selected.source }}</b>
+              </div>
+              <div>
+                <span>希望日期</span>
+                <b>{{ selected.dueDate || '未指定' }}</b>
+              </div>
+              <div>
+                <span>預算</span>
+                <b>NT$ {{ selected.budget || 0 }}</b>
+              </div>
+            </div>
             <h3>零件</h3>
-            <el-table :data="selected.parts" size="small"><el-table-column prop="name" label="零件" /><el-table-column prop="material" label="材料" /><el-table-column prop="color" label="顏色" /><el-table-column prop="quantity" label="數量" width="70" /><el-table-column prop="readiness" label="準備" width="100" /></el-table>
-            <h3>內部備註</h3><p class="notes">{{ selected.notes || '—' }}</p>
-            <div class="section-head"><h3>付款紀錄</h3><el-button size="small" type="primary" @click="openPayment">登錄付款</el-button></div>
-            <el-table :data="selected.payments || []" size="small"><el-table-column prop="recordedAt" label="時間" min-width="160"><template #default="{ row }">{{ formatDate(row.recordedAt) }}</template></el-table-column><el-table-column prop="status" label="狀態" width="100"><template #default="{ row }">{{ paymentLabel(row.status) }}</template></el-table-column><el-table-column prop="method" label="方式" width="130" /><el-table-column prop="amount" label="金額" width="110"><template #default="{ row }">NT$ {{ Number(row.amount || 0).toLocaleString() }}</template></el-table-column><el-table-column prop="reference" label="參考號" min-width="130" /></el-table>
+            <el-table :data="selected.parts" size="small">
+              <el-table-column prop="name" label="零件" />
+              <el-table-column prop="material" label="材料" />
+              <el-table-column prop="color" label="顏色" />
+              <el-table-column prop="quantity" label="數量" width="70" />
+              <el-table-column prop="readiness" label="準備" width="100" />
+            </el-table>
+            <h3>內部備註</h3>
+            <p class="notes">{{ selected.notes || '—' }}</p>
+            <div class="section-head">
+              <h3>付款紀錄</h3>
+              <el-button size="small" type="primary" @click="openPayment">登錄付款</el-button>
+            </div>
+            <el-table :data="selected.payments || []" size="small">
+              <el-table-column prop="recordedAt" label="時間" min-width="160">
+                <template #default="{ row }">{{ formatDate(row.recordedAt) }}</template>
+              </el-table-column>
+              <el-table-column prop="status" label="狀態" width="100">
+                <template #default="{ row }">{{ paymentLabel(row.status) }}</template>
+              </el-table-column>
+              <el-table-column prop="method" label="方式" width="130" />
+              <el-table-column prop="amount" label="金額" width="110">
+                <template #default="{ row }">NT$ {{ Number(row.amount || 0).toLocaleString() }}</template>
+              </el-table-column>
+              <el-table-column prop="reference" label="參考號" min-width="130" />
+            </el-table>
           </el-tab-pane>
           <el-tab-pane label="報價版本" name="quotes">
             <el-button type="primary" size="small" icon="Plus" @click="openQuoteDialog">建立報價版本</el-button>
-            <div v-for="quote in selected.quoteVersions" :key="quote.id" class="quote-version"><div><b>V{{ quote.versionNo }}</b><el-tag size="small" style="margin-left: 8px">{{ quote.status }}</el-tag><p>{{ quote.scope || '未填寫範圍' }}</p></div><strong>NT$ {{ Number(quote.customerTotal || 0).toLocaleString() }}</strong></div>
+            <div v-for="quote in selected.quoteVersions" :key="quote.id" class="quote-version">
+              <div>
+                <b>V{{ quote.versionNo }}</b>
+                <el-tag size="small" style="margin-left: 8px">{{ quote.status }}</el-tag>
+                <p>{{ quote.scope || '未填寫範圍' }}</p>
+              </div>
+              <strong>NT$ {{ Number(quote.customerTotal || 0).toLocaleString() }}</strong>
+            </div>
           </el-tab-pane>
           <el-tab-pane label="生產閘門" name="production">
-            <el-alert :type="readiness && readiness.allowed ? 'success' : 'warning'" :closable="false" show-icon :title="readiness && readiness.allowed ? '已符合開始列印條件' : '仍有生產條件待完成'" />
-            <ul class="checks"><li v-for="(value, key) in readiness && readiness.checks" :key="key"><i :class="value ? 'el-icon-success ok' : 'el-icon-warning-outline waiting'" />{{ readinessLabel(key) }}</li></ul>
+            <el-alert
+              :type="readiness && readiness.allowed ? 'success' : 'warning'"
+              :closable="false"
+              show-icon
+              :title="readiness && readiness.allowed ? '已符合開始列印條件' : '仍有生產條件待完成'"
+            />
+            <ul class="checks">
+              <li v-for="(value, key) in readiness && readiness.checks" :key="key">
+                <i :class="value ? 'el-icon-success ok' : 'el-icon-warning-outline waiting'" />
+                {{ readinessLabel(key) }}
+              </li>
+            </ul>
 
             <section class="orca-panel">
-              <div class="orca-heading"><div><h3>OrcaSlicer 切片</h3><p>設定檔由此系統的 `/profiles` 唯讀目錄提供；切片完成後仍需由人員核准 G-code。</p></div><el-tag type="info">Pinned OrcaSlicer</el-tag></div>
+              <div class="orca-heading">
+                <div>
+                  <h3>OrcaSlicer 切片</h3>
+                  <p>設定檔由此系統的 `/profiles` 唯讀目錄提供；切片完成後仍需由人員核准 G-code。</p>
+                </div>
+                <el-tag type="info">Pinned OrcaSlicer</el-tag>
+              </div>
               <el-form label-position="top" class="orca-form">
-                <el-form-item label="來源模型"><el-select v-model="orcaForm.sourceFileId" placeholder="選擇案件模型"><el-option v-for="file in sourceFiles" :key="file.id" :label="file.name" :value="file.id" /></el-select></el-form-item>
-                <el-form-item label="設定檔名稱"><el-input v-model.trim="orcaForm.profileId" placeholder="例如：corexy-pla-020" /></el-form-item>
-                <el-form-item label="印表機 ID"><el-input v-model.trim="orcaForm.printerId" placeholder="選填；預設使用案件印表機" /></el-form-item>
-                <el-form-item label="機台／製程設定"><el-input v-model.trim="orcaForm.settingsPath" placeholder="/profiles/machine.json;/profiles/process.json" /></el-form-item>
-                <el-form-item label="材料設定"><el-input v-model.trim="orcaForm.filamentPath" placeholder="/profiles/PLA.json" /></el-form-item>
-                <el-button type="primary" :loading="orcaSubmitting" :disabled="!orcaForm.sourceFileId || !orcaForm.profileId" @click="queueOrcaSlice">送往 OrcaSlicer</el-button>
+                <el-form-item label="來源模型">
+                  <el-select v-model="orcaForm.sourceFileId" placeholder="選擇案件模型">
+                    <el-option v-for="file in sourceFiles" :key="file.id" :label="file.name" :value="file.id" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="設定檔名稱">
+                  <el-input v-model.trim="orcaForm.profileId" placeholder="例如：corexy-pla-020" />
+                </el-form-item>
+                <el-form-item label="印表機 ID">
+                  <el-input v-model.trim="orcaForm.printerId" placeholder="選填；預設使用案件印表機" />
+                </el-form-item>
+                <el-form-item label="機台／製程設定">
+                  <el-input v-model.trim="orcaForm.settingsPath" placeholder="/profiles/machine.json;/profiles/process.json" />
+                </el-form-item>
+                <el-form-item label="材料設定">
+                  <el-input v-model.trim="orcaForm.filamentPath" placeholder="/profiles/PLA.json" />
+                </el-form-item>
+                <el-button
+                  type="primary"
+                  :loading="orcaSubmitting"
+                  :disabled="!orcaForm.sourceFileId || !orcaForm.profileId"
+                  @click="queueOrcaSlice"
+                >
+                  送往 OrcaSlicer
+                </el-button>
               </el-form>
               <el-table v-if="selected.slicerJobs && selected.slicerJobs.length" :data="selected.slicerJobs" size="small" class="orca-jobs">
                 <el-table-column prop="profileId" label="設定檔" min-width="130" />
                 <el-table-column prop="status" label="切片狀態" width="105" />
-                <el-table-column label="預估" width="130"><template #default="{ row }">{{ row.estimatedMinutes || 0 }} 分／{{ row.estimatedGrams || 0 }} g</template></el-table-column>
-                <el-table-column label="核准" width="145"><template #default="{ row }"><el-button v-if="row.status === 'completed' && !row.approvedAt" size="small" type="success" @click="approveOrcaSlice(row)">核准 G-code</el-button><span v-else>{{ row.approvedAt ? '已核准' : '待完成' }}</span></template></el-table-column>
+                <el-table-column label="預估" width="130">
+                  <template #default="{ row }">{{ row.estimatedMinutes || 0 }} 分／{{ row.estimatedGrams || 0 }} g</template>
+                </el-table-column>
+                <el-table-column label="核准" width="145">
+                  <template #default="{ row }">
+                    <el-button
+                      v-if="row.status === 'completed' && !row.approvedAt"
+                      size="small"
+                      type="success"
+                      @click="approveOrcaSlice(row)"
+                    >
+                      核准 G-code
+                    </el-button>
+                    <span v-else>{{ row.approvedAt ? '已核准' : '待完成' }}</span>
+                  </template>
+                </el-table-column>
               </el-table>
             </section>
-            <el-button type="success" :disabled="!readiness || !readiness.allowed" @click="createProduction">建立 FarmFlow 生產任務</el-button>
+            <el-button type="success" :disabled="!readiness || !readiness.allowed" @click="createProduction">
+              建立 FarmFlow 生產任務
+            </el-button>
 
             <div class="operations-panel">
               <template v-if="selected.status === 'ready_to_print'">
@@ -70,7 +212,14 @@
                 <el-input v-model="operations.printerId" placeholder="印表機 ID" />
                 <el-input-number v-model="operations.estimatedMinutes" :min="1" :max="43200" />
                 <el-button size="small" @click="confirmSchedule">確認排程</el-button>
-                <el-button v-if="selected.schedule && selected.schedule.confirmedAt" size="small" type="primary" @click="recordAttempt('started')">開始列印</el-button>
+                <el-button
+                  v-if="selected.schedule && selected.schedule.confirmedAt"
+                  size="small"
+                  type="primary"
+                  @click="recordAttempt('started')"
+                >
+                  開始列印
+                </el-button>
               </template>
               <template v-if="selected.status === 'printing'">
                 <h3>列印作業</h3>
@@ -91,37 +240,84 @@
                 <el-button size="small" @click="openAfterSales">建立售後重印案件</el-button>
               </template>
             </div>
-</el-tab-pane>
+          </el-tab-pane>
           <el-tab-pane label="歷程" name="history">
-            <el-timeline><el-timeline-item v-for="item in selected.statusHistory" :key="item.id" :timestamp="formatDate(item.at)">{{ statusLabel(item.from) || '建立' }} → {{ statusLabel(item.to) }} {{ item.reason ? `：${item.reason}` : '' }}</el-timeline-item></el-timeline>
+            <el-timeline>
+              <el-timeline-item v-for="item in selected.statusHistory" :key="item.id" :timestamp="formatDate(item.at)">
+                {{ statusLabel(item.from) || '建立' }} → {{ statusLabel(item.to) }} {{ item.reason ? `：${item.reason}` : '' }}
+              </el-timeline-item>
+            </el-timeline>
           </el-tab-pane>
         </el-tabs>
-        <div class="actions"><el-select v-model="targetStatus" placeholder="變更案件狀態"><el-option v-for="item in statuses" :key="item.value" :label="item.label" :value="item.value" /></el-select><el-button type="primary" :disabled="!targetStatus" @click="changeStatus">套用狀態</el-button></div>
+        <div class="actions">
+          <el-select v-model="targetStatus" placeholder="變更案件狀態">
+            <el-option v-for="item in statuses" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
+          <el-button type="primary" :disabled="!targetStatus" @click="changeStatus">套用狀態</el-button>
+        </div>
       </div>
     </el-drawer>
 
-    <el-dialog title="建立正式報價版本" v-model="quoteDialog" width="640px">
+    <el-dialog v-model="quoteDialog" title="建立正式報價版本" width="640px">
       <el-collapse v-model="autoQuoteOpen" class="aq-collapse">
         <el-collapse-item name="auto">
           <template #title><b>自動估價（依切片數據，一鍵帶入）</b></template>
           <div class="aq-grid">
-            <label>切片克重 g<el-input-number v-model="autoQuoteForm.grams" :min="0" size="small" /></label>
-            <label>列印時間 分<el-input-number v-model="autoQuoteForm.minutes" :min="0" size="small" /></label>
-            <label>切片範圍
-              <el-select v-model="autoQuoteForm.scope" size="small"><el-option label="單組切片（×組數）" value="unit" /><el-option label="整單總量（不乘）" value="order" /></el-select>
+            <label>
+              切片克重 g
+              <el-input-number v-model="autoQuoteForm.grams" :min="0" size="small" />
             </label>
-            <label>成品組數<el-input-number v-model="autoQuoteForm.quantity" :min="1" size="small" /></label>
-            <label>顏色模式
-              <el-select v-model="autoQuoteForm.colorMode" size="small"><el-option label="單色" value="single" /><el-option label="組合多色" value="combined" /><el-option label="分開多色" value="separated" /></el-select>
+            <label>
+              列印時間 分
+              <el-input-number v-model="autoQuoteForm.minutes" :min="0" size="small" />
             </label>
-            <label>顏色數<el-input-number v-model="autoQuoteForm.colorCount" :min="1" :max="64" size="small" /></label>
-            <label>最大邊長 mm<el-input-number v-model="autoQuoteForm.maxSizeMm" :min="0" size="small" /></label>
-            <label>支撐占比 %<el-input-number v-model="autoQuoteForm.supportPercent" :min="0" :max="100" size="small" /></label>
-            <label>品質責任
-              <el-select v-model="autoQuoteForm.quality" size="small"><el-option label="一般" value="standard" /><el-option label="外觀優先" value="appearance" /><el-option label="功能／公差" value="functional" /></el-select>
+            <label>
+              切片範圍
+              <el-select v-model="autoQuoteForm.scope" size="small">
+                <el-option label="單組切片（×組數）" value="unit" />
+                <el-option label="整單總量（不乘）" value="order" />
+              </el-select>
             </label>
-            <label>交期
-              <el-select v-model="autoQuoteForm.dueInHours" size="small"><el-option label="一般" :value="null" /><el-option label="72hr" :value="72" /><el-option label="48hr" :value="48" /><el-option label="24hr" :value="24" /></el-select>
+            <label>
+              成品組數
+              <el-input-number v-model="autoQuoteForm.quantity" :min="1" size="small" />
+            </label>
+            <label>
+              顏色模式
+              <el-select v-model="autoQuoteForm.colorMode" size="small">
+                <el-option label="單色" value="single" />
+                <el-option label="組合多色" value="combined" />
+                <el-option label="分開多色" value="separated" />
+              </el-select>
+            </label>
+            <label>
+              顏色數
+              <el-input-number v-model="autoQuoteForm.colorCount" :min="1" :max="64" size="small" />
+            </label>
+            <label>
+              最大邊長 mm
+              <el-input-number v-model="autoQuoteForm.maxSizeMm" :min="0" size="small" />
+            </label>
+            <label>
+              支撐占比 %
+              <el-input-number v-model="autoQuoteForm.supportPercent" :min="0" :max="100" size="small" />
+            </label>
+            <label>
+              品質責任
+              <el-select v-model="autoQuoteForm.quality" size="small">
+                <el-option label="一般" value="standard" />
+                <el-option label="外觀優先" value="appearance" />
+                <el-option label="功能／公差" value="functional" />
+              </el-select>
+            </label>
+            <label>
+              交期
+              <el-select v-model="autoQuoteForm.dueInHours" size="small">
+                <el-option label="一般" :value="null" />
+                <el-option label="72hr" :value="72" />
+                <el-option label="48hr" :value="48" />
+                <el-option label="24hr" :value="24" />
+              </el-select>
             </label>
           </div>
           <div class="aq-actions">
@@ -130,7 +326,10 @@
           </div>
           <template v-if="autoQuoteResult">
             <ul class="aq-lines">
-              <li v-for="line in autoQuoteVisibleLines" :key="line.key"><span>{{ line.label }}</span><b>{{ line.amount &lt; 0 ? '-' : '' }}NT$ {{ Math.abs(line.amount).toLocaleString() }}</b></li>
+              <li v-for="line in autoQuoteVisibleLines" :key="line.key">
+                <span>{{ line.label }}</span>
+                <b>{{ line.amount &lt; 0 ? '-' : '' }}NT$ {{ Math.abs(line.amount).toLocaleString() }}</b>
+              </li>
             </ul>
             <el-alert
               v-if="autoQuoteResult.escalated"
@@ -145,46 +344,259 @@
           </template>
         </el-collapse-item>
       </el-collapse>
-      <el-form label-width="100px"><el-form-item label="報價範圍"><el-input v-model="quoteForm.scope" type="textarea" :rows="3" /></el-form-item><el-form-item label="材料"><el-input-number v-model="quoteForm.breakdown.material" :min="0" /></el-form-item><el-form-item label="機台工時"><el-input-number v-model="quoteForm.breakdown.machineTime" :min="0" /></el-form-item><el-form-item label="設定費"><el-input-number v-model="quoteForm.breakdown.setup" :min="0" /></el-form-item><el-form-item label="建模"><el-input-number v-model="quoteForm.breakdown.modeling" :min="0" /></el-form-item><el-form-item label="後處理"><el-input-number v-model="quoteForm.breakdown.postProcessing" :min="0" /></el-form-item><el-form-item label="包裝運送"><el-input-number v-model="quoteForm.breakdown.shipping" :min="0" /></el-form-item><el-form-item label="折扣"><el-input-number v-model="quoteForm.breakdown.discount" :min="0" /></el-form-item><el-form-item label="稅額"><el-input-number v-model="quoteForm.breakdown.tax" :min="0" /></el-form-item><el-form-item label="發送客戶"><el-switch v-model="quoteForm.send" /></el-form-item></el-form>
-      <template #footer><div><el-button @click="quoteDialog = false">取消</el-button><el-button type="primary" :loading="savingQuote" @click="saveQuote">建立版本</el-button></div></template>
+      <el-form label-width="100px">
+        <el-form-item label="報價範圍"><el-input v-model="quoteForm.scope" type="textarea" :rows="3" /></el-form-item>
+        <el-form-item label="材料"><el-input-number v-model="quoteForm.breakdown.material" :min="0" /></el-form-item>
+        <el-form-item label="機台工時"><el-input-number v-model="quoteForm.breakdown.machineTime" :min="0" /></el-form-item>
+        <el-form-item label="設定費"><el-input-number v-model="quoteForm.breakdown.setup" :min="0" /></el-form-item>
+        <el-form-item label="建模"><el-input-number v-model="quoteForm.breakdown.modeling" :min="0" /></el-form-item>
+        <el-form-item label="後處理"><el-input-number v-model="quoteForm.breakdown.postProcessing" :min="0" /></el-form-item>
+        <el-form-item label="包裝運送"><el-input-number v-model="quoteForm.breakdown.shipping" :min="0" /></el-form-item>
+        <el-form-item label="折扣"><el-input-number v-model="quoteForm.breakdown.discount" :min="0" /></el-form-item>
+        <el-form-item label="稅額"><el-input-number v-model="quoteForm.breakdown.tax" :min="0" /></el-form-item>
+        <el-form-item label="發送客戶"><el-switch v-model="quoteForm.send" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <div>
+          <el-button @click="quoteDialog = false">取消</el-button>
+          <el-button type="primary" :loading="savingQuote" @click="saveQuote">建立版本</el-button>
+        </div>
+      </template>
     </el-dialog>
-    <el-dialog title="登錄付款" v-model="paymentDialog" width="500px">
-      <el-form label-width="96px"><el-form-item label="付款狀態"><el-select v-model="paymentForm.status" style="width: 100%"><el-option label="已付款" value="paid" /><el-option label="月結" value="monthly_terms" /><el-option label="免付款" value="waived" /><el-option label="退款" value="refunded" /></el-select></el-form-item><el-form-item label="付款方式"><el-select v-model="paymentForm.method" style="width: 100%"><el-option label="銀行轉帳" value="bank_transfer" /><el-option label="現金" value="cash" /><el-option label="LINE Pay" value="line_pay" /><el-option label="街口支付" value="jkopay" /><el-option label="PayUni" value="payuni" /><el-option label="月結" value="monthly_terms" /><el-option label="免付款" value="waived" /><el-option label="退款" value="refund" /></el-select></el-form-item><el-form-item label="金額"><el-input-number v-model="paymentForm.amount" :min="0" style="width: 100%" /></el-form-item><el-form-item label="參考號"><el-input v-model.trim="paymentForm.reference" /></el-form-item><el-form-item label="備註"><el-input v-model.trim="paymentForm.note" type="textarea" :rows="3" /></el-form-item></el-form>
-      <template #footer><div><el-button @click="paymentDialog = false">取消</el-button><el-button type="primary" :loading="paymentSaving" @click="savePayment">儲存付款紀錄</el-button></div></template>
+    <el-dialog v-model="paymentDialog" title="登錄付款" width="500px">
+      <el-form label-width="96px">
+        <el-form-item label="付款狀態">
+          <el-select v-model="paymentForm.status" style="width: 100%">
+            <el-option label="已付款" value="paid" />
+            <el-option label="月結" value="monthly_terms" />
+            <el-option label="免付款" value="waived" />
+            <el-option label="退款" value="refunded" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="付款方式">
+          <el-select v-model="paymentForm.method" style="width: 100%">
+            <el-option label="銀行轉帳" value="bank_transfer" />
+            <el-option label="現金" value="cash" />
+            <el-option label="LINE Pay" value="line_pay" />
+            <el-option label="街口支付" value="jkopay" />
+            <el-option label="PayUni" value="payuni" />
+            <el-option label="月結" value="monthly_terms" />
+            <el-option label="免付款" value="waived" />
+            <el-option label="退款" value="refund" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="金額"><el-input-number v-model="paymentForm.amount" :min="0" style="width: 100%" /></el-form-item>
+        <el-form-item label="參考號"><el-input v-model.trim="paymentForm.reference" /></el-form-item>
+        <el-form-item label="備註"><el-input v-model.trim="paymentForm.note" type="textarea" :rows="3" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <div>
+          <el-button @click="paymentDialog = false">取消</el-button>
+          <el-button type="primary" :loading="paymentSaving" @click="savePayment">儲存付款紀錄</el-button>
+        </div>
+      </template>
     </el-dialog>
-    <el-dialog title="登錄交付" v-model="deliveryDialog" width="500px">
-      <el-form label-width="96px"><el-form-item label="交付方式"><el-select v-model="deliveryForm.method" style="width: 100%"><el-option label="自取" value="pickup" /><el-option label="宅配／貨運" value="courier" /><el-option label="內部配送" value="internal_delivery" /></el-select></el-form-item><el-form-item label="交付狀態"><el-select v-model="deliveryForm.status" style="width: 100%"><el-option label="準備中" value="ready" /><el-option label="已寄出" value="shipped" /><el-option label="已交付" value="delivered" /></el-select></el-form-item><el-form-item label="承運商"><el-input v-model.trim="deliveryForm.carrier" /></el-form-item><el-form-item label="追蹤編號"><el-input v-model.trim="deliveryForm.trackingNumber" /></el-form-item><el-form-item label="備註"><el-input v-model.trim="deliveryForm.note" type="textarea" :rows="3" /></el-form-item></el-form>
-      <template #footer><div><el-button @click="deliveryDialog = false">取消</el-button><el-button type="primary" :loading="deliverySaving" @click="saveDelivery">儲存交付紀錄</el-button></div></template>
+    <el-dialog v-model="deliveryDialog" title="登錄交付" width="500px">
+      <el-form label-width="96px">
+        <el-form-item label="交付方式">
+          <el-select v-model="deliveryForm.method" style="width: 100%">
+            <el-option label="自取" value="pickup" />
+            <el-option label="宅配／貨運" value="courier" />
+            <el-option label="內部配送" value="internal_delivery" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="交付狀態">
+          <el-select v-model="deliveryForm.status" style="width: 100%">
+            <el-option label="準備中" value="ready" />
+            <el-option label="已寄出" value="shipped" />
+            <el-option label="已交付" value="delivered" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="承運商"><el-input v-model.trim="deliveryForm.carrier" /></el-form-item>
+        <el-form-item label="追蹤編號"><el-input v-model.trim="deliveryForm.trackingNumber" /></el-form-item>
+        <el-form-item label="備註"><el-input v-model.trim="deliveryForm.note" type="textarea" :rows="3" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <div>
+          <el-button @click="deliveryDialog = false">取消</el-button>
+          <el-button type="primary" :loading="deliverySaving" @click="saveDelivery">儲存交付紀錄</el-button>
+        </div>
+      </template>
     </el-dialog>
   </div>
 </template>
 
 <script>
-  import { approveCaseSlicerJob, autoQuote, createCaseAfterSales, createCaseOrcaSlice, createCaseProductionJobs, createCaseQuote, confirmCaseSchedule, fetchCase, fetchCases, recordCasePayment, recordPrintAttempt, recordQualityCheck, suggestCaseScheduleAutomatically, transitionCase, updateCaseDelivery } from '@/api/cases'
+  import {
+    approveCaseSlicerJob,
+    autoQuote,
+    createCaseAfterSales,
+    createCaseOrcaSlice,
+    createCaseProductionJobs,
+    createCaseQuote,
+    confirmCaseSchedule,
+    fetchCase,
+    fetchCases,
+    recordCasePayment,
+    recordPrintAttempt,
+    recordQualityCheck,
+    suggestCaseScheduleAutomatically,
+    transitionCase,
+    updateCaseDelivery,
+  } from '@/api/cases'
   const statuses = [
-    ['new', '新案件'], ['under_review', '審核中'], ['supplement_requested', '等待補件'], ['awaiting_customer', '等待客戶回覆'], ['formal_quote_sent', '正式報價已送出'], ['accepted', '客戶已接受'], ['revision_requested', '客戶要求修改'], ['awaiting_payment', '等待付款'], ['paid', '已付款'], ['production_pending', '待生產確認'], ['ready_to_print', '可開始列印'], ['printing', '列印中'], ['quality_check', '品質檢查'], ['ready_for_delivery', '待交付'], ['completed', '已完成'], ['cancelled', '已取消'], ['aftersales', '售後處理'],
+    ['new', '新案件'],
+    ['under_review', '審核中'],
+    ['supplement_requested', '等待補件'],
+    ['awaiting_customer', '等待客戶回覆'],
+    ['formal_quote_sent', '正式報價已送出'],
+    ['accepted', '客戶已接受'],
+    ['revision_requested', '客戶要求修改'],
+    ['awaiting_payment', '等待付款'],
+    ['paid', '已付款'],
+    ['production_pending', '待生產確認'],
+    ['ready_to_print', '可開始列印'],
+    ['printing', '列印中'],
+    ['quality_check', '品質檢查'],
+    ['ready_for_delivery', '待交付'],
+    ['completed', '已完成'],
+    ['cancelled', '已取消'],
+    ['aftersales', '售後處理'],
   ]
-  const quoteForm = () => ({ scope: '', send: true, breakdown: { material: 0, machineTime: 0, setup: 0, modeling: 0, postProcessing: 0, multicolor: 0, packing: 0, shipping: 0, risk: 0, discount: 0, tax: 0 } })
-  const autoQuoteForm = () => ({ grams: 0, minutes: 0, scope: 'unit', quantity: 1, material: 'PETG', colorMode: 'single', colorCount: 1, maxSizeMm: 0, supportPercent: 0, quality: 'standard', dueInHours: null, fileRepair: false })
+  const quoteForm = () => ({
+    scope: '',
+    send: true,
+    breakdown: {
+      material: 0,
+      machineTime: 0,
+      setup: 0,
+      modeling: 0,
+      postProcessing: 0,
+      multicolor: 0,
+      packing: 0,
+      shipping: 0,
+      risk: 0,
+      discount: 0,
+      tax: 0,
+    },
+  })
+  const autoQuoteForm = () => ({
+    grams: 0,
+    minutes: 0,
+    scope: 'unit',
+    quantity: 1,
+    material: 'PETG',
+    colorMode: 'single',
+    colorCount: 1,
+    maxSizeMm: 0,
+    supportPercent: 0,
+    quality: 'standard',
+    dueInHours: null,
+    fileRepair: false,
+  })
   export default {
     name: 'Cases',
-    data() { return { loading: false, cases: [], query: { search: '', status: '' }, statuses: statuses.map(([value, label]) => ({ value, label })), drawerVisible: false, drawerTab: 'overview', selected: null, sourceFiles: [], readiness: null, targetStatus: '', quoteDialog: false, quoteForm: quoteForm(), savingQuote: false, autoQuoteOpen: ['auto'], autoQuoteForm: autoQuoteForm(), autoQuoteResult: null, autoQuoting: false, paymentDialog: false, paymentSaving: false, paymentForm: { status: 'paid', method: 'bank_transfer', amount: 0, reference: '', note: '' }, deliveryDialog: false, deliverySaving: false, deliveryForm: { method: 'pickup', status: 'delivered', carrier: '', trackingNumber: '', note: '' }, orcaSubmitting: false, orcaForm: { sourceFileId: '', profileId: '', printerId: '', settingsPath: '', filamentPath: '' }, operations: { startAt: '', printerId: '', estimatedMinutes: 60 } } },
+    data() {
+      return {
+        loading: false,
+        cases: [],
+        query: { search: '', status: '' },
+        statuses: statuses.map(([value, label]) => ({ value, label })),
+        drawerVisible: false,
+        drawerTab: 'overview',
+        selected: null,
+        sourceFiles: [],
+        readiness: null,
+        targetStatus: '',
+        quoteDialog: false,
+        quoteForm: quoteForm(),
+        savingQuote: false,
+        autoQuoteOpen: ['auto'],
+        autoQuoteForm: autoQuoteForm(),
+        autoQuoteResult: null,
+        autoQuoting: false,
+        paymentDialog: false,
+        paymentSaving: false,
+        paymentForm: { status: 'paid', method: 'bank_transfer', amount: 0, reference: '', note: '' },
+        deliveryDialog: false,
+        deliverySaving: false,
+        deliveryForm: { method: 'pickup', status: 'delivered', carrier: '', trackingNumber: '', note: '' },
+        orcaSubmitting: false,
+        orcaForm: { sourceFileId: '', profileId: '', printerId: '', settingsPath: '', filamentPath: '' },
+        operations: { startAt: '', printerId: '', estimatedMinutes: 60 },
+      }
+    },
     computed: {
       autoQuoteVisibleLines() {
         if (!this.autoQuoteResult) return []
         return this.autoQuoteResult.lines.filter((line) => line.amount !== 0 && line.key !== 'total')
       },
     },
-    created() { this.load() },
+    created() {
+      this.load()
+    },
     methods: {
-      async load() { this.loading = true; try { const result = await fetchCases(this.query); this.cases = result.cases || [] } finally { this.loading = false } },
-      async openCase(row) { const result = await fetchCase(row.id); this.selected = result.case; this.sourceFiles = result.sourceFiles || []; this.readiness = result.readiness; this.targetStatus = ''; this.orcaForm = { sourceFileId: (result.sourceFiles || [])[0]?.id || '', profileId: '', printerId: result.case.printerId || '', settingsPath: '', filamentPath: '' }; this.operations = { startAt: result.case.schedule?.startAt || new Date(Date.now() + 3600000).toISOString(), printerId: result.case.printerId || '', estimatedMinutes: result.case.scheduleSuggestion?.estimatedMinutes || 60 }; this.drawerVisible = true },
-      async refreshSelected() { if (!this.selected) return; const result = await fetchCase(this.selected.id); this.selected = result.case; this.sourceFiles = result.sourceFiles || []; this.readiness = result.readiness; await this.load() },
-      async changeStatus() { try { await transitionCase(this.selected.id, this.targetStatus); this.$baseMessage('案件狀態已更新。', 'success'); await this.refreshSelected() } catch (_) {} },
-      async saveQuote() { this.savingQuote = true; try { await createCaseQuote(this.selected.id, this.quoteForm); this.quoteDialog = false; this.quoteForm = quoteForm(); this.$baseMessage('報價版本已建立。', 'success'); await this.refreshSelected() } finally { this.savingQuote = false } },
+      async load() {
+        this.loading = true
+        try {
+          const result = await fetchCases(this.query)
+          this.cases = result.cases || []
+        } finally {
+          this.loading = false
+        }
+      },
+      async openCase(row) {
+        const result = await fetchCase(row.id)
+        this.selected = result.case
+        this.sourceFiles = result.sourceFiles || []
+        this.readiness = result.readiness
+        this.targetStatus = ''
+        this.orcaForm = {
+          sourceFileId: (result.sourceFiles || [])[0]?.id || '',
+          profileId: '',
+          printerId: result.case.printerId || '',
+          settingsPath: '',
+          filamentPath: '',
+        }
+        this.operations = {
+          startAt: result.case.schedule?.startAt || new Date(Date.now() + 3600000).toISOString(),
+          printerId: result.case.printerId || '',
+          estimatedMinutes: result.case.scheduleSuggestion?.estimatedMinutes || 60,
+        }
+        this.drawerVisible = true
+      },
+      async refreshSelected() {
+        if (!this.selected) return
+        const result = await fetchCase(this.selected.id)
+        this.selected = result.case
+        this.sourceFiles = result.sourceFiles || []
+        this.readiness = result.readiness
+        await this.load()
+      },
+      async changeStatus() {
+        try {
+          await transitionCase(this.selected.id, this.targetStatus)
+          this.$baseMessage('案件狀態已更新。', 'success')
+          await this.refreshSelected()
+        } catch (_) {}
+      },
+      async saveQuote() {
+        this.savingQuote = true
+        try {
+          await createCaseQuote(this.selected.id, this.quoteForm)
+          this.quoteDialog = false
+          this.quoteForm = quoteForm()
+          this.$baseMessage('報價版本已建立。', 'success')
+          await this.refreshSelected()
+        } finally {
+          this.savingQuote = false
+        }
+      },
       openQuoteDialog() {
         this.autoQuoteResult = null
-        const caseQty = Number(this.selected?.defaults?.quantity || (this.selected?.parts || []).reduce((sum, part) => sum + Number(part.quantity || 1), 0) || 1)
+        const caseQty = Number(
+          this.selected?.defaults?.quantity || (this.selected?.parts || []).reduce((sum, part) => sum + Number(part.quantity || 1), 0) || 1
+        )
         this.autoQuoteForm = { ...autoQuoteForm(), quantity: Math.max(1, caseQty) }
         this.quoteDialog = true
       },
@@ -207,7 +619,9 @@
         if (!result) return
         const line = (key) => result.lines.find((item) => item.key === key)
         const amountOf = (key) => Math.max(0, Number(line(key)?.amount || 0))
-        const servicesTotal = result.lines.filter((item) => item.key.startsWith('service_')).reduce((sum, item) => sum + Math.max(0, Number(item.amount || 0)), 0)
+        const servicesTotal = result.lines
+          .filter((item) => item.key.startsWith('service_'))
+          .reduce((sum, item) => sum + Math.max(0, Number(item.amount || 0)), 0)
         const breakdown = this.quoteForm.breakdown
         breakdown.material = amountOf('base_weight')
         breakdown.machineTime = amountOf('base_time')
@@ -219,43 +633,375 @@
         breakdown.tax = amountOf('tax')
         breakdown.modeling = amountOf('service_modeling')
         if (!this.quoteForm.scope) {
-          this.quoteForm.scope = `${result.input.material}｜${result.pricing.tierPricePerGram}/g｜基礎費 NT$${Number(result.pricing.productionBase).toLocaleString()}${result.escalated ? '｜⚠ 需專員確認' : ''}`
+          this.quoteForm.scope = `${result.input.material}｜${result.pricing.tierPricePerGram}/g｜基礎費 NT$${Number(
+            result.pricing.productionBase
+          ).toLocaleString()}${result.escalated ? '｜⚠ 需專員確認' : ''}`
         }
         this.$baseMessage('已帶入報價欄位，可再手動微調。', 'success')
       },
-      openPayment() { this.paymentForm = { status: 'paid', method: 'bank_transfer', amount: Number(this.selected.quotedValue || this.selected.quoteVersions?.[0]?.customerTotal || 0), reference: '', note: '' }; this.paymentDialog = true },
-      async savePayment() { this.paymentSaving = true; try { await recordCasePayment(this.selected.id, this.paymentForm); this.paymentDialog = false; this.$baseMessage('付款紀錄已儲存。', 'success'); await this.refreshSelected() } finally { this.paymentSaving = false } },
-      async createProduction() { try { const result = await createCaseProductionJobs(this.selected.id); this.$baseMessage(`已建立 ${result.jobs.length} 個生產任務。`, 'success'); await this.refreshSelected() } catch (_) {} },
-      async queueOrcaSlice() { this.orcaSubmitting = true; try { await createCaseOrcaSlice(this.selected.id, this.orcaForm); this.$baseMessage('OrcaSlicer 切片工作已排入獨立 worker。', 'success'); await this.refreshSelected() } finally { this.orcaSubmitting = false } },
-      async approveOrcaSlice(job) { try { await approveCaseSlicerJob(this.selected.id, job.id); this.$baseMessage('G-code 已核准，可繼續生產閘門。', 'success'); await this.refreshSelected() } catch (_) {} },
-      async suggestSchedule() { try { const result = await suggestCaseScheduleAutomatically(this.selected.id); this.operations.startAt = result.scheduleSuggestion.suggestedStartAt; this.operations.printerId = result.scheduleSuggestion.suggestedPrinterId; this.operations.estimatedMinutes = result.scheduleSuggestion.estimatedMinutes; this.$baseMessage('系統建議已帶入，請由專員確認', 'success'); await this.refreshSelected() } catch (_) {} },
-      async confirmSchedule() { try { await confirmCaseSchedule(this.selected.id, { startAt: this.operations.startAt, printerId: this.operations.printerId, note: `Estimated ${this.operations.estimatedMinutes} minutes` }); this.$baseMessage('排程已由專員確認', 'success'); await this.refreshSelected() } catch (_) {} },
-      async recordAttempt(action) { try { const queueJobId = (this.selected.productionJobIds || [])[0] || ''; await recordPrintAttempt(this.selected.id, { action, queueJobId, note: action === 'completed' ? '列印完成' : action === 'failed' ? '列印失敗' : '開始列印' }); this.$baseMessage('列印紀錄已更新', 'success'); await this.refreshSelected() } catch (_) {} },
-      async quickQualityCheck(reprint) { try { const parts = this.selected.parts.map((part) => ({ partId: part.id, result: reprint ? 'failed' : 'passed', notes: reprint ? '需重印' : '快速品管通過' })); await recordQualityCheck(this.selected.id, { parts, reprint, note: reprint ? '建立重印工作' : '全部零件通過' }); this.$baseMessage(reprint ? '已建立重印工作' : '品管已通過', 'success'); await this.refreshSelected() } catch (_) {} },
-      async saveDelivery() { this.deliverySaving = true; try { await updateCaseDelivery(this.selected.id, this.deliveryForm); this.deliveryDialog = false; this.$baseMessage(this.deliveryForm.status === 'delivered' ? '案件已完成交付。' : '交付紀錄已儲存。', 'success'); await this.refreshSelected() } finally { this.deliverySaving = false } },
-      async openAfterSales() { try { await createCaseAfterSales(this.selected.id, { type: 'reprint', description: '由內部案件面板建立的售後重印', reopenProduction: true }); this.$baseMessage('售後重印案件已建立', 'success'); await this.refreshSelected() } catch (_) {} },
-      statusLabel(status) { return (this.statuses.find((item) => item.value === status) || {}).label || status || '' },
-      statusType(status) { return ['completed', 'ready_to_print', 'paid'].includes(status) ? 'success' : ['cancelled'].includes(status) ? 'danger' : ['supplement_requested', 'revision_requested', 'awaiting_payment'].includes(status) ? 'warning' : 'info' },
-      paymentLabel(status) { return { paid: '已付款', monthly_terms: '月結', waived: '免付款', refunded: '已退款', unpaid: '未付款' }[status] || status },
-      workflowIndex(status) { if (['new', 'under_review', 'supplement_requested', 'awaiting_customer'].includes(status)) return 0; if (['formal_quote_sent', 'accepted', 'revision_requested'].includes(status)) return 1; if (['awaiting_payment', 'paid'].includes(status)) return 2; if (['production_pending', 'ready_to_print', 'printing', 'quality_check'].includes(status)) return 3; return 4 },
-      readinessLabel(key) { return { acceptedCurrentQuote: '客戶已接受目前報價版本', paymentSatisfied: '付款、月結或免付款條件完成', printerAssigned: '已指派印表機', orcaSliceComplete: 'OrcaSlicer 已產生 G-code', gcodeApproved: 'G-code 已由人員核准', allItemsReady: '全部零件已完成準備' }[key] || key },
-      formatDate(value) { return value ? new Date(value).toLocaleString('zh-TW', { hour12: false }) : '—' },
+      openPayment() {
+        this.paymentForm = {
+          status: 'paid',
+          method: 'bank_transfer',
+          amount: Number(this.selected.quotedValue || this.selected.quoteVersions?.[0]?.customerTotal || 0),
+          reference: '',
+          note: '',
+        }
+        this.paymentDialog = true
+      },
+      async savePayment() {
+        this.paymentSaving = true
+        try {
+          await recordCasePayment(this.selected.id, this.paymentForm)
+          this.paymentDialog = false
+          this.$baseMessage('付款紀錄已儲存。', 'success')
+          await this.refreshSelected()
+        } finally {
+          this.paymentSaving = false
+        }
+      },
+      async createProduction() {
+        try {
+          const result = await createCaseProductionJobs(this.selected.id)
+          this.$baseMessage(`已建立 ${result.jobs.length} 個生產任務。`, 'success')
+          await this.refreshSelected()
+        } catch (_) {}
+      },
+      async queueOrcaSlice() {
+        this.orcaSubmitting = true
+        try {
+          await createCaseOrcaSlice(this.selected.id, this.orcaForm)
+          this.$baseMessage('OrcaSlicer 切片工作已排入獨立 worker。', 'success')
+          await this.refreshSelected()
+        } finally {
+          this.orcaSubmitting = false
+        }
+      },
+      async approveOrcaSlice(job) {
+        try {
+          await approveCaseSlicerJob(this.selected.id, job.id)
+          this.$baseMessage('G-code 已核准，可繼續生產閘門。', 'success')
+          await this.refreshSelected()
+        } catch (_) {}
+      },
+      async suggestSchedule() {
+        try {
+          const result = await suggestCaseScheduleAutomatically(this.selected.id)
+          this.operations.startAt = result.scheduleSuggestion.suggestedStartAt
+          this.operations.printerId = result.scheduleSuggestion.suggestedPrinterId
+          this.operations.estimatedMinutes = result.scheduleSuggestion.estimatedMinutes
+          this.$baseMessage('系統建議已帶入，請由專員確認', 'success')
+          await this.refreshSelected()
+        } catch (_) {}
+      },
+      async confirmSchedule() {
+        try {
+          await confirmCaseSchedule(this.selected.id, {
+            startAt: this.operations.startAt,
+            printerId: this.operations.printerId,
+            note: `Estimated ${this.operations.estimatedMinutes} minutes`,
+          })
+          this.$baseMessage('排程已由專員確認', 'success')
+          await this.refreshSelected()
+        } catch (_) {}
+      },
+      async recordAttempt(action) {
+        try {
+          const queueJobId = (this.selected.productionJobIds || [])[0] || ''
+          await recordPrintAttempt(this.selected.id, {
+            action,
+            queueJobId,
+            note: action === 'completed' ? '列印完成' : action === 'failed' ? '列印失敗' : '開始列印',
+          })
+          this.$baseMessage('列印紀錄已更新', 'success')
+          await this.refreshSelected()
+        } catch (_) {}
+      },
+      async quickQualityCheck(reprint) {
+        try {
+          const parts = this.selected.parts.map((part) => ({
+            partId: part.id,
+            result: reprint ? 'failed' : 'passed',
+            notes: reprint ? '需重印' : '快速品管通過',
+          }))
+          await recordQualityCheck(this.selected.id, { parts, reprint, note: reprint ? '建立重印工作' : '全部零件通過' })
+          this.$baseMessage(reprint ? '已建立重印工作' : '品管已通過', 'success')
+          await this.refreshSelected()
+        } catch (_) {}
+      },
+      async saveDelivery() {
+        this.deliverySaving = true
+        try {
+          await updateCaseDelivery(this.selected.id, this.deliveryForm)
+          this.deliveryDialog = false
+          this.$baseMessage(this.deliveryForm.status === 'delivered' ? '案件已完成交付。' : '交付紀錄已儲存。', 'success')
+          await this.refreshSelected()
+        } finally {
+          this.deliverySaving = false
+        }
+      },
+      async openAfterSales() {
+        try {
+          await createCaseAfterSales(this.selected.id, {
+            type: 'reprint',
+            description: '由內部案件面板建立的售後重印',
+            reopenProduction: true,
+          })
+          this.$baseMessage('售後重印案件已建立', 'success')
+          await this.refreshSelected()
+        } catch (_) {}
+      },
+      statusLabel(status) {
+        return (this.statuses.find((item) => item.value === status) || {}).label || status || ''
+      },
+      statusType(status) {
+        return ['completed', 'ready_to_print', 'paid'].includes(status)
+          ? 'success'
+          : ['cancelled'].includes(status)
+          ? 'danger'
+          : ['supplement_requested', 'revision_requested', 'awaiting_payment'].includes(status)
+          ? 'warning'
+          : 'info'
+      },
+      paymentLabel(status) {
+        return { paid: '已付款', monthly_terms: '月結', waived: '免付款', refunded: '已退款', unpaid: '未付款' }[status] || status
+      },
+      workflowIndex(status) {
+        if (['new', 'under_review', 'supplement_requested', 'awaiting_customer'].includes(status)) return 0
+        if (['formal_quote_sent', 'accepted', 'revision_requested'].includes(status)) return 1
+        if (['awaiting_payment', 'paid'].includes(status)) return 2
+        if (['production_pending', 'ready_to_print', 'printing', 'quality_check'].includes(status)) return 3
+        return 4
+      },
+      readinessLabel(key) {
+        return (
+          {
+            acceptedCurrentQuote: '客戶已接受目前報價版本',
+            paymentSatisfied: '付款、月結或免付款條件完成',
+            printerAssigned: '已指派印表機',
+            orcaSliceComplete: 'OrcaSlicer 已產生 G-code',
+            gcodeApproved: 'G-code 已由人員核准',
+            allItemsReady: '全部零件已完成準備',
+          }[key] || key
+        )
+      },
+      formatDate(value) {
+        return value ? new Date(value).toLocaleString('zh-TW', { hour12: false }) : '—'
+      },
     },
   }
 </script>
 
 <style lang="scss" scoped>
-  .toolbar { display: flex; gap: 12px; margin-bottom: 18px; } .toolbar .el-input { max-width: 390px; } .toolbar .el-select { width: 160px; }
-  .aq-collapse { margin-bottom: 16px; border: 1px solid #e5e9f2; border-radius: 10px; padding: 0 12px; }
-  .aq-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 14px; }
-  .aq-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #667085; }
-  .aq-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 12px; }
-  .aq-lines { list-style: none; margin: 12px 0 0; padding: 10px 0 0; border-top: 1px dashed #dbe2ef; max-height: 220px; overflow: auto; }
-  .aq-lines li { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; padding: 3px 0; color: #344054; }
-  .aq-lines li b { white-space: nowrap; font-weight: 600; }
-  .aq-alert { margin-top: 10px; }
-  .muted { color: #8992a3; font-size: 12px; margin-top: 4px; } .drawer-content { padding: 28px; } .drawer-head { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 18px; } .drawer-head h2 { margin: 3px 0; } .drawer-head p { margin: 4px 0; } .section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .case-steps { margin: 22px 0; } .detail-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; } .detail-grid span, .detail-grid b { display: block; } .detail-grid span { color: #8992a3; font-size: 12px; margin-bottom: 4px; } h3 { margin: 22px 0 10px; } .notes { white-space: pre-wrap; color: #4b5563; }
-  .quote-version { display: flex; justify-content: space-between; padding: 15px 0; border-bottom: 1px solid #edf0f5; } .quote-version p { margin: 6px 0 0; color: #667085; } .checks { list-style: none; padding: 0; line-height: 2.1; } .checks i { margin-right: 8px; } .ok { color: #17a673; } .waiting { color: #e6a23c; } .orca-panel { margin: 20px 0; padding: 18px; border: 1px solid #dbe5f4; border-radius: 8px; background: #f8fbff; } .orca-heading { display: flex; justify-content: space-between; gap: 12px; } .orca-heading h3 { margin: 0; } .orca-heading p { color: #667085; font-size: 12px; line-height: 1.6; margin: 6px 0 14px; } .orca-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; } .orca-form .el-form-item { margin-bottom: 12px; } .orca-form .el-select { width: 100%; } .orca-form .el-button { align-self: end; justify-self: start; margin-bottom: 12px; } .orca-jobs { margin-top: 6px; } .operations-panel { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 18px; padding-top: 16px; border-top: 1px solid #edf0f5; } .operations-panel h3 { flex-basis: 100%; margin: 0 0 3px; } .operations-panel .el-input { width: 260px; } .actions { display: flex; gap: 10px; margin-top: 22px; padding-top: 18px; border-top: 1px solid #edf0f5; } .actions .el-select { width: 210px; }
-  @media (max-width: 680px) { .toolbar { flex-wrap: wrap; } .toolbar .el-input { max-width: none; width: 100%; } .detail-grid { grid-template-columns: 1fr; } }
+  .toolbar {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .toolbar .el-input {
+    max-width: 390px;
+  }
+  .toolbar .el-select {
+    width: 160px;
+  }
+  .aq-collapse {
+    margin-bottom: 16px;
+    border: 1px solid #e5e9f2;
+    border-radius: 10px;
+    padding: 0 12px;
+  }
+  .aq-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px 14px;
+  }
+  .aq-grid label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+    color: #667085;
+  }
+  .aq-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 12px;
+  }
+  .aq-lines {
+    list-style: none;
+    margin: 12px 0 0;
+    padding: 10px 0 0;
+    border-top: 1px dashed #dbe2ef;
+    max-height: 220px;
+    overflow: auto;
+  }
+  .aq-lines li {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 13px;
+    padding: 3px 0;
+    color: #344054;
+  }
+  .aq-lines li b {
+    white-space: nowrap;
+    font-weight: 600;
+  }
+  .aq-alert {
+    margin-top: 10px;
+  }
+  .muted {
+    color: #8992a3;
+    font-size: 12px;
+    margin-top: 4px;
+  }
+  .drawer-content {
+    padding: 28px;
+  }
+  .drawer-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    margin-bottom: 18px;
+  }
+  .drawer-head h2 {
+    margin: 3px 0;
+  }
+  .drawer-head p {
+    margin: 4px 0;
+  }
+  .section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .case-steps {
+    margin: 22px 0;
+  }
+  .detail-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 15px;
+  }
+  .detail-grid span,
+  .detail-grid b {
+    display: block;
+  }
+  .detail-grid span {
+    color: #8992a3;
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+  h3 {
+    margin: 22px 0 10px;
+  }
+  .notes {
+    white-space: pre-wrap;
+    color: #4b5563;
+  }
+  .quote-version {
+    display: flex;
+    justify-content: space-between;
+    padding: 15px 0;
+    border-bottom: 1px solid #edf0f5;
+  }
+  .quote-version p {
+    margin: 6px 0 0;
+    color: #667085;
+  }
+  .checks {
+    list-style: none;
+    padding: 0;
+    line-height: 2.1;
+  }
+  .checks i {
+    margin-right: 8px;
+  }
+  .ok {
+    color: #17a673;
+  }
+  .waiting {
+    color: #e6a23c;
+  }
+  .orca-panel {
+    margin: 20px 0;
+    padding: 18px;
+    border: 1px solid #dbe5f4;
+    border-radius: 8px;
+    background: #f8fbff;
+  }
+  .orca-heading {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .orca-heading h3 {
+    margin: 0;
+  }
+  .orca-heading p {
+    color: #667085;
+    font-size: 12px;
+    line-height: 1.6;
+    margin: 6px 0 14px;
+  }
+  .orca-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 12px;
+  }
+  .orca-form .el-form-item {
+    margin-bottom: 12px;
+  }
+  .orca-form .el-select {
+    width: 100%;
+  }
+  .orca-form .el-button {
+    align-self: end;
+    justify-self: start;
+    margin-bottom: 12px;
+  }
+  .orca-jobs {
+    margin-top: 6px;
+  }
+  .operations-panel {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid #edf0f5;
+  }
+  .operations-panel h3 {
+    flex-basis: 100%;
+    margin: 0 0 3px;
+  }
+  .operations-panel .el-input {
+    width: 260px;
+  }
+  .actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 22px;
+    padding-top: 18px;
+    border-top: 1px solid #edf0f5;
+  }
+  .actions .el-select {
+    width: 210px;
+  }
+  @media (max-width: 680px) {
+    .toolbar {
+      flex-wrap: wrap;
+    }
+    .toolbar .el-input {
+      max-width: none;
+      width: 100%;
+    }
+    .detail-grid {
+      grid-template-columns: 1fr;
+    }
+  }
 </style>

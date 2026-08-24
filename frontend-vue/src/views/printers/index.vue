@@ -1,7 +1,9 @@
 <template>
   <div class="printers-container">
     <div class="quickbar">
-      <el-button v-permissions="['printers:control']" type="primary" icon="CirclePlus" @click="addDialogVisible = true">新增打印機</el-button>
+      <el-button v-permissions="['printers:control']" type="primary" icon="CirclePlus" @click="addDialogVisible = true">
+        新增打印機
+      </el-button>
       <el-radio-group v-model="mode" size="small">
         <el-radio-button label="cards">卡片</el-radio-button>
         <el-radio-button label="table">表格</el-radio-button>
@@ -26,7 +28,9 @@
       <el-table-column prop="name" label="名稱" />
       <el-table-column prop="model" label="型號" />
       <el-table-column label="狀態" width="120">
-        <template #default="{ row }"><el-tag size="small" :type="statusTagType(row.status)">{{ row.status }}</el-tag></template>
+        <template #default="{ row }">
+          <el-tag size="small" :type="statusTagType(row.status)">{{ row.status }}</el-tag>
+        </template>
       </el-table-column>
       <el-table-column label="溫度" width="160">
         <template #default="{ row }">{{ row.nozzle }}/{{ row.targetNozzle }}°C · {{ row.bed }}/{{ row.targetBed }}°C</template>
@@ -37,7 +41,9 @@
       <el-table-column label="操作" width="180">
         <template #default="{ row }">
           <el-button size="small" @click="openDrawer(row)">開啟</el-button>
-          <el-button size="small" v-permissions="['actions:write']" :loading="actionBusy === row.id" @click="quickToggle(row)">{{ row.status === 'printing' ? '暫停' : '啟動' }}</el-button>
+          <el-button v-permissions="['actions:write']" size="small" :loading="actionBusy === row.id" @click="quickToggle(row)">
+            {{ row.status === 'printing' ? '暫停' : '啟動' }}
+          </el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -48,17 +54,37 @@
         <el-tag size="small" :type="statusTagType(activePrinter.status)">{{ activePrinter.status }}</el-tag>
 
         <el-row :gutter="12" class="drawer-metrics">
-          <el-col :span="12"><div class="drawer-metric"><span>進度</span><strong>{{ Math.round(activePrinter.progress || 0) }}%</strong></div></el-col>
-          <el-col :span="12"><div class="drawer-metric"><span>佇列</span><strong>{{ activePrinter.queue || 0 }}</strong></div></el-col>
-          <el-col :span="12"><div class="drawer-metric"><span>噴頭</span><strong>{{ activePrinter.nozzle }}/{{ activePrinter.targetNozzle }}°C</strong></div></el-col>
-          <el-col :span="12"><div class="drawer-metric"><span>熱床</span><strong>{{ activePrinter.bed }}/{{ activePrinter.targetBed }}°C</strong></div></el-col>
+          <el-col :span="12">
+            <div class="drawer-metric">
+              <span>進度</span>
+              <strong>{{ Math.round(activePrinter.progress || 0) }}%</strong>
+            </div>
+          </el-col>
+          <el-col :span="12">
+            <div class="drawer-metric">
+              <span>佇列</span>
+              <strong>{{ activePrinter.queue || 0 }}</strong>
+            </div>
+          </el-col>
+          <el-col :span="12">
+            <div class="drawer-metric">
+              <span>噴頭</span>
+              <strong>{{ activePrinter.nozzle }}/{{ activePrinter.targetNozzle }}°C</strong>
+            </div>
+          </el-col>
+          <el-col :span="12">
+            <div class="drawer-metric">
+              <span>熱床</span>
+              <strong>{{ activePrinter.bed }}/{{ activePrinter.targetBed }}°C</strong>
+            </div>
+          </el-col>
         </el-row>
         <el-progress :percentage="activePrinter.progress || 0" :stroke-width="8" />
 
         <h3 class="drawer-section-title">控制</h3>
-        <div class="control-grid" v-permissions="['actions:write']">
-          <el-button @click="control('pause')" v-if="activePrinter.status !== 'paused'">暫停</el-button>
-          <el-button @click="control('resume')" v-else>恢復</el-button>
+        <div v-permissions="['actions:write']" class="control-grid">
+          <el-button v-if="activePrinter.status !== 'paused'" @click="control('pause')">暫停</el-button>
+          <el-button v-else @click="control('resume')">恢復</el-button>
           <el-button @click="control('start')">啟動</el-button>
           <el-button @click="control('cancel')">取消</el-button>
           <el-button @click="control('home axes')">回原點</el-button>
@@ -68,7 +94,7 @@
       </div>
     </el-drawer>
 
-    <el-dialog title="新增打印機" v-model="addDialogVisible" width="480px">
+    <el-dialog v-model="addDialogVisible" title="新增打印機" width="480px">
       <el-form :model="addForm" label-width="110px" size="small">
         <el-form-item label="連線方式">
           <el-select v-model="addForm.connection" style="width: 100%">
@@ -79,19 +105,29 @@
         <el-form-item label="型號"><el-input v-model="addForm.model" /></el-form-item>
         <el-form-item label="位置"><el-input v-model="addForm.location" /></el-form-item>
         <el-form-item label="已裝線材"><el-input v-model="addForm.filament" /></el-form-item>
-        <el-form-item label="相容材料"><el-input v-model="addForm.materialsText" placeholder="以逗號分隔，例如 PLA,PETG,TPU" /></el-form-item>
+        <el-form-item label="相容材料">
+          <el-input v-model="addForm.materialsText" placeholder="以逗號分隔，例如 PLA,PETG,TPU" />
+        </el-form-item>
         <el-form-item label="成型範圍 mm">
           <el-row :gutter="8">
-            <el-col :span="8"><el-input-number v-model="addForm.volume[0]" :min="1" controls-position="right" style="width: 100%" /></el-col>
-            <el-col :span="8"><el-input-number v-model="addForm.volume[1]" :min="1" controls-position="right" style="width: 100%" /></el-col>
-            <el-col :span="8"><el-input-number v-model="addForm.volume[2]" :min="1" controls-position="right" style="width: 100%" /></el-col>
+            <el-col :span="8">
+              <el-input-number v-model="addForm.volume[0]" :min="1" controls-position="right" style="width: 100%" />
+            </el-col>
+            <el-col :span="8">
+              <el-input-number v-model="addForm.volume[1]" :min="1" controls-position="right" style="width: 100%" />
+            </el-col>
+            <el-col :span="8">
+              <el-input-number v-model="addForm.volume[2]" :min="1" controls-position="right" style="width: 100%" />
+            </el-col>
           </el-row>
         </el-form-item>
       </el-form>
-      <template #footer><div>
-        <el-button @click="addDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="creating" @click="submitAdd">新增</el-button>
-      </div></template>
+      <template #footer>
+        <div>
+          <el-button @click="addDialogVisible = false">取消</el-button>
+          <el-button type="primary" :loading="creating" @click="submitAdd">新增</el-button>
+        </div>
+      </template>
     </el-dialog>
   </div>
 </template>
@@ -166,7 +202,10 @@
         }
         this.creating = true
         try {
-          const materials = this.addForm.materialsText.split(',').map((item) => item.trim()).filter(Boolean)
+          const materials = this.addForm.materialsText
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean)
           const isManual = this.addForm.connection === 'Manual setup'
           await createPrinter({
             name: this.addForm.name,

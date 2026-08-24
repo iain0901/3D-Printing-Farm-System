@@ -15,8 +15,10 @@ export function archiveProfile(profileId) {
 
 export function setDefaultProfile(profileId) {
   const key = `profile-default:${profileId}`
-  return request({ url: `/api/profiles/${profileId}/default`, method: 'patch', headers: idempotencyHeaders(key, { profileId }) }).then((r) => {
-    clearIdempotency(key)
-    return r
-  })
+  return request({ url: `/api/profiles/${profileId}/default`, method: 'patch', headers: idempotencyHeaders(key, { profileId }) }).then(
+    (r) => {
+      clearIdempotency(key)
+      return r
+    }
+  )
 }

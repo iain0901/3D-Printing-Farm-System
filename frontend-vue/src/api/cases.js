@@ -13,10 +13,12 @@ export function createPublicCase(payload, files = []) {
   const body = new FormData()
   body.append('payload', JSON.stringify(payload))
   files.forEach((file) => body.append('files', file, file.name))
-  return publicRequest.post('/api/public/cases', body, {
-    headers: { 'Content-Type': undefined },
-    timeout: 10 * 60 * 1000,
-  }).then((response) => response.data)
+  return publicRequest
+    .post('/api/public/cases', body, {
+      headers: { 'Content-Type': undefined },
+      timeout: 10 * 60 * 1000,
+    })
+    .then((response) => response.data)
 }
 
 export function fetchPublicCase(id, token) {

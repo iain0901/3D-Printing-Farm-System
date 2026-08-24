@@ -22,7 +22,10 @@ export function uploadModelFile(fileBlob, material = 'PLA', folder = 'Uploads') 
     url: '/api/files/upload',
     method: 'post',
     data: formData,
-    headers: { 'Content-Type': undefined, ...idempotencyHeaders(key, { name: fileBlob.name, size: fileBlob.size, lastModified: fileBlob.lastModified, material, folder }) },
+    headers: {
+      'Content-Type': undefined,
+      ...idempotencyHeaders(key, { name: fileBlob.name, size: fileBlob.size, lastModified: fileBlob.lastModified, material, folder }),
+    },
   }).then((file) => {
     clearIdempotency(key)
     return file

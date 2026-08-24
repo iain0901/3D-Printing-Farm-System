@@ -73,7 +73,12 @@
     methods: {
       async load() {
         const settings = await fetchWorkspaceSettings()
-        this.form = { organizationName: settings.organizationName, defaultLocation: settings.defaultLocation, hotDropMode: settings.hotDropMode, requireAdmin2fa: settings.requireAdmin2fa }
+        this.form = {
+          organizationName: settings.organizationName,
+          defaultLocation: settings.defaultLocation,
+          hotDropMode: settings.hotDropMode,
+          requireAdmin2fa: settings.requireAdmin2fa,
+        }
       },
       async save() {
         this.saving = true
@@ -101,7 +106,11 @@
         }
         this.enabling = true
         try {
-          const result = await enableTwoFactor({ secret: this.pendingSecret, code: this.enableForm.code, password: this.enableForm.password })
+          const result = await enableTwoFactor({
+            secret: this.pendingSecret,
+            code: this.enableForm.code,
+            password: this.enableForm.password,
+          })
           this.twoFactor = result.user.twoFactor
           this.$store.commit('user/setCurrentUser', result.user)
           this.qrDataUrl = ''

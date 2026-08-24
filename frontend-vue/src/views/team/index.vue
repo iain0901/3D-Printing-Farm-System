@@ -16,7 +16,7 @@
       </el-table-column>
       <el-table-column prop="location" label="位置" width="140" />
       <el-table-column prop="lastSeen" label="最近上線" width="120" />
-      <el-table-column label="操作" width="110" v-permissions="['users:write']">
+      <el-table-column v-permissions="['users:write']" label="操作" width="110">
         <template #default="{ row }">
           <el-button size="small" :loading="resetBusy === row.id" @click="resetPassword(row)">重設密碼</el-button>
         </template>
@@ -24,7 +24,7 @@
     </el-table>
     <div v-if="!users.length" class="empty-hint">尚無團隊成員</div>
 
-    <el-dialog title="邀請成員" v-model="dialogVisible" width="420px">
+    <el-dialog v-model="dialogVisible" title="邀請成員" width="420px">
       <el-form label-width="80px" size="small">
         <el-form-item label="姓名"><el-input v-model="form.name" /></el-form-item>
         <el-form-item label="Email"><el-input v-model="form.email" /></el-form-item>
@@ -35,10 +35,12 @@
         </el-form-item>
         <el-form-item label="位置"><el-input v-model="form.location" /></el-form-item>
       </el-form>
-      <template #footer><div>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submit">邀請</el-button>
-      </div></template>
+      <template #footer>
+        <div>
+          <el-button @click="dialogVisible = false">取消</el-button>
+          <el-button type="primary" :loading="saving" @click="submit">邀請</el-button>
+        </div>
+      </template>
     </el-dialog>
   </div>
 </template>
@@ -85,7 +87,10 @@
         this.resetBusy = row.id
         try {
           const result = await resetUserPassword(row.id)
-          this.$baseAlert(`已為 ${row.email} 重設密碼。${result.temporaryPassword ? '臨時密碼：' + result.temporaryPassword : ''}`, '密碼已重設')
+          this.$baseAlert(
+            `已為 ${row.email} 重設密碼。${result.temporaryPassword ? `臨時密碼：${result.temporaryPassword}` : ''}`,
+            '密碼已重設'
+          )
         } finally {
           this.resetBusy = ''
         }
@@ -100,7 +105,10 @@
           const result = await inviteUser(this.form)
           this.users.push(result.user)
           this.dialogVisible = false
-          this.$baseAlert(`已邀請 ${result.user.email}。${result.temporaryPassword ? '臨時密碼：' + result.temporaryPassword : ''}`, '邀請成功')
+          this.$baseAlert(
+            `已邀請 ${result.user.email}。${result.temporaryPassword ? `臨時密碼：${result.temporaryPassword}` : ''}`,
+            '邀請成功'
+          )
         } finally {
           this.saving = false
         }

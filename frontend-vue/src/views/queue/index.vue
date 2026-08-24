@@ -1,9 +1,13 @@
 <template>
   <div class="queue-container">
     <div class="quickbar">
-      <el-button v-permissions="['queue:write']" :loading="matching === 'dry'" @click="preview" icon="View">預覽配對</el-button>
-      <el-button v-permissions="['queue:write']" type="primary" :loading="matching === 'commit'" @click="commitMatch" icon="Connection">立即配對</el-button>
-      <span v-if="lastMatch" class="quickbar-note">上次配對：{{ lastMatch.matches.length }} 筆已配對，{{ lastMatch.skipped.length }} 筆略過</span>
+      <el-button v-permissions="['queue:write']" :loading="matching === 'dry'" icon="View" @click="preview">預覽配對</el-button>
+      <el-button v-permissions="['queue:write']" type="primary" :loading="matching === 'commit'" icon="Connection" @click="commitMatch">
+        立即配對
+      </el-button>
+      <span v-if="lastMatch" class="quickbar-note">
+        上次配對：{{ lastMatch.matches.length }} 筆已配對，{{ lastMatch.skipped.length }} 筆略過
+      </span>
     </div>
 
     <el-table :data="queue" style="width: 100%">
@@ -48,9 +52,11 @@
     </el-table>
     <div v-if="!queue.length" class="empty-hint">目前沒有排程任務</div>
 
-    <el-dialog title="排程到打印機" v-model="scheduleDialogVisible" width="420px">
+    <el-dialog v-model="scheduleDialogVisible" title="排程到打印機" width="420px">
       <el-form v-if="scheduleTarget" label-width="90px" size="small">
-        <el-form-item label="檔案"><span>{{ scheduleTarget.file }}</span></el-form-item>
+        <el-form-item label="檔案">
+          <span>{{ scheduleTarget.file }}</span>
+        </el-form-item>
         <el-form-item label="打印機">
           <el-select v-model="scheduleForm.printerId" style="width: 100%">
             <el-option v-for="p in printers" :key="p.id" :label="p.name" :value="p.id" />
@@ -60,10 +66,12 @@
           <el-input v-model="scheduleForm.scheduledStart" placeholder="例如 13:00" />
         </el-form-item>
       </el-form>
-      <template #footer><div>
-        <el-button @click="scheduleDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="scheduling" @click="submitSchedule">確認排程</el-button>
-      </div></template>
+      <template #footer>
+        <div>
+          <el-button @click="scheduleDialogVisible = false">取消</el-button>
+          <el-button type="primary" :loading="scheduling" @click="submitSchedule">確認排程</el-button>
+        </div>
+      </template>
     </el-dialog>
   </div>
 </template>
@@ -139,7 +147,10 @@
       },
       openSchedule(row) {
         this.scheduleTarget = row
-        this.scheduleForm = { printerId: row.printerId || (this.printers[0] && this.printers[0].id) || '', scheduledStart: row.scheduledStart || '13:00' }
+        this.scheduleForm = {
+          printerId: row.printerId || (this.printers[0] && this.printers[0].id) || '',
+          scheduledStart: row.scheduledStart || '13:00',
+        }
         this.scheduleDialogVisible = true
       },
       async submitSchedule() {

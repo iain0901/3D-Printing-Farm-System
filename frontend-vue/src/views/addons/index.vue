@@ -1,7 +1,7 @@
 <template>
   <div class="addons-container">
     <el-row :gutter="16">
-      <el-col :xs="24" :sm="12" :md="8" v-for="addon in addons" :key="addon.id">
+      <el-col v-for="addon in addons" :key="addon.id" :xs="24" :sm="12" :md="8">
         <el-card shadow="never" class="addon-card">
           <div class="addon-head">
             <b>{{ addon.name }}</b>
@@ -9,7 +9,9 @@
           </div>
           <el-tag size="small" class="addon-category">{{ addon.category }}</el-tag>
           <p class="addon-desc">{{ addon.description }}</p>
-          <el-tag size="small" :type="addon.status === 'enabled' ? 'success' : addon.status === 'beta' ? 'warning' : 'info'">{{ addon.status }}</el-tag>
+          <el-tag size="small" :type="addon.status === 'enabled' ? 'success' : addon.status === 'beta' ? 'warning' : 'info'">
+            {{ addon.status }}
+          </el-tag>
         </el-card>
       </el-col>
     </el-row>

@@ -30,11 +30,7 @@ const isChromeExtensionError = (err) => {
 
   // 错误本身是字符串
   if (typeof err === 'string') {
-    return (
-      err.includes('runtime.lastError') ||
-      err.includes('message port closed') ||
-      err.includes('The message port closed')
-    )
+    return err.includes('runtime.lastError') || err.includes('message port closed') || err.includes('The message port closed')
   }
 
   return false

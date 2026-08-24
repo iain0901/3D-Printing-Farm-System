@@ -288,20 +288,20 @@
       pointer-events: none;
     }
 
-    ::v-deep {
-      .fold-unfold {
+    
+:deep(.fold-unfold) {
         margin-right: $base-padding;
       }
-    }
+
 
     .tabs-content {
       position: relative;
       width: calc(100% - 90px);
       height: $base-tag-item-height;
 
-      ::v-deep {
-        .el-tabs__nav-next,
-        .el-tabs__nav-prev {
+      
+:deep(.el-tabs__nav-next,
+        .el-tabs__nav-prev) {
           height: $base-tag-item-height;
           line-height: $base-tag-item-height;
           color: rgba(0, 0, 0, 0.6);
@@ -320,8 +320,7 @@
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.05);
           }
         }
-
-        .el-tabs__header {
+:deep(.el-tabs__header) {
           border-bottom: 0;
 
           .el-tabs__nav {
@@ -393,7 +392,7 @@
             }
           }
         }
-      }
+
     }
 
     .more {

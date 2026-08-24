@@ -7,8 +7,10 @@ export function fetchHistory() {
 
 export function reprintJob(jobId) {
   const key = `history-reprint:${jobId}`
-  return request({ url: `/api/history/${jobId}/reprint`, method: 'post', data: {}, headers: idempotencyHeaders(key, { jobId }) }).then((r) => {
-    clearIdempotency(key)
-    return r
-  })
+  return request({ url: `/api/history/${jobId}/reprint`, method: 'post', data: {}, headers: idempotencyHeaders(key, { jobId }) }).then(
+    (r) => {
+      clearIdempotency(key)
+      return r
+    }
+  )
 }

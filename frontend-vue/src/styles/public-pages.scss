@@ -1,0 +1,49 @@
+// 公開網站各頁共用的區塊樣式（於各頁 <style> 中 @include page-blocks）
+@mixin page-hero($accent: #3563e9) {
+  .page-hero {
+    background: linear-gradient(135deg, #17223b 0%, #1f3057 70%, #27407a 100%);
+    color: #fff;
+    text-align: center;
+    padding: 72px 24px 60px;
+
+    .eyebrow {
+      color: #8fb0ff;
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: 2px;
+    }
+
+    h1 { font-size: 38px; margin: 12px 0 14px; line-height: 1.3; }
+
+    p { color: #c4d0e6; max-width: 720px; margin: auto; line-height: 1.9; font-size: 15px; }
+  }
+}
+
+@mixin page-section {
+  section.block {
+    max-width: 1080px;
+    margin: auto;
+    padding: 54px 24px 20px;
+
+    h2 { font-size: 28px; text-align: center; margin-bottom: 6px; }
+    .sub { text-align: center; color: #667085; margin-bottom: 26px; }
+  }
+}
+
+@mixin card-grid($cols: 3) {
+  display: grid;
+  grid-template-columns: repeat($cols, 1fr);
+  gap: 18px;
+
+  @media (max-width: 860px) { grid-template-columns: 1fr; }
+}
+
+@mixin soft-card {
+  background: #fff;
+  border: 1px solid #e3e9f4;
+  border-radius: 14px;
+  padding: 26px 22px;
+  transition: box-shadow 0.2s, transform 0.2s;
+
+  &:hover { box-shadow: 0 10px 30px rgba(23, 34, 59, 0.08); transform: translateY(-2px); }
+}

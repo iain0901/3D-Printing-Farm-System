@@ -1,5 +1,5 @@
 <template>
-  <el-dialog :before-close="handleClose" :close-on-click-modal="false" :title="title" v-model="dialogFormVisible" width="909px">
+  <el-dialog v-model="dialogFormVisible" :before-close="handleClose" :close-on-click-modal="false" :title="title" width="909px">
     <div class="upload">
       <el-alert
         :closable="false"
@@ -30,20 +30,22 @@
         :on-success="handleSuccess"
       >
         <template #trigger><i class="el-icon-plus"></i></template>
-        <el-dialog append-to-body title="查看大图" v-model="dialogVisible">
+        <el-dialog v-model="dialogVisible" append-to-body title="查看大图">
           <div>
             <img alt="" :src="dialogImageUrl" width="100%" />
           </div>
         </el-dialog>
       </el-upload>
     </div>
-    <template #footer><div class="dialog-footer" style="position: relative; padding-right: 15px; text-align: right">
-      <div v-if="show" style="position: absolute; top: 10px; left: 15px; color: #999">
-        正在上传中... 当前上传成功数:{{ imgSuccessNum }}张 当前上传失败数:{{ imgErrorNum }}张
+    <template #footer>
+      <div class="dialog-footer" style="position: relative; padding-right: 15px; text-align: right">
+        <div v-if="show" style="position: absolute; top: 10px; left: 15px; color: #999">
+          正在上传中... 当前上传成功数:{{ imgSuccessNum }}张 当前上传失败数:{{ imgErrorNum }}张
+        </div>
+        <el-button type="primary" @click="handleClose">关闭</el-button>
+        <el-button :loading="loading" size="small" style="margin-left: 10px" type="success" @click="submitUpload">开始上传</el-button>
       </div>
-      <el-button type="primary" @click="handleClose">关闭</el-button>
-      <el-button :loading="loading" size="small" style="margin-left: 10px" type="success" @click="submitUpload">开始上传</el-button>
-    </div></template>
+    </template>
   </el-dialog>
 </template>
 
@@ -192,24 +194,20 @@
         line-height: 30px;
       }
 
-      ::v-deep {
-        .el-upload--picture-card {
+      :deep(.el-upload--picture-card) {
+        width: 128px;
+        height: 128px;
+        margin: 3px 8px 8px 8px;
+        border: 2px dashed #c0ccda;
+      }
+      :deep(.el-upload-list--picture) {
+        margin-bottom: 20px;
+      }
+      :deep(.el-upload-list--picture-card) {
+        .el-upload-list__item {
           width: 128px;
           height: 128px;
           margin: 3px 8px 8px 8px;
-          border: 2px dashed #c0ccda;
-        }
-
-        .el-upload-list--picture {
-          margin-bottom: 20px;
-        }
-
-        .el-upload-list--picture-card {
-          .el-upload-list__item {
-            width: 128px;
-            height: 128px;
-            margin: 3px 8px 8px 8px;
-          }
         }
       }
     }

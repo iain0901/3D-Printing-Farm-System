@@ -1,7 +1,9 @@
 <template>
   <div class="notifications-container">
     <div class="quickbar">
-      <el-button v-permissions="['notifications:write']" type="primary" icon="CirclePlus" @click="dialogVisible = true">新增通知管道</el-button>
+      <el-button v-permissions="['notifications:write']" type="primary" icon="CirclePlus" @click="dialogVisible = true">
+        新增通知管道
+      </el-button>
     </div>
     <el-table :data="channels" style="width: 100%">
       <el-table-column prop="name" label="名稱" min-width="140" />
@@ -13,9 +15,11 @@
         </template>
       </el-table-column>
       <el-table-column label="狀態" width="110">
-        <template #default="{ row }"><el-tag size="small">{{ row.lastStatus || 'not sent' }}</el-tag></template>
+        <template #default="{ row }">
+          <el-tag size="small">{{ row.lastStatus || 'not sent' }}</el-tag>
+        </template>
       </el-table-column>
-      <el-table-column label="操作" width="100" v-permissions="['notifications:write']">
+      <el-table-column v-permissions="['notifications:write']" label="操作" width="100">
         <template #default="{ row }">
           <el-button size="small" :loading="testBusy === row.id" @click="test(row)">測試</el-button>
         </template>
@@ -23,7 +27,7 @@
     </el-table>
     <div v-if="!channels.length" class="empty-hint">尚無通知管道</div>
 
-    <el-dialog title="新增通知管道" v-model="dialogVisible" width="420px">
+    <el-dialog v-model="dialogVisible" title="新增通知管道" width="420px">
       <el-form label-width="80px" size="small">
         <el-form-item label="名稱"><el-input v-model="form.name" /></el-form-item>
         <el-form-item label="類型">
@@ -37,10 +41,12 @@
         <el-form-item label="URL"><el-input v-model="form.url" placeholder="https://..." /></el-form-item>
         <el-form-item label="事件"><el-input v-model="form.eventsText" placeholder="以逗號分隔，例如 *" /></el-form-item>
       </el-form>
-      <template #footer><div>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submit">新增</el-button>
-      </div></template>
+      <template #footer>
+        <div>
+          <el-button @click="dialogVisible = false">取消</el-button>
+          <el-button type="primary" :loading="saving" @click="submit">新增</el-button>
+        </div>
+      </template>
     </el-dialog>
   </div>
 </template>
@@ -87,8 +93,16 @@
         }
         this.saving = true
         try {
-          const events = this.form.eventsText.split(',').map((s) => s.trim()).filter(Boolean)
-          const channel = await createNotificationChannel({ name: this.form.name, type: this.form.type, url: this.form.url, events: events.length ? events : ['*'] })
+          const events = this.form.eventsText
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)
+          const channel = await createNotificationChannel({
+            name: this.form.name,
+            type: this.form.type,
+            url: this.form.url,
+            events: events.length ? events : ['*'],
+          })
           this.channels.push(channel)
           this.$baseMessage('通知管道已新增', 'success')
           this.dialogVisible = false

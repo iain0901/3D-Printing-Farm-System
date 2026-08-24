@@ -17,7 +17,8 @@ describe("Traditional Chinese Vue frontend", () => {
     const config = await readFile(new URL("../frontend-vue/src/config/setting.config.js", import.meta.url), "utf8");
     expect(router).toContain("name: 'Cases'");
     expect(router).toContain("name: 'AiKnowledge'");
-    expect(config).toContain("routerMode: 'hash'");
+    // SEO：官網採 history mode（Fastify SPA fallback + nginx proxy），不再使用 hash
+    expect(config).toContain("routerMode: 'history'");
     expect(config).toContain("tokenTableName: 'layerpilot-token'");
   });
 });

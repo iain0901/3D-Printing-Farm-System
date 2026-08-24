@@ -2,7 +2,11 @@
   <div class="portal-dashboard">
     <div class="welcome-row">
       <h2>歡迎，{{ customer && customer.name }}</h2>
-      <div class="points-badge">會員點數：<b>{{ customer && customer.loyaltyPoints || 0 }}</b> 點</div>
+      <div class="points-badge">
+        會員點數：
+        <b>{{ (customer && customer.loyaltyPoints) || 0 }}</b>
+        點
+      </div>
     </div>
 
     <el-tabs v-model="tab">
@@ -15,7 +19,9 @@
             </div>
             <p class="quote-meta">案件編號：{{ caseItem.caseNo }} · {{ caseItem.parts.length }} 個零件</p>
             <p v-if="caseItem.quote" class="quote-meta">報價總額：NT$ {{ caseItem.quote.total }}</p>
-            <p v-if="caseItem.delivery && caseItem.delivery.trackingNumber" class="quote-meta">物流追蹤：{{ caseItem.delivery.trackingNumber }}</p>
+            <p v-if="caseItem.delivery && caseItem.delivery.trackingNumber" class="quote-meta">
+              物流追蹤：{{ caseItem.delivery.trackingNumber }}
+            </p>
             <div v-if="caseItem.status === 'formal_quote_sent'" class="quote-actions">
               <el-button size="small" type="primary" @click="decideUnifiedCase(caseItem, 'accepted')">接受報價</el-button>
               <el-button size="small" @click="decideUnifiedCase(caseItem, 'revision')">要求修改</el-button>
@@ -36,7 +42,9 @@
             <p class="quote-meta">材料：{{ quote.material }} · 數量：{{ quote.quantity }} · 報價：${{ quote.quotedValue || 0 }}</p>
             <p v-if="quote.filePartCount > 1" class="quote-meta">此檔案偵測到 {{ quote.filePartCount }} 個獨立零件</p>
             <div class="quote-actions">
-              <el-button v-if="quote.fileId" size="small" :loading="previewBusy === quote.id" @click="previewQuoteFile(quote)">預覽檔案</el-button>
+              <el-button v-if="quote.fileId" size="small" :loading="previewBusy === quote.id" @click="previewQuoteFile(quote)">
+                預覽檔案
+              </el-button>
               <template v-if="quote.status === 'quoted'">
                 <el-button size="small" type="primary" @click="decide(quote, 'accepted')">接受</el-button>
                 <el-button size="small" @click="decide(quote, 'revision')">要求修改</el-button>
@@ -45,14 +53,12 @@
             </div>
             <div v-if="(quote.confirmations || []).length" class="confirmations">
               <b class="confirmations-title">生產細節確認</b>
-              <div
-                v-for="item in quote.confirmations"
-                :key="item.id"
-                class="confirmation-item"
-                :class="'is-' + item.status"
-              >
+              <div v-for="item in quote.confirmations" :key="item.id" class="confirmation-item" :class="'is-' + item.status">
                 <div class="confirmation-row">
-                  <span class="confirmation-label"><b>{{ item.label }}</b><template v-if="item.value">：{{ item.value }}</template></span>
+                  <span class="confirmation-label">
+                    <b>{{ item.label }}</b>
+                    <template v-if="item.value">：{{ item.value }}</template>
+                  </span>
                   <el-tag v-if="item.status === 'confirmed'" size="small" type="success">已確認</el-tag>
                   <el-tag v-else-if="item.status === 'issue'" size="small" type="warning">已回覆問題</el-tag>
                 </div>
@@ -72,7 +78,8 @@
             </div>
             <div class="quote-messages">
               <div v-for="msg in quote.messages || []" :key="msg.id" class="message" :class="msg.author">
-                <b>{{ msg.authorName || msg.author }}</b>：{{ msg.body }}
+                <b>{{ msg.authorName || msg.author }}</b>
+                ：{{ msg.body }}
                 <div v-if="(msg.attachments || []).length" class="message-attachments">
                   <img
                     v-for="att in msg.attachments"
@@ -114,14 +121,19 @@
             <b>{{ order.id }}</b>
             <el-tag size="small">{{ order.status }}</el-tag>
           </div>
-          <p class="quote-meta">到期：{{ order.due }} · 金額：${{ order.value }}<span v-if="order.discount"> · 折扣：-${{ order.discount }}</span></p>
+          <p class="quote-meta">
+            到期：{{ order.due }} · 金額：${{ order.value }}
+            <span v-if="order.discount">· 折扣：-${{ order.discount }}</span>
+          </p>
           <p v-if="order.payment" class="quote-meta">付款狀態：{{ order.payment.provider }} · {{ order.payment.status }}</p>
 
-          <div class="order-tracking" v-if="trackingByOrder[order.id]">
+          <div v-if="trackingByOrder[order.id]" class="order-tracking">
             <p class="quote-meta">
               物流：{{ trackingByOrder[order.id].carrier || '尚未出貨' }}
-              <template v-if="trackingByOrder[order.id].trackingNumber"> · 追蹤號碼：{{ trackingByOrder[order.id].trackingNumber }}</template>
-              <template v-if="trackingByOrder[order.id].status === 'not_configured'"> ·（Track.TW 尚未設定，暫無法查詢即時貨態）</template>
+              <template v-if="trackingByOrder[order.id].trackingNumber">
+                · 追蹤號碼：{{ trackingByOrder[order.id].trackingNumber }}
+              </template>
+              <template v-if="trackingByOrder[order.id].status === 'not_configured'">·（Track.TW 尚未設定，暫無法查詢即時貨態）</template>
             </p>
           </div>
 
@@ -156,52 +168,71 @@
       </el-tab-pane>
     </el-tabs>
 
-    <el-dialog title="檔案預覽 / DFM 檢查" v-model="previewVisible" width="480px">
+    <el-dialog v-model="previewVisible" title="檔案預覽 / DFM 檢查" width="480px">
       <div v-if="previewData">
-        <model-viewer
-          v-if="previewArrayBuffer"
-          :array-buffer="previewArrayBuffer"
-          :filename="previewData.name"
-          :height="260"
-        />
-        <p><b>{{ previewData.name }}</b>（{{ previewData.type }}）</p>
+        <model-viewer v-if="previewArrayBuffer" :array-buffer="previewArrayBuffer" :filename="previewData.name" :height="260" />
+        <p>
+          <b>{{ previewData.name }}</b>
+          （{{ previewData.type }}）
+        </p>
         <p>尺寸：{{ previewData.summary.dimensions.join(' × ') }} mm</p>
         <p>建構板佔用率：{{ previewData.buildPlate.occupancyPercent }}%（{{ previewData.buildPlate.fit }}）</p>
-        <el-alert v-for="(warning, index) in previewData.warnings" :key="index" :title="warning" type="warning" show-icon :closable="false" style="margin-top: 8px" />
+        <el-alert
+          v-for="(warning, index) in previewData.warnings"
+          :key="index"
+          :title="warning"
+          type="warning"
+          show-icon
+          :closable="false"
+          style="margin-top: 8px"
+        />
       </div>
     </el-dialog>
 
-    <el-dialog title="結帳" v-model="checkoutVisible" width="380px">
+    <el-dialog v-model="checkoutVisible" title="結帳" width="380px">
       <p class="hint">選擇付款方式（尚未接上正式商店憑證的供應商會顯示「即將推出」）</p>
       <el-radio-group v-model="checkoutMethod" style="display: flex; flex-direction: column; gap: 8px">
         <el-radio v-for="method in paymentMethods" :key="method.id" :label="method.id" :disabled="!method.configured">
-          {{ method.name }}<span v-if="!method.configured" class="hint"> （即將推出）</span>
+          {{ method.name }}
+          <span v-if="!method.configured" class="hint">（即將推出）</span>
         </el-radio>
       </el-radio-group>
-      <template #footer><div>
-        <el-button @click="checkoutVisible = false">取消</el-button>
-        <el-button type="primary" :loading="checkingOut" @click="submitCheckout">確認</el-button>
-      </div></template>
+      <template #footer>
+        <div>
+          <el-button @click="checkoutVisible = false">取消</el-button>
+          <el-button type="primary" :loading="checkingOut" @click="submitCheckout">確認</el-button>
+        </div>
+      </template>
     </el-dialog>
 
-    <el-dialog title="套用優惠券" v-model="couponVisible" width="360px">
+    <el-dialog v-model="couponVisible" title="套用優惠券" width="360px">
       <el-input v-model="couponCode" placeholder="輸入優惠碼" />
-      <template #footer><div>
-        <el-button @click="couponVisible = false">取消</el-button>
-        <el-button type="primary" :loading="applyingCoupon" @click="submitCoupon">套用</el-button>
-      </div></template>
+      <template #footer>
+        <div>
+          <el-button @click="couponVisible = false">取消</el-button>
+          <el-button type="primary" :loading="applyingCoupon" @click="submitCoupon">套用</el-button>
+        </div>
+      </template>
     </el-dialog>
 
-    <el-dialog title="折抵點數" v-model="redeemVisible" width="360px">
-      <p class="hint">目前可用點數：{{ customer && customer.loyaltyPoints || 0 }}（100 點折抵 $10）</p>
-      <el-input-number v-model="redeemPointsValue" :min="0" :max="(customer && customer.loyaltyPoints) || 0" style="width: 100%" controls-position="right" />
-      <template #footer><div>
-        <el-button @click="redeemVisible = false">取消</el-button>
-        <el-button type="primary" :loading="redeeming" @click="submitRedeem">折抵</el-button>
-      </div></template>
+    <el-dialog v-model="redeemVisible" title="折抵點數" width="360px">
+      <p class="hint">目前可用點數：{{ (customer && customer.loyaltyPoints) || 0 }}（100 點折抵 $10）</p>
+      <el-input-number
+        v-model="redeemPointsValue"
+        :min="0"
+        :max="(customer && customer.loyaltyPoints) || 0"
+        style="width: 100%"
+        controls-position="right"
+      />
+      <template #footer>
+        <div>
+          <el-button @click="redeemVisible = false">取消</el-button>
+          <el-button type="primary" :loading="redeeming" @click="submitRedeem">折抵</el-button>
+        </div>
+      </template>
     </el-dialog>
 
-    <el-dialog :title="addressForm.id ? '編輯地址' : '新增地址'" v-model="addressDialogVisible" width="420px">
+    <el-dialog v-model="addressDialogVisible" :title="addressForm.id ? '編輯地址' : '新增地址'" width="420px">
       <el-form label-width="80px" size="small">
         <el-form-item label="標籤"><el-input v-model="addressForm.label" /></el-form-item>
         <el-form-item label="收件人"><el-input v-model="addressForm.recipient" /></el-form-item>
@@ -212,10 +243,12 @@
         <el-form-item label="郵遞區號"><el-input v-model="addressForm.postalCode" /></el-form-item>
         <el-form-item label="設為預設"><el-switch v-model="addressForm.isDefault" /></el-form-item>
       </el-form>
-      <template #footer><div>
-        <el-button @click="addressDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="savingAddress" @click="submitAddress">儲存</el-button>
-      </div></template>
+      <template #footer>
+        <div>
+          <el-button @click="addressDialogVisible = false">取消</el-button>
+          <el-button type="primary" :loading="savingAddress" @click="submitAddress">儲存</el-button>
+        </div>
+      </template>
     </el-dialog>
   </div>
 </template>
@@ -355,7 +388,7 @@
         window.open(`/api/quote-messages/${quoteId}/${messageId}/attachments/${index}`, '_blank', 'noopener')
       },
       async confirmItem(quote, item, decision) {
-        const note = (this.confirmationNotes[quote.id + ':' + item.id] || '').trim()
+        const note = (this.confirmationNotes[`${quote.id}:${item.id}`] || '').trim()
         if (decision === 'issue' && !note && !(item.value || '').trim()) {
           this.$baseMessage('請寫下想調整的方向或直接用下方訊息欄說明，讓專員了解你的想法。', 'warning')
           return
@@ -363,7 +396,7 @@
         const result = await decideQuoteConfirmation(quote.id, item.id, decision, note)
         const index = this.quotes.findIndex((q) => q.id === quote.id)
         if (index !== -1) this.quotes.splice(index, 1, result.quoteRequest)
-        this.confirmationNotes[quote.id + ':' + item.id] = ''
+        this.confirmationNotes[`${quote.id}:${item.id}`] = ''
         this.$baseMessage(decision === 'confirmed' ? '已確認，感謝回覆！' : '已把問題回覆給專員。', 'success')
       },
       async previewQuoteFile(quote) {
@@ -373,7 +406,11 @@
           this.previewData = await fetchQuoteFilePreview(quote.id)
           this.previewVisible = true
           // 3D 檢視器需要原始檔案位元組；跟 DFM 摘要分開拉取，其中一個失敗不影響另一個顯示
-          fetchQuoteFileRaw(quote.id).then((buffer) => { this.previewArrayBuffer = buffer }).catch(() => {})
+          fetchQuoteFileRaw(quote.id)
+            .then((buffer) => {
+              this.previewArrayBuffer = buffer
+            })
+            .catch(() => {})
         } finally {
           this.previewBusy = ''
         }
@@ -472,7 +509,9 @@
             const created = await createAddress(payload)
             this.addresses.push(created)
           }
-          this.addresses.forEach((a) => { if (payload.isDefault && a.id !== id) a.isDefault = false })
+          this.addresses.forEach((a) => {
+            if (payload.isDefault && a.id !== id) a.isDefault = false
+          })
           this.$baseMessage('地址已儲存', 'success')
           this.addressDialogVisible = false
         } finally {
@@ -546,29 +585,66 @@
     border-radius: 10px;
     padding: 10px 12px;
 
-    .confirmations-title { font-size: 13px; color: #475467; }
+    .confirmations-title {
+      font-size: 13px;
+      color: #475467;
+    }
 
     .confirmation-item {
       padding: 8px 0;
       border-bottom: 1px dashed #edf0f5;
 
-      &:last-child { border-bottom: 0; }
-      &.is-confirmed .confirmation-label { color: #1c7c44; }
-      &.is-issue .confirmation-label { color: #b25e02; }
+      &:last-child {
+        border-bottom: 0;
+      }
+      &.is-confirmed .confirmation-label {
+        color: #1c7c44;
+      }
+      &.is-issue .confirmation-label {
+        color: #b25e02;
+      }
 
-      .confirmation-row { display: flex; justify-content: space-between; gap: 10px; align-items: center; font-size: 13px; }
-      .confirmation-note { margin: 4px 0 0; font-size: 12px; color: #667085; white-space: pre-wrap; }
-      .confirmation-actions { display: flex; gap: 8px; margin-top: 6px; align-items: center; flex-wrap: wrap; }
-      .confirmation-note-input { flex: 1; min-width: 180px; }
+      .confirmation-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: center;
+        font-size: 13px;
+      }
+      .confirmation-note {
+        margin: 4px 0 0;
+        font-size: 12px;
+        color: #667085;
+        white-space: pre-wrap;
+      }
+      .confirmation-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 6px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .confirmation-note-input {
+        flex: 1;
+        min-width: 180px;
+      }
     }
   }
 
   .message-attachments {
-    display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap;
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+    flex-wrap: wrap;
 
     .attachment-thumb {
-      width: 72px; height: 72px; object-fit: cover; border-radius: 8px;
-      border: 1px solid #e3e9f4; cursor: zoom-in; background: #fff;
+      width: 72px;
+      height: 72px;
+      object-fit: cover;
+      border-radius: 8px;
+      border: 1px solid #e3e9f4;
+      cursor: zoom-in;
+      background: #fff;
     }
   }
 

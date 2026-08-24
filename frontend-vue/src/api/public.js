@@ -27,9 +27,7 @@ export function submitPublicQuoteRequest(payload, file) {
       formData.append(key, Array.isArray(value) ? value.join(',') : String(value))
     }
   })
-  return publicRequest
-    .post('/api/public/quoteRequests', formData, { headers: { 'Content-Type': undefined } })
-    .then((r) => r.data)
+  return publicRequest.post('/api/public/quoteRequests', formData, { headers: { 'Content-Type': undefined } }).then((r) => r.data)
 }
 
 export function fetchPublicQuoteStatus(id, token) {

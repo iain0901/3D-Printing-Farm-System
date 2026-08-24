@@ -82,8 +82,8 @@
     margin-right: 4px;
   }
 
-  ::v-deep {
-    .el-tag {
+  
+:deep(.el-tag) {
       float: right;
       height: 16px;
       padding-right: 4px;
@@ -92,5 +92,5 @@
       line-height: 16px;
       border: 0;
     }
-  }
+
 </style>

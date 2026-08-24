@@ -26,36 +26,44 @@
       <el-table-column prop="material" label="材料" width="110" />
       <el-table-column prop="size" label="大小" width="100" />
       <el-table-column label="狀態" width="110">
-        <template #default="{ row }"><el-tag size="small">{{ row.status }}</el-tag></template>
+        <template #default="{ row }">
+          <el-tag size="small">{{ row.status }}</el-tag>
+        </template>
       </el-table-column>
       <el-table-column label="操作" width="220">
         <template #default="{ row }">
           <el-button size="small" :loading="previewBusy === row.id" @click="handlePreview(row)">預覽</el-button>
           <el-button size="small" @click="handleDownload(row)">下載</el-button>
-          <el-button size="small" type="danger" v-permissions="['files:write']" @click="handleDelete(row)">刪除</el-button>
+          <el-button v-permissions="['files:write']" size="small" type="danger" @click="handleDelete(row)">刪除</el-button>
         </template>
       </el-table-column>
     </el-table>
     <div v-if="!files.length" class="empty-hint">尚無檔案，上傳一個 STL/3MF/OBJ/G-code 開始</div>
 
-    <el-dialog title="檔案預覽 / DFM 檢查" v-model="previewVisible" width="480px">
+    <el-dialog v-model="previewVisible" title="檔案預覽 / DFM 檢查" width="480px">
       <div v-if="previewData">
-        <model-viewer
-          v-if="previewArrayBuffer"
-          :array-buffer="previewArrayBuffer"
-          :filename="previewData.name"
-          :height="260"
-        />
-        <p><b>{{ previewData.name }}</b>（{{ previewData.type }} · {{ previewData.material }}）</p>
+        <model-viewer v-if="previewArrayBuffer" :array-buffer="previewArrayBuffer" :filename="previewData.name" :height="260" />
+        <p>
+          <b>{{ previewData.name }}</b>
+          （{{ previewData.type }} · {{ previewData.material }}）
+        </p>
         <p>尺寸：{{ previewData.summary.dimensions.join(' × ') }} mm</p>
         <p>預估重量：{{ previewData.summary.estimateGrams }}g · 預估工時：{{ previewData.summary.printTime }}</p>
         <p>建構板佔用率：{{ previewData.buildPlate.occupancyPercent }}%（{{ previewData.buildPlate.fit }}）</p>
         <p v-if="previewData.compatiblePrinters.length">相容打印機：{{ previewData.compatiblePrinters.map((p) => p.name).join('、') }}</p>
-        <el-alert v-for="(warning, index) in previewData.warnings" :key="index" :title="warning" type="warning" show-icon :closable="false" style="margin-top: 8px" />
+        <el-alert
+          v-for="(warning, index) in previewData.warnings"
+          :key="index"
+          :title="warning"
+          type="warning"
+          show-icon
+          :closable="false"
+          style="margin-top: 8px"
+        />
       </div>
     </el-dialog>
 
-    <el-dialog title="新增資料夾" v-model="folderDialogVisible" width="380px">
+    <el-dialog v-model="folderDialogVisible" title="新增資料夾" width="380px">
       <el-form label-width="80px" size="small">
         <el-form-item label="名稱"><el-input v-model="folderForm.name" /></el-form-item>
         <el-form-item label="用途">
@@ -68,10 +76,12 @@
           </el-select>
         </el-form-item>
       </el-form>
-      <template #footer><div>
-        <el-button @click="folderDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="creatingFolder" @click="submitFolder">新增</el-button>
-      </div></template>
+      <template #footer>
+        <div>
+          <el-button @click="folderDialogVisible = false">取消</el-button>
+          <el-button type="primary" :loading="creatingFolder" @click="submitFolder">新增</el-button>
+        </div>
+      </template>
     </el-dialog>
   </div>
 </template>
@@ -139,7 +149,11 @@
         try {
           this.previewData = await fetchFilePreview(file.id)
           this.previewVisible = true
-          fetchFileRaw(file.id).then((buffer) => { this.previewArrayBuffer = buffer }).catch(() => {})
+          fetchFileRaw(file.id)
+            .then((buffer) => {
+              this.previewArrayBuffer = buffer
+            })
+            .catch(() => {})
         } finally {
           this.previewBusy = ''
         }

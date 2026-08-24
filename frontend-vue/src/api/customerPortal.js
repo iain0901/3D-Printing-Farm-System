@@ -28,7 +28,12 @@ export function sendQuoteMessage(quoteId, body, files = []) {
   const form = new FormData()
   form.append('body', body)
   files.forEach((file) => form.append('files', file, file.name))
-  return customerRequest({ url: `/api/customer/quotes/${quoteId}/messages`, method: 'post', data: form, headers: { 'Content-Type': undefined } })
+  return customerRequest({
+    url: `/api/customer/quotes/${quoteId}/messages`,
+    method: 'post',
+    data: form,
+    headers: { 'Content-Type': undefined },
+  })
 }
 
 // decision: 'confirmed' | 'issue'（附註說明問題）

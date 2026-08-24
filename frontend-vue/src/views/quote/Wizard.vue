@@ -1,7 +1,10 @@
 <template>
   <main class="quote-page">
     <header class="quote-header">
-      <router-link class="brand" to="/">3DRFM <span>製造服務</span></router-link>
+      <router-link class="brand" to="/">
+        3DRFM
+        <span>製造服務</span>
+      </router-link>
       <div class="header-links">
         <router-link to="/portal/login">會員中心</router-link>
         <router-link to="/login">內部登入</router-link>
@@ -63,9 +66,18 @@
               accept=".stl,.3mf,.step,.stp"
             >
               <el-icon><UploadFilled /></el-icon>
-              <div class="el-upload__text">拖曳模型至此，或 <em>選擇檔案</em></div>
+              <div class="el-upload__text">
+                拖曳模型至此，或
+                <em>選擇檔案</em>
+              </div>
             </el-upload>
-            <el-alert v-if="fileList.length" type="success" :closable="false" show-icon title="檔案會以私有儲存方式處理；解析異常時保留案件並交由專員檢查。" />
+            <el-alert
+              v-if="fileList.length"
+              type="success"
+              :closable="false"
+              show-icon
+              title="檔案會以私有儲存方式處理；解析異常時保留案件並交由專員檢查。"
+            />
             <div v-if="fileList.length" class="model-preview-block">
               <model-viewer :file="previewFile" :filename="previewName" :height="260" @error="onPreviewError" />
               <div v-if="fileList.length > 1" class="preview-switch">
@@ -76,7 +88,9 @@
                   class="preview-tab"
                   :class="{ active: index === previewIndex }"
                   @click="previewIndex = index"
-                >{{ item.name }}</button>
+                >
+                  {{ item.name }}
+                </button>
               </div>
               <p v-if="previewError" class="subtle">此格式無法在瀏覽器預覽（STEP 等），仍可正常送出，由專員轉檔處理。</p>
             </div>
@@ -85,7 +99,9 @@
               <p class="subtle">系統先以案件預設套用；可直接覆寫各零件的材料、顏色與數量。</p>
               <div v-for="part in parts" :key="part.localId" class="part-row">
                 <el-input v-model="part.name" size="small" />
-                <el-select v-model="part.material" size="small"><el-option v-for="item in materials" :key="item" :label="item" :value="item" /></el-select>
+                <el-select v-model="part.material" size="small">
+                  <el-option v-for="item in materials" :key="item" :label="item" :value="item" />
+                </el-select>
                 <span class="color-cell">
                   <el-color-picker v-model="part.colorHex" size="small" :predefine="palette" />
                   <el-input v-model="part.color" size="small" placeholder="顏色說明（選填）" />
@@ -98,13 +114,32 @@
             <h2>告訴我們你想製作什麼</h2>
             <el-form label-position="top">
               <el-form-item label="用途與需求" required>
-                <el-input v-model="form.purpose" type="textarea" :rows="4" placeholder="例如：依照電路板尺寸製作可鎖牆的外殼、需要防水與走線孔。" />
+                <el-input
+                  v-model="form.purpose"
+                  type="textarea"
+                  :rows="4"
+                  placeholder="例如：依照電路板尺寸製作可鎖牆的外殼、需要防水與走線孔。"
+                />
               </el-form-item>
               <el-form-item label="關鍵尺寸、草圖或照片">
-                <el-input v-model="form.criticalDimensions" type="textarea" :rows="3" placeholder="可填寫長寬高、孔位、配合物尺寸；照片與草圖可在送出後由 Chatwoot 對話補件。" />
+                <el-input
+                  v-model="form.criticalDimensions"
+                  type="textarea"
+                  :rows="3"
+                  placeholder="可填寫長寬高、孔位、配合物尺寸；照片與草圖可在送出後由 Chatwoot 對話補件。"
+                />
               </el-form-item>
               <el-form-item label="草圖、照片或需求 PDF">
-                <el-upload action="" :auto-upload="false" multiple :file-list="attachmentList" :on-change="onAttachmentChange" :on-remove="onAttachmentRemove" :before-upload="validateAttachmentFile" accept=".png,.jpg,.jpeg,.webp,.pdf">
+                <el-upload
+                  action=""
+                  :auto-upload="false"
+                  multiple
+                  :file-list="attachmentList"
+                  :on-change="onAttachmentChange"
+                  :on-remove="onAttachmentRemove"
+                  :before-upload="validateAttachmentFile"
+                  accept=".png,.jpg,.jpeg,.webp,.pdf"
+                >
                   <el-button size="small" icon="Paperclip">選擇附件</el-button>
                   <template #tip><span class="el-upload__tip">每個附件上限 100 MB。</span></template>
                 </el-upload>
@@ -122,18 +157,38 @@
               <el-form-item label="手機"><el-input v-model="form.customer.phone" /></el-form-item>
               <el-form-item label="公司／工作室"><el-input v-model="form.customer.company" /></el-form-item>
               <el-form-item label="案件名稱" required><el-input v-model="form.project" /></el-form-item>
-              <el-form-item label="希望完成日期"><el-date-picker v-model="form.dueDate" type="date" value-format="yyyy-MM-dd" style="width: 100%" /></el-form-item>
+              <el-form-item label="希望完成日期">
+                <el-date-picker v-model="form.dueDate" type="date" value-format="yyyy-MM-dd" style="width: 100%" />
+              </el-form-item>
             </div>
             <el-divider>案件預設</el-divider>
             <div class="form-grid">
-              <el-form-item label="材料"><el-select v-model="form.defaults.material" style="width: 100%"><el-option v-for="item in materials" :key="item" :label="item" :value="item" /></el-select></el-form-item>
-              <el-form-item label="顏色"><el-input v-model="form.defaults.color" placeholder="例如：霧黑、白色、Pantone 色號" /></el-form-item>
-              <el-form-item label="數量"><el-input-number v-model="form.defaults.quantity" :min="1" :max="10000" style="width: 100%" /></el-form-item>
-              <el-form-item label="品質"><el-select v-model="form.defaults.quality" style="width: 100%"><el-option label="草稿" value="Draft" /><el-option label="標準" value="Standard" /><el-option label="精細" value="Fine" /></el-select></el-form-item>
+              <el-form-item label="材料">
+                <el-select v-model="form.defaults.material" style="width: 100%">
+                  <el-option v-for="item in materials" :key="item" :label="item" :value="item" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="顏色">
+                <el-input v-model="form.defaults.color" placeholder="例如：霧黑、白色、Pantone 色號" />
+              </el-form-item>
+              <el-form-item label="數量">
+                <el-input-number v-model="form.defaults.quantity" :min="1" :max="10000" style="width: 100%" />
+              </el-form-item>
+              <el-form-item label="品質">
+                <el-select v-model="form.defaults.quality" style="width: 100%">
+                  <el-option label="草稿" value="Draft" />
+                  <el-option label="標準" value="Standard" />
+                  <el-option label="精細" value="Fine" />
+                </el-select>
+              </el-form-item>
               <el-form-item label="填充率"><el-slider v-model="form.defaults.infill" :max="100" show-input /></el-form-item>
-              <el-form-item label="壁數"><el-input-number v-model="form.defaults.walls" :min="1" :max="12" style="width: 100%" /></el-form-item>
+              <el-form-item label="壁數">
+                <el-input-number v-model="form.defaults.walls" :min="1" :max="12" style="width: 100%" />
+              </el-form-item>
             </div>
-            <el-form-item label="備註"><el-input v-model="form.notes" type="textarea" :rows="3" placeholder="例如：表面處理、組裝需求、包裝、運送方式等。" /></el-form-item>
+            <el-form-item label="備註">
+              <el-input v-model="form.notes" type="textarea" :rows="3" placeholder="例如：表面處理、組裝需求、包裝、運送方式等。" />
+            </el-form-item>
           </el-form>
         </section>
 
@@ -142,13 +197,17 @@
           <div class="review-grid">
             <div>
               <dl>
-                <dt>案件名稱</dt><dd>{{ form.project || '尚未填寫' }}</dd>
-                <dt>服務方式</dt><dd>{{ form.mode === 'estimate' ? '快速估價' : '專員協助' }}</dd>
-                <dt>材料／數量</dt><dd>{{ form.defaults.material }}／{{ form.defaults.quantity }}</dd>
-                <dt>模型</dt><dd>{{ form.hasModel ? `${fileList.length} 個檔案` : '需要建模協助' }}</dd>
+                <dt>案件名稱</dt>
+                <dd>{{ form.project || '尚未填寫' }}</dd>
+                <dt>服務方式</dt>
+                <dd>{{ form.mode === 'estimate' ? '快速估價' : '專員協助' }}</dd>
+                <dt>材料／數量</dt>
+                <dd>{{ form.defaults.material }}／{{ form.defaults.quantity }}</dd>
+                <dt>模型</dt>
+                <dd>{{ form.hasModel ? `${fileList.length} 個檔案` : '需要建模協助' }}</dd>
               </dl>
             </div>
-            <aside class="estimate-card" v-loading="estimating">
+            <aside v-loading="estimating" class="estimate-card">
               <p>初步預估總價</p>
               <strong>NT$ {{ estimate ? estimate.total.toLocaleString() : '—' }}</strong>
               <small>最終金額由專員確認模型、OrcaSlicer 切片與製程後提供。</small>
@@ -169,7 +228,12 @@
               />
             </aside>
           </div>
-          <el-alert type="info" :closable="false" show-icon title="客戶端只顯示最終總價；材料、工時、風險、折扣與稅額等明細由內部人員管理。" />
+          <el-alert
+            type="info"
+            :closable="false"
+            show-icon
+            title="客戶端只顯示最終總價；材料、工時、風險、折扣與稅額等明細由內部人員管理。"
+          />
         </section>
 
         <div class="wizard-actions">
@@ -179,11 +243,13 @@
         </div>
       </el-card>
 
-      <el-dialog title="案件已建立" v-model="successVisible" width="460px" :close-on-click-modal="false">
+      <el-dialog v-model="successVisible" title="案件已建立" width="460px" :close-on-click-modal="false">
         <div v-if="createdCase" class="success-dialog">
           <el-result icon="success" title="已收到你的案件" :sub-title="`${createdCase.caseNo}｜${createdCase.project}`" />
           <p>案件連結已建立。後續客服與 LINE 對話會統一在 Chatwoot 進行。</p>
-          <el-input :value="publicCaseUrl" readonly><template #append><el-button @click="copyLink">複製連結</el-button></template></el-input>
+          <el-input :value="publicCaseUrl" readonly>
+            <template #append><el-button @click="copyLink">複製連結</el-button></template>
+          </el-input>
         </div>
       </el-dialog>
     </section>
@@ -207,7 +273,17 @@
     dueDate: '',
     budget: 0,
     notes: '',
-    defaults: { material: 'PLA', color: '白色', quantity: 1, quality: 'Standard', layerHeight: '', infill: 15, walls: 2, support: 'Auto', postProcessing: [] },
+    defaults: {
+      material: 'PLA',
+      color: '白色',
+      quantity: 1,
+      quality: 'Standard',
+      layerHeight: '',
+      infill: 15,
+      walls: 2,
+      support: 'Auto',
+      postProcessing: [],
+    },
   })
 
   export default {
@@ -269,14 +345,17 @@
       onFileChange(file, files) {
         if (!this.validateModelFile(file.raw || file)) return
         this.fileList = files.filter((item) => this.validateModelFile(item.raw || item))
-        this.parts = this.fileList.map((item, index) => this.parts[index] || ({
-          localId: item.uid || `${Date.now()}-${index}`,
-          name: item.name.replace(/\.[^.]+$/, ''),
-          material: this.form.defaults.material,
-          color: '',
-          colorHex: '',
-          quantity: this.form.defaults.quantity,
-        }))
+        this.parts = this.fileList.map(
+          (item, index) =>
+            this.parts[index] || {
+              localId: item.uid || `${Date.now()}-${index}`,
+              name: item.name.replace(/\.[^.]+$/, ''),
+              material: this.form.defaults.material,
+              color: '',
+              colorHex: '',
+              quantity: this.form.defaults.quantity,
+            }
+        )
         if (this.previewIndex >= this.fileList.length) this.previewIndex = 0
         this.previewError = ''
       },
@@ -291,7 +370,9 @@
         if (!this.validateAttachmentFile(file.raw || file)) return
         this.attachmentList = files.filter((item) => this.validateAttachmentFile(item.raw || item))
       },
-      onAttachmentRemove(_, files) { this.attachmentList = files },
+      onAttachmentRemove(_, files) {
+        this.attachmentList = files
+      },
       validateStep() {
         if (this.step === 1 && this.form.hasModel && !this.fileList.length) return '請至少上傳一個模型檔案。'
         if (this.step === 1 && !this.form.hasModel && !this.form.purpose.trim()) return '請填寫用途或建模需求。'
@@ -334,12 +415,14 @@
         try {
           const payload = {
             ...this.form,
-            parts: this.form.hasModel ? this.parts.map((part) => ({
-              name: part.name,
-              material: part.material,
-              color: part.colorHex || part.color || '',
-              quantity: part.quantity,
-            })) : [],
+            parts: this.form.hasModel
+              ? this.parts.map((part) => ({
+                  name: part.name,
+                  material: part.material,
+                  color: part.colorHex || part.color || '',
+                  quantity: part.quantity,
+                }))
+              : [],
             modeling: { sketches: [], criticalDimensions: this.form.criticalDimensions, requirements: this.form.purpose },
           }
           const files = [...this.fileList, ...this.attachmentList].map((item) => item.raw || item)
@@ -360,43 +443,248 @@
 </script>
 
 <style lang="scss" scoped>
-  .quote-page { min-height: 100vh; background: #f5f7fb; color: #17223b; }
-  .quote-header { max-width: 1160px; margin: auto; padding: 22px 24px; display: flex; justify-content: space-between; align-items: center; }
-  .brand { color: #17223b; font-size: 22px; font-weight: 800; text-decoration: none; letter-spacing: .4px; }
-  .brand span { font-size: 13px; color: #6b7280; font-weight: 500; margin-left: 7px; }
-  .header-links a { margin-left: 20px; color: #4b5563; text-decoration: none; font-size: 14px; }
-  .hero { max-width: 860px; margin: 24px auto 34px; text-align: center; padding: 0 24px; }
-  .eyebrow { color: #3563e9; font-weight: 700; font-size: 13px; letter-spacing: 1px; }
-  h1 { margin: 8px 0 12px; font-size: 38px; }
-  .hero p:last-child, .subtle { color: #667085; line-height: 1.7; }
-  .quote-shell { max-width: 980px; margin: auto; padding: 0 24px 60px; }
-  .wizard-card { margin-top: 30px; border: 0; border-radius: 16px; }
-  .step-content { min-height: 390px; padding: 18px 8px; }
-  h2 { font-size: 24px; margin: 4px 0 18px; }
-  h3 { margin: 24px 0 4px; }
-  .mode-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; margin: 26px 0; }
-  .mode-card { min-height: 150px; border: 1px solid #dbe2ef; border-radius: 12px; background: #fff; padding: 24px; text-align: left; cursor: pointer; transition: .2s; }
-  .mode-card:hover, .mode-card.selected { border-color: #3563e9; box-shadow: 0 8px 24px rgba(53,99,233,.12); }
-  .mode-card i { color: #3563e9; font-size: 25px; display: block; margin-bottom: 16px; }
-  .mode-card b, .mode-card span { display: block; }
-  .mode-card span { margin-top: 7px; color: #667085; font-size: 14px; }
-  .choice-form { max-width: 600px; }
-  .part-row { display: grid; grid-template-columns: 1.3fr .9fr 1.5fr 90px; gap: 10px; align-items: center; margin-top: 8px; }
-  .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; }
-  .review-grid { display: grid; grid-template-columns: 1fr 310px; gap: 28px; margin-bottom: 24px; }
-  dl { margin: 0; } dt { color: #667085; margin-top: 14px; } dd { margin: 3px 0; font-weight: 600; }
-  .estimate-card { background: #17223b; color: #fff; border-radius: 14px; padding: 24px; }
-  .estimate-card p { margin: 0; opacity: .72; } .estimate-card strong { display: block; font-size: 31px; margin: 10px 0; } .estimate-card small { line-height: 1.6; opacity: .72; }
-  .estimate-lines { list-style: none; margin: 14px 0 0; padding: 12px 0 0; border-top: 1px solid rgba(255,255,255,.16); }
-  .estimate-lines li { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 3px 0; opacity: .88; }
-  .estimate-lines li b { font-weight: 600; white-space: nowrap; }
-  .estimate-alert { margin-top: 14px; }
-  .model-preview-block { margin-top: 18px; border: 1px solid #dbe2ef; border-radius: 12px; padding: 14px; background: #fff; }
-  .preview-switch { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-  .preview-tab { border: 1px solid #dbe2ef; background: #f8fafc; border-radius: 8px; padding: 5px 10px; font-size: 12px; cursor: pointer; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .preview-tab.active { border-color: #3563e9; color: #3563e9; background: #eef3ff; }
-  .color-cell { display: flex; align-items: center; gap: 8px; }
-  .wizard-actions { display: flex; justify-content: flex-end; gap: 10px; padding-top: 20px; border-top: 1px solid #edf0f5; }
-  .success-dialog { text-align: center; } .success-dialog p { color: #667085; line-height: 1.7; }
-  @media (max-width: 680px) { h1 { font-size: 30px; } .mode-grid, .form-grid, .review-grid { grid-template-columns: 1fr; } .part-row { grid-template-columns: 1fr 1fr; } }
+  .quote-page {
+    min-height: 100vh;
+    background: #f5f7fb;
+    color: #17223b;
+  }
+  .quote-header {
+    max-width: 1160px;
+    margin: auto;
+    padding: 22px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .brand {
+    color: #17223b;
+    font-size: 22px;
+    font-weight: 800;
+    text-decoration: none;
+    letter-spacing: 0.4px;
+  }
+  .brand span {
+    font-size: 13px;
+    color: #6b7280;
+    font-weight: 500;
+    margin-left: 7px;
+  }
+  .header-links a {
+    margin-left: 20px;
+    color: #4b5563;
+    text-decoration: none;
+    font-size: 14px;
+  }
+  .hero {
+    max-width: 860px;
+    margin: 24px auto 34px;
+    text-align: center;
+    padding: 0 24px;
+  }
+  .eyebrow {
+    color: #3563e9;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 1px;
+  }
+  h1 {
+    margin: 8px 0 12px;
+    font-size: 38px;
+  }
+  .hero p:last-child,
+  .subtle {
+    color: #667085;
+    line-height: 1.7;
+  }
+  .quote-shell {
+    max-width: 980px;
+    margin: auto;
+    padding: 0 24px 60px;
+  }
+  .wizard-card {
+    margin-top: 30px;
+    border: 0;
+    border-radius: 16px;
+  }
+  .step-content {
+    min-height: 390px;
+    padding: 18px 8px;
+  }
+  h2 {
+    font-size: 24px;
+    margin: 4px 0 18px;
+  }
+  h3 {
+    margin: 24px 0 4px;
+  }
+  .mode-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 18px;
+    margin: 26px 0;
+  }
+  .mode-card {
+    min-height: 150px;
+    border: 1px solid #dbe2ef;
+    border-radius: 12px;
+    background: #fff;
+    padding: 24px;
+    text-align: left;
+    cursor: pointer;
+    transition: 0.2s;
+  }
+  .mode-card:hover,
+  .mode-card.selected {
+    border-color: #3563e9;
+    box-shadow: 0 8px 24px rgba(53, 99, 233, 0.12);
+  }
+  .mode-card i {
+    color: #3563e9;
+    font-size: 25px;
+    display: block;
+    margin-bottom: 16px;
+  }
+  .mode-card b,
+  .mode-card span {
+    display: block;
+  }
+  .mode-card span {
+    margin-top: 7px;
+    color: #667085;
+    font-size: 14px;
+  }
+  .choice-form {
+    max-width: 600px;
+  }
+  .part-row {
+    display: grid;
+    grid-template-columns: 1.3fr 0.9fr 1.5fr 90px;
+    gap: 10px;
+    align-items: center;
+    margin-top: 8px;
+  }
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 18px;
+  }
+  .review-grid {
+    display: grid;
+    grid-template-columns: 1fr 310px;
+    gap: 28px;
+    margin-bottom: 24px;
+  }
+  dl {
+    margin: 0;
+  }
+  dt {
+    color: #667085;
+    margin-top: 14px;
+  }
+  dd {
+    margin: 3px 0;
+    font-weight: 600;
+  }
+  .estimate-card {
+    background: #17223b;
+    color: #fff;
+    border-radius: 14px;
+    padding: 24px;
+  }
+  .estimate-card p {
+    margin: 0;
+    opacity: 0.72;
+  }
+  .estimate-card strong {
+    display: block;
+    font-size: 31px;
+    margin: 10px 0;
+  }
+  .estimate-card small {
+    line-height: 1.6;
+    opacity: 0.72;
+  }
+  .estimate-lines {
+    list-style: none;
+    margin: 14px 0 0;
+    padding: 12px 0 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.16);
+  }
+  .estimate-lines li {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 13px;
+    padding: 3px 0;
+    opacity: 0.88;
+  }
+  .estimate-lines li b {
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .estimate-alert {
+    margin-top: 14px;
+  }
+  .model-preview-block {
+    margin-top: 18px;
+    border: 1px solid #dbe2ef;
+    border-radius: 12px;
+    padding: 14px;
+    background: #fff;
+  }
+  .preview-switch {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .preview-tab {
+    border: 1px solid #dbe2ef;
+    background: #f8fafc;
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .preview-tab.active {
+    border-color: #3563e9;
+    color: #3563e9;
+    background: #eef3ff;
+  }
+  .color-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .wizard-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding-top: 20px;
+    border-top: 1px solid #edf0f5;
+  }
+  .success-dialog {
+    text-align: center;
+  }
+  .success-dialog p {
+    color: #667085;
+    line-height: 1.7;
+  }
+  @media (max-width: 680px) {
+    h1 {
+      font-size: 30px;
+    }
+    .mode-grid,
+    .form-grid,
+    .review-grid {
+      grid-template-columns: 1fr;
+    }
+    .part-row {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
 </style>

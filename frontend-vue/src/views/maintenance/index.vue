@@ -1,7 +1,9 @@
 <template>
   <div class="maintenance-container">
     <div class="quickbar">
-      <el-button v-permissions="['maintenance:write']" type="primary" icon="CirclePlus" @click="dialogVisible = true">新增維護任務</el-button>
+      <el-button v-permissions="['maintenance:write']" type="primary" icon="CirclePlus" @click="dialogVisible = true">
+        新增維護任務
+      </el-button>
     </div>
     <el-table :data="jobs" style="width: 100%">
       <el-table-column prop="title" label="項目" min-width="160" />
@@ -20,7 +22,7 @@
     </el-table>
     <div v-if="!jobs.length" class="empty-hint">尚無維護任務</div>
 
-    <el-dialog title="新增維護任務" v-model="dialogVisible" width="420px">
+    <el-dialog v-model="dialogVisible" title="新增維護任務" width="420px">
       <el-form label-width="80px" size="small">
         <el-form-item label="項目"><el-input v-model="form.title" /></el-form-item>
         <el-form-item label="打印機">
@@ -34,10 +36,12 @@
           </el-select>
         </el-form-item>
       </el-form>
-      <template #footer><div>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submit">新增</el-button>
-      </div></template>
+      <template #footer>
+        <div>
+          <el-button @click="dialogVisible = false">取消</el-button>
+          <el-button type="primary" :loading="saving" @click="submit">新增</el-button>
+        </div>
+      </template>
     </el-dialog>
   </div>
 </template>

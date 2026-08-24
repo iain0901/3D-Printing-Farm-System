@@ -32,7 +32,9 @@
               <el-switch v-model="settings.supports" />
             </el-form-item>
             <el-form-item>
-              <el-button v-permissions="['files:write']" type="primary" :loading="running" @click="run" style="width: 100%">{{ running ? '切片中…' : '開始切片' }}</el-button>
+              <el-button v-permissions="['files:write']" type="primary" :loading="running" style="width: 100%" @click="run">
+                {{ running ? '切片中…' : '開始切片' }}
+              </el-button>
             </el-form-item>
           </el-form>
         </el-card>
@@ -98,7 +100,9 @@
           this.$store.commit('files/patchOne', result.file)
           const file = this.files.find((f) => f.id === this.settings.fileId)
           if (result.job.status === 'complete') {
-            this.resultText = `${result.job.outputName || (file ? file.name : '')} · ${this.settings.material}, ${this.settings.layerHeight}mm, ${this.settings.infill}% infill · ${result.job.engine} engine`
+            this.resultText = `${result.job.outputName || (file ? file.name : '')} · ${this.settings.material}, ${
+              this.settings.layerHeight
+            }mm, ${this.settings.infill}% infill · ${result.job.engine} engine`
             this.$baseMessage('切片完成', 'success')
           } else {
             this.resultText = `切片失敗：${result.job.error || '未知錯誤'}`

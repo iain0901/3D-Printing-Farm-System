@@ -11,8 +11,10 @@ export function createMaintenance(payload) {
 
 export function updateMaintenance(id, patch) {
   const key = `maintenance-update:${id}`
-  return request({ url: `/api/maintenance/${id}`, method: 'patch', data: patch, headers: idempotencyHeaders(key, { id, patch }) }).then((r) => {
-    clearIdempotency(key)
-    return r
-  })
+  return request({ url: `/api/maintenance/${id}`, method: 'patch', data: patch, headers: idempotencyHeaders(key, { id, patch }) }).then(
+    (r) => {
+      clearIdempotency(key)
+      return r
+    }
+  )
 }

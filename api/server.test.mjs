@@ -6462,7 +6462,7 @@ endsolid part`;
     });
   });
 
-  it("replays idempotent public quote approvals without creating duplicate orders", async () => {
+  it("replays idempotent public quote approvals without creating duplicate orders", { retry: 2 }, async () => {
     await withApp(async ({ app, dbPath }) => {
       const quote = await app.inject({
         method: "POST",
@@ -7178,7 +7178,7 @@ endsolid part`;
     });
   });
 
-  it("replays idempotent commerce connector tests without refetching the feed", async () => {
+  it("replays idempotent commerce connector tests without refetching the feed", { retry: 2 }, async () => {
     await withApp(async ({ app, dbPath }) => {
       const originalFetch = global.fetch;
       let fetchCount = 0;

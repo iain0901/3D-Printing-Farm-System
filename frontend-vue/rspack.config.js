@@ -252,9 +252,26 @@ module.exports = {
   },
   devServer: {
     hot: true,
-    // 与 React 前端 dev server (5173) 及后端 API (8797) 并存，避免端口冲突
+    // 與 React 前端 dev server (5173) 及後端 API (8797) 並存，避免端口冲突
     port: 5174,
+    // history mode：深連結一律回 index.html（正式環境由 Fastify setNotFoundHandler 處理）
     historyApiFallback: true,
+    setupMiddlewares: (middlewares, devServer) => {
+      // RspackDevServer 對 historyApiFallback 支援不穩，這裡手動改寫無副檔名的 GET 請求
+      const path = require('path')
+      devServer.app.use((req, res, next) => {
+        if (
+          req.method === 'GET' &&
+          !req.url.startsWith('/api/') &&
+          !req.url.startsWith('/@') &&
+          !path.extname(req.url.split('?')[0])
+        ) {
+          req.url = '/index.html'
+        }
+        next()
+      })
+      return middlewares
+    },
     static: {
       directory: path.join(__dirname, 'public'),
     },

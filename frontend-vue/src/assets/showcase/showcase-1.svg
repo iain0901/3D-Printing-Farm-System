@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#eef3ff"/><stop offset="1" stop-color="#dfe9ff"/>
+    </linearGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3563e9"/><stop offset="1" stop-color="#2748b8"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="300" fill="url(#bg)"/>
+  <ellipse cx="200" cy="252" rx="130" ry="16" fill="#c7d6f8"/>
+  <!-- benchy 船 -->
+  <path d="M110 200 L290 200 L262 240 L138 240 Z" fill="url(#body)"/>
+  <rect x="185" y="150" width="30" height="52" rx="4" fill="#4d7bf0"/>
+  <path d="M185 150 L215 150 L208 128 L192 128 Z" fill="#4d7bf0"/>
+  <circle cx="200" cy="118" r="10" fill="#2748b8"/>
+  <!-- 列印層紋 -->
+  <g stroke="#ffffff" stroke-opacity=".22" stroke-width="3">
+    <line x1="116" y1="212" x2="284" y2="212"/>
+    <line x1="122" y1="222" x2="278" y2="222"/>
+    <line x1="130" y1="232" x2="270" y2="232"/>
+  </g>
+</svg>

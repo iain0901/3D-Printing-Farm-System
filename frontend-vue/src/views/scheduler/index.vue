@@ -17,7 +17,9 @@
             <el-option label="到期優先" value="due-priority" />
             <el-option label="負載平衡" value="load-balance" />
           </el-select>
-          <el-button v-permissions="['queue:write']" type="primary" :loading="busy === 'optimize'" @click="runOptimize">執行最佳化</el-button>
+          <el-button v-permissions="['queue:write']" type="primary" :loading="busy === 'optimize'" @click="runOptimize">
+            執行最佳化
+          </el-button>
         </el-card>
       </el-col>
       <el-col :xs="24" :md="8">
@@ -29,7 +31,9 @@
             <el-option label="降低到期風險" value="due-risk" />
             <el-option label="成本平衡" value="balanced-cost" />
           </el-select>
-          <el-button v-permissions="['queue:write']" type="primary" :loading="busy === 'constraint'" @click="runConstraint">執行求解</el-button>
+          <el-button v-permissions="['queue:write']" type="primary" :loading="busy === 'constraint'" @click="runConstraint">
+            執行求解
+          </el-button>
         </el-card>
       </el-col>
     </el-row>

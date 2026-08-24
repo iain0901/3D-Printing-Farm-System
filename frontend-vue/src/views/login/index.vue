@@ -435,7 +435,7 @@
                 }
 
                 .custom-input {
-                  ::v-deep .el-input__inner {
+                  :deep(.el-input__inner) {
                     height: 46px;
                     padding-left: 50px;
                     padding-right: 50px;
@@ -633,7 +633,7 @@
 
                 .input-wrapper {
                   .custom-input {
-                    ::v-deep .el-input__inner {
+                    :deep(.el-input__inner) {
                       height: 45px;
                       font-size: 14px;
                     }
@@ -714,7 +714,7 @@
                   }
 
                   .custom-input {
-                    ::v-deep .el-input__inner {
+                    :deep(.el-input__inner) {
                       padding-left: 40px;
                       border-radius: 10px;
                     }
@@ -799,7 +799,7 @@
 
                 .input-wrapper {
                   .custom-input {
-                    ::v-deep .el-input__inner {
+                    :deep(.el-input__inner) {
                       height: 40px;
                     }
                   }

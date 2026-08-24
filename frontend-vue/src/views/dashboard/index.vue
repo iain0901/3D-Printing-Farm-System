@@ -9,7 +9,7 @@
     </div>
 
     <el-row :gutter="16" class="metric-row">
-      <el-col :xs="12" :sm="8" :md="4" v-for="metric in metrics" :key="metric.label">
+      <el-col v-for="metric in metrics" :key="metric.label" :xs="12" :sm="8" :md="4">
         <el-card shadow="never" class="metric-card" :class="metric.tone">
           <div class="metric-label">{{ metric.label }}</div>
           <div class="metric-value">{{ metric.value }}</div>
@@ -20,12 +20,14 @@
     <el-row :gutter="16" class="panel-row">
       <el-col :xs="24" :md="14">
         <el-card shadow="never">
-          <template #header><div class="panel-header">
-            <span>設備狀態</span>
-          </div></template>
+          <template #header>
+            <div class="panel-header">
+              <span>設備狀態</span>
+            </div>
+          </template>
           <div v-if="!printers.length" class="empty-hint">尚無打印機資料</div>
-          <el-row :gutter="12" v-else>
-            <el-col :xs="24" :sm="12" v-for="printer in printers" :key="printer.id">
+          <el-row v-else :gutter="12">
+            <el-col v-for="printer in printers" :key="printer.id" :xs="24" :sm="12">
               <div class="printer-card">
                 <div class="printer-card-head">
                   <b>{{ printer.name }}</b>
@@ -42,7 +44,9 @@
 
       <el-col :xs="24" :md="10">
         <el-card shadow="never">
-          <template #header><div class="panel-header"><span>臨近到期任務</span></div></template>
+          <template #header>
+            <div class="panel-header"><span>臨近到期任務</span></div>
+          </template>
           <ul class="event-feed">
             <li v-for="job in dueSoon" :key="job.id">
               <span :class="'status-dot ' + job.status" />
@@ -58,7 +62,9 @@
     <el-row :gutter="16" class="panel-row">
       <el-col :xs="24">
         <el-card shadow="never">
-          <template #header><div class="panel-header"><span>自動產生待辦（前 6 筆）</span></div></template>
+          <template #header>
+            <div class="panel-header"><span>自動產生待辦（前 6 筆）</span></div>
+          </template>
           <ul class="event-feed">
             <li v-for="todo in todosPreview" :key="todo.id">
               <span :class="'status-dot ' + (isUrgent(todo) ? 'failed' : 'queued')" />
@@ -147,7 +153,7 @@
   .metric-card {
     margin-bottom: 12px;
 
-    ::v-deep .el-card__body {
+    :deep(.el-card__body) {
       padding: 14px;
     }
 

@@ -21,11 +21,20 @@ router.beforeResolve(async (to, from, next) => {
   // 公開客戶端路由：品牌落地頁 (/)、估價精靈 (/quote*)、案件追蹤 (/customer/cases/*，
   // 以 token 驗證)、與整個 /portal/* 客戶入口，皆不走員工端 accessToken 守衛邏輯
   // （否則匿名客戶會被強制導去 /login 員工登入頁）。
-  const isPublicPath =
-    to.path === '/' ||
-    to.path.startsWith('/portal') ||
-    to.path.startsWith('/quote') ||
-    to.path.startsWith('/customer/cases')
+  const publicPrefixes = [
+    '/portal',
+    '/quote',
+    '/customer/cases',
+    '/services',
+    '/gallery',
+    '/pricing',
+    '/about',
+    '/faq',
+    '/contact',
+    '/terms',
+    '/privacy',
+  ]
+  const isPublicPath = to.path === '/' || publicPrefixes.some((prefix) => to.path.startsWith(prefix))
   if (isPublicPath) {
     next()
     if (progressBar) VabProgress.done()

@@ -63,7 +63,12 @@ instance.interceptors.response.use(
     }
 
     if (!response) {
-      const message = error.message === 'Network Error' ? '后端接口连接异常' : error.message && error.message.includes('timeout') ? '后端接口请求超时' : '后端接口未知异常'
+      const message =
+        error.message === 'Network Error'
+          ? '后端接口连接异常'
+          : error.message && error.message.includes('timeout')
+          ? '后端接口请求超时'
+          : '后端接口未知异常'
       baseMessage(message, 'error')
       return Promise.reject(error)
     }

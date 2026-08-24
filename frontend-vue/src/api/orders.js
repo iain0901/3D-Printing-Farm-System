@@ -12,7 +12,12 @@ export function createOrder(payload) {
 // status: received | queued | printing | on_hold | packed | shipped | completed | cancelled
 export function updateOrderStatus(orderId, status) {
   const key = `order-status:${orderId}`
-  return request({ url: `/api/orders/${orderId}/status`, method: 'patch', data: { status }, headers: idempotencyHeaders(key, { orderId, status }) }).then((r) => {
+  return request({
+    url: `/api/orders/${orderId}/status`,
+    method: 'patch',
+    data: { status },
+    headers: idempotencyHeaders(key, { orderId, status }),
+  }).then((r) => {
     clearIdempotency(key)
     return r
   })
@@ -20,7 +25,12 @@ export function updateOrderStatus(orderId, status) {
 
 export function updateOrderTracking(orderId, patch) {
   const key = `order-tracking:${orderId}`
-  return request({ url: `/api/orders/${orderId}/tracking`, method: 'patch', data: patch, headers: idempotencyHeaders(key, { orderId, ...patch }) }).then((r) => {
+  return request({
+    url: `/api/orders/${orderId}/tracking`,
+    method: 'patch',
+    data: patch,
+    headers: idempotencyHeaders(key, { orderId, ...patch }),
+  }).then((r) => {
     clearIdempotency(key)
     return r
   })
@@ -32,7 +42,12 @@ export function generateJobsForOrder(orderId, dryRun = false) {
 
 export function updateQuoteRequest(quoteId, patch) {
   const key = `quote-update:${quoteId}`
-  return request({ url: `/api/quoteRequests/${quoteId}`, method: 'patch', data: patch, headers: idempotencyHeaders(key, { quoteId, patch }) }).then((r) => {
+  return request({
+    url: `/api/quoteRequests/${quoteId}`,
+    method: 'patch',
+    data: patch,
+    headers: idempotencyHeaders(key, { quoteId, patch }),
+  }).then((r) => {
     clearIdempotency(key)
     return r
   })
@@ -56,7 +71,12 @@ export function replyQuoteMessage(quoteId, body, files = []) {
 // 建立生產細節確認項目（label/value/note），客戶端會逐項確認
 export function createQuoteConfirmations(quoteId, items) {
   const key = `quote-confirm:${quoteId}`
-  return request({ url: `/api/quoteRequests/${quoteId}/confirmations`, method: 'post', data: { items }, headers: idempotencyHeaders(key, { quoteId, items }) }).then((r) => {
+  return request({
+    url: `/api/quoteRequests/${quoteId}/confirmations`,
+    method: 'post',
+    data: { items },
+    headers: idempotencyHeaders(key, { quoteId, items }),
+  }).then((r) => {
     clearIdempotency(key)
     return r
   })

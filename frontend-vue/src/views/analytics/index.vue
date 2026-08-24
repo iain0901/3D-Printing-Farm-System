@@ -1,7 +1,7 @@
 <template>
   <div class="analytics-container">
     <el-row :gutter="16" class="metric-row">
-      <el-col :xs="12" :sm="8" :md="4" v-for="metric in metrics" :key="metric.label">
+      <el-col v-for="metric in metrics" :key="metric.label" :xs="12" :sm="8" :md="4">
         <el-card shadow="never" class="metric-card">
           <div class="metric-label">{{ metric.label }}</div>
           <div class="metric-value">{{ metric.value }}</div>
@@ -92,7 +92,7 @@
   .metric-card {
     margin-bottom: 12px;
 
-    ::v-deep .el-card__body {
+    :deep(.el-card__body) {
       padding: 12px;
     }
 

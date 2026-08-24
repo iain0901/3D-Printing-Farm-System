@@ -33,8 +33,8 @@
     font-size: $base-font-size-default;
     line-height: $base-nav-bar-height;
 
-    ::v-deep {
-      .el-breadcrumb__item {
+    
+:deep(.el-breadcrumb__item) {
         .el-breadcrumb__inner {
           a {
             display: flex;
@@ -56,6 +56,6 @@
           }
         }
       }
-    }
+
   }
 </style>

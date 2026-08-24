@@ -90,9 +90,8 @@
     .vab-main {
       background: $base-menu-background;
 
-      ::v-deep {
-        .el-menu {
-          &.el-menu--horizontal {
+      
+:deep(.el-menu.el-menu--horizontal) {
             display: flex;
             align-items: center;
             justify-content: flex-end;
@@ -129,52 +128,13 @@
             }
           }
 
+          :deep(.el-menu) {
           svg {
             width: 1rem;
             margin-right: 3px;
           }
-
-          &--horizontal {
-            .el-menu {
-              .el-menu-item,
-              .el-submenu__title {
-                height: $base-menu-item-height;
-                line-height: $base-menu-item-height;
-              }
-            }
-
-            .el-submenu,
-            .el-menu-item {
-              &.is-active {
-                background-color: $base-color-blue !important;
-                border-bottom: 0 solid transparent !important;
-
-                .el-submenu__title {
-                  border-bottom: 0 solid transparent !important;
-                }
-              }
-            }
-
-            > .el-menu-item {
-              .el-tag {
-                margin-top: calc(#{$base-top-bar-height} / 2 - 7.5px);
-                margin-left: 5px;
-              }
-
-              @media only screen and (max-width: 1199px) {
-                .el-tag {
-                  display: none;
-                }
-              }
-
-              &.is-active {
-                background-color: transparent !important;
-                border-bottom: 3px solid $base-color-blue !important;
-              }
-            }
-          }
         }
-      }
+
     }
 
     .right-panel {
@@ -183,17 +143,15 @@
       justify-content: flex-end;
       height: $base-top-bar-height;
 
-      ::v-deep {
-        .username,
-        .user-role {
+      
+:deep(.username,
+        .user-role) {
           color: rgba($base-color-white, 0.9);
         }
-
-        .username + i {
+:deep(.username + i) {
           color: rgba($base-color-white, 0.9);
         }
-
-        svg {
+:deep(svg) {
           width: 1em;
           height: 1em;
           margin-right: 15px;
@@ -202,8 +160,7 @@
           cursor: pointer;
           fill: rgba($base-color-white, 0.9);
         }
-
-        button {
+:deep(button) {
           svg {
             margin-right: 0;
             color: rgba($base-color-white, 0.9);
@@ -211,11 +168,10 @@
             fill: rgba($base-color-white, 0.9);
           }
         }
-
-        .el-badge {
+:deep(.el-badge) {
           margin-right: 15px;
         }
-      }
+
     }
   }
 </style>

@@ -22,7 +22,12 @@ export function matchQueueJobs(dryRun) {
 export function scheduleQueueJob(jobId, printerId, scheduledStart = '13:00') {
   const payload = { printerId, scheduledStart }
   const key = `queue-schedule:${jobId}`
-  return request({ url: `/api/queue/${jobId}/schedule`, method: 'patch', data: payload, headers: idempotencyHeaders(key, { jobId, ...payload }) }).then((result) => {
+  return request({
+    url: `/api/queue/${jobId}/schedule`,
+    method: 'patch',
+    data: payload,
+    headers: idempotencyHeaders(key, { jobId, ...payload }),
+  }).then((result) => {
     clearIdempotency(key)
     return result
   })
@@ -30,7 +35,12 @@ export function scheduleQueueJob(jobId, printerId, scheduledStart = '13:00') {
 
 export function updateQueueStatus(jobId, status) {
   const key = `queue-status:${jobId}`
-  return request({ url: `/api/queue/${jobId}/status`, method: 'patch', data: { status }, headers: idempotencyHeaders(key, { jobId, status }) }).then((result) => {
+  return request({
+    url: `/api/queue/${jobId}/status`,
+    method: 'patch',
+    data: { status },
+    headers: idempotencyHeaders(key, { jobId, status }),
+  }).then((result) => {
     clearIdempotency(key)
     return result
   })
@@ -38,7 +48,12 @@ export function updateQueueStatus(jobId, status) {
 
 export function updateQueuePriority(jobId, priority) {
   const key = `queue-priority:${jobId}`
-  return request({ url: `/api/queue/${jobId}/priority`, method: 'patch', data: { priority }, headers: idempotencyHeaders(key, { jobId, priority }) }).then((result) => {
+  return request({
+    url: `/api/queue/${jobId}/priority`,
+    method: 'patch',
+    data: { priority },
+    headers: idempotencyHeaders(key, { jobId, priority }),
+  }).then((result) => {
     clearIdempotency(key)
     return result
   })
