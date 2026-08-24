@@ -15,7 +15,7 @@
         <div class="welcome-section">
           <div class="logo-container">
             <div class="logo-icon">
-              <i class="el-icon-s-platform"></i>
+              <el-icon><Monitor /></el-icon>
             </div>
             <h1 class="logo-text">{{ title }}</h1>
           </div>
@@ -23,15 +23,15 @@
           <p class="welcome-subtitle">登录您的账户以继续访问系统</p>
           <div class="feature-list">
             <div class="feature-item">
-              <i class="el-icon-check"></i>
+              <el-icon><Check /></el-icon>
               <span>现代化的管理界面</span>
             </div>
             <div class="feature-item">
-              <i class="el-icon-check"></i>
+              <el-icon><Check /></el-icon>
               <span>强大的功能模块</span>
             </div>
             <div class="feature-item">
-              <i class="el-icon-check"></i>
+              <el-icon><Check /></el-icon>
               <span>安全可靠的数据保护</span>
             </div>
           </div>
@@ -49,7 +49,7 @@
             <el-form-item class="form-item" prop="email">
               <div class="input-wrapper">
                 <div class="input-icon">
-                  <i class="el-icon-user"></i>
+                  <el-icon><User /></el-icon>
                 </div>
                 <el-input v-model.trim="form.email" v-focus class="custom-input" placeholder="请输入邮箱" tabindex="1" type="text" />
               </div>
@@ -58,7 +58,7 @@
             <el-form-item class="form-item" prop="password">
               <div class="input-wrapper">
                 <div class="input-icon">
-                  <i class="el-icon-lock"></i>
+                  <el-icon><Lock /></el-icon>
                 </div>
                 <el-input
                   :key="passwordType"
@@ -68,10 +68,10 @@
                   placeholder="请输入密码"
                   tabindex="2"
                   :type="passwordType"
-                  @keyup.enter.native="handleLogin"
+                  @keyup.enter="handleLogin"
                 />
                 <div class="password-toggle" @click="handlePassword">
-                  <i :class="passwordType === 'password' ? 'el-icon-view' : 'el-icon-hide'"></i>
+                  <el-icon><component :is="passwordType === 'password' ? 'View' : 'Hide'" /></el-icon>
                 </div>
               </div>
             </el-form-item>
@@ -79,7 +79,7 @@
             <el-form-item v-if="requiresTwoFactor" class="form-item" prop="twoFactorCode">
               <div class="input-wrapper">
                 <div class="input-icon">
-                  <i class="el-icon-mobile-phone"></i>
+                  <el-icon><Iphone /></el-icon>
                 </div>
                 <el-input
                   v-model.trim="form.twoFactorCode"
@@ -87,7 +87,7 @@
                   placeholder="请输入两步验证码或恢复码"
                   tabindex="3"
                   type="text"
-                  @keyup.enter.native="handleLogin"
+                  @keyup.enter="handleLogin"
                 />
               </div>
             </el-form-item>
@@ -157,7 +157,7 @@
     created() {
       document.body.style.overflow = 'hidden'
     },
-    beforeDestroy() {
+    beforeUnmount() {
       document.body.style.overflow = 'auto'
     },
     methods: {

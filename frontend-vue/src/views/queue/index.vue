@@ -1,8 +1,8 @@
 <template>
   <div class="queue-container">
     <div class="quickbar">
-      <el-button v-permissions="['queue:write']" :loading="matching === 'dry'" @click="preview" icon="el-icon-view">預覽配對</el-button>
-      <el-button v-permissions="['queue:write']" type="primary" :loading="matching === 'commit'" @click="commitMatch" icon="el-icon-connection">立即配對</el-button>
+      <el-button v-permissions="['queue:write']" :loading="matching === 'dry'" @click="preview" icon="View">預覽配對</el-button>
+      <el-button v-permissions="['queue:write']" type="primary" :loading="matching === 'commit'" @click="commitMatch" icon="Connection">立即配對</el-button>
       <span v-if="lastMatch" class="quickbar-note">上次配對：{{ lastMatch.matches.length }} 筆已配對，{{ lastMatch.skipped.length }} 筆略過</span>
     </div>
 
@@ -10,45 +10,45 @@
       <el-table-column prop="file" label="檔案" min-width="160" />
       <el-table-column prop="printer" label="打印機" width="140" />
       <el-table-column label="狀態" width="150">
-        <template slot-scope="{ row }">
-          <el-select v-if="canWrite" v-model="row.status" size="mini" :disabled="statusBusy === row.id" @change="changeStatus(row)">
+        <template #default="{ row }">
+          <el-select v-if="canWrite" v-model="row.status" size="small" :disabled="statusBusy === row.id" @change="changeStatus(row)">
             <el-option v-for="s in statusOptions" :key="s" :label="s" :value="s" />
           </el-select>
-          <el-tag v-else size="mini">{{ row.status }}</el-tag>
+          <el-tag v-else size="small">{{ row.status }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column label="優先級" width="130">
-        <template slot-scope="{ row }">
-          <el-select v-if="canWrite" v-model="row.priority" size="mini" :disabled="priorityBusy === row.id" @change="changePriority(row)">
+        <template #default="{ row }">
+          <el-select v-if="canWrite" v-model="row.priority" size="small" :disabled="priorityBusy === row.id" @change="changePriority(row)">
             <el-option v-for="p in priorityOptions" :key="p" :label="p" :value="p" />
           </el-select>
-          <el-tag v-else size="mini">{{ row.priority }}</el-tag>
+          <el-tag v-else size="small">{{ row.priority }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column prop="stage" label="階段" width="140" />
       <el-table-column prop="material" label="材料" width="110" />
       <el-table-column label="顏色" width="140">
-        <template slot-scope="{ row }">
+        <template #default="{ row }">
           <span v-if="row.filePartCount > 1" class="hint">{{ row.filePartCount }} 個零件（多色）</span>
           <span v-else>{{ row.color || 'Any' }}</span>
         </template>
       </el-table-column>
       <el-table-column label="後製/備註" min-width="140">
-        <template slot-scope="{ row }">
+        <template #default="{ row }">
           <span v-if="row.postProcessing && row.postProcessing.length" class="hint">{{ row.postProcessing.join('、') }}</span>
           <span v-if="row.notes" class="hint" :title="row.notes">・備註：{{ row.notes }}</span>
         </template>
       </el-table-column>
       <el-table-column prop="due" label="到期" width="140" />
       <el-table-column label="操作" width="120">
-        <template slot-scope="{ row }">
-          <el-button v-permissions="['queue:write']" size="mini" @click="openSchedule(row)">排程</el-button>
+        <template #default="{ row }">
+          <el-button v-permissions="['queue:write']" size="small" @click="openSchedule(row)">排程</el-button>
         </template>
       </el-table-column>
     </el-table>
     <div v-if="!queue.length" class="empty-hint">目前沒有排程任務</div>
 
-    <el-dialog title="排程到打印機" :visible.sync="scheduleDialogVisible" width="420px">
+    <el-dialog title="排程到打印機" v-model="scheduleDialogVisible" width="420px">
       <el-form v-if="scheduleTarget" label-width="90px" size="small">
         <el-form-item label="檔案"><span>{{ scheduleTarget.file }}</span></el-form-item>
         <el-form-item label="打印機">
@@ -60,10 +60,10 @@
           <el-input v-model="scheduleForm.scheduledStart" placeholder="例如 13:00" />
         </el-form-item>
       </el-form>
-      <div slot="footer">
+      <template #footer><div>
         <el-button @click="scheduleDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="scheduling" @click="submitSchedule">確認排程</el-button>
-      </div>
+      </div></template>
     </el-dialog>
   </div>
 </template>

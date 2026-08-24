@@ -6,7 +6,7 @@
       </div>
     </div>
 
-    <el-dropdown-menu slot="dropdown" class="custom-dropdown">
+    <template #dropdown><el-dropdown-menu class="custom-dropdown">
       <div class="dropdown-header">
         <div class="header-avatar">{{ initials }}</div>
         <div class="header-info">
@@ -17,10 +17,10 @@
       </div>
 
       <el-dropdown-item command="logout" class="dropdown-item logout-item">
-        <i class="el-icon-switch-button"></i>
+        <el-icon><SwitchButton /></el-icon>
         <span>退出登录</span>
       </el-dropdown-item>
-    </el-dropdown-menu>
+    </el-dropdown-menu></template>
   </el-dropdown>
 </template>
 

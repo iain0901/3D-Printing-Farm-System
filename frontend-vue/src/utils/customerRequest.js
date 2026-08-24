@@ -1,4 +1,4 @@
-import Vue from 'vue'
+import baseMessage from '@/utils/baseMessage'
 import axios from 'axios'
 import { baseURL, contentType, requestTimeout } from '@/config'
 import store from '@/store'
@@ -26,7 +26,7 @@ instance.interceptors.response.use(
   (error) => {
     const { response } = error
     if (!response) {
-      Vue.prototype.$baseMessage('連線異常，請稍後再試', 'error')
+      baseMessage('連線異常，請稍後再試', 'error')
       return Promise.reject(error)
     }
     const message = response.data && response.data.error
@@ -34,7 +34,7 @@ instance.interceptors.response.use(
       store.dispatch('customerAuth/resetAccessToken').catch(() => {})
       if (router.currentRoute.path !== '/portal/login') router.push('/portal/login').catch(() => {})
     }
-    Vue.prototype.$baseMessage(message || `請求失敗（${response.status}）`, 'error')
+    baseMessage(message || `請求失敗（${response.status}）`, 'error')
     return Promise.reject(error)
   }
 )

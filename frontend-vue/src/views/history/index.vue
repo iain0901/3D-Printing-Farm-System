@@ -4,18 +4,18 @@
       <el-table-column prop="file" label="檔案" min-width="160" />
       <el-table-column prop="printer" label="打印機" width="140" />
       <el-table-column label="狀態" width="110">
-        <template slot-scope="{ row }"><el-tag size="mini" :type="row.status === 'complete' ? 'success' : row.status === 'failed' ? 'danger' : 'info'">{{ row.status }}</el-tag></template>
+        <template #default="{ row }"><el-tag size="small" :type="row.status === 'complete' ? 'success' : row.status === 'failed' ? 'danger' : 'info'">{{ row.status }}</el-tag></template>
       </el-table-column>
       <el-table-column prop="duration" label="時長" width="100" />
       <el-table-column prop="material" label="材料" width="100" />
       <el-table-column label="成本" width="90">
-        <template slot-scope="{ row }">${{ row.cost }}</template>
+        <template #default="{ row }">${{ row.cost }}</template>
       </el-table-column>
       <el-table-column prop="date" label="日期" width="140" />
       <el-table-column prop="note" label="備註" min-width="140" />
       <el-table-column label="操作" width="110" v-permissions="['queue:write']">
-        <template slot-scope="{ row }">
-          <el-button size="mini" :loading="reprintBusy === row.id" @click="reprint(row)">重印</el-button>
+        <template #default="{ row }">
+          <el-button size="small" :loading="reprintBusy === row.id" @click="reprint(row)">重印</el-button>
         </template>
       </el-table-column>
     </el-table>

@@ -47,6 +47,10 @@ export function createCaseQuote(id, data) {
   return request({ url: `/api/cases/${id}/quotes`, method: 'post', data })
 }
 
+export function autoQuote(data) {
+  return request({ url: '/api/quotes/auto', method: 'post', data })
+}
+
 export function recordCasePayment(id, data) {
   return request({ url: `/api/cases/${id}/payments`, method: 'post', data })
 }

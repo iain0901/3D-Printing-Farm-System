@@ -1,7 +1,7 @@
 <template>
   <div class="customers-container">
     <div class="quickbar">
-      <el-button v-permissions="['orders:write']" type="primary" icon="el-icon-circle-plus" @click="openCreate">新增客戶</el-button>
+      <el-button v-permissions="['orders:write']" type="primary" icon="CirclePlus" @click="openCreate">新增客戶</el-button>
     </div>
     <el-table :data="customers" style="width: 100%">
       <el-table-column prop="name" label="姓名" min-width="140" />
@@ -9,18 +9,18 @@
       <el-table-column prop="email" label="Email" min-width="180" />
       <el-table-column prop="phone" label="電話" width="140" />
       <el-table-column label="標籤" min-width="140">
-        <template slot-scope="{ row }"><el-tag v-for="t in row.tags" :key="t" size="mini" style="margin-right: 4px">{{ t }}</el-tag></template>
+        <template #default="{ row }"><el-tag v-for="t in row.tags" :key="t" size="small" style="margin-right: 4px">{{ t }}</el-tag></template>
       </el-table-column>
       <el-table-column label="操作" width="160" v-permissions="['orders:write']">
-        <template slot-scope="{ row }">
-          <el-button size="mini" @click="openEdit(row)">編輯</el-button>
-          <el-button size="mini" type="danger" @click="remove(row)">刪除</el-button>
+        <template #default="{ row }">
+          <el-button size="small" @click="openEdit(row)">編輯</el-button>
+          <el-button size="small" type="danger" @click="remove(row)">刪除</el-button>
         </template>
       </el-table-column>
     </el-table>
     <div v-if="!customers.length" class="empty-hint">尚無客戶資料</div>
 
-    <el-dialog :title="form.id ? '編輯客戶' : '新增客戶'" :visible.sync="dialogVisible" width="460px">
+    <el-dialog :title="form.id ? '編輯客戶' : '新增客戶'" v-model="dialogVisible" width="460px">
       <el-form label-width="80px" size="small">
         <el-form-item label="姓名"><el-input v-model="form.name" /></el-form-item>
         <el-form-item label="公司"><el-input v-model="form.company" /></el-form-item>
@@ -28,10 +28,10 @@
         <el-form-item label="電話"><el-input v-model="form.phone" /></el-form-item>
         <el-form-item label="備註"><el-input v-model="form.notes" type="textarea" :rows="2" /></el-form-item>
       </el-form>
-      <div slot="footer">
+      <template #footer><div>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="submit">儲存</el-button>
-      </div>
+      </div></template>
     </el-dialog>
   </div>
 </template>

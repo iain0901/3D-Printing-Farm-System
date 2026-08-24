@@ -1,7 +1,7 @@
 <template>
   <div class="settings-container">
     <el-card shadow="never" class="settings-card">
-      <div slot="header">工作區設定</div>
+      <template #header><div>工作區設定</div></template>
       <el-form label-width="140px" size="small">
         <el-form-item label="組織名稱"><el-input v-model="form.organizationName" :disabled="!canWrite" /></el-form-item>
         <el-form-item label="預設地點"><el-input v-model="form.defaultLocation" :disabled="!canWrite" /></el-form-item>
@@ -22,7 +22,7 @@
     </el-card>
 
     <el-card shadow="never" class="settings-card">
-      <div slot="header">兩步驗證（2FA）</div>
+      <template #header><div>兩步驗證（2FA）</div></template>
       <p v-if="twoFactor.enabled" class="hint">已啟用兩步驗證，剩餘 {{ twoFactor.recoveryCodesRemaining }} 組恢復碼。</p>
       <template v-else>
         <el-button v-if="!qrDataUrl" type="primary" :loading="settingUp" @click="beginSetup">開始設定</el-button>

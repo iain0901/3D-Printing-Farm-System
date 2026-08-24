@@ -52,12 +52,7 @@ module.exports = {
         test: /\.vue$/,
         use: [
           {
-            loader: 'vue-loader',
-            options: {
-              compilerOptions: {
-                preserveWhitespace: false,
-              },
-            },
+          loader: 'vue-loader',
           },
         ],
       },
@@ -131,7 +126,6 @@ module.exports = {
     extensions: ['.js', '.vue', '.json'],
     alias: {
       '@': resolve('src'),
-      vue$: 'vue/dist/vue.esm.js',
       path: 'path-browserify',
       fs: false,
     },

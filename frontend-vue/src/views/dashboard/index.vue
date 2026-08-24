@@ -1,10 +1,10 @@
 <template>
   <div class="dashboard-container">
     <div class="quickbar">
-      <el-button type="primary" icon="el-icon-circle-plus" disabled>新增打印机</el-button>
-      <el-button icon="el-icon-upload2" disabled>上传檔案</el-button>
-      <el-button icon="el-icon-date" disabled>排程</el-button>
-      <el-button icon="el-icon-s-check" disabled>檢視待辦</el-button>
+      <el-button type="primary" icon="CirclePlus" disabled>新增打印机</el-button>
+      <el-button icon="Upload" disabled>上传檔案</el-button>
+      <el-button icon="Calendar" disabled>排程</el-button>
+      <el-button icon="DocumentChecked" disabled>檢視待辦</el-button>
       <span class="quickbar-note">（動作按鈕將在 Phase 3/4 對應視圖完成後啟用）</span>
     </div>
 
@@ -20,16 +20,16 @@
     <el-row :gutter="16" class="panel-row">
       <el-col :xs="24" :md="14">
         <el-card shadow="never">
-          <div slot="header" class="panel-header">
+          <template #header><div class="panel-header">
             <span>設備狀態</span>
-          </div>
+          </div></template>
           <div v-if="!printers.length" class="empty-hint">尚無打印機資料</div>
           <el-row :gutter="12" v-else>
             <el-col :xs="24" :sm="12" v-for="printer in printers" :key="printer.id">
               <div class="printer-card">
                 <div class="printer-card-head">
                   <b>{{ printer.name }}</b>
-                  <el-tag size="mini" :type="statusTagType(printer.status)">{{ printer.status }}</el-tag>
+                  <el-tag size="small" :type="statusTagType(printer.status)">{{ printer.status }}</el-tag>
                 </div>
                 <div class="printer-card-meta">{{ printer.model }} · {{ printer.location }}</div>
                 <el-progress :percentage="printer.progress || 0" :stroke-width="6" :show-text="false" />
@@ -42,7 +42,7 @@
 
       <el-col :xs="24" :md="10">
         <el-card shadow="never">
-          <div slot="header" class="panel-header"><span>臨近到期任務</span></div>
+          <template #header><div class="panel-header"><span>臨近到期任務</span></div></template>
           <ul class="event-feed">
             <li v-for="job in dueSoon" :key="job.id">
               <span :class="'status-dot ' + job.status" />
@@ -58,7 +58,7 @@
     <el-row :gutter="16" class="panel-row">
       <el-col :xs="24">
         <el-card shadow="never">
-          <div slot="header" class="panel-header"><span>自動產生待辦（前 6 筆）</span></div>
+          <template #header><div class="panel-header"><span>自動產生待辦（前 6 筆）</span></div></template>
           <ul class="event-feed">
             <li v-for="todo in todosPreview" :key="todo.id">
               <span :class="'status-dot ' + (isUrgent(todo) ? 'failed' : 'queued')" />

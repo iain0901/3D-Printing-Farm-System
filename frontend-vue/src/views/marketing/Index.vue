@@ -13,7 +13,7 @@
 
     <section class="steps-strip">
       <div v-for="step in steps" :key="step.title" class="step-item">
-        <div class="step-icon"><i :class="step.icon" /></div>
+        <div class="step-icon"><el-icon><component :is="step.icon" /></el-icon></div>
         <div class="step-title">{{ step.title }}</div>
         <div class="step-desc">{{ step.desc }}</div>
       </div>
@@ -21,7 +21,7 @@
 
     <section class="quote-workspace">
       <el-card shadow="never" class="form-card">
-        <div slot="header">報價設定</div>
+        <template #header><div>報價設定</div></template>
         <el-row :gutter="24">
           <el-col :xs="24" :sm="12">
             <el-form label-width="90px" size="small">
@@ -29,13 +29,13 @@
               <el-form-item label="Email"><el-input v-model="form.email" /></el-form-item>
               <el-form-item label="專案名稱"><el-input v-model="form.project" /></el-form-item>
               <el-form-item>
-                <span slot="label">材料 <field-help text="不同材料有不同硬度、耐熱性與價格。PLA 最容易列印、成本最低；PETG/ABS/ASA 較耐用耐熱；TPU 有彈性；Resin（光固化樹脂）/Nylon（SLS 尼龍）精度較高但成本較高。" /></span>
+                <template #label><span>材料 <field-help text="不同材料有不同硬度、耐熱性與價格。PLA 最容易列印、成本最低；PETG/ABS/ASA 較耐用耐熱；TPU 有彈性；Resin（光固化樹脂）/Nylon（SLS 尼龍）精度較高但成本較高。" /></span></template>
                 <el-select v-model="form.material" style="width: 100%">
                   <el-option v-for="m in materials" :key="m" :label="m" :value="m" />
                 </el-select>
               </el-form-item>
               <el-form-item>
-                <span slot="label">品質 <field-help text="層高越薄（例如 0.12mm），表面越細緻、越精密，但列印時間越長、費用越高；層高越厚（例如 0.28mm）列印越快，但表面較粗糙，適合不要求外觀的功能件。" /></span>
+                <template #label><span>品質 <field-help text="層高越薄（例如 0.12mm），表面越細緻、越精密，但列印時間越長、費用越高；層高越厚（例如 0.28mm）列印越快，但表面較粗糙，適合不要求外觀的功能件。" /></span></template>
                 <el-select v-model="form.quality" style="width: 100%">
                   <el-option label="一般（0.28mm，較快）" value="Draft" />
                   <el-option label="標準（0.20mm）" value="Standard" />
@@ -43,15 +43,15 @@
                 </el-select>
               </el-form-item>
               <el-form-item>
-                <span slot="label">填充率 <field-help text="模型內部支撐結構的密度（0-100%）。填充率越高，成品越堅固但用料與列印時間也越多，費用越高。一般擺件裝飾件 10-20% 即可；需要承重、耐用的功能件建議 40% 以上。" /></span>
+                <template #label><span>填充率 <field-help text="模型內部支撐結構的密度（0-100%）。填充率越高，成品越堅固但用料與列印時間也越多，費用越高。一般擺件裝飾件 10-20% 即可；需要承重、耐用的功能件建議 40% 以上。" /></span></template>
                 <el-slider v-model="form.infill" :max="100" show-input />
               </el-form-item>
               <el-form-item>
-                <span slot="label">牆數 <field-help text="模型外殼的層數（壁厚）。牆數越多，成品越堅固、越耐撞擊與磨損，但也會增加用料與列印時間。一般 2-3 層足夠日常使用，戶外或承重件建議 4 層以上。" /></span>
+                <template #label><span>牆數 <field-help text="模型外殼的層數（壁厚）。牆數越多，成品越堅固、越耐撞擊與磨損，但也會增加用料與列印時間。一般 2-3 層足夠日常使用，戶外或承重件建議 4 層以上。" /></span></template>
                 <el-input-number v-model="form.walls" :min="1" :max="6" controls-position="right" style="width: 100%" />
               </el-form-item>
               <el-form-item>
-                <span slot="label">顏色 <field-help text="整體列印顏色（單一顏色）。若上傳的檔案偵測到多個獨立零件，下方會另外出現每個零件可個別指定顏色的多色列印選項。" /></span>
+                <template #label><span>顏色 <field-help text="整體列印顏色（單一顏色）。若上傳的檔案偵測到多個獨立零件，下方會另外出現每個零件可個別指定顏色的多色列印選項。" /></span></template>
                 <el-color-picker v-model="form.color" :predefine="colorPalette" />
               </el-form-item>
             </el-form>
@@ -60,11 +60,11 @@
           <el-col :xs="24" :sm="12">
             <el-form label-width="90px" size="small">
               <el-form-item>
-                <span slot="label">支撐材 <field-help text="當模型有懸空結構或大角度懸垂（例如比 45 度更平的斜面）時，需要額外列印支撐材才能成功列印，完成後須手動拆除，會增加材料與工時成本。不確定的話可以先關閉，若模型結構複雜再開啟。" /></span>
+                <template #label><span>支撐材 <field-help text="當模型有懸空結構或大角度懸垂（例如比 45 度更平的斜面）時，需要額外列印支撐材才能成功列印，完成後須手動拆除，會增加材料與工時成本。不確定的話可以先關閉，若模型結構複雜再開啟。" /></span></template>
                 <el-switch v-model="form.support" />
               </el-form-item>
               <el-form-item>
-                <span slot="label">後處理 <field-help text="列印完成後的額外加工，每項都會額外收費：打磨（去除層紋讓表面更平滑）、上漆（上色或保護漆）、染色（整體染色，多用於白色尼龍件）、拋光（讓表面更光亮）。可多選或都不選。" /></span>
+                <template #label><span>後處理 <field-help text="列印完成後的額外加工，每項都會額外收費：打磨（去除層紋讓表面更平滑）、上漆（上色或保護漆）、染色（整體染色，多用於白色尼龍件）、拋光（讓表面更光亮）。可多選或都不選。" /></span></template>
                 <el-checkbox-group v-model="form.postProcessing">
                   <el-checkbox label="sanding">打磨</el-checkbox>
                   <el-checkbox label="painting">上漆</el-checkbox>
@@ -73,17 +73,17 @@
                 </el-checkbox-group>
               </el-form-item>
               <el-form-item>
-                <span slot="label">數量 <field-help text="訂購數量越多，單價通常越低。達到 10 件以上自動 95 折、50 件以上 9 折、100 件以上 85 折。" /></span>
+                <template #label><span>數量 <field-help text="訂購數量越多，單價通常越低。達到 10 件以上自動 95 折、50 件以上 9 折、100 件以上 85 折。" /></span></template>
                 <el-input-number v-model="form.quantity" :min="1" style="width: 100%" controls-position="right" />
               </el-form-item>
               <el-form-item>
-                <span slot="label">急件 <field-help text="加急插單處理，優先排進生產隊列以縮短等待時間，會依報價加收約 25% 服務費。注意：這不會讓印表機印得更快，純粹是排程優先權，實際列印時間不會改變。" /></span>
+                <template #label><span>急件 <field-help text="加急插單處理，優先排進生產隊列以縮短等待時間，會依報價加收約 25% 服務費。注意：這不會讓印表機印得更快，純粹是排程優先權，實際列印時間不會改變。" /></span></template>
                 <el-switch v-model="form.rush" />
               </el-form-item>
               <el-form-item>
-                <span slot="label">模型檔 <field-help text="選填。上傳 STL/3MF/OBJ/G-code 檔案後，系統會自動解析實際尺寸與重量，並偵測檔案內是否含有多個獨立零件（例如一次匯出多個鑰匙圈），估價也會改用真實尺寸重新計算。不上傳的話，價格是用一個中等尺寸的參考件估算。" /></span>
+                <template #label><span>模型檔 <field-help text="選填。上傳 STL/3MF/OBJ/G-code 檔案後，系統會自動解析實際尺寸與重量，並偵測檔案內是否含有多個獨立零件（例如一次匯出多個鑰匙圈），估價也會改用真實尺寸重新計算。不上傳的話，價格是用一個中等尺寸的參考件估算。" /></span></template>
                 <el-upload action="" :show-file-list="false" :before-upload="handleFileSelect" accept=".stl,.3mf,.obj,.gcode">
-                  <el-button size="small" icon="el-icon-upload2">{{ selectedFile ? selectedFile.name : '選擇檔案（選填）' }}</el-button>
+                  <el-button size="small" icon="Upload">{{ selectedFile ? selectedFile.name : '選擇檔案（選填）' }}</el-button>
                 </el-upload>
                 <div v-if="selectedFile" class="file-hint">已選擇：{{ selectedFile.name }}（{{ Math.round(selectedFile.size / 1024) }} KB）</div>
               </el-form-item>
@@ -131,7 +131,7 @@
       </el-card>
 
       <el-card shadow="never" class="price-card" v-loading="pricingLoading">
-        <div slot="header">即時報價</div>
+        <template #header><div>即時報價</div></template>
         <div class="price-total">
           <span class="price-currency">$</span>{{ liveEstimate.total }}
         </div>
@@ -201,10 +201,10 @@
         materials: ['PLA', 'PETG', 'ABS', 'ASA', 'TPU', 'Resin', 'Nylon'],
         colorPalette: COLOR_PALETTE,
         steps: [
-          { icon: 'el-icon-upload', title: '1. 上傳模型或填規格', desc: '上傳 STL/3MF/OBJ/G-code，系統自動偵測尺寸與單檔多零件；沒有檔案也能先用參數估價。' },
-          { icon: 'el-icon-view', title: '2. 即時看到報價', desc: '調整材料、品質、填充率、數量等參數，價格即時更新，多零件檔案可分別指定顏色。' },
-          { icon: 'el-icon-s-order', title: '3. 送出並追蹤進度', desc: '送出後用同一個 Email 註冊/登入客戶入口，即可查看報價進度、留言溝通、線上結帳。' },
-          { icon: 'el-icon-truck', title: '4. 生產與物流追蹤', desc: '訂單確認後進入生產排程，完成後提供物流追蹤號碼查詢，並可累積會員點數折抵下次消費。' },
+          { icon: 'Upload', title: '1. 上傳模型或填規格', desc: '上傳 STL/3MF/OBJ/G-code，系統自動偵測尺寸與單檔多零件；沒有檔案也能先用參數估價。' },
+          { icon: 'View', title: '2. 即時看到報價', desc: '調整材料、品質、填充率、數量等參數，價格即時更新，多零件檔案可分別指定顏色。' },
+          { icon: 'Tickets', title: '3. 送出並追蹤進度', desc: '送出後用同一個 Email 註冊/登入客戶入口，即可查看報價進度、留言溝通、線上結帳。' },
+          { icon: 'Van', title: '4. 生產與物流追蹤', desc: '訂單確認後進入生產排程，完成後提供物流追蹤號碼查詢，並可累積會員點數折抵下次消費。' },
         ],
         materialInfo: [
           { name: 'PLA', desc: '最容易列印、成本最低，適合一般模型、擺件與原型。' },

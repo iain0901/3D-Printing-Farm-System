@@ -11,7 +11,7 @@
           :style="{ background: swatch }"
           @click="setColor(part.index, swatch)"
         />
-        <el-color-picker v-model="customColors[part.index]" size="mini" @change="(hex) => setColor(part.index, hex)" />
+        <el-color-picker v-model="customColors[part.index]" size="small" @change="(hex) => setColor(part.index, hex)" />
       </span>
     </div>
   </div>

@@ -1,4 +1,8 @@
-import Vue from 'vue'
-import VabIcon from 'vab-icon'
+import '@fortawesome/fontawesome-free/css/all.min.css'
+import VabIcon from '@/components/VabIcon/index.vue'
 
-Vue.component('VabIcon', VabIcon)
+const setupVabIcon = (app) => {
+  app.component('VabIcon', VabIcon)
+}
+
+export default setupVabIcon

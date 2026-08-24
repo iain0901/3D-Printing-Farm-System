@@ -2,7 +2,7 @@
   <div id="tabs-container" class="tabs-container">
     <el-tabs v-model="tabActive" class="tabs-content" type="card" @tab-click="handleTabClick" @tab-remove="handleTabRemove">
       <el-tab-pane v-for="item in visitedRoutes" :key="item.path" :closable="!isAffix(item)" :name="item.path">
-        <template slot="label">
+        <template #label>
           <vab-icon v-if="getTabIcon(item)" :icon="['fas', getTabIcon(item)]" class="tab-icon" />
           <span>{{ item.meta.title }}</span>
         </template>
@@ -12,9 +12,9 @@
     <el-dropdown @command="handleCommand">
       <span style="cursor: pointer">
         更多操作
-        <i class="el-icon-arrow-down el-icon--right"></i>
+        <el-icon class="el-icon--right"><ArrowDown /></el-icon>
       </span>
-      <el-dropdown-menu slot="dropdown" class="tabs-more">
+      <template #dropdown><el-dropdown-menu class="tabs-more">
         <el-dropdown-item command="closeOtherstabs">
           <vab-icon :icon="['fas', 'times-circle']" />
           关闭其他
@@ -31,7 +31,7 @@
           <vab-icon :icon="['fas', 'ban']"></vab-icon>
           关闭全部
         </el-dropdown-item>
-      </el-dropdown-menu>
+      </el-dropdown-menu></template>
     </el-dropdown>
   </div>
 </template>
@@ -376,7 +376,7 @@
               border-color: $base-color-default;
             }
 
-            .el-icon-close {
+            .el-icon {
               position: relative;
               margin-left: 8px;
               font-size: 12px;

@@ -10,13 +10,13 @@
     </el-row>
 
     <el-card shadow="never" class="chart-card">
-      <div slot="header">近期產量趨勢</div>
+      <template #header><div>近期產量趨勢</div></template>
       <vab-chart v-if="chartOption" :option="chartOption" style="height: 320px" autoresize />
       <div v-else class="empty-hint">尚無資料</div>
     </el-card>
 
     <el-card shadow="never">
-      <div slot="header">打印機負載</div>
+      <template #header><div>打印機負載</div></template>
       <el-table :data="analytics.printerLoad || []" style="width: 100%">
         <el-table-column prop="printer" label="打印機" min-width="140" />
         <el-table-column prop="status" label="狀態" width="110" />

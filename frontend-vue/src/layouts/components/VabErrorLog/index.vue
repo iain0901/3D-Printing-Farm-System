@@ -2,7 +2,7 @@
   <div v-if="errorLogs.length > 0">
     <el-badge
       :value="errorLogs.length"
-      @click.native="dialogTableVisible = true"
+      @click="dialogTableVisible = true"
     >
       <el-button type="danger">
         <vab-icon :icon="['fas', 'bug']" />
@@ -10,36 +10,36 @@
     </el-badge>
 
     <el-dialog
-      :visible.sync="dialogTableVisible"
+      v-model="dialogTableVisible"
       append-to-body
       title="vue-admin-better异常捕获(温馨提示：错误必须解决)"
       width="70%"
     >
       <el-table :data="errorLogs">
         <el-table-column label="报错路由">
-          <template slot-scope="{ row }">
+          <template #default="{ row }">
             <a :href="row.url" target="_blank">
               <el-tag type="success">{{ row.url }}</el-tag>
             </a>
           </template>
         </el-table-column>
         <el-table-column label="错误信息">
-          <template slot-scope="{ row }">
+          <template #default="{ row }">
             <el-tag type="danger">{{ decodeUnicode(row.err.message) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="错误详情" width="120">
-          <template slot-scope="scope">
+          <template #default="scope">
             <el-popover placement="top-start" trigger="hover">
               <div style="color: red">
                 {{ scope.row.err.stack }}
               </div>
-              <el-button slot="reference">查看</el-button>
+              <template #reference><el-button>查看</el-button></template>
             </el-popover>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="380">
-          <template slot-scope="{ row }">
+          <template #default="{ row }">
             <a
               v-for="(item, index) in searchList"
               :key="index"
@@ -54,12 +54,12 @@
           </template>
         </el-table-column>
       </el-table>
-      <span slot="footer" class="dialog-footer">
+      <template #footer><span class="dialog-footer">
         <el-button @click="dialogTableVisible = false">取 消</el-button>
-        <el-button icon="el-icon-delete" type="danger" @click="clearAll">
+        <el-button icon="Delete" type="danger" @click="clearAll">
           暂不显示
         </el-button>
-      </span>
+      </span></template>
     </el-dialog>
   </div>
 </template>

@@ -11,7 +11,7 @@
 
     <el-table :data="todos" style="width: 100%">
       <el-table-column label="待辦" min-width="220">
-        <template slot-scope="{ row }">
+        <template #default="{ row }">
           <b>{{ row.title }}</b>
           <div class="todo-note">{{ row.actionNote || '由生產狀態自動產生' }}</div>
         </template>
@@ -20,17 +20,17 @@
       <el-table-column prop="source" label="來源任務" width="160" />
       <el-table-column prop="kind" label="類型" width="110" />
       <el-table-column label="嚴重度" width="100">
-        <template slot-scope="{ row }"><el-tag size="mini" :type="severityTagType(row.severity)">{{ row.severity }}</el-tag></template>
+        <template #default="{ row }"><el-tag size="small" :type="severityTagType(row.severity)">{{ row.severity }}</el-tag></template>
       </el-table-column>
       <el-table-column label="狀態" width="100">
-        <template slot-scope="{ row }"><el-tag size="mini">{{ row.status || 'open' }}</el-tag></template>
+        <template #default="{ row }"><el-tag size="small">{{ row.status || 'open' }}</el-tag></template>
       </el-table-column>
       <el-table-column prop="due" label="到期" width="120" />
       <el-table-column label="操作" width="220" v-permissions="['queue:write']">
-        <template slot-scope="{ row }">
-          <el-button size="mini" :disabled="row.status === 'claimed'" :loading="busy === row.id + '-claim'" @click="runAction(row, 'claim')">認領</el-button>
-          <el-button size="mini" :loading="busy === row.id + '-snooze'" @click="runAction(row, 'snooze')">延後</el-button>
-          <el-button size="mini" type="primary" :loading="busy === row.id + '-complete'" @click="runAction(row, 'complete')">完成</el-button>
+        <template #default="{ row }">
+          <el-button size="small" :disabled="row.status === 'claimed'" :loading="busy === row.id + '-claim'" @click="runAction(row, 'claim')">認領</el-button>
+          <el-button size="small" :loading="busy === row.id + '-snooze'" @click="runAction(row, 'snooze')">延後</el-button>
+          <el-button size="small" type="primary" :loading="busy === row.id + '-complete'" @click="runAction(row, 'complete')">完成</el-button>
         </template>
       </el-table-column>
     </el-table>

@@ -3,7 +3,7 @@
     <el-tabs v-model="tab">
       <el-tab-pane label="零件" name="parts">
         <div class="quickbar">
-          <el-button v-permissions="['catalog:write']" type="primary" icon="el-icon-circle-plus" @click="partDialogVisible = true">新增零件</el-button>
+          <el-button v-permissions="['catalog:write']" type="primary" icon="CirclePlus" @click="partDialogVisible = true">新增零件</el-button>
         </div>
         <el-table :data="parts" style="width: 100%">
           <el-table-column prop="name" label="名稱" min-width="160" />
@@ -11,7 +11,7 @@
           <el-table-column prop="process" label="製程" min-width="160" />
           <el-table-column prop="plates" label="片數" width="80" />
           <el-table-column label="狀態" width="110">
-            <template slot-scope="{ row }"><el-tag size="mini">{{ row.status }}</el-tag></template>
+            <template #default="{ row }"><el-tag size="small">{{ row.status }}</el-tag></template>
           </el-table-column>
         </el-table>
         <div v-if="!parts.length" class="empty-hint">尚無零件</div>
@@ -19,16 +19,16 @@
 
       <el-tab-pane label="SKU" name="skus">
         <div class="quickbar">
-          <el-button v-permissions="['catalog:write']" type="primary" icon="el-icon-circle-plus" @click="skuDialogVisible = true" :disabled="!parts.length">新增 SKU</el-button>
+          <el-button v-permissions="['catalog:write']" type="primary" icon="CirclePlus" @click="skuDialogVisible = true" :disabled="!parts.length">新增 SKU</el-button>
         </div>
         <el-table :data="skus" style="width: 100%">
           <el-table-column prop="sku" label="編號" width="140" />
           <el-table-column prop="title" label="標題" min-width="160" />
           <el-table-column label="零件">
-            <template slot-scope="{ row }">{{ (row.parts || []).join('、') }}</template>
+            <template #default="{ row }">{{ (row.parts || []).join('、') }}</template>
           </el-table-column>
           <el-table-column label="價格" width="90">
-            <template slot-scope="{ row }">${{ row.price }}</template>
+            <template #default="{ row }">${{ row.price }}</template>
           </el-table-column>
           <el-table-column prop="stock" label="庫存" width="80" />
         </el-table>
@@ -36,7 +36,7 @@
       </el-tab-pane>
     </el-tabs>
 
-    <el-dialog title="新增零件" :visible.sync="partDialogVisible" width="440px">
+    <el-dialog title="新增零件" v-model="partDialogVisible" width="440px">
       <el-form label-width="90px" size="small">
         <el-form-item label="名稱"><el-input v-model="partForm.name" /></el-form-item>
         <el-form-item label="來源檔案">
@@ -46,13 +46,13 @@
         </el-form-item>
         <el-form-item label="材料"><el-input v-model="partForm.material" /></el-form-item>
       </el-form>
-      <div slot="footer">
+      <template #footer><div>
         <el-button @click="partDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="savingPart" @click="submitPart">新增</el-button>
-      </div>
+      </div></template>
     </el-dialog>
 
-    <el-dialog title="新增 SKU" :visible.sync="skuDialogVisible" width="440px">
+    <el-dialog title="新增 SKU" v-model="skuDialogVisible" width="440px">
       <el-form label-width="90px" size="small">
         <el-form-item label="編號"><el-input v-model="skuForm.sku" /></el-form-item>
         <el-form-item label="標題"><el-input v-model="skuForm.title" /></el-form-item>
@@ -63,10 +63,10 @@
         </el-form-item>
         <el-form-item label="價格"><el-input-number v-model="skuForm.price" :min="0" style="width: 100%" controls-position="right" /></el-form-item>
       </el-form>
-      <div slot="footer">
+      <template #footer><div>
         <el-button @click="skuDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="savingSku" @click="submitSku">新增</el-button>
-      </div>
+      </div></template>
     </el-dialog>
   </div>
 </template>

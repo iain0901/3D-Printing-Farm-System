@@ -74,7 +74,7 @@
       },
     },
 
-    beforeDestroy() {
+    beforeUnmount() {
       clearTimeout(this.timeOutID)
     },
   }

@@ -2,19 +2,19 @@
   <div class="ai-knowledge-page">
     <vab-page-header title="AI 知識庫" content="由團隊維護 Chatwoot AI 可引用的材料、服務、付款與交期說明；對話逐字稿仍只保留在 Chatwoot。" />
     <el-card shadow="never">
-      <div class="toolbar"><el-button type="primary" icon="el-icon-plus" @click="openCreate">新增知識條目</el-button><el-button icon="el-icon-refresh" @click="load">更新</el-button></div>
+      <div class="toolbar"><el-button type="primary" icon="Plus" @click="openCreate">新增知識條目</el-button><el-button icon="Refresh" @click="load">更新</el-button></div>
       <el-table v-loading="loading" :data="items" row-key="id">
         <el-table-column prop="title" label="標題" min-width="180" />
         <el-table-column prop="category" label="分類" width="120" />
-        <el-table-column label="標籤" min-width="160"><template slot-scope="{ row }"><el-tag v-for="tag in row.tags" :key="tag" size="mini" class="tag">{{ tag }}</el-tag></template></el-table-column>
-        <el-table-column label="狀態" width="105"><template slot-scope="{ row }"><el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '啟用' : '停用' }}</el-tag></template></el-table-column>
+        <el-table-column label="標籤" min-width="160"><template #default="{ row }"><el-tag v-for="tag in row.tags" :key="tag" size="small" class="tag">{{ tag }}</el-tag></template></el-table-column>
+        <el-table-column label="狀態" width="105"><template #default="{ row }"><el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '啟用' : '停用' }}</el-tag></template></el-table-column>
         <el-table-column label="更新者" prop="updatedBy" width="160" />
-        <el-table-column label="操作" width="180"><template slot-scope="{ row }"><el-button size="mini" @click="openEdit(row)">編輯</el-button><el-button size="mini" type="danger" plain @click="remove(row)">刪除</el-button></template></el-table-column>
+        <el-table-column label="操作" width="180"><template #default="{ row }"><el-button size="small" @click="openEdit(row)">編輯</el-button><el-button size="small" type="danger" plain @click="remove(row)">刪除</el-button></template></el-table-column>
       </el-table>
       <el-empty v-if="!loading && !items.length" description="尚未建立 AI 知識條目" />
     </el-card>
 
-    <el-dialog :title="editingId ? '編輯 AI 知識條目' : '新增 AI 知識條目'" :visible.sync="dialogVisible" width="640px" @closed="resetForm">
+    <el-dialog :title="editingId ? '編輯 AI 知識條目' : '新增 AI 知識條目'" v-model="dialogVisible" width="640px" @closed="resetForm">
       <el-form label-position="top">
         <el-form-item label="標題"><el-input v-model.trim="form.title" maxlength="160" show-word-limit /></el-form-item>
         <el-form-item label="分類"><el-input v-model.trim="form.category" placeholder="例如：materials、delivery、payment" /></el-form-item>
@@ -22,7 +22,7 @@
         <el-form-item label="AI 可引用內容"><el-input v-model.trim="form.content" type="textarea" :rows="8" maxlength="6000" show-word-limit placeholder="寫入已確認的服務規則、材料限制或回覆準則。" /></el-form-item>
         <el-form-item label="啟用"><el-switch v-model="form.enabled" active-text="AI 可引用" inactive-text="停用" /></el-form-item>
       </el-form>
-      <div slot="footer"><el-button @click="dialogVisible = false">取消</el-button><el-button type="primary" :loading="saving" @click="save">儲存</el-button></div>
+      <template #footer><div><el-button @click="dialogVisible = false">取消</el-button><el-button type="primary" :loading="saving" @click="save">儲存</el-button></div></template>
     </el-dialog>
   </div>
 </template>

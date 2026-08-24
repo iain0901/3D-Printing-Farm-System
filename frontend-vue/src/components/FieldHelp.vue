@@ -1,6 +1,6 @@
 <template>
   <el-tooltip :content="text" placement="right" popper-class="field-help-tooltip">
-    <i class="el-icon-question field-help-icon" @click.prevent />
+    <el-icon class="field-help-icon" @click.prevent><QuestionFilled /></el-icon>
   </el-tooltip>
 </template>
 

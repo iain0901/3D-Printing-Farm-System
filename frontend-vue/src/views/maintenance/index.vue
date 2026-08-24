@@ -1,17 +1,17 @@
 <template>
   <div class="maintenance-container">
     <div class="quickbar">
-      <el-button v-permissions="['maintenance:write']" type="primary" icon="el-icon-circle-plus" @click="dialogVisible = true">新增維護任務</el-button>
+      <el-button v-permissions="['maintenance:write']" type="primary" icon="CirclePlus" @click="dialogVisible = true">新增維護任務</el-button>
     </div>
     <el-table :data="jobs" style="width: 100%">
       <el-table-column prop="title" label="項目" min-width="160" />
       <el-table-column prop="printer" label="打印機" width="140" />
       <el-table-column label="狀態" width="150">
-        <template slot-scope="{ row }">
-          <el-select v-if="canWrite" v-model="row.status" size="mini" @change="changeStatus(row)">
+        <template #default="{ row }">
+          <el-select v-if="canWrite" v-model="row.status" size="small" @change="changeStatus(row)">
             <el-option v-for="s in statusOptions" :key="s" :label="s" :value="s" />
           </el-select>
-          <el-tag v-else size="mini">{{ row.status }}</el-tag>
+          <el-tag v-else size="small">{{ row.status }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column prop="severity" label="嚴重度" width="100" />
@@ -20,7 +20,7 @@
     </el-table>
     <div v-if="!jobs.length" class="empty-hint">尚無維護任務</div>
 
-    <el-dialog title="新增維護任務" :visible.sync="dialogVisible" width="420px">
+    <el-dialog title="新增維護任務" v-model="dialogVisible" width="420px">
       <el-form label-width="80px" size="small">
         <el-form-item label="項目"><el-input v-model="form.title" /></el-form-item>
         <el-form-item label="打印機">
@@ -34,10 +34,10 @@
           </el-select>
         </el-form-item>
       </el-form>
-      <div slot="footer">
+      <template #footer><div>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="submit">新增</el-button>
-      </div>
+      </div></template>
     </el-dialog>
   </div>
 </template>

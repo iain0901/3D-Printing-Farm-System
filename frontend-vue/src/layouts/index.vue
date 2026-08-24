@@ -72,7 +72,7 @@
     beforeMount() {
       window.addEventListener('resize', this.handleResize)
     },
-    beforeDestroy() {
+    beforeUnmount() {
       window.removeEventListener('resize', this.handleResize)
       this.controller.abort()
       clearTimeout(this.timeOutID)

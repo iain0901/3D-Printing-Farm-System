@@ -21,8 +21,19 @@ export function decideQuote(quoteId, decision, note = '') {
   return customerRequest({ url: `/api/customer/quotes/${quoteId}/decision`, method: 'post', data: { decision, note } })
 }
 
-export function sendQuoteMessage(quoteId, body) {
-  return customerRequest({ url: `/api/customer/quotes/${quoteId}/messages`, method: 'post', data: { body } })
+export function sendQuoteMessage(quoteId, body, files = []) {
+  if (!files.length) {
+    return customerRequest({ url: `/api/customer/quotes/${quoteId}/messages`, method: 'post', data: { body } })
+  }
+  const form = new FormData()
+  form.append('body', body)
+  files.forEach((file) => form.append('files', file, file.name))
+  return customerRequest({ url: `/api/customer/quotes/${quoteId}/messages`, method: 'post', data: form, headers: { 'Content-Type': undefined } })
+}
+
+// decision: 'confirmed' | 'issue'（附註說明問題）
+export function decideQuoteConfirmation(quoteId, itemId, decision, note = '') {
+  return customerRequest({ url: `/api/customer/quotes/${quoteId}/confirmations/${itemId}`, method: 'post', data: { decision, note } })
 }
 
 export function fetchPaymentMethods() {

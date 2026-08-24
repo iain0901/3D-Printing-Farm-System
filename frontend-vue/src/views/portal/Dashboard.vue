@@ -11,15 +11,15 @@
           <div v-for="caseItem in cases" :key="caseItem.id" class="quote-item">
             <div class="quote-head">
               <b>{{ caseItem.project }}</b>
-              <el-tag size="mini">{{ caseItem.status }}</el-tag>
+              <el-tag size="small">{{ caseItem.status }}</el-tag>
             </div>
             <p class="quote-meta">案件編號：{{ caseItem.caseNo }} · {{ caseItem.parts.length }} 個零件</p>
             <p v-if="caseItem.quote" class="quote-meta">報價總額：NT$ {{ caseItem.quote.total }}</p>
             <p v-if="caseItem.delivery && caseItem.delivery.trackingNumber" class="quote-meta">物流追蹤：{{ caseItem.delivery.trackingNumber }}</p>
             <div v-if="caseItem.status === 'formal_quote_sent'" class="quote-actions">
-              <el-button size="mini" type="primary" @click="decideUnifiedCase(caseItem, 'accepted')">接受報價</el-button>
-              <el-button size="mini" @click="decideUnifiedCase(caseItem, 'revision')">要求修改</el-button>
-              <el-button size="mini" @click="contactSpecialist">取消請聯絡專員</el-button>
+              <el-button size="small" type="primary" @click="decideUnifiedCase(caseItem, 'accepted')">接受報價</el-button>
+              <el-button size="small" @click="decideUnifiedCase(caseItem, 'revision')">要求修改</el-button>
+              <el-button size="small" @click="contactSpecialist">取消請聯絡專員</el-button>
             </div>
             <p class="hint">聯絡與補件請在原 LINE 對話中進行。</p>
           </div>
@@ -31,26 +31,77 @@
           <div v-for="quote in quotes" :key="quote.id" class="quote-item">
             <div class="quote-head">
               <b>{{ quote.project }}</b>
-              <el-tag size="mini">{{ quote.status }}</el-tag>
+              <el-tag size="small">{{ quote.status }}</el-tag>
             </div>
             <p class="quote-meta">材料：{{ quote.material }} · 數量：{{ quote.quantity }} · 報價：${{ quote.quotedValue || 0 }}</p>
             <p v-if="quote.filePartCount > 1" class="quote-meta">此檔案偵測到 {{ quote.filePartCount }} 個獨立零件</p>
             <div class="quote-actions">
-              <el-button v-if="quote.fileId" size="mini" :loading="previewBusy === quote.id" @click="previewQuoteFile(quote)">預覽檔案</el-button>
+              <el-button v-if="quote.fileId" size="small" :loading="previewBusy === quote.id" @click="previewQuoteFile(quote)">預覽檔案</el-button>
               <template v-if="quote.status === 'quoted'">
-                <el-button size="mini" type="primary" @click="decide(quote, 'accepted')">接受</el-button>
-                <el-button size="mini" @click="decide(quote, 'revision')">要求修改</el-button>
-                <el-button size="mini" @click="contactSpecialist">取消請聯絡專員</el-button>
+                <el-button size="small" type="primary" @click="decide(quote, 'accepted')">接受</el-button>
+                <el-button size="small" @click="decide(quote, 'revision')">要求修改</el-button>
+                <el-button size="small" @click="contactSpecialist">取消請聯絡專員</el-button>
               </template>
+            </div>
+            <div v-if="(quote.confirmations || []).length" class="confirmations">
+              <b class="confirmations-title">生產細節確認</b>
+              <div
+                v-for="item in quote.confirmations"
+                :key="item.id"
+                class="confirmation-item"
+                :class="'is-' + item.status"
+              >
+                <div class="confirmation-row">
+                  <span class="confirmation-label"><b>{{ item.label }}</b><template v-if="item.value">：{{ item.value }}</template></span>
+                  <el-tag v-if="item.status === 'confirmed'" size="small" type="success">已確認</el-tag>
+                  <el-tag v-else-if="item.status === 'issue'" size="small" type="warning">已回覆問題</el-tag>
+                </div>
+                <p v-if="item.note" class="confirmation-note">{{ item.note }}</p>
+                <p v-if="item.decidedNote" class="confirmation-note">我的回覆：{{ item.decidedNote }}</p>
+                <div v-if="item.status === 'pending'" class="confirmation-actions">
+                  <el-input
+                    v-model="confirmationNotes[quote.id + ':' + item.id]"
+                    size="small"
+                    placeholder="想補充什麼都可以寫在這裡（選填）"
+                    class="confirmation-note-input"
+                  />
+                  <el-button size="small" type="primary" @click="confirmItem(quote, item, 'confirmed')">確認無誤</el-button>
+                  <el-button size="small" @click="confirmItem(quote, item, 'issue')">有問題</el-button>
+                </div>
+              </div>
             </div>
             <div class="quote-messages">
               <div v-for="msg in quote.messages || []" :key="msg.id" class="message" :class="msg.author">
                 <b>{{ msg.authorName || msg.author }}</b>：{{ msg.body }}
+                <div v-if="(msg.attachments || []).length" class="message-attachments">
+                  <img
+                    v-for="att in msg.attachments"
+                    :key="att.index"
+                    :src="`/api/quote-messages/${quote.id}/${msg.id}/attachments/${att.index}`"
+                    class="attachment-thumb"
+                    loading="lazy"
+                    @click="openAttachment(quote.id, msg.id, att.index)"
+                  />
+                </div>
               </div>
               <div class="message-input">
-                <el-input v-model="messageDrafts[quote.id]" size="mini" placeholder="輸入訊息…" @keyup.enter.native="sendMessage(quote)" />
-                <el-button size="mini" @click="sendMessage(quote)">送出</el-button>
+                <el-input v-model="messageDrafts[quote.id]" size="small" placeholder="輸入訊息…" @keyup.enter="sendMessage(quote)" />
+                <el-upload
+                  :auto-upload="false"
+                  :show-file-list="false"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  :on-change="(file) => addMessageFiles(quote.id, file)"
+                  class="message-upload"
+                >
+                  <el-button size="small" icon="Paperclip" />
+                </el-upload>
+                <el-button size="small" @click="sendMessage(quote)">送出</el-button>
               </div>
+              <p v-if="(messageFiles[quote.id] || []).length" class="subtle">
+                將附上 {{ messageFiles[quote.id].length }} 張圖片：
+                {{ messageFiles[quote.id].map((f) => f.name).join('、') }}
+                <el-button link size="small" @click="messageFiles[quote.id] = []">清除</el-button>
+              </p>
             </div>
           </div>
           <div v-if="!quotes.length" class="empty-hint">目前沒有報價需求</div>
@@ -61,7 +112,7 @@
         <el-card v-for="order in orders" :key="order.id" shadow="never" class="portal-card">
           <div class="order-head">
             <b>{{ order.id }}</b>
-            <el-tag size="mini">{{ order.status }}</el-tag>
+            <el-tag size="small">{{ order.status }}</el-tag>
           </div>
           <p class="quote-meta">到期：{{ order.due }} · 金額：${{ order.value }}<span v-if="order.discount"> · 折扣：-${{ order.discount }}</span></p>
           <p v-if="order.payment" class="quote-meta">付款狀態：{{ order.payment.provider }} · {{ order.payment.status }}</p>
@@ -75,11 +126,11 @@
           </div>
 
           <div class="order-actions">
-            <el-button size="mini" @click="loadTracking(order)">查詢物流</el-button>
-            <el-button size="mini" @click="startReorder(order)">再次訂購</el-button>
-            <el-button size="mini" @click="openCheckout(order)">結帳</el-button>
-            <el-button size="mini" @click="openCoupon(order)">套用優惠券</el-button>
-            <el-button size="mini" :disabled="!customer || !customer.loyaltyPoints" @click="openRedeem(order)">折抵點數</el-button>
+            <el-button size="small" @click="loadTracking(order)">查詢物流</el-button>
+            <el-button size="small" @click="startReorder(order)">再次訂購</el-button>
+            <el-button size="small" @click="openCheckout(order)">結帳</el-button>
+            <el-button size="small" @click="openCoupon(order)">套用優惠券</el-button>
+            <el-button size="small" :disabled="!customer || !customer.loyaltyPoints" @click="openRedeem(order)">折抵點數</el-button>
           </div>
         </el-card>
         <div v-if="!orders.length" class="empty-hint">目前沒有訂單</div>
@@ -87,25 +138,25 @@
 
       <el-tab-pane label="地址簿" name="addresses">
         <div class="quickbar">
-          <el-button type="primary" size="small" icon="el-icon-circle-plus" @click="openAddressDialog()">新增地址</el-button>
+          <el-button type="primary" size="small" icon="CirclePlus" @click="openAddressDialog()">新增地址</el-button>
         </div>
         <el-card v-for="address in addresses" :key="address.id" shadow="never" class="portal-card address-card">
           <div class="order-head">
             <b>{{ address.label }}</b>
-            <el-tag v-if="address.isDefault" size="mini" type="success">預設</el-tag>
+            <el-tag v-if="address.isDefault" size="small" type="success">預設</el-tag>
           </div>
           <p class="quote-meta">{{ address.recipient }} · {{ address.phone }}</p>
           <p class="quote-meta">{{ address.line1 }} {{ address.line2 }}，{{ address.city }} {{ address.postalCode }}</p>
           <div class="order-actions">
-            <el-button size="mini" @click="openAddressDialog(address)">編輯</el-button>
-            <el-button size="mini" type="danger" @click="removeAddress(address)">刪除</el-button>
+            <el-button size="small" @click="openAddressDialog(address)">編輯</el-button>
+            <el-button size="small" type="danger" @click="removeAddress(address)">刪除</el-button>
           </div>
         </el-card>
         <div v-if="!addresses.length" class="empty-hint">尚未新增地址</div>
       </el-tab-pane>
     </el-tabs>
 
-    <el-dialog title="檔案預覽 / DFM 檢查" :visible.sync="previewVisible" width="480px">
+    <el-dialog title="檔案預覽 / DFM 檢查" v-model="previewVisible" width="480px">
       <div v-if="previewData">
         <model-viewer
           v-if="previewArrayBuffer"
@@ -120,37 +171,37 @@
       </div>
     </el-dialog>
 
-    <el-dialog title="結帳" :visible.sync="checkoutVisible" width="380px">
+    <el-dialog title="結帳" v-model="checkoutVisible" width="380px">
       <p class="hint">選擇付款方式（尚未接上正式商店憑證的供應商會顯示「即將推出」）</p>
       <el-radio-group v-model="checkoutMethod" style="display: flex; flex-direction: column; gap: 8px">
         <el-radio v-for="method in paymentMethods" :key="method.id" :label="method.id" :disabled="!method.configured">
           {{ method.name }}<span v-if="!method.configured" class="hint"> （即將推出）</span>
         </el-radio>
       </el-radio-group>
-      <div slot="footer">
+      <template #footer><div>
         <el-button @click="checkoutVisible = false">取消</el-button>
         <el-button type="primary" :loading="checkingOut" @click="submitCheckout">確認</el-button>
-      </div>
+      </div></template>
     </el-dialog>
 
-    <el-dialog title="套用優惠券" :visible.sync="couponVisible" width="360px">
+    <el-dialog title="套用優惠券" v-model="couponVisible" width="360px">
       <el-input v-model="couponCode" placeholder="輸入優惠碼" />
-      <div slot="footer">
+      <template #footer><div>
         <el-button @click="couponVisible = false">取消</el-button>
         <el-button type="primary" :loading="applyingCoupon" @click="submitCoupon">套用</el-button>
-      </div>
+      </div></template>
     </el-dialog>
 
-    <el-dialog title="折抵點數" :visible.sync="redeemVisible" width="360px">
+    <el-dialog title="折抵點數" v-model="redeemVisible" width="360px">
       <p class="hint">目前可用點數：{{ customer && customer.loyaltyPoints || 0 }}（100 點折抵 $10）</p>
       <el-input-number v-model="redeemPointsValue" :min="0" :max="(customer && customer.loyaltyPoints) || 0" style="width: 100%" controls-position="right" />
-      <div slot="footer">
+      <template #footer><div>
         <el-button @click="redeemVisible = false">取消</el-button>
         <el-button type="primary" :loading="redeeming" @click="submitRedeem">折抵</el-button>
-      </div>
+      </div></template>
     </el-dialog>
 
-    <el-dialog :title="addressForm.id ? '編輯地址' : '新增地址'" :visible.sync="addressDialogVisible" width="420px">
+    <el-dialog :title="addressForm.id ? '編輯地址' : '新增地址'" v-model="addressDialogVisible" width="420px">
       <el-form label-width="80px" size="small">
         <el-form-item label="標籤"><el-input v-model="addressForm.label" /></el-form-item>
         <el-form-item label="收件人"><el-input v-model="addressForm.recipient" /></el-form-item>
@@ -161,10 +212,10 @@
         <el-form-item label="郵遞區號"><el-input v-model="addressForm.postalCode" /></el-form-item>
         <el-form-item label="設為預設"><el-switch v-model="addressForm.isDefault" /></el-form-item>
       </el-form>
-      <div slot="footer">
+      <template #footer><div>
         <el-button @click="addressDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="savingAddress" @click="submitAddress">儲存</el-button>
-      </div>
+      </div></template>
     </el-dialog>
   </div>
 </template>
@@ -176,6 +227,7 @@
     fetchMyCases,
     fetchMyOrders,
     decideQuote,
+    decideQuoteConfirmation,
     decideCase,
     sendQuoteMessage,
     fetchQuoteFilePreview,
@@ -204,6 +256,8 @@
         cases: [],
         orders: [],
         addresses: [],
+        messageFiles: {},
+        confirmationNotes: {},
         messageDrafts: {},
         previewVisible: false,
         previewBusy: '',
@@ -272,11 +326,45 @@
       },
       async sendMessage(quote) {
         const body = (this.messageDrafts[quote.id] || '').trim()
-        if (!body) return
-        const result = await sendQuoteMessage(quote.id, body)
+        const files = this.messageFiles[quote.id] || []
+        if (!body && !files.length) return
+        const result = await sendQuoteMessage(quote.id, body, files)
         const index = this.quotes.findIndex((q) => q.id === quote.id)
         if (index !== -1) this.quotes.splice(index, 1, result.quoteRequest)
-        this.$set(this.messageDrafts, quote.id, '')
+        this.messageDrafts[quote.id] = ''
+        this.messageFiles[quote.id] = []
+      },
+      addMessageFiles(quoteId, uploadFile) {
+        const raw = uploadFile.raw || uploadFile
+        if (!/^image\/(png|jpe?g|webp|gif)$/i.test(raw.type || '') && !/\.(png|jpe?g|webp|gif)$/i.test(raw.name || '')) {
+          this.$baseMessage('只支援 PNG / JPG / WEBP / GIF 圖片。', 'warning')
+          return
+        }
+        if (raw.size > 5 * 1024 * 1024) {
+          this.$baseMessage('圖片上限 5MB。', 'warning')
+          return
+        }
+        const list = this.messageFiles[quoteId] || (this.messageFiles[quoteId] = [])
+        if (list.length >= 3) {
+          this.$baseMessage('每則訊息最多 3 張圖片。', 'warning')
+          return
+        }
+        list.push(raw)
+      },
+      openAttachment(quoteId, messageId, index) {
+        window.open(`/api/quote-messages/${quoteId}/${messageId}/attachments/${index}`, '_blank', 'noopener')
+      },
+      async confirmItem(quote, item, decision) {
+        const note = (this.confirmationNotes[quote.id + ':' + item.id] || '').trim()
+        if (decision === 'issue' && !note && !(item.value || '').trim()) {
+          this.$baseMessage('請寫下想調整的方向或直接用下方訊息欄說明，讓專員了解你的想法。', 'warning')
+          return
+        }
+        const result = await decideQuoteConfirmation(quote.id, item.id, decision, note)
+        const index = this.quotes.findIndex((q) => q.id === quote.id)
+        if (index !== -1) this.quotes.splice(index, 1, result.quoteRequest)
+        this.confirmationNotes[quote.id + ':' + item.id] = ''
+        this.$baseMessage(decision === 'confirmed' ? '已確認，感謝回覆！' : '已把問題回覆給專員。', 'success')
       },
       async previewQuoteFile(quote) {
         this.previewBusy = quote.id
@@ -292,7 +380,7 @@
       },
       async loadTracking(order) {
         const result = await fetchOrderTracking(order.id)
-        this.$set(this.trackingByOrder, order.id, result)
+        this.trackingByOrder[order.id] = result
       },
       async startReorder(order) {
         const created = await reorder(order.id)
@@ -314,7 +402,7 @@
         try {
           const result = await checkoutOrder(this.checkoutOrderTarget.id, this.checkoutMethod)
           const index = this.orders.findIndex((o) => o.id === this.checkoutOrderTarget.id)
-          if (index !== -1) this.$set(this.orders[index], 'payment', result.payment)
+          if (index !== -1) this.orders[index].payment = result.payment
           this.$baseMessage(result.payment.message || '結帳請求已送出', result.ok ? 'success' : 'warning')
           this.checkoutVisible = false
         } finally {
@@ -450,6 +538,38 @@
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
+  }
+
+  .confirmations {
+    margin: 10px 0;
+    border: 1px solid #e3e9f4;
+    border-radius: 10px;
+    padding: 10px 12px;
+
+    .confirmations-title { font-size: 13px; color: #475467; }
+
+    .confirmation-item {
+      padding: 8px 0;
+      border-bottom: 1px dashed #edf0f5;
+
+      &:last-child { border-bottom: 0; }
+      &.is-confirmed .confirmation-label { color: #1c7c44; }
+      &.is-issue .confirmation-label { color: #b25e02; }
+
+      .confirmation-row { display: flex; justify-content: space-between; gap: 10px; align-items: center; font-size: 13px; }
+      .confirmation-note { margin: 4px 0 0; font-size: 12px; color: #667085; white-space: pre-wrap; }
+      .confirmation-actions { display: flex; gap: 8px; margin-top: 6px; align-items: center; flex-wrap: wrap; }
+      .confirmation-note-input { flex: 1; min-width: 180px; }
+    }
+  }
+
+  .message-attachments {
+    display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap;
+
+    .attachment-thumb {
+      width: 72px; height: 72px; object-fit: cover; border-radius: 8px;
+      border: 1px solid #e3e9f4; cursor: zoom-in; background: #fff;
+    }
   }
 
   .quote-messages {

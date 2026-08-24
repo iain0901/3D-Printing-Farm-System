@@ -1,12 +1,12 @@
-import Vue from 'vue'
+import baseMessage from '@/utils/baseMessage'
 import Clipboard from 'clipboard'
 
 function clipboardSuccess() {
-  Vue.prototype.$baseMessage('复制成功', 'success')
+  baseMessage('复制成功', 'success')
 }
 
 function clipboardError() {
-  Vue.prototype.$baseMessage('复制失败', 'error')
+  baseMessage('复制失败', 'error')
 }
 
 /**

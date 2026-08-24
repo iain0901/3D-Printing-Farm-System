@@ -1,29 +1,29 @@
 <template>
   <div class="notifications-container">
     <div class="quickbar">
-      <el-button v-permissions="['notifications:write']" type="primary" icon="el-icon-circle-plus" @click="dialogVisible = true">新增通知管道</el-button>
+      <el-button v-permissions="['notifications:write']" type="primary" icon="CirclePlus" @click="dialogVisible = true">新增通知管道</el-button>
     </div>
     <el-table :data="channels" style="width: 100%">
       <el-table-column prop="name" label="名稱" min-width="140" />
       <el-table-column prop="type" label="類型" width="100" />
       <el-table-column prop="url" label="URL" min-width="220" />
       <el-table-column label="啟用" width="90">
-        <template slot-scope="{ row }">
+        <template #default="{ row }">
           <el-switch v-model="row.enabled" v-permissions="['notifications:write']" @change="toggle(row)" />
         </template>
       </el-table-column>
       <el-table-column label="狀態" width="110">
-        <template slot-scope="{ row }"><el-tag size="mini">{{ row.lastStatus || 'not sent' }}</el-tag></template>
+        <template #default="{ row }"><el-tag size="small">{{ row.lastStatus || 'not sent' }}</el-tag></template>
       </el-table-column>
       <el-table-column label="操作" width="100" v-permissions="['notifications:write']">
-        <template slot-scope="{ row }">
-          <el-button size="mini" :loading="testBusy === row.id" @click="test(row)">測試</el-button>
+        <template #default="{ row }">
+          <el-button size="small" :loading="testBusy === row.id" @click="test(row)">測試</el-button>
         </template>
       </el-table-column>
     </el-table>
     <div v-if="!channels.length" class="empty-hint">尚無通知管道</div>
 
-    <el-dialog title="新增通知管道" :visible.sync="dialogVisible" width="420px">
+    <el-dialog title="新增通知管道" v-model="dialogVisible" width="420px">
       <el-form label-width="80px" size="small">
         <el-form-item label="名稱"><el-input v-model="form.name" /></el-form-item>
         <el-form-item label="類型">
@@ -37,10 +37,10 @@
         <el-form-item label="URL"><el-input v-model="form.url" placeholder="https://..." /></el-form-item>
         <el-form-item label="事件"><el-input v-model="form.eventsText" placeholder="以逗號分隔，例如 *" /></el-form-item>
       </el-form>
-      <div slot="footer">
+      <template #footer><div>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="submit">新增</el-button>
-      </div>
+      </div></template>
     </el-dialog>
   </div>
 </template>

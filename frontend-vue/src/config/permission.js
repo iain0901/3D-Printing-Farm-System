@@ -18,9 +18,15 @@ VabProgress.configure({
 router.beforeResolve(async (to, from, next) => {
   if (progressBar) VabProgress.start()
 
-  // 行销首页 (/) 和整个 /portal/* 客户入口都是独立、公开或使用客户端 customerAuth 的路由，
-  // 完全不走员工端 accessToken 守卫逻辑（否则未登录员工会被强制导去 /login）。
-  if (to.path === '/' || to.path.startsWith('/portal')) {
+  // 公開客戶端路由：品牌落地頁 (/)、估價精靈 (/quote*)、案件追蹤 (/customer/cases/*，
+  // 以 token 驗證)、與整個 /portal/* 客戶入口，皆不走員工端 accessToken 守衛邏輯
+  // （否則匿名客戶會被強制導去 /login 員工登入頁）。
+  const isPublicPath =
+    to.path === '/' ||
+    to.path.startsWith('/portal') ||
+    to.path.startsWith('/quote') ||
+    to.path.startsWith('/customer/cases')
+  if (isPublicPath) {
     next()
     if (progressBar) VabProgress.done()
     document.title = getPageTitle(to.meta.title)

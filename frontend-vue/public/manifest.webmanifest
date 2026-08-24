@@ -1,7 +1,7 @@
 {
-  "name": "3DSTU FarmFlow",
-  "short_name": "3DSTU FarmFlow",
-  "description": "3D printing production cockpit for printers, queue, files, materials, todos, and operations.",
+  "name": "3DRFM 三點成型",
+  "short_name": "3DRFM 三點成型",
+  "description": "3DRFM 三點成型客戶入口與生產管理",
   "id": "/",
   "start_url": "/",
   "scope": "/",

@@ -1,4 +1,4 @@
-import Vue from 'vue'
+import baseMessage from '@/utils/baseMessage'
 import axios from 'axios'
 import { baseURL, contentType, invalidCode, lockedCode, loginInterception, noPermissionCode, requestTimeout } from '@/config'
 import store from '@/store'
@@ -64,7 +64,7 @@ instance.interceptors.response.use(
 
     if (!response) {
       const message = error.message === 'Network Error' ? '后端接口连接异常' : error.message && error.message.includes('timeout') ? '后端接口请求超时' : '后端接口未知异常'
-      Vue.prototype.$baseMessage(message, 'error')
+      baseMessage(message, 'error')
       return Promise.reject(error)
     }
 
@@ -73,20 +73,20 @@ instance.interceptors.response.use(
 
     switch (status) {
       case invalidCode: // 401：未登录或 token 失效
-        Vue.prototype.$baseMessage(serverMessage || '登录状态已失效，请重新登录', 'error')
+        baseMessage(serverMessage || '登录状态已失效，请重新登录', 'error')
         if (loginInterception) {
           store.dispatch('user/resetAccessToken').catch(() => {})
           redirectToLogin()
         }
         break
       case noPermissionCode: // 403：已登录但无权限，不登出
-        Vue.prototype.$baseMessage(serverMessage || '没有权限执行此操作', 'error')
+        baseMessage(serverMessage || '没有权限执行此操作', 'error')
         break
       case lockedCode: // 423：账户临时锁定
-        Vue.prototype.$baseMessage(serverMessage || '账户已被临时锁定，请稍后再试', 'error')
+        baseMessage(serverMessage || '账户已被临时锁定，请稍后再试', 'error')
         break
       default:
-        Vue.prototype.$baseMessage(serverMessage || `后端接口 ${status} 异常`, 'error')
+        baseMessage(serverMessage || `后端接口 ${status} 异常`, 'error')
         break
     }
     return Promise.reject(error)

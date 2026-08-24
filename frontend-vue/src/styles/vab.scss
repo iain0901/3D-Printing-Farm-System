@@ -8,7 +8,7 @@
 @import './normalize.scss';
 @import './transition.scss';
 @import './loading.scss';
-@import 'element-ui/lib/theme-chalk/display.css';
+@import './display.scss';
 
 @mixin scrollbar {
   max-height: 88vh;
@@ -142,7 +142,7 @@ html {
 
     .el-image-viewer {
       &__close {
-        .el-icon-circle-close {
+        .el-icon {
           color: $base-color-white;
         }
       }

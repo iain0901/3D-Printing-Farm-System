@@ -2,7 +2,7 @@
  * @description 员工端登录态：token、当前用户、由后端角色映射出的 scopes（作为 permissions 使用）
  */
 
-import Vue from 'vue'
+import { ElNotification } from 'element-plus'
 import { getUserInfo, login, logout } from '@/api/auth'
 import { getAccessToken, removeAccessToken, setAccessToken } from '@/utils/accessToken'
 import { resetRouter } from '@/router'
@@ -53,7 +53,12 @@ const actions = {
     commit('setAccessToken', data.token)
     const hour = new Date().getHours()
     const greeting = hour < 8 ? '早上好' : hour <= 11 ? '上午好' : hour <= 13 ? '中午好' : hour < 18 ? '下午好' : '晚上好'
-    Vue.prototype.$baseNotify(`欢迎登录${title}`, `${greeting}，${data.user?.name || data.user?.email}！`)
+    ElNotification({
+      title: `欢迎登录${title}`,
+      message: `${greeting}，${data.user?.name || data.user?.email}！`,
+      position: 'top-right',
+      type: 'success',
+    })
     return data
   },
   async getUserInfo({ commit }) {

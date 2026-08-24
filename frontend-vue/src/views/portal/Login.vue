@@ -3,7 +3,7 @@
     <h2>客戶登入</h2>
     <el-form label-width="70px" size="small">
       <el-form-item label="Email"><el-input v-model="form.email" /></el-form-item>
-      <el-form-item label="密碼"><el-input v-model="form.password" type="password" show-password @keyup.enter.native="submit" /></el-form-item>
+      <el-form-item label="密碼"><el-input v-model="form.password" type="password" show-password @keyup.enter="submit" /></el-form-item>
       <el-button type="primary" :loading="loading" style="width: 100%" @click="submit">登入</el-button>
     </el-form>
     <div class="portal-auth-links">

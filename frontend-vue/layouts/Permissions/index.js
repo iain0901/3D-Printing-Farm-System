@@ -1,12 +1,7 @@
 import permissions from './permissions'
 
-const install = function (Vue) {
-  Vue.directive('permissions', permissions)
-}
-
-if (window.Vue) {
-  window['permissions'] = permissions
-  Vue.use(install)
+const install = function (app) {
+  app.directive('permissions', permissions)
 }
 
 permissions.install = install

@@ -1,32 +1,34 @@
 import { loadingText, messageDuration, title } from '@/config'
 import * as lodash from 'lodash'
-import { Loading, Message, MessageBox, Notification } from 'element-ui'
+import { ElLoading, ElMessage, ElMessageBox, ElNotification } from 'element-plus'
+import mitt from 'mitt'
 import store from '@/store'
 import { getAccessToken } from '@/utils/accessToken'
 
 const accessToken = store.getters['user/accessToken']
 const layout = store.getters['settings/layout']
 
-const install = (Vue) => {
+const install = (app) => {
+  const gp = app.config.globalProperties
   /* 全局accessToken */
-  Vue.prototype.$baseAccessToken = () => {
+  gp.$baseAccessToken = () => {
     return accessToken || getAccessToken()
   }
   /* 全局标题 */
-  Vue.prototype.$baseTitle = (() => {
+  gp.$baseTitle = (() => {
     return title
   })()
   /* 全局加载层 */
-  Vue.prototype.$baseLoading = (index, text) => {
+  gp.$baseLoading = (index, text) => {
     let loading
     if (!index) {
-      loading = Loading.service({
+      loading = ElLoading.service({
         lock: true,
         text: text || loadingText,
         background: 'hsla(0,0%,100%,.8)',
       })
     } else {
-      loading = Loading.service({
+      loading = ElLoading.service({
         lock: true,
         text: text || loadingText,
         spinner: `vab-loading-type${index}`,
@@ -36,10 +38,10 @@ const install = (Vue) => {
     return loading
   }
   /* 全局多彩加载层 */
-  Vue.prototype.$baseColorfullLoading = (index, text) => {
+  gp.$baseColorfullLoading = (index, text) => {
     let loading
     if (!index) {
-      loading = Loading.service({
+      loading = ElLoading.service({
         lock: true,
         text: text || loadingText,
         spinner: 'dots-loader',
@@ -60,7 +62,7 @@ const install = (Vue) => {
           index = 'plus'
           break
       }
-      loading = Loading.service({
+      loading = ElLoading.service({
         lock: true,
         text: text || loadingText,
         spinner: `${index}-loader`,
@@ -70,8 +72,8 @@ const install = (Vue) => {
     return loading
   }
   /* 全局Message */
-  Vue.prototype.$baseMessage = (message, type) => {
-    Message({
+  gp.$baseMessage = (message, type) => {
+    ElMessage({
       offset: 60,
       showClose: true,
       message: message,
@@ -82,8 +84,8 @@ const install = (Vue) => {
   }
 
   /* 全局Alert */
-  Vue.prototype.$baseAlert = (content, title, callback) => {
-    MessageBox.alert(content, title || '温馨提示', {
+  gp.$baseAlert = (content, title, callback) => {
+    ElMessageBox.alert(content, title || '温馨提示', {
       confirmButtonText: '确定',
       dangerouslyUseHTMLString: true,
       callback: () => {
@@ -95,8 +97,8 @@ const install = (Vue) => {
   }
 
   /* 全局Confirm */
-  Vue.prototype.$baseConfirm = (content, title, callback1, callback2) => {
-    MessageBox.confirm(content, title || '温馨提示', {
+  gp.$baseConfirm = (content, title, callback1, callback2) => {
+    ElMessageBox.confirm(content, title || '温馨提示', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       closeOnClickModal: false,
@@ -115,8 +117,8 @@ const install = (Vue) => {
   }
 
   /* 全局Notification */
-  Vue.prototype.$baseNotify = (message, title, type, position) => {
-    Notification({
+  gp.$baseNotify = (message, title, type, position) => {
+    ElNotification({
       title: title,
       message: message,
       position: position || 'top-right',
@@ -126,7 +128,7 @@ const install = (Vue) => {
   }
 
   /* 全局TableHeight */
-  Vue.prototype.$baseTableHeight = (formType) => {
+  gp.$baseTableHeight = (formType) => {
     let height = window.innerHeight
     let paddingHeight = 400
     const formHeight = 50
@@ -144,13 +146,9 @@ const install = (Vue) => {
   }
 
   /* 全局lodash */
-  Vue.prototype.$baseLodash = lodash
-  /* 全局事件总线 */
-  Vue.prototype.$baseEventBus = new Vue()
-}
-
-if (typeof window !== 'undefined' && window.Vue) {
-  install(window.Vue)
+  gp.$baseLodash = lodash
+  /* 全局事件总线（Vue 3 移除了实例事件，改用 mitt） */
+  gp.$baseEventBus = mitt()
 }
 
 export default install

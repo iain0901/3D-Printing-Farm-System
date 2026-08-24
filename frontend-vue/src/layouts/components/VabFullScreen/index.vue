@@ -17,7 +17,7 @@
     mounted() {
       this.init()
     },
-    beforeDestroy() {
+    beforeUnmount() {
       this.destroy()
     },
     methods: {

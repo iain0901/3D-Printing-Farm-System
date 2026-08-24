@@ -46,7 +46,7 @@
     mounted() {
       this.timeChange()
     },
-    beforeDestroy() {
+    beforeUnmount() {
       clearInterval(this.timer)
     },
     methods: {

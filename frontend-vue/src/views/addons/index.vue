@@ -7,9 +7,9 @@
             <b>{{ addon.name }}</b>
             <el-switch v-model="addon.enabled" v-permissions="['settings:write']" :disabled="busy === addon.id" @change="toggle(addon)" />
           </div>
-          <el-tag size="mini" class="addon-category">{{ addon.category }}</el-tag>
+          <el-tag size="small" class="addon-category">{{ addon.category }}</el-tag>
           <p class="addon-desc">{{ addon.description }}</p>
-          <el-tag size="mini" :type="addon.status === 'enabled' ? 'success' : addon.status === 'beta' ? 'warning' : 'info'">{{ addon.status }}</el-tag>
+          <el-tag size="small" :type="addon.status === 'enabled' ? 'success' : addon.status === 'beta' ? 'warning' : 'info'">{{ addon.status }}</el-tag>
         </el-card>
       </el-col>
     </el-row>

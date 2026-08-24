@@ -3,10 +3,7 @@
  * @description 导入所有 vuex 模块，自动加入namespaced:true，用于解决vuex命名冲突，请勿修改。
  */
 
-import Vue from 'vue'
-import Vuex from 'vuex'
-
-Vue.use(Vuex)
+import { createStore } from 'vuex'
 const files = require.context('./modules', false, /\.js$/)
 const modules = {}
 
@@ -21,7 +18,7 @@ Object.keys(modules).forEach((key) => {
 const pluginFiles = require.context('./plugins', false, /\.js$/)
 const plugins = pluginFiles.keys().map((key) => pluginFiles(key).default)
 
-const store = new Vuex.Store({
+const store = createStore({
   modules,
   plugins,
 })

@@ -3,21 +3,21 @@
     <vab-page-header title="3DRFM 案件中心" content="客戶案件、報價版本、付款與生產準備都在同一個工作流程內。" />
     <el-card shadow="never">
       <div class="toolbar">
-        <el-input v-model="query.search" clearable placeholder="搜尋案件編號、客戶、Email 或案件名稱" prefix-icon="el-icon-search" @keyup.enter.native="load" />
+        <el-input v-model="query.search" clearable placeholder="搜尋案件編號、客戶、Email 或案件名稱" prefix-icon="Search" @keyup.enter="load" />
         <el-select v-model="query.status" clearable placeholder="全部狀態" @change="load"><el-option v-for="item in statuses" :key="item.value" :label="item.label" :value="item.value" /></el-select>
-        <el-button type="primary" icon="el-icon-refresh" @click="load">更新</el-button>
+        <el-button type="primary" icon="Refresh" @click="load">更新</el-button>
       </div>
       <el-table v-loading="loading" :data="cases" row-key="id" @row-click="openCase">
-        <el-table-column label="案件" min-width="185"><template slot-scope="{ row }"><b>{{ row.caseNo }}</b><div class="muted">{{ row.project }}</div></template></el-table-column>
-        <el-table-column label="客戶" min-width="150"><template slot-scope="{ row }">{{ row.customerSnapshot.name }}<div class="muted">{{ row.customerSnapshot.email }}</div></template></el-table-column>
-        <el-table-column label="狀態" width="150"><template slot-scope="{ row }"><el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag></template></el-table-column>
-        <el-table-column label="報價總額" width="130"><template slot-scope="{ row }">{{ row.quotedValue ? `NT$ ${Number(row.quotedValue).toLocaleString()}` : '—' }}</template></el-table-column>
-        <el-table-column label="付款" width="110"><template slot-scope="{ row }">{{ paymentLabel(row.paymentStatus) }}</template></el-table-column>
-        <el-table-column label="更新時間" width="170"><template slot-scope="{ row }">{{ formatDate(row.updatedAt) }}</template></el-table-column>
+        <el-table-column label="案件" min-width="185"><template #default="{ row }"><b>{{ row.caseNo }}</b><div class="muted">{{ row.project }}</div></template></el-table-column>
+        <el-table-column label="客戶" min-width="150"><template #default="{ row }">{{ row.customerSnapshot.name }}<div class="muted">{{ row.customerSnapshot.email }}</div></template></el-table-column>
+        <el-table-column label="狀態" width="150"><template #default="{ row }"><el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag></template></el-table-column>
+        <el-table-column label="報價總額" width="130"><template #default="{ row }">{{ row.quotedValue ? `NT$ ${Number(row.quotedValue).toLocaleString()}` : '—' }}</template></el-table-column>
+        <el-table-column label="付款" width="110"><template #default="{ row }">{{ paymentLabel(row.paymentStatus) }}</template></el-table-column>
+        <el-table-column label="更新時間" width="170"><template #default="{ row }">{{ formatDate(row.updatedAt) }}</template></el-table-column>
       </el-table>
     </el-card>
 
-    <el-drawer :visible.sync="drawerVisible" size="700px" :with-header="false" @closed="selected = null">
+    <el-drawer v-model="drawerVisible" size="700px" :with-header="false" @closed="selected = null">
       <div v-if="selected" class="drawer-content">
         <div class="drawer-head">
           <div><p class="muted">{{ selected.caseNo }}</p><h2>{{ selected.project }}</h2><p>{{ selected.customerSnapshot.name }} · {{ selected.customerSnapshot.phone || selected.customerSnapshot.email }}</p></div>
@@ -30,14 +30,14 @@
           <el-tab-pane label="案件內容" name="overview">
             <div class="detail-grid"><div><span>服務方式</span><b>{{ selected.mode === 'estimate' ? '快速估價' : '專員協助' }}</b></div><div><span>來源</span><b>{{ selected.source }}</b></div><div><span>希望日期</span><b>{{ selected.dueDate || '未指定' }}</b></div><div><span>預算</span><b>NT$ {{ selected.budget || 0 }}</b></div></div>
             <h3>零件</h3>
-            <el-table :data="selected.parts" size="mini"><el-table-column prop="name" label="零件" /><el-table-column prop="material" label="材料" /><el-table-column prop="color" label="顏色" /><el-table-column prop="quantity" label="數量" width="70" /><el-table-column prop="readiness" label="準備" width="100" /></el-table>
+            <el-table :data="selected.parts" size="small"><el-table-column prop="name" label="零件" /><el-table-column prop="material" label="材料" /><el-table-column prop="color" label="顏色" /><el-table-column prop="quantity" label="數量" width="70" /><el-table-column prop="readiness" label="準備" width="100" /></el-table>
             <h3>內部備註</h3><p class="notes">{{ selected.notes || '—' }}</p>
-            <div class="section-head"><h3>付款紀錄</h3><el-button size="mini" type="primary" @click="openPayment">登錄付款</el-button></div>
-            <el-table :data="selected.payments || []" size="mini"><el-table-column prop="recordedAt" label="時間" min-width="160"><template slot-scope="{ row }">{{ formatDate(row.recordedAt) }}</template></el-table-column><el-table-column prop="status" label="狀態" width="100"><template slot-scope="{ row }">{{ paymentLabel(row.status) }}</template></el-table-column><el-table-column prop="method" label="方式" width="130" /><el-table-column prop="amount" label="金額" width="110"><template slot-scope="{ row }">NT$ {{ Number(row.amount || 0).toLocaleString() }}</template></el-table-column><el-table-column prop="reference" label="參考號" min-width="130" /></el-table>
+            <div class="section-head"><h3>付款紀錄</h3><el-button size="small" type="primary" @click="openPayment">登錄付款</el-button></div>
+            <el-table :data="selected.payments || []" size="small"><el-table-column prop="recordedAt" label="時間" min-width="160"><template #default="{ row }">{{ formatDate(row.recordedAt) }}</template></el-table-column><el-table-column prop="status" label="狀態" width="100"><template #default="{ row }">{{ paymentLabel(row.status) }}</template></el-table-column><el-table-column prop="method" label="方式" width="130" /><el-table-column prop="amount" label="金額" width="110"><template #default="{ row }">NT$ {{ Number(row.amount || 0).toLocaleString() }}</template></el-table-column><el-table-column prop="reference" label="參考號" min-width="130" /></el-table>
           </el-tab-pane>
           <el-tab-pane label="報價版本" name="quotes">
-            <el-button type="primary" size="small" icon="el-icon-plus" @click="quoteDialog = true">建立報價版本</el-button>
-            <div v-for="quote in selected.quoteVersions" :key="quote.id" class="quote-version"><div><b>V{{ quote.versionNo }}</b><el-tag size="mini" style="margin-left: 8px">{{ quote.status }}</el-tag><p>{{ quote.scope || '未填寫範圍' }}</p></div><strong>NT$ {{ Number(quote.customerTotal || 0).toLocaleString() }}</strong></div>
+            <el-button type="primary" size="small" icon="Plus" @click="openQuoteDialog">建立報價版本</el-button>
+            <div v-for="quote in selected.quoteVersions" :key="quote.id" class="quote-version"><div><b>V{{ quote.versionNo }}</b><el-tag size="small" style="margin-left: 8px">{{ quote.status }}</el-tag><p>{{ quote.scope || '未填寫範圍' }}</p></div><strong>NT$ {{ Number(quote.customerTotal || 0).toLocaleString() }}</strong></div>
           </el-tab-pane>
           <el-tab-pane label="生產閘門" name="production">
             <el-alert :type="readiness && readiness.allowed ? 'success' : 'warning'" :closable="false" show-icon :title="readiness && readiness.allowed ? '已符合開始列印條件' : '仍有生產條件待完成'" />
@@ -53,11 +53,11 @@
                 <el-form-item label="材料設定"><el-input v-model.trim="orcaForm.filamentPath" placeholder="/profiles/PLA.json" /></el-form-item>
                 <el-button type="primary" :loading="orcaSubmitting" :disabled="!orcaForm.sourceFileId || !orcaForm.profileId" @click="queueOrcaSlice">送往 OrcaSlicer</el-button>
               </el-form>
-              <el-table v-if="selected.slicerJobs && selected.slicerJobs.length" :data="selected.slicerJobs" size="mini" class="orca-jobs">
+              <el-table v-if="selected.slicerJobs && selected.slicerJobs.length" :data="selected.slicerJobs" size="small" class="orca-jobs">
                 <el-table-column prop="profileId" label="設定檔" min-width="130" />
                 <el-table-column prop="status" label="切片狀態" width="105" />
-                <el-table-column label="預估" width="130"><template slot-scope="{ row }">{{ row.estimatedMinutes || 0 }} 分／{{ row.estimatedGrams || 0 }} g</template></el-table-column>
-                <el-table-column label="核准" width="145"><template slot-scope="{ row }"><el-button v-if="row.status === 'completed' && !row.approvedAt" size="mini" type="success" @click="approveOrcaSlice(row)">核准 G-code</el-button><span v-else>{{ row.approvedAt ? '已核准' : '待完成' }}</span></template></el-table-column>
+                <el-table-column label="預估" width="130"><template #default="{ row }">{{ row.estimatedMinutes || 0 }} 分／{{ row.estimatedGrams || 0 }} g</template></el-table-column>
+                <el-table-column label="核准" width="145"><template #default="{ row }"><el-button v-if="row.status === 'completed' && !row.approvedAt" size="small" type="success" @click="approveOrcaSlice(row)">核准 G-code</el-button><span v-else>{{ row.approvedAt ? '已核准' : '待完成' }}</span></template></el-table-column>
               </el-table>
             </section>
             <el-button type="success" :disabled="!readiness || !readiness.allowed" @click="createProduction">建立 FarmFlow 生產任務</el-button>
@@ -100,30 +100,81 @@
       </div>
     </el-drawer>
 
-    <el-dialog title="建立正式報價版本" :visible.sync="quoteDialog" width="580px">
+    <el-dialog title="建立正式報價版本" v-model="quoteDialog" width="640px">
+      <el-collapse v-model="autoQuoteOpen" class="aq-collapse">
+        <el-collapse-item name="auto">
+          <template #title><b>自動估價（依切片數據，一鍵帶入）</b></template>
+          <div class="aq-grid">
+            <label>切片克重 g<el-input-number v-model="autoQuoteForm.grams" :min="0" size="small" /></label>
+            <label>列印時間 分<el-input-number v-model="autoQuoteForm.minutes" :min="0" size="small" /></label>
+            <label>切片範圍
+              <el-select v-model="autoQuoteForm.scope" size="small"><el-option label="單組切片（×組數）" value="unit" /><el-option label="整單總量（不乘）" value="order" /></el-select>
+            </label>
+            <label>成品組數<el-input-number v-model="autoQuoteForm.quantity" :min="1" size="small" /></label>
+            <label>顏色模式
+              <el-select v-model="autoQuoteForm.colorMode" size="small"><el-option label="單色" value="single" /><el-option label="組合多色" value="combined" /><el-option label="分開多色" value="separated" /></el-select>
+            </label>
+            <label>顏色數<el-input-number v-model="autoQuoteForm.colorCount" :min="1" :max="64" size="small" /></label>
+            <label>最大邊長 mm<el-input-number v-model="autoQuoteForm.maxSizeMm" :min="0" size="small" /></label>
+            <label>支撐占比 %<el-input-number v-model="autoQuoteForm.supportPercent" :min="0" :max="100" size="small" /></label>
+            <label>品質責任
+              <el-select v-model="autoQuoteForm.quality" size="small"><el-option label="一般" value="standard" /><el-option label="外觀優先" value="appearance" /><el-option label="功能／公差" value="functional" /></el-select>
+            </label>
+            <label>交期
+              <el-select v-model="autoQuoteForm.dueInHours" size="small"><el-option label="一般" :value="null" /><el-option label="72hr" :value="72" /><el-option label="48hr" :value="48" /><el-option label="24hr" :value="24" /></el-select>
+            </label>
+          </div>
+          <div class="aq-actions">
+            <el-checkbox v-model="autoQuoteForm.fileRepair" size="small">檔案需修復</el-checkbox>
+            <el-button type="primary" size="small" :loading="autoQuoting" @click="runAutoQuote">計算自動估價</el-button>
+          </div>
+          <template v-if="autoQuoteResult">
+            <ul class="aq-lines">
+              <li v-for="line in autoQuoteVisibleLines" :key="line.key"><span>{{ line.label }}</span><b>{{ line.amount &lt; 0 ? '-' : '' }}NT$ {{ Math.abs(line.amount).toLocaleString() }}</b></li>
+            </ul>
+            <el-alert
+              v-if="autoQuoteResult.escalated"
+              type="warning"
+              :closable="false"
+              show-icon
+              class="aq-alert"
+              title="建議轉專員確認"
+              :description="autoQuoteResult.escalationReasons.map((item) => item.message).join('；')"
+            />
+            <div class="aq-actions"><el-button size="small" @click="applyAutoQuote">帶入下方報價欄位</el-button></div>
+          </template>
+        </el-collapse-item>
+      </el-collapse>
       <el-form label-width="100px"><el-form-item label="報價範圍"><el-input v-model="quoteForm.scope" type="textarea" :rows="3" /></el-form-item><el-form-item label="材料"><el-input-number v-model="quoteForm.breakdown.material" :min="0" /></el-form-item><el-form-item label="機台工時"><el-input-number v-model="quoteForm.breakdown.machineTime" :min="0" /></el-form-item><el-form-item label="設定費"><el-input-number v-model="quoteForm.breakdown.setup" :min="0" /></el-form-item><el-form-item label="建模"><el-input-number v-model="quoteForm.breakdown.modeling" :min="0" /></el-form-item><el-form-item label="後處理"><el-input-number v-model="quoteForm.breakdown.postProcessing" :min="0" /></el-form-item><el-form-item label="包裝運送"><el-input-number v-model="quoteForm.breakdown.shipping" :min="0" /></el-form-item><el-form-item label="折扣"><el-input-number v-model="quoteForm.breakdown.discount" :min="0" /></el-form-item><el-form-item label="稅額"><el-input-number v-model="quoteForm.breakdown.tax" :min="0" /></el-form-item><el-form-item label="發送客戶"><el-switch v-model="quoteForm.send" /></el-form-item></el-form>
-      <div slot="footer"><el-button @click="quoteDialog = false">取消</el-button><el-button type="primary" :loading="savingQuote" @click="saveQuote">建立版本</el-button></div>
+      <template #footer><div><el-button @click="quoteDialog = false">取消</el-button><el-button type="primary" :loading="savingQuote" @click="saveQuote">建立版本</el-button></div></template>
     </el-dialog>
-    <el-dialog title="登錄付款" :visible.sync="paymentDialog" width="500px">
+    <el-dialog title="登錄付款" v-model="paymentDialog" width="500px">
       <el-form label-width="96px"><el-form-item label="付款狀態"><el-select v-model="paymentForm.status" style="width: 100%"><el-option label="已付款" value="paid" /><el-option label="月結" value="monthly_terms" /><el-option label="免付款" value="waived" /><el-option label="退款" value="refunded" /></el-select></el-form-item><el-form-item label="付款方式"><el-select v-model="paymentForm.method" style="width: 100%"><el-option label="銀行轉帳" value="bank_transfer" /><el-option label="現金" value="cash" /><el-option label="LINE Pay" value="line_pay" /><el-option label="街口支付" value="jkopay" /><el-option label="PayUni" value="payuni" /><el-option label="月結" value="monthly_terms" /><el-option label="免付款" value="waived" /><el-option label="退款" value="refund" /></el-select></el-form-item><el-form-item label="金額"><el-input-number v-model="paymentForm.amount" :min="0" style="width: 100%" /></el-form-item><el-form-item label="參考號"><el-input v-model.trim="paymentForm.reference" /></el-form-item><el-form-item label="備註"><el-input v-model.trim="paymentForm.note" type="textarea" :rows="3" /></el-form-item></el-form>
-      <div slot="footer"><el-button @click="paymentDialog = false">取消</el-button><el-button type="primary" :loading="paymentSaving" @click="savePayment">儲存付款紀錄</el-button></div>
+      <template #footer><div><el-button @click="paymentDialog = false">取消</el-button><el-button type="primary" :loading="paymentSaving" @click="savePayment">儲存付款紀錄</el-button></div></template>
     </el-dialog>
-    <el-dialog title="登錄交付" :visible.sync="deliveryDialog" width="500px">
+    <el-dialog title="登錄交付" v-model="deliveryDialog" width="500px">
       <el-form label-width="96px"><el-form-item label="交付方式"><el-select v-model="deliveryForm.method" style="width: 100%"><el-option label="自取" value="pickup" /><el-option label="宅配／貨運" value="courier" /><el-option label="內部配送" value="internal_delivery" /></el-select></el-form-item><el-form-item label="交付狀態"><el-select v-model="deliveryForm.status" style="width: 100%"><el-option label="準備中" value="ready" /><el-option label="已寄出" value="shipped" /><el-option label="已交付" value="delivered" /></el-select></el-form-item><el-form-item label="承運商"><el-input v-model.trim="deliveryForm.carrier" /></el-form-item><el-form-item label="追蹤編號"><el-input v-model.trim="deliveryForm.trackingNumber" /></el-form-item><el-form-item label="備註"><el-input v-model.trim="deliveryForm.note" type="textarea" :rows="3" /></el-form-item></el-form>
-      <div slot="footer"><el-button @click="deliveryDialog = false">取消</el-button><el-button type="primary" :loading="deliverySaving" @click="saveDelivery">儲存交付紀錄</el-button></div>
+      <template #footer><div><el-button @click="deliveryDialog = false">取消</el-button><el-button type="primary" :loading="deliverySaving" @click="saveDelivery">儲存交付紀錄</el-button></div></template>
     </el-dialog>
   </div>
 </template>
 
 <script>
-  import { approveCaseSlicerJob, createCaseAfterSales, createCaseOrcaSlice, createCaseProductionJobs, createCaseQuote, confirmCaseSchedule, fetchCase, fetchCases, recordCasePayment, recordPrintAttempt, recordQualityCheck, suggestCaseScheduleAutomatically, transitionCase, updateCaseDelivery } from '@/api/cases'
+  import { approveCaseSlicerJob, autoQuote, createCaseAfterSales, createCaseOrcaSlice, createCaseProductionJobs, createCaseQuote, confirmCaseSchedule, fetchCase, fetchCases, recordCasePayment, recordPrintAttempt, recordQualityCheck, suggestCaseScheduleAutomatically, transitionCase, updateCaseDelivery } from '@/api/cases'
   const statuses = [
     ['new', '新案件'], ['under_review', '審核中'], ['supplement_requested', '等待補件'], ['awaiting_customer', '等待客戶回覆'], ['formal_quote_sent', '正式報價已送出'], ['accepted', '客戶已接受'], ['revision_requested', '客戶要求修改'], ['awaiting_payment', '等待付款'], ['paid', '已付款'], ['production_pending', '待生產確認'], ['ready_to_print', '可開始列印'], ['printing', '列印中'], ['quality_check', '品質檢查'], ['ready_for_delivery', '待交付'], ['completed', '已完成'], ['cancelled', '已取消'], ['aftersales', '售後處理'],
   ]
   const quoteForm = () => ({ scope: '', send: true, breakdown: { material: 0, machineTime: 0, setup: 0, modeling: 0, postProcessing: 0, multicolor: 0, packing: 0, shipping: 0, risk: 0, discount: 0, tax: 0 } })
+  const autoQuoteForm = () => ({ grams: 0, minutes: 0, scope: 'unit', quantity: 1, material: 'PETG', colorMode: 'single', colorCount: 1, maxSizeMm: 0, supportPercent: 0, quality: 'standard', dueInHours: null, fileRepair: false })
   export default {
     name: 'Cases',
-    data() { return { loading: false, cases: [], query: { search: '', status: '' }, statuses: statuses.map(([value, label]) => ({ value, label })), drawerVisible: false, drawerTab: 'overview', selected: null, sourceFiles: [], readiness: null, targetStatus: '', quoteDialog: false, quoteForm: quoteForm(), savingQuote: false, paymentDialog: false, paymentSaving: false, paymentForm: { status: 'paid', method: 'bank_transfer', amount: 0, reference: '', note: '' }, deliveryDialog: false, deliverySaving: false, deliveryForm: { method: 'pickup', status: 'delivered', carrier: '', trackingNumber: '', note: '' }, orcaSubmitting: false, orcaForm: { sourceFileId: '', profileId: '', printerId: '', settingsPath: '', filamentPath: '' }, operations: { startAt: '', printerId: '', estimatedMinutes: 60 } } },
+    data() { return { loading: false, cases: [], query: { search: '', status: '' }, statuses: statuses.map(([value, label]) => ({ value, label })), drawerVisible: false, drawerTab: 'overview', selected: null, sourceFiles: [], readiness: null, targetStatus: '', quoteDialog: false, quoteForm: quoteForm(), savingQuote: false, autoQuoteOpen: ['auto'], autoQuoteForm: autoQuoteForm(), autoQuoteResult: null, autoQuoting: false, paymentDialog: false, paymentSaving: false, paymentForm: { status: 'paid', method: 'bank_transfer', amount: 0, reference: '', note: '' }, deliveryDialog: false, deliverySaving: false, deliveryForm: { method: 'pickup', status: 'delivered', carrier: '', trackingNumber: '', note: '' }, orcaSubmitting: false, orcaForm: { sourceFileId: '', profileId: '', printerId: '', settingsPath: '', filamentPath: '' }, operations: { startAt: '', printerId: '', estimatedMinutes: 60 } } },
+    computed: {
+      autoQuoteVisibleLines() {
+        if (!this.autoQuoteResult) return []
+        return this.autoQuoteResult.lines.filter((line) => line.amount !== 0 && line.key !== 'total')
+      },
+    },
     created() { this.load() },
     methods: {
       async load() { this.loading = true; try { const result = await fetchCases(this.query); this.cases = result.cases || [] } finally { this.loading = false } },
@@ -131,6 +182,47 @@
       async refreshSelected() { if (!this.selected) return; const result = await fetchCase(this.selected.id); this.selected = result.case; this.sourceFiles = result.sourceFiles || []; this.readiness = result.readiness; await this.load() },
       async changeStatus() { try { await transitionCase(this.selected.id, this.targetStatus); this.$baseMessage('案件狀態已更新。', 'success'); await this.refreshSelected() } catch (_) {} },
       async saveQuote() { this.savingQuote = true; try { await createCaseQuote(this.selected.id, this.quoteForm); this.quoteDialog = false; this.quoteForm = quoteForm(); this.$baseMessage('報價版本已建立。', 'success'); await this.refreshSelected() } finally { this.savingQuote = false } },
+      openQuoteDialog() {
+        this.autoQuoteResult = null
+        const caseQty = Number(this.selected?.defaults?.quantity || (this.selected?.parts || []).reduce((sum, part) => sum + Number(part.quantity || 1), 0) || 1)
+        this.autoQuoteForm = { ...autoQuoteForm(), quantity: Math.max(1, caseQty) }
+        this.quoteDialog = true
+      },
+      async runAutoQuote() {
+        this.autoQuoting = true
+        try {
+          this.autoQuoteResult = await autoQuote(this.autoQuoteForm)
+          if (this.autoQuoteResult.escalated) {
+            const reasons = this.autoQuoteResult.escalationReasons.map((item) => item.message).join('；')
+            this.$baseMessage(`自動估價完成，但建議專員確認：${reasons}`, 'warning')
+          }
+        } catch (error) {
+          this.$baseMessage(error?.response?.data?.error || '自動估價失敗，請稍後再試。', 'error')
+        } finally {
+          this.autoQuoting = false
+        }
+      },
+      applyAutoQuote() {
+        const result = this.autoQuoteResult
+        if (!result) return
+        const line = (key) => result.lines.find((item) => item.key === key)
+        const amountOf = (key) => Math.max(0, Number(line(key)?.amount || 0))
+        const servicesTotal = result.lines.filter((item) => item.key.startsWith('service_')).reduce((sum, item) => sum + Math.max(0, Number(item.amount || 0)), 0)
+        const breakdown = this.quoteForm.breakdown
+        breakdown.material = amountOf('base_weight')
+        breakdown.machineTime = amountOf('base_time')
+        breakdown.setup = amountOf('base_minimum') + amountOf('business_multiplier') + amountOf('tier_minimum')
+        breakdown.multicolor = amountOf('color_setup')
+        breakdown.risk = amountOf('risk') + amountOf('rush') + amountOf('quality_responsibility')
+        breakdown.postProcessing = servicesTotal + amountOf('manual_extra')
+        breakdown.discount = Math.abs(Number(line('volume_discount')?.amount || 0))
+        breakdown.tax = amountOf('tax')
+        breakdown.modeling = amountOf('service_modeling')
+        if (!this.quoteForm.scope) {
+          this.quoteForm.scope = `${result.input.material}｜${result.pricing.tierPricePerGram}/g｜基礎費 NT$${Number(result.pricing.productionBase).toLocaleString()}${result.escalated ? '｜⚠ 需專員確認' : ''}`
+        }
+        this.$baseMessage('已帶入報價欄位，可再手動微調。', 'success')
+      },
       openPayment() { this.paymentForm = { status: 'paid', method: 'bank_transfer', amount: Number(this.selected.quotedValue || this.selected.quoteVersions?.[0]?.customerTotal || 0), reference: '', note: '' }; this.paymentDialog = true },
       async savePayment() { this.paymentSaving = true; try { await recordCasePayment(this.selected.id, this.paymentForm); this.paymentDialog = false; this.$baseMessage('付款紀錄已儲存。', 'success'); await this.refreshSelected() } finally { this.paymentSaving = false } },
       async createProduction() { try { const result = await createCaseProductionJobs(this.selected.id); this.$baseMessage(`已建立 ${result.jobs.length} 個生產任務。`, 'success'); await this.refreshSelected() } catch (_) {} },
@@ -154,6 +246,14 @@
 
 <style lang="scss" scoped>
   .toolbar { display: flex; gap: 12px; margin-bottom: 18px; } .toolbar .el-input { max-width: 390px; } .toolbar .el-select { width: 160px; }
+  .aq-collapse { margin-bottom: 16px; border: 1px solid #e5e9f2; border-radius: 10px; padding: 0 12px; }
+  .aq-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 14px; }
+  .aq-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #667085; }
+  .aq-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 12px; }
+  .aq-lines { list-style: none; margin: 12px 0 0; padding: 10px 0 0; border-top: 1px dashed #dbe2ef; max-height: 220px; overflow: auto; }
+  .aq-lines li { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; padding: 3px 0; color: #344054; }
+  .aq-lines li b { white-space: nowrap; font-weight: 600; }
+  .aq-alert { margin-top: 10px; }
   .muted { color: #8992a3; font-size: 12px; margin-top: 4px; } .drawer-content { padding: 28px; } .drawer-head { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 18px; } .drawer-head h2 { margin: 3px 0; } .drawer-head p { margin: 4px 0; } .section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .case-steps { margin: 22px 0; } .detail-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; } .detail-grid span, .detail-grid b { display: block; } .detail-grid span { color: #8992a3; font-size: 12px; margin-bottom: 4px; } h3 { margin: 22px 0 10px; } .notes { white-space: pre-wrap; color: #4b5563; }
   .quote-version { display: flex; justify-content: space-between; padding: 15px 0; border-bottom: 1px solid #edf0f5; } .quote-version p { margin: 6px 0 0; color: #667085; } .checks { list-style: none; padding: 0; line-height: 2.1; } .checks i { margin-right: 8px; } .ok { color: #17a673; } .waiting { color: #e6a23c; } .orca-panel { margin: 20px 0; padding: 18px; border: 1px solid #dbe5f4; border-radius: 8px; background: #f8fbff; } .orca-heading { display: flex; justify-content: space-between; gap: 12px; } .orca-heading h3 { margin: 0; } .orca-heading p { color: #667085; font-size: 12px; line-height: 1.6; margin: 6px 0 14px; } .orca-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; } .orca-form .el-form-item { margin-bottom: 12px; } .orca-form .el-select { width: 100%; } .orca-form .el-button { align-self: end; justify-self: start; margin-bottom: 12px; } .orca-jobs { margin-top: 6px; } .operations-panel { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 18px; padding-top: 16px; border-top: 1px solid #edf0f5; } .operations-panel h3 { flex-basis: 100%; margin: 0 0 3px; } .operations-panel .el-input { width: 260px; } .actions { display: flex; gap: 10px; margin-top: 22px; padding-top: 18px; border-top: 1px solid #edf0f5; } .actions .el-select { width: 210px; }

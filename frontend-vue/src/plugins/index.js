@@ -1,13 +1,21 @@
 /* 公共引入,勿随意修改,修改时需经过确认 */
-import Vue from 'vue'
-import './element'
-import './support'
 import '@/styles/vab.scss'
 import '@/config/permission'
-import '@/utils/errorLog'
-import './vabIcon'
 import VabPermissions from 'layouts/Permissions'
+import { registerLayoutComponents } from '@/layouts/export'
+import { setupErrorLog } from '@/utils/errorLog'
 import Vab from '@/utils/vab'
+import setupElement from './element'
+import './support'
+import setupVabIcon from './vabIcon'
 
-Vue.use(Vab)
-Vue.use(VabPermissions)
+const setupPlugins = (app) => {
+  app.use(Vab)
+  app.use(VabPermissions)
+  registerLayoutComponents(app)
+  setupErrorLog(app)
+  setupElement(app)
+  setupVabIcon(app)
+}
+
+export default setupPlugins

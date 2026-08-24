@@ -8,7 +8,7 @@
         :http-request="handleUpload"
         accept=".stl,.3mf,.obj,.gcode"
       >
-        <el-button type="primary" icon="el-icon-upload2" :loading="uploading">上傳模型檔</el-button>
+        <el-button type="primary" icon="Upload" :loading="uploading">上傳模型檔</el-button>
       </el-upload>
       <el-select v-model="uploadMaterial" size="small" style="width: 140px">
         <el-option v-for="m in materials" :key="m" :label="m" :value="m" />
@@ -16,7 +16,7 @@
       <el-select v-model="uploadFolder" size="small" style="width: 140px">
         <el-option v-for="f in folderNames" :key="f" :label="f" :value="f" />
       </el-select>
-      <el-button v-permissions="['files:write']" icon="el-icon-folder-add" @click="folderDialogVisible = true">新增資料夾</el-button>
+      <el-button v-permissions="['files:write']" icon="FolderAdd" @click="folderDialogVisible = true">新增資料夾</el-button>
     </div>
 
     <el-table :data="files" style="width: 100%">
@@ -26,19 +26,19 @@
       <el-table-column prop="material" label="材料" width="110" />
       <el-table-column prop="size" label="大小" width="100" />
       <el-table-column label="狀態" width="110">
-        <template slot-scope="{ row }"><el-tag size="mini">{{ row.status }}</el-tag></template>
+        <template #default="{ row }"><el-tag size="small">{{ row.status }}</el-tag></template>
       </el-table-column>
       <el-table-column label="操作" width="220">
-        <template slot-scope="{ row }">
-          <el-button size="mini" :loading="previewBusy === row.id" @click="handlePreview(row)">預覽</el-button>
-          <el-button size="mini" @click="handleDownload(row)">下載</el-button>
-          <el-button size="mini" type="danger" v-permissions="['files:write']" @click="handleDelete(row)">刪除</el-button>
+        <template #default="{ row }">
+          <el-button size="small" :loading="previewBusy === row.id" @click="handlePreview(row)">預覽</el-button>
+          <el-button size="small" @click="handleDownload(row)">下載</el-button>
+          <el-button size="small" type="danger" v-permissions="['files:write']" @click="handleDelete(row)">刪除</el-button>
         </template>
       </el-table-column>
     </el-table>
     <div v-if="!files.length" class="empty-hint">尚無檔案，上傳一個 STL/3MF/OBJ/G-code 開始</div>
 
-    <el-dialog title="檔案預覽 / DFM 檢查" :visible.sync="previewVisible" width="480px">
+    <el-dialog title="檔案預覽 / DFM 檢查" v-model="previewVisible" width="480px">
       <div v-if="previewData">
         <model-viewer
           v-if="previewArrayBuffer"
@@ -55,7 +55,7 @@
       </div>
     </el-dialog>
 
-    <el-dialog title="新增資料夾" :visible.sync="folderDialogVisible" width="380px">
+    <el-dialog title="新增資料夾" v-model="folderDialogVisible" width="380px">
       <el-form label-width="80px" size="small">
         <el-form-item label="名稱"><el-input v-model="folderForm.name" /></el-form-item>
         <el-form-item label="用途">
@@ -68,10 +68,10 @@
           </el-select>
         </el-form-item>
       </el-form>
-      <div slot="footer">
+      <template #footer><div>
         <el-button @click="folderDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="creatingFolder" @click="submitFolder">新增</el-button>
-      </div>
+      </div></template>
     </el-dialog>
   </div>
 </template>

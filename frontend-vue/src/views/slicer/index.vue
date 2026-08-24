@@ -3,7 +3,7 @@
     <el-row :gutter="16">
       <el-col :xs="24" :md="10">
         <el-card shadow="never">
-          <div slot="header">切片設定</div>
+          <template #header><div>切片設定</div></template>
           <el-form label-width="90px" size="small">
             <el-form-item label="模型檔">
               <el-select v-model="settings.fileId" style="width: 100%">
@@ -40,7 +40,7 @@
 
       <el-col :xs="24" :md="14">
         <el-card shadow="never">
-          <div slot="header">結果</div>
+          <template #header><div>結果</div></template>
           <p v-if="resultText" class="result-text">{{ resultText }}</p>
           <p v-else class="muted">選擇檔案與設定後，建立後端切片工作。</p>
           <h4>近期切片工作</h4>

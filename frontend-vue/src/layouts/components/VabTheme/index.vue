@@ -12,23 +12,20 @@
       </div>
     </div>
 
-    <el-drawer :visible.sync="drawerVisible" append-to-body direction="rtl" size="300px" title="主题配置">
+    <el-drawer v-model="drawerVisible" append-to-body direction="rtl" size="300px" title="主题配置">
       <el-scrollbar style="height: 80vh; overflow: hidden">
         <div class="el-drawer__body">
           <div class="theme-config-container">
             <div class="config-section">
               <div class="section-header">
-                <i class="el-icon-picture-outline"></i>
+                <el-icon><Picture /></el-icon>
                 <span>主题风格</span>
               </div>
               <div class="theme-options">
                 <div
                   class="theme-option"
                   :class="{ active: theme.name === 'default' }"
-                  @click="
-                    theme.name = 'default'
-                    handleSaveTheme()
-                  "
+                  @click="handleSetTheme('name', 'default')"
                 >
                   <div class="theme-preview default-theme">
                     <div class="preview-header"></div>
@@ -40,10 +37,7 @@
                 <div
                   class="theme-option"
                   :class="{ active: theme.name === 'green' }"
-                  @click="
-                    theme.name = 'green'
-                    handleSaveTheme()
-                  "
+                  @click="handleSetTheme('name', 'green')"
                 >
                   <div class="theme-preview green-theme">
                     <div class="preview-header"></div>
@@ -55,10 +49,7 @@
                 <div
                   class="theme-option"
                   :class="{ active: theme.name === 'glory' }"
-                  @click="
-                    theme.name = 'glory'
-                    handleSaveTheme()
-                  "
+                  @click="handleSetTheme('name', 'glory')"
                 >
                   <div class="theme-preview glory-theme">
                     <div class="preview-header"></div>
@@ -72,17 +63,14 @@
 
             <div class="config-section">
               <div class="section-header">
-                <i class="el-icon-s-grid"></i>
+                <el-icon><Grid /></el-icon>
                 <span>布局设置</span>
               </div>
               <div class="layout-options">
                 <div
                   class="layout-option"
                   :class="{ active: theme.layout === 'vertical' }"
-                  @click="
-                    theme.layout = 'vertical'
-                    handleSaveTheme()
-                  "
+                  @click="handleSetTheme('layout', 'vertical')"
                 >
                   <div class="layout-preview vertical-layout">
                     <div class="preview-header"></div>
@@ -94,10 +82,7 @@
                 <div
                   class="layout-option"
                   :class="{ active: theme.layout === 'horizontal' }"
-                  @click="
-                    theme.layout = 'horizontal'
-                    handleSaveTheme()
-                  "
+                  @click="handleSetTheme('layout', 'horizontal')"
                 >
                   <div class="layout-preview horizontal-layout">
                     <div class="preview-header"></div>
@@ -113,7 +98,7 @@
 
             <div class="config-section">
               <div class="section-header">
-                <i class="el-icon-setting"></i>
+                <el-icon><Setting /></el-icon>
                 <span>功能设置</span>
               </div>
               <div class="feature-options">
@@ -171,11 +156,7 @@
       }),
     },
     created() {
-      const handleTheme = () => {
-        this.handleOpenTheme()
-      }
-
-      this.$baseEventBus.$on('theme', handleTheme)
+      this.$baseEventBus.on('theme', this.handleThemeEvent)
       const theme = localStorage.getItem('vue-admin-better-theme')
       if (null !== theme) {
         this.theme = JSON.parse(theme)
@@ -185,12 +166,18 @@
         this.theme.header = this.header
         this.theme.tabsBar = this.tabsBar
       }
-
-      this.$once('hook:beforeDestroy', () => {
-        this.$baseEventBus.$off('theme', handleTheme)
-      })
+    },
+    beforeUnmount() {
+      this.$baseEventBus.off('theme', this.handleThemeEvent)
     },
     methods: {
+      handleThemeEvent() {
+        this.handleOpenTheme()
+      },
+      handleSetTheme(key, value) {
+        this.theme[key] = value
+        this.handleSaveTheme()
+      },
       ...mapActions({
         changeLayout: 'settings/changeLayout',
         changeHeader: 'settings/changeHeader',

@@ -1,7 +1,7 @@
 import store from '@/store'
 
 export default {
-  inserted(element, binding) {
+  mounted(element, binding) {
     const { value } = binding
     const permissions = store.getters['user/permissions']
     if (value && value instanceof Array && value.length > 0) {

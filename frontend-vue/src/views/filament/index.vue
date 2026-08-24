@@ -3,21 +3,21 @@
     <el-tabs v-model="tab">
       <el-tab-pane label="線材庫存" name="spools">
         <div class="quickbar">
-          <el-button v-permissions="['inventory:write']" type="primary" icon="el-icon-circle-plus" @click="spoolDialogVisible = true">新增線材</el-button>
+          <el-button v-permissions="['inventory:write']" type="primary" icon="CirclePlus" @click="spoolDialogVisible = true">新增線材</el-button>
         </div>
         <el-table :data="spools" style="width: 100%">
           <el-table-column prop="material" label="材料" width="100" />
           <el-table-column prop="brand" label="品牌" width="120" />
           <el-table-column prop="location" label="位置" width="140" />
           <el-table-column label="剩餘">
-            <template slot-scope="{ row }">
+            <template #default="{ row }">
               <el-progress :percentage="Math.round((row.remaining / row.weight) * 100)" :stroke-width="8" />
               <small>{{ row.remaining }}g / {{ row.weight }}g</small>
             </template>
           </el-table-column>
           <el-table-column label="操作" width="140" v-permissions="['inventory:write']">
-            <template slot-scope="{ row }">
-              <el-button size="mini" :loading="usageBusy === row.id" @click="logUsage(row)">記錄用量 20g</el-button>
+            <template #default="{ row }">
+              <el-button size="small" :loading="usageBusy === row.id" @click="logUsage(row)">記錄用量 20g</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -26,7 +26,7 @@
 
       <el-tab-pane label="採購申請" name="purchases">
         <div class="quickbar">
-          <el-button v-permissions="['inventory:write']" type="primary" icon="el-icon-circle-plus" @click="purchaseDialogVisible = true">新增採購申請</el-button>
+          <el-button v-permissions="['inventory:write']" type="primary" icon="CirclePlus" @click="purchaseDialogVisible = true">新增採購申請</el-button>
         </div>
         <el-table :data="purchaseRequests" style="width: 100%">
           <el-table-column prop="material" label="材料" width="100" />
@@ -35,8 +35,8 @@
           <el-table-column prop="status" label="狀態" width="100" />
           <el-table-column prop="due" label="到期" width="120" />
           <el-table-column label="操作" width="120" v-permissions="['inventory:write']">
-            <template slot-scope="{ row }">
-              <el-button size="mini" :disabled="row.status === 'received'" :loading="receiveBusy === row.id" @click="receive(row)">已收貨</el-button>
+            <template #default="{ row }">
+              <el-button size="small" :disabled="row.status === 'received'" :loading="receiveBusy === row.id" @click="receive(row)">已收貨</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -44,29 +44,29 @@
       </el-tab-pane>
     </el-tabs>
 
-    <el-dialog title="新增線材" :visible.sync="spoolDialogVisible" width="420px">
+    <el-dialog title="新增線材" v-model="spoolDialogVisible" width="420px">
       <el-form label-width="80px" size="small">
         <el-form-item label="材料"><el-input v-model="spoolForm.material" /></el-form-item>
         <el-form-item label="品牌"><el-input v-model="spoolForm.brand" /></el-form-item>
         <el-form-item label="位置"><el-input v-model="spoolForm.location" /></el-form-item>
         <el-form-item label="總重 g"><el-input-number v-model="spoolForm.weight" :min="1" style="width: 100%" controls-position="right" /></el-form-item>
       </el-form>
-      <div slot="footer">
+      <template #footer><div>
         <el-button @click="spoolDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="savingSpool" @click="submitSpool">新增</el-button>
-      </div>
+      </div></template>
     </el-dialog>
 
-    <el-dialog title="新增採購申請" :visible.sync="purchaseDialogVisible" width="420px">
+    <el-dialog title="新增採購申請" v-model="purchaseDialogVisible" width="420px">
       <el-form label-width="80px" size="small">
         <el-form-item label="材料"><el-input v-model="purchaseForm.material" /></el-form-item>
         <el-form-item label="供應商"><el-input v-model="purchaseForm.supplier" /></el-form-item>
         <el-form-item label="數量"><el-input-number v-model="purchaseForm.quantity" :min="1" style="width: 100%" controls-position="right" /></el-form-item>
       </el-form>
-      <div slot="footer">
+      <template #footer><div>
         <el-button @click="purchaseDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="savingPurchase" @click="submitPurchase">新增</el-button>
-      </div>
+      </div></template>
     </el-dialog>
   </div>
 </template>

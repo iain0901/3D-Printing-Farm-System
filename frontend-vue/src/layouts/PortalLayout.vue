@@ -1,7 +1,7 @@
 <template>
   <div class="portal-layout">
     <header class="portal-header">
-      <span class="portal-brand">3DSTU FarmFlow · 客戶入口</span>
+      <span class="portal-brand">3DRFM 三點成型 · 客戶入口</span>
       <el-button v-if="customer" type="text" @click="logout">登出（{{ customer.name }}）</el-button>
     </header>
     <main class="portal-main">

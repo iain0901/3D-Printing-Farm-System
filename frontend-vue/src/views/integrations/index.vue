@@ -4,18 +4,18 @@
       <el-tab-pane label="硬體橋接" name="bridges">
         <p class="hint">將打印機連上 OctoPrint / Moonraker / PrusaLink，讓後端能直接下發控制指令。</p>
         <div class="quickbar">
-          <el-button v-permissions="['printers:control']" type="primary" icon="el-icon-circle-plus" @click="bridgeDialogVisible = true" :disabled="!printers.length">新增橋接</el-button>
+          <el-button v-permissions="['printers:control']" type="primary" icon="CirclePlus" @click="bridgeDialogVisible = true" :disabled="!printers.length">新增橋接</el-button>
         </div>
         <el-table :data="bridges" style="width: 100%">
           <el-table-column prop="name" label="名稱" min-width="140" />
           <el-table-column prop="kind" label="類型" width="120" />
           <el-table-column prop="baseUrl" label="位址" min-width="180" />
           <el-table-column label="狀態" width="120">
-            <template slot-scope="{ row }"><el-tag size="mini">{{ row.lastStatus || 'not tested' }}</el-tag></template>
+            <template #default="{ row }"><el-tag size="small">{{ row.lastStatus || 'not tested' }}</el-tag></template>
           </el-table-column>
           <el-table-column label="操作" width="100" v-permissions="['printers:control']">
-            <template slot-scope="{ row }">
-              <el-button size="mini" :loading="testBusy === row.id" @click="testBridgeConn(row)">測試</el-button>
+            <template #default="{ row }">
+              <el-button size="small" :loading="testBusy === row.id" @click="testBridgeConn(row)">測試</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -24,19 +24,19 @@
 
       <el-tab-pane label="Webhook" name="webhooks">
         <div class="quickbar">
-          <el-button v-permissions="['webhooks:write']" type="primary" icon="el-icon-circle-plus" @click="webhookDialogVisible = true">新增 Webhook</el-button>
+          <el-button v-permissions="['webhooks:write']" type="primary" icon="CirclePlus" @click="webhookDialogVisible = true">新增 Webhook</el-button>
         </div>
         <el-table :data="webhooks" style="width: 100%">
           <el-table-column prop="name" label="名稱" min-width="140" />
           <el-table-column prop="url" label="URL" min-width="200" />
           <el-table-column label="啟用" width="90">
-            <template slot-scope="{ row }">
+            <template #default="{ row }">
               <el-switch v-model="row.enabled" :disabled="!canWebhooks" @change="toggleWebhook(row)" />
             </template>
           </el-table-column>
           <el-table-column label="操作" width="100" v-permissions="['webhooks:write']">
-            <template slot-scope="{ row }">
-              <el-button size="mini" :loading="testWebhookBusy === row.id" @click="testWebhookConn(row)">測試</el-button>
+            <template #default="{ row }">
+              <el-button size="small" :loading="testWebhookBusy === row.id" @click="testWebhookConn(row)">測試</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -56,7 +56,7 @@
       </el-tab-pane>
     </el-tabs>
 
-    <el-dialog title="新增橋接" :visible.sync="bridgeDialogVisible" width="420px">
+    <el-dialog title="新增橋接" v-model="bridgeDialogVisible" width="420px">
       <el-form label-width="90px" size="small">
         <el-form-item label="打印機">
           <el-select v-model="bridgeForm.printerId" style="width: 100%">
@@ -75,22 +75,22 @@
         <el-form-item label="位址"><el-input v-model="bridgeForm.baseUrl" placeholder="http://..." /></el-form-item>
         <el-form-item label="API Key"><el-input v-model="bridgeForm.apiKey" /></el-form-item>
       </el-form>
-      <div slot="footer">
+      <template #footer><div>
         <el-button @click="bridgeDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="savingBridge" @click="submitBridge">儲存</el-button>
-      </div>
+      </div></template>
     </el-dialog>
 
-    <el-dialog title="新增 Webhook" :visible.sync="webhookDialogVisible" width="420px">
+    <el-dialog title="新增 Webhook" v-model="webhookDialogVisible" width="420px">
       <el-form label-width="90px" size="small">
         <el-form-item label="名稱"><el-input v-model="webhookForm.name" /></el-form-item>
         <el-form-item label="URL"><el-input v-model="webhookForm.url" placeholder="https://..." /></el-form-item>
         <el-form-item label="事件"><el-input v-model="webhookForm.eventsText" placeholder="以逗號分隔，例如 *" /></el-form-item>
       </el-form>
-      <div slot="footer">
+      <template #footer><div>
         <el-button @click="webhookDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="savingWebhook" @click="submitWebhook">新增</el-button>
-      </div>
+      </div></template>
     </el-dialog>
   </div>
 </template>

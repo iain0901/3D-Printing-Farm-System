@@ -5,24 +5,27 @@
  * 详见 C:\Users\USER\.claude\plans\polished-swinging-scroll.md 的 Migration Phases。
  */
 
-import Vue from 'vue'
-import VueRouter from 'vue-router'
+import { createRouter, createWebHashHistory, createWebHistory } from 'vue-router'
 import Layout from '@/layouts'
 import { publicPath, routerMode } from '@/config'
-
-Vue.use(VueRouter)
 export const constantRoutes = [
   {
-    // 行销首页：公开，不需要任何登入态，因此放在 constantRoutes（一律注册），
-    // 且必须在 src/config/permission.js 的守卫里明确放行，见该档案开头注释。
+    // 品牌落地頁：公開行銷首頁（服務、流程、方案、FAQ），CTA 導向 /quote 估價。
     path: '/',
+    name: 'Landing',
+    component: () => import('@/views/landing/Index'),
+    hidden: true,
+  },
+  {
+    // 估價精靈：公開，客戶從落地頁 CTA 進入；/quote/new 為相容重導向。
+    path: '/quote',
     name: 'QuoteWizard',
     component: () => import('@/views/quote/Wizard'),
     hidden: true,
   },
   {
     path: '/quote/new',
-    component: () => import('@/views/quote/Wizard'),
+    redirect: '/quote',
     hidden: true,
   },
   {
@@ -427,17 +430,18 @@ export const asyncRoutes = [
     ],
   },
   {
-    path: '*',
+    path: '/:pathMatch(.*)*',
     redirect: '/404',
     hidden: true,
   },
 ]
 
-const router = new VueRouter({
-  base: publicPath,
-  mode: routerMode,
+const router = createRouter({
+  history:
+    routerMode === 'history' ? createWebHistory(publicPath) : createWebHashHistory(publicPath),
   scrollBehavior: () => ({
-    y: 0,
+    top: 0,
+    left: 0,
   }),
   routes: constantRoutes,
 })

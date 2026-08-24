@@ -2,7 +2,7 @@
   <div class="model-viewer">
     <div ref="canvasHost" class="model-viewer-canvas" :style="{ height: height + 'px' }" />
     <div v-if="loading" class="model-viewer-overlay">
-      <i class="el-icon-loading" /> 載入模型中…
+      <el-icon><Loading /></el-icon> 載入模型中…
     </div>
     <div v-else-if="errorMessage" class="model-viewer-overlay error">
       {{ errorMessage }}
@@ -110,7 +110,7 @@
       this.loadModel()
       window.addEventListener('resize', this.handleResize)
     },
-    beforeDestroy() {
+    beforeUnmount() {
       window.removeEventListener('resize', this.handleResize)
       cancelAnimationFrame(this.frameHandle)
       this.disposeMeshes()

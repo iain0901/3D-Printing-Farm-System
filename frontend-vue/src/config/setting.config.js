@@ -13,13 +13,13 @@ const setting = {
   // 进行编译的依赖
   transpileDependencies: [],
   //标题 （包括初次加载雪花屏的标题 页面的标题 浏览器的标题）
-  title: '3DSTU FarmFlow',
+  title: '3DRFM 三點成型｜3D 列印代工服務',
   //简写
-  abbreviation: 'farmflow',
+  abbreviation: '3drfm',
   //开发环境端口号
   devPort: '5174',
   //copyright
-  copyright: '3DSTU',
+  copyright: '3DRFM 三點成型',
   //是否显示页面底部自定义版权信息
   footerCopyright: false,
   //是否显示顶部进度条

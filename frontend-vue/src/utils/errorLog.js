@@ -1,4 +1,4 @@
-import Vue from 'vue'
+import { nextTick } from 'vue'
 import store from '@/store'
 import { isArray, isString } from '@/utils/validate'
 import { errorLog } from '@/config'
@@ -15,7 +15,7 @@ const checkNeed = () => {
   return false
 }
 
-// 检查是否是Chrome扩展相关错误
+// 检查是否是Chrome扩展相关的错误
 const isChromeExtensionError = (err) => {
   if (!err) return false
 
@@ -30,14 +30,19 @@ const isChromeExtensionError = (err) => {
 
   // 错误本身是字符串
   if (typeof err === 'string') {
-    return err.includes('runtime.lastError') || err.includes('message port closed') || err.includes('The message port closed')
+    return (
+      err.includes('runtime.lastError') ||
+      err.includes('message port closed') ||
+      err.includes('The message port closed')
+    )
   }
 
   return false
 }
 
-if (checkNeed()) {
-  Vue.config.errorHandler = (err, vm, info) => {
+export const setupErrorLog = (app) => {
+  if (!checkNeed()) return
+  app.config.errorHandler = (err, vm, info) => {
     // 过滤Chrome扩展相关错误
     if (isChromeExtensionError(err)) {
       return
@@ -45,7 +50,7 @@ if (checkNeed()) {
 
     console.error('vue-admin-better错误拦截:', err, vm, info)
     const url = window.location.href
-    Vue.nextTick(() => {
+    nextTick(() => {
       store.dispatch('errorLog/addErrorLog', { err, vm, info, url })
     })
   }

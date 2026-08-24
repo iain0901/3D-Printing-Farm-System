@@ -1,5 +1,5 @@
 <template>
-  <el-dialog :before-close="handleClose" :close-on-click-modal="false" :title="title" :visible.sync="dialogFormVisible" width="909px">
+  <el-dialog :before-close="handleClose" :close-on-click-modal="false" :title="title" v-model="dialogFormVisible" width="909px">
     <div class="upload">
       <el-alert
         :closable="false"
@@ -29,21 +29,21 @@
         :on-remove="handleRemove"
         :on-success="handleSuccess"
       >
-        <i slot="trigger" class="el-icon-plus"></i>
-        <el-dialog append-to-body title="查看大图" :visible.sync="dialogVisible">
+        <template #trigger><i class="el-icon-plus"></i></template>
+        <el-dialog append-to-body title="查看大图" v-model="dialogVisible">
           <div>
             <img alt="" :src="dialogImageUrl" width="100%" />
           </div>
         </el-dialog>
       </el-upload>
     </div>
-    <div slot="footer" class="dialog-footer" style="position: relative; padding-right: 15px; text-align: right">
+    <template #footer><div class="dialog-footer" style="position: relative; padding-right: 15px; text-align: right">
       <div v-if="show" style="position: absolute; top: 10px; left: 15px; color: #999">
         正在上传中... 当前上传成功数:{{ imgSuccessNum }}张 当前上传失败数:{{ imgErrorNum }}张
       </div>
       <el-button type="primary" @click="handleClose">关闭</el-button>
       <el-button :loading="loading" size="small" style="margin-left: 10px" type="success" @click="submitUpload">开始上传</el-button>
-    </div>
+    </div></template>
   </el-dialog>
 </template>
 

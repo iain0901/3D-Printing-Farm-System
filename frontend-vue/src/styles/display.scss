@@ -1,0 +1,24 @@
+// 取代 element-ui/lib/theme-chalk/display.css 的響應式隱藏工具類（與原 Bootstrap 3 斷點語義一致）
+.hidden-xs {
+  @media (max-width: 767px) {
+    display: none !important;
+  }
+}
+
+.hidden-sm {
+  @media (min-width: 768px) and (max-width: 991px) {
+    display: none !important;
+  }
+}
+
+.hidden-md {
+  @media (min-width: 992px) and (max-width: 1199px) {
+    display: none !important;
+  }
+}
+
+.hidden-lg {
+  @media (min-width: 1200px) {
+    display: none !important;
+  }
+}

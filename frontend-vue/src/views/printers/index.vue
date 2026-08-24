@@ -1,7 +1,7 @@
 <template>
   <div class="printers-container">
     <div class="quickbar">
-      <el-button v-permissions="['printers:control']" type="primary" icon="el-icon-circle-plus" @click="addDialogVisible = true">新增打印機</el-button>
+      <el-button v-permissions="['printers:control']" type="primary" icon="CirclePlus" @click="addDialogVisible = true">新增打印機</el-button>
       <el-radio-group v-model="mode" size="small">
         <el-radio-button label="cards">卡片</el-radio-button>
         <el-radio-button label="table">表格</el-radio-button>
@@ -12,7 +12,7 @@
       <div v-for="printer in printers" :key="printer.id" class="printer-card" @click="openDrawer(printer)">
         <div class="printer-card-head">
           <h3>{{ printer.name }}</h3>
-          <el-tag size="mini" :type="statusTagType(printer.status)">{{ printer.status }}</el-tag>
+          <el-tag size="small" :type="statusTagType(printer.status)">{{ printer.status }}</el-tag>
         </div>
         <p class="printer-card-meta">{{ printer.model }} · {{ printer.location }}</p>
         <div class="temperature">{{ printer.nozzle }}/{{ printer.targetNozzle }}°C · {{ printer.bed }}/{{ printer.targetBed }}°C bed</div>
@@ -26,23 +26,23 @@
       <el-table-column prop="name" label="名稱" />
       <el-table-column prop="model" label="型號" />
       <el-table-column label="狀態" width="120">
-        <template slot-scope="{ row }"><el-tag size="mini" :type="statusTagType(row.status)">{{ row.status }}</el-tag></template>
+        <template #default="{ row }"><el-tag size="small" :type="statusTagType(row.status)">{{ row.status }}</el-tag></template>
       </el-table-column>
       <el-table-column label="溫度" width="160">
-        <template slot-scope="{ row }">{{ row.nozzle }}/{{ row.targetNozzle }}°C · {{ row.bed }}/{{ row.targetBed }}°C</template>
+        <template #default="{ row }">{{ row.nozzle }}/{{ row.targetNozzle }}°C · {{ row.bed }}/{{ row.targetBed }}°C</template>
       </el-table-column>
       <el-table-column label="工作" prop="job">
-        <template slot-scope="{ row }">{{ row.job || '閒置' }}</template>
+        <template #default="{ row }">{{ row.job || '閒置' }}</template>
       </el-table-column>
       <el-table-column label="操作" width="180">
-        <template slot-scope="{ row }">
-          <el-button size="mini" @click="openDrawer(row)">開啟</el-button>
-          <el-button size="mini" v-permissions="['actions:write']" :loading="actionBusy === row.id" @click="quickToggle(row)">{{ row.status === 'printing' ? '暫停' : '啟動' }}</el-button>
+        <template #default="{ row }">
+          <el-button size="small" @click="openDrawer(row)">開啟</el-button>
+          <el-button size="small" v-permissions="['actions:write']" :loading="actionBusy === row.id" @click="quickToggle(row)">{{ row.status === 'printing' ? '暫停' : '啟動' }}</el-button>
         </template>
       </el-table-column>
     </el-table>
 
-    <el-drawer :visible.sync="drawerVisible" :title="activePrinter && activePrinter.name" size="380px" direction="rtl">
+    <el-drawer v-model="drawerVisible" :title="activePrinter && activePrinter.name" size="380px" direction="rtl">
       <div v-if="activePrinter" class="printer-drawer">
         <p class="drawer-meta">{{ activePrinter.model }} · {{ activePrinter.connection }}</p>
         <el-tag size="small" :type="statusTagType(activePrinter.status)">{{ activePrinter.status }}</el-tag>
@@ -68,7 +68,7 @@
       </div>
     </el-drawer>
 
-    <el-dialog title="新增打印機" :visible.sync="addDialogVisible" width="480px">
+    <el-dialog title="新增打印機" v-model="addDialogVisible" width="480px">
       <el-form :model="addForm" label-width="110px" size="small">
         <el-form-item label="連線方式">
           <el-select v-model="addForm.connection" style="width: 100%">
@@ -88,10 +88,10 @@
           </el-row>
         </el-form-item>
       </el-form>
-      <div slot="footer">
+      <template #footer><div>
         <el-button @click="addDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="creating" @click="submitAdd">新增</el-button>
-      </div>
+      </div></template>
     </el-dialog>
   </div>
 </template>

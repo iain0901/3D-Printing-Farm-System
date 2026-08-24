@@ -27,12 +27,12 @@
           <h2>你想怎麼開始？</h2>
           <div class="mode-grid">
             <button class="mode-card" :class="{ selected: form.mode === 'estimate' }" @click="form.mode = 'estimate'">
-              <i class="el-icon-data-analysis" />
+              <el-icon><DataAnalysis /></el-icon>
               <b>快速估價</b>
               <span>先輸入條件並取得初步總價</span>
             </button>
             <button class="mode-card" :class="{ selected: form.mode === 'agent' }" @click="form.mode = 'agent'">
-              <i class="el-icon-service" />
+              <el-icon><Service /></el-icon>
               <b>專員協助</b>
               <span>由專員確認材料、建模與製程</span>
             </button>
@@ -62,17 +62,34 @@
               :before-upload="validateModelFile"
               accept=".stl,.3mf,.step,.stp"
             >
-              <i class="el-icon-upload" />
+              <el-icon><UploadFilled /></el-icon>
               <div class="el-upload__text">拖曳模型至此，或 <em>選擇檔案</em></div>
             </el-upload>
             <el-alert v-if="fileList.length" type="success" :closable="false" show-icon title="檔案會以私有儲存方式處理；解析異常時保留案件並交由專員檢查。" />
+            <div v-if="fileList.length" class="model-preview-block">
+              <model-viewer :file="previewFile" :filename="previewName" :height="260" @error="onPreviewError" />
+              <div v-if="fileList.length > 1" class="preview-switch">
+                <button
+                  v-for="(item, index) in fileList"
+                  :key="item.uid"
+                  type="button"
+                  class="preview-tab"
+                  :class="{ active: index === previewIndex }"
+                  @click="previewIndex = index"
+                >{{ item.name }}</button>
+              </div>
+              <p v-if="previewError" class="subtle">此格式無法在瀏覽器預覽（STEP 等），仍可正常送出，由專員轉檔處理。</p>
+            </div>
             <div v-if="parts.length" class="part-list">
               <h3>零件設定</h3>
               <p class="subtle">系統先以案件預設套用；可直接覆寫各零件的材料、顏色與數量。</p>
               <div v-for="part in parts" :key="part.localId" class="part-row">
                 <el-input v-model="part.name" size="small" />
                 <el-select v-model="part.material" size="small"><el-option v-for="item in materials" :key="item" :label="item" :value="item" /></el-select>
-                <el-input v-model="part.color" size="small" placeholder="顏色" />
+                <span class="color-cell">
+                  <el-color-picker v-model="part.colorHex" size="small" :predefine="palette" />
+                  <el-input v-model="part.color" size="small" placeholder="顏色說明（選填）" />
+                </span>
                 <el-input-number v-model="part.quantity" :min="1" :max="10000" size="small" />
               </div>
             </div>
@@ -88,8 +105,8 @@
               </el-form-item>
               <el-form-item label="草圖、照片或需求 PDF">
                 <el-upload action="" :auto-upload="false" multiple :file-list="attachmentList" :on-change="onAttachmentChange" :on-remove="onAttachmentRemove" :before-upload="validateAttachmentFile" accept=".png,.jpg,.jpeg,.webp,.pdf">
-                  <el-button size="small" icon="el-icon-paperclip">選擇附件</el-button>
-                  <span slot="tip" class="el-upload__tip">每個附件上限 100 MB。</span>
+                  <el-button size="small" icon="Paperclip">選擇附件</el-button>
+                  <template #tip><span class="el-upload__tip">每個附件上限 100 MB。</span></template>
                 </el-upload>
               </el-form-item>
             </el-form>
@@ -135,6 +152,21 @@
               <p>初步預估總價</p>
               <strong>NT$ {{ estimate ? estimate.total.toLocaleString() : '—' }}</strong>
               <small>最終金額由專員確認模型、OrcaSlicer 切片與製程後提供。</small>
+              <ul v-if="estimate && estimate.lines && estimate.lines.length" class="estimate-lines">
+                <li v-for="line in estimate.lines" :key="line.key">
+                  <span>{{ line.label }}</span>
+                  <b>NT$ {{ Number(line.amount).toLocaleString() }}</b>
+                </li>
+              </ul>
+              <el-alert
+                v-if="estimate && estimate.escalations && estimate.escalations.length"
+                type="warning"
+                :closable="false"
+                show-icon
+                class="estimate-alert"
+                title="此案件建議專員確認"
+                :description="estimate.escalations.map((item) => item.message).join('；')"
+              />
             </aside>
           </div>
           <el-alert type="info" :closable="false" show-icon title="客戶端只顯示最終總價；材料、工時、風險、折扣與稅額等明細由內部人員管理。" />
@@ -147,11 +179,11 @@
         </div>
       </el-card>
 
-      <el-dialog title="案件已建立" :visible.sync="successVisible" width="460px" :close-on-click-modal="false">
+      <el-dialog title="案件已建立" v-model="successVisible" width="460px" :close-on-click-modal="false">
         <div v-if="createdCase" class="success-dialog">
           <el-result icon="success" title="已收到你的案件" :sub-title="`${createdCase.caseNo}｜${createdCase.project}`" />
           <p>案件連結已建立。後續客服與 LINE 對話會統一在 Chatwoot 進行。</p>
-          <el-input :value="publicCaseUrl" readonly><el-button slot="append" @click="copyLink">複製連結</el-button></el-input>
+          <el-input :value="publicCaseUrl" readonly><template #append><el-button @click="copyLink">複製連結</el-button></template></el-input>
         </div>
       </el-dialog>
     </section>
@@ -160,6 +192,9 @@
 
 <script>
   import { createPublicCase, estimateCase } from '@/api/cases'
+  import ModelViewer from '@/components/ModelViewer'
+
+  const COLOR_PALETTE = ['#f5f5f0', '#1c1c1c', '#d64545', '#3b6fd6', '#3f9142', '#e0b400', '#e07b28', '#8752c9']
 
   const emptyForm = () => ({
     mode: 'estimate',
@@ -177,14 +212,18 @@
 
   export default {
     name: 'QuoteWizard',
+    components: { ModelViewer },
     data() {
       return {
         step: 0,
         form: emptyForm(),
         materials: ['PLA', 'PETG', 'ABS', 'ASA', 'TPU', 'Resin', 'Nylon'],
+        palette: COLOR_PALETTE,
         fileList: [],
         attachmentList: [],
         parts: [],
+        previewIndex: 0,
+        previewError: '',
         estimate: null,
         estimating: false,
         submitting: false,
@@ -197,6 +236,19 @@
       publicCaseUrl() {
         if (!this.createdCase || !this.accessToken) return ''
         return `${window.location.origin}/customer/cases/${this.createdCase.id}?token=${encodeURIComponent(this.accessToken)}`
+      },
+      previewFile() {
+        const item = this.fileList[this.previewIndex] || this.fileList[0]
+        return item ? item.raw || item : null
+      },
+      previewName() {
+        const item = this.fileList[this.previewIndex] || this.fileList[0]
+        return item ? item.name : ''
+      },
+    },
+    watch: {
+      previewIndex() {
+        this.previewError = ''
       },
     },
     methods: {
@@ -221,9 +273,15 @@
           localId: item.uid || `${Date.now()}-${index}`,
           name: item.name.replace(/\.[^.]+$/, ''),
           material: this.form.defaults.material,
-          color: this.form.defaults.color,
+          color: '',
+          colorHex: '',
           quantity: this.form.defaults.quantity,
         }))
+        if (this.previewIndex >= this.fileList.length) this.previewIndex = 0
+        this.previewError = ''
+      },
+      onPreviewError() {
+        this.previewError = 'preview-failed'
       },
       onFileRemove(file, files) {
         this.fileList = files
@@ -252,6 +310,7 @@
       async loadEstimate() {
         this.estimating = true
         try {
+          const colorCount = new Set(this.parts.map((part) => (part.colorHex || part.color || '').toLowerCase()).filter(Boolean)).size || 1
           this.estimate = await estimateCase({
             material: this.form.defaults.material,
             quantity: this.form.defaults.quantity,
@@ -262,6 +321,7 @@
             postProcessing: this.form.defaults.postProcessing,
             hasModel: this.form.hasModel,
             rush: false,
+            colors: colorCount,
           })
         } finally {
           this.estimating = false
@@ -277,7 +337,7 @@
             parts: this.form.hasModel ? this.parts.map((part) => ({
               name: part.name,
               material: part.material,
-              color: part.color,
+              color: part.colorHex || part.color || '',
               quantity: part.quantity,
             })) : [],
             modeling: { sketches: [], criticalDimensions: this.form.criticalDimensions, requirements: this.form.purpose },
@@ -321,12 +381,21 @@
   .mode-card b, .mode-card span { display: block; }
   .mode-card span { margin-top: 7px; color: #667085; font-size: 14px; }
   .choice-form { max-width: 600px; }
-  .part-row { display: grid; grid-template-columns: 1.4fr 1fr 1fr 100px; gap: 10px; align-items: center; margin-top: 8px; }
+  .part-row { display: grid; grid-template-columns: 1.3fr .9fr 1.5fr 90px; gap: 10px; align-items: center; margin-top: 8px; }
   .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; }
   .review-grid { display: grid; grid-template-columns: 1fr 310px; gap: 28px; margin-bottom: 24px; }
   dl { margin: 0; } dt { color: #667085; margin-top: 14px; } dd { margin: 3px 0; font-weight: 600; }
   .estimate-card { background: #17223b; color: #fff; border-radius: 14px; padding: 24px; }
   .estimate-card p { margin: 0; opacity: .72; } .estimate-card strong { display: block; font-size: 31px; margin: 10px 0; } .estimate-card small { line-height: 1.6; opacity: .72; }
+  .estimate-lines { list-style: none; margin: 14px 0 0; padding: 12px 0 0; border-top: 1px solid rgba(255,255,255,.16); }
+  .estimate-lines li { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 3px 0; opacity: .88; }
+  .estimate-lines li b { font-weight: 600; white-space: nowrap; }
+  .estimate-alert { margin-top: 14px; }
+  .model-preview-block { margin-top: 18px; border: 1px solid #dbe2ef; border-radius: 12px; padding: 14px; background: #fff; }
+  .preview-switch { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .preview-tab { border: 1px solid #dbe2ef; background: #f8fafc; border-radius: 8px; padding: 5px 10px; font-size: 12px; cursor: pointer; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .preview-tab.active { border-color: #3563e9; color: #3563e9; background: #eef3ff; }
+  .color-cell { display: flex; align-items: center; gap: 8px; }
   .wizard-actions { display: flex; justify-content: flex-end; gap: 10px; padding-top: 20px; border-top: 1px solid #edf0f5; }
   .success-dialog { text-align: center; } .success-dialog p { color: #667085; line-height: 1.7; }
   @media (max-width: 680px) { h1 { font-size: 30px; } .mode-grid, .form-grid, .review-grid { grid-template-columns: 1fr; } .part-row { grid-template-columns: 1fr 1fr; } }
