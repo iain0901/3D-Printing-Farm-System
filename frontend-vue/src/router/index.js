@@ -55,6 +55,12 @@ export const constantRoutes = [
     hidden: true,
   },
   {
+    // OAuth（Google/LINE）回呼落地頁：從 hash 取 token 後轉入 dashboard
+    path: '/portal/oauth-callback',
+    component: () => import('@/views/portal/OauthCallback'),
+    hidden: true,
+  },
+  {
     path: '/portal/register',
     component: () => import('@/views/portal/Register'),
     hidden: true,

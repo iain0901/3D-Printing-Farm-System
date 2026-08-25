@@ -33,6 +33,19 @@ import { registerChatwootRoutes } from "./chatwoot-module.mjs";
 import { autoQuoteConfigSchema, computeAutoQuote, defaultAutoQuoteConfig } from "./pricing-engine.mjs";
 import { buildModelChecks, detectSlicerCommand, parseGcodeStats, runPrusaSlicePipeline, summarizeModelChecks } from "./slicer-pipeline.mjs";
 import { createLineClient, operatorMessageText, quoteReadyText, resolveLineTarget, shippedText } from "./line-notify.mjs";
+import {
+  OAUTH_PROVIDERS,
+  buildAuthorizeUrl,
+  exchangeAndFetchProfile,
+  findCustomerByEmail,
+  findCustomerByProvider,
+  isProviderConfigured,
+  newStateRecord,
+  oauthConfigFromEnv,
+  providerField,
+  redirectUriFor,
+  validateAndConsumeState,
+} from "./customer-oauth.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -7229,6 +7242,94 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     await dispatchEvent(database, "customer.portal_registered", `${customer.name} created a customer portal account`, { workspaceId, customerId: customer.id, email: customer.email });
     await database.write();
     return reply.code(201).send({ token, customer: sanitizeCustomer(customer) });
+  });
+
+  // ---- 客戶入口社交登入（Google / LINE OAuth）----
+  // 僅供客戶端；員工登入維持密碼 + 2FA。state 一次性 10 分鐘，存 DB。
+  // 成功後 302 到 /portal/oauth-callback#token=...（hash 不進 server log）。
+  const oauthOriginBase = (request) => {
+    const configured = process.env.LAYERPILOT_PUBLIC_URL || "";
+    if (configured) return configured.replace(/\/+$/, "");
+    const proto = String(request.headers["x-forwarded-proto"] || "").split(",")[0].trim() || "http";
+    const host = String(request.headers["x-forwarded-host"] || "").split(",")[0].trim() || request.headers.host || "127.0.0.1:8797";
+    return `${proto}://${host}`;
+  };
+  const oauthFail = (request, reply, code) => reply.redirect(`${oauthOriginBase(request)}/portal/login?oauthError=${code}`);
+
+  app.get("/api/customer-auth/oauth/:provider/start", async (request, reply) => {
+    const provider = String(request.params.provider || "");
+    if (!OAUTH_PROVIDERS.includes(provider)) return reply.code(404).send({ error: "Unknown oauth provider" });
+    const config = oauthConfigFromEnv();
+    if (!isProviderConfigured(config, provider)) return oauthFail(request, reply, "not_configured");
+    const record = newStateRecord(provider);
+    database.data.oauthStates ||= [];
+    const now = Date.now();
+    database.data.oauthStates = database.data.oauthStates.filter((row) => now - Date.parse(row.createdAt) < 10 * 60 * 1000);
+    database.data.oauthStates.push(record);
+    await database.write();
+    const url = buildAuthorizeUrl(config, provider, { redirectUri: redirectUriFor(provider, process.env), state: record.state });
+    return reply.redirect(url);
+  });
+
+  app.get("/api/customer-auth/oauth/:provider/callback", async (request, reply) => {
+    const provider = String(request.params.provider || "");
+    if (!OAUTH_PROVIDERS.includes(provider)) return reply.code(404).send({ error: "Unknown oauth provider" });
+    try {
+      const config = oauthConfigFromEnv();
+      if (!isProviderConfigured(config, provider)) return oauthFail(request, reply, "not_configured");
+      const state = String(request.query?.state || "");
+      if (!validateAndConsumeState(database.data.oauthStates ||= [], provider, state)) return oauthFail(request, reply, "state_invalid");
+      const profile = await exchangeAndFetchProfile(config, provider, {
+        code: String(request.query?.code || ""),
+        redirectUri: redirectUriFor(provider, process.env),
+      });
+      if (!profile.providerId) return oauthFail(request, reply, "profile_incomplete");
+
+      database.data.customers ||= [];
+      let customer = findCustomerByProvider(database.data.customers, provider, profile.providerId)
+        || (profile.email && profile.emailVerified ? findCustomerByEmail(database.data.customers, profile.email) : null);
+      const now = new Date().toISOString();
+      const isNew = !customer;
+      if (isNew) {
+        const email = profile.email || `${provider}-${profile.providerId}@users.3drfm.local`;
+        if (findCustomerByEmail(database.data.customers, email)) return oauthFail(request, reply, "email_conflict");
+        customer = {
+          id: randomUUID(),
+          workspaceId: DEFAULT_WORKSPACE_ID,
+          name: profile.name || "客戶",
+          email,
+          phone: "",
+          company: "",
+          line: "",
+          tags: [],
+          notes: "",
+          source: provider === "google" ? "Google 登入" : "LINE 登入",
+          createdAt: now,
+          updatedAt: now,
+          lastActivityAt: now,
+        };
+        database.data.customers.push(customer);
+      }
+      customer[providerField(provider)] = profile.providerId;
+      customer.name = customer.name || profile.name || "客戶";
+      customer.lastLoginAt = now;
+      customer.updatedAt = now;
+
+      const token = randomBytes(32).toString("hex");
+      const session = createCustomerSession({ token, customer, workspaceId: customer.workspaceId, now: new Date(now) });
+      database.data.customerSessions ||= [];
+      database.data.customerSessions.push(session);
+      await dispatchEvent(database, isNew ? "customer.oauth_registered" : "customer.oauth_login", `${customer.name} signed in with ${provider}`, {
+        workspaceId: customer.workspaceId || DEFAULT_WORKSPACE_ID,
+        customerId: customer.id,
+        provider,
+      });
+      await database.write();
+      return reply.redirect(`${oauthOriginBase(request)}/portal/oauth-callback#token=${token}`);
+    } catch (error) {
+      request.log.warn({ err: error }, "oauth callback failed");
+      return oauthFail(request, reply, "provider_error");
+    }
   });
 
   app.post("/api/customer-auth/claim", { config: { rateLimit: customerAuthRateLimit } }, async (request, reply) => {
