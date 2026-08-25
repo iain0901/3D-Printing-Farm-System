@@ -98,7 +98,6 @@
 </script>
 
 <style lang="scss" scoped>
-  @import '@/styles/brand';
   @import '@/styles/public-pages';
 
   .services-page {

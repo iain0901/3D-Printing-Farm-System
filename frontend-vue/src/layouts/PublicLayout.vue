@@ -105,6 +105,12 @@
   }
 </script>
 
+<style lang="scss">
+// 品牌Token 與公用樣式必須「全域」注入：
+// 放在 scoped 區塊會被編譯成 :root[data-v-xxx] 而永遠匹配不到。
+@import '@/styles/brand';
+</style>
+
 <style lang="scss" scoped>
 @import '@/styles/brand';
 

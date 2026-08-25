@@ -61,7 +61,7 @@
 
       <!-- ============ 數據帶 ============ -->
       <section class="stats">
-        <div v-for="s in stats" :key="s.label" class="stat">
+        <div v-for="s in stats" :key="s.label" class="stat notch-card">
           <b>
             {{ s.value }}
             <small>{{ s.unit }}</small>
@@ -249,8 +249,6 @@
 </script>
 
 <style lang="scss" scoped>
-  @import '@/styles/brand';
-
   .landing {
     background: var(--paper);
   }
@@ -374,7 +372,6 @@
     position: relative;
     z-index: 2;
     .stat {
-      @extend .notch-card;
       text-align: center;
       padding: 20px 12px;
       b {
