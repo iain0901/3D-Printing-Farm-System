@@ -1,14 +1,10 @@
 <template>
   <div class="about-page">
-    <section class="page-hero">
-      <p class="eyebrow">ABOUT US</p>
-      <h1>關於 3DRFM 三點成型</h1>
-      <p>
-        我們相信 3D 列印不該是懂機器的人的特權。
-        <br />
-        你帶著想法來，我們負責把它變成成品。
-      </p>
-    </section>
+    <site-hero
+      eyebrow="ABOUT US"
+      title="關於 3DRFM 三點成型"
+      lead="我們相信 3D 列印不該是懂機器的人的特權。 你帶著想法來，我們負責把它變成成品。"
+    />
 
     <section class="block">
       <div class="story">
@@ -66,8 +62,11 @@
 </template>
 
 <script>
+  import SiteHero from '@/components/site/SiteHero'
+
   export default {
     name: 'SiteAbout',
+    components: { SiteHero },
     data() {
       return {
         promises: [
@@ -88,6 +87,7 @@
 </script>
 
 <style lang="scss" scoped>
+  @import '@/styles/brand';
   @import '@/styles/public-pages';
 
   .about-page {

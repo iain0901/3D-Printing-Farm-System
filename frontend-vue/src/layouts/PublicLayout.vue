@@ -1,11 +1,14 @@
 <template>
   <div class="public-site">
-    <header class="site-header" :class="{ scrolled }">
+    <header class="site-header" :class="{ scrolled, open: menuOpen }">
       <div class="header-inner">
-        <router-link to="/" class="brand">
-          <span class="brand-mark">3DRFM</span>
-          <span class="brand-sub">三點成型</span>
+        <router-link to="/" class="brand" @click="menuOpen = false">
+          <span class="logo-mark" aria-hidden="true">
+            <i /><i /><i />
+          </span>
+          <span class="brand-text">3DRFM<small>三點成型</small></span>
         </router-link>
+
         <nav class="main-nav">
           <router-link to="/" exact>首頁</router-link>
           <router-link to="/services">服務</router-link>
@@ -15,46 +18,54 @@
           <router-link to="/faq">常見問題</router-link>
           <router-link to="/contact">聯絡</router-link>
         </nav>
-        <div class="header-actions">
-          <router-link to="/portal/login" class="btn ghost small">會員中心</router-link>
-          <router-link to="/quote" class="btn primary small">立即估價</router-link>
+
+        <div class="actions">
+          <router-link to="/portal/login" class="btnx ghost-dark sm hide-m">會員中心</router-link>
+          <router-link to="/quote" class="btnx accent sm">立即估價</router-link>
+          <button class="burger hide-pc" :aria-expanded="menuOpen" aria-label="menu" @click="menuOpen = !menuOpen">
+            <span /><span /><span />
+          </button>
         </div>
       </div>
+
+      <transition name="drop">
+        <nav v-if="menuOpen" class="mobile-nav">
+          <router-link v-for="item in mobileItems" :key="item.to" :to="item.to" @click="menuOpen = false">{{ item.label }}</router-link>
+        </nav>
+      </transition>
     </header>
 
     <main class="page-body">
       <slot />
     </main>
 
-    <footer class="site-footer">
-      <div class="footer-grid">
-        <div class="footer-brand-col">
-          <div class="footer-brand">3DRFM 三點成型</div>
-          <p>把你的想法變成拿在手中的成品。<br />FDM 列印代印、建模與小量製造。</p>
+    <footer class="site-footer layer-lines">
+      <div class="f-inner">
+        <div class="f-grid">
+          <div class="f-brand">
+            <div class="brand light"><span class="logo-mark"><i /><i /><i /></span><span class="brand-text">3DRFM<small>三點成型</small></span></div>
+            <p>積層製造 × 生產管理系統。<br />把你的想法，一層一層變成精確的成品。</p>
+            <p class="mono-label on-light" style="color:#ff9d5c">FDM · CAD · BATCH</p>
+          </div>
+          <div class="f-col"><b>服務</b>
+            <router-link to="/services">FDM 列印代印</router-link>
+            <router-link to="/services">3D 建模</router-link>
+            <router-link to="/services">小量製造</router-link>
+            <router-link to="/quote">線上估價</router-link>
+          </div>
+          <div class="f-col"><b>支援</b>
+            <router-link to="/faq">常見問題</router-link>
+            <router-link to="/contact">聯絡我們</router-link>
+            <router-link to="/portal/login">會員中心</router-link>
+            <router-link to="/portal/register">註冊帳號</router-link>
+          </div>
+          <div class="f-col"><b>公司</b>
+            <router-link to="/about">關於我們</router-link>
+            <router-link to="/terms">服務條款</router-link>
+            <router-link to="/privacy">隱私權政策</router-link>
+          </div>
         </div>
-        <div class="footer-col">
-          <b>服務</b>
-          <router-link to="/services">FDM 列印代印</router-link>
-          <router-link to="/services">3D 建模</router-link>
-          <router-link to="/services">小量製造</router-link>
-          <router-link to="/quote">線上估價</router-link>
-        </div>
-        <div class="footer-col">
-          <b>支援</b>
-          <router-link to="/faq">常見問題</router-link>
-          <router-link to="/contact">聯絡我們</router-link>
-          <router-link to="/portal/login">會員中心</router-link>
-          <router-link to="/portal/register">註冊帳號</router-link>
-        </div>
-        <div class="footer-col">
-          <b>公司</b>
-          <router-link to="/about">關於我們</router-link>
-          <router-link to="/terms">服務條款</router-link>
-          <router-link to="/privacy">隱私權政策</router-link>
-        </div>
-      </div>
-      <div class="footer-bottom">
-        © {{ year }} 3DRFM 三點成型 · All rights reserved.
+        <div class="f-bottom">© {{ year }} 3DRFM 三點成型 · All rights reserved.</div>
       </div>
     </footer>
   </div>
@@ -64,7 +75,21 @@
   export default {
     name: 'PublicLayout',
     data() {
-      return { scrolled: false }
+      return {
+        scrolled: false,
+        menuOpen: false,
+        year: new Date().getFullYear(),
+        mobileItems: [
+          { to: '/', label: '首頁' },
+          { to: '/services', label: '服務' },
+          { to: '/gallery', label: '作品' },
+          { to: '/pricing', label: '方案價格' },
+          { to: '/about', label: '關於我們' },
+          { to: '/faq', label: '常見問題' },
+          { to: '/contact', label: '聯絡' },
+          { to: '/portal/login', label: '會員中心' },
+        ],
+      }
     },
     mounted() {
       window.addEventListener('scroll', this.onScroll, { passive: true })
@@ -74,108 +99,74 @@
     },
     methods: {
       onScroll() {
-        this.scrolled = window.scrollY > 12
+        this.scrolled = window.scrollY > 10
       },
     },
   }
 </script>
 
 <style lang="scss" scoped>
-  .public-site {
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    background: #f5f7fb;
-    color: #17223b;
-  }
+@import '@/styles/brand';
 
-  .site-header {
-    position: sticky;
-    top: 0;
-    z-index: 50;
-    background: rgba(255, 255, 255, 0.86);
-    backdrop-filter: blur(10px);
-    border-bottom: 1px solid transparent;
-    transition: border-color 0.2s, box-shadow 0.2s;
+.public-site { min-height: 100vh; display: flex; flex-direction: column; background: var(--paper); color: var(--text); font-family: var(--sans); }
 
-    &.scrolled {
-      border-bottom-color: #e3e9f4;
-      box-shadow: 0 4px 18px rgba(23, 34, 59, 0.06);
-    }
-  }
+// ---------- Header ----------
+.site-header {
+  position: sticky; top: 0; z-index: 60;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid transparent;
+  transition: box-shadow 0.2s, border-color 0.2s;
 
-  .header-inner {
-    max-width: 1160px;
-    margin: auto;
-    padding: 14px 24px;
-    display: flex;
-    align-items: center;
-    gap: 26px;
-  }
+  &.scrolled { border-bottom-color: var(--line); box-shadow: 0 6px 24px rgba(12, 18, 34, 0.07); }
+}
+.header-inner { max-width: 1180px; margin: auto; padding: 13px 24px; display: flex; align-items: center; gap: 24px; }
 
-  .brand { display: flex; align-items: baseline; gap: 7px; text-decoration: none; }
-  .brand-mark { font-size: 21px; font-weight: 800; color: #17223b; letter-spacing: 0.4px; }
-  .brand-sub { font-size: 13px; color: #6b7280; font-weight: 500; }
+.brand { display: inline-flex; align-items: center; gap: 11px; text-decoration: none;
+  &.light .brand-text { color: #fff; } }
+.logo-mark { display: inline-flex; flex-direction: column; gap: 3px;
+  i { width: 26px; height: 5px; border-radius: 2px; background: var(--melt); display: block;
+    &:nth-child(1) { width: 18px; opacity: .55; }
+    &:nth-child(2) { width: 22px; opacity: .8; }
+    &:nth-child(3) { width: 26px; }
+  } }
+.brand-text { font-weight: 900; font-size: 19px; letter-spacing: .4px; color: var(--ink); line-height: 1.05;
+  small { display: block; font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: 2px; } }
 
-  .main-nav { display: flex; gap: 4px; margin-left: auto; }
-  .main-nav a {
-    padding: 8px 14px;
-    border-radius: 8px;
-    color: #475467;
-    text-decoration: none;
-    font-size: 14px;
-    transition: background 0.15s, color 0.15s;
+.main-nav { margin-left: auto; display: flex; gap: 2px;
+  a { padding: 9px 15px; border-radius: 8px; color: #45506b; text-decoration: none; font-size: 14px; transition: .15s;
+    &:hover { color: var(--ink); background: #eef1f7; }
+    &.router-link-active { color: var(--ink); background: var(--accent-soft); font-weight: 700; }
+  } }
 
-    &:hover { background: #eef3ff; color: #17223b; }
-    &.router-link-active { background: #3563e9; color: #fff; font-weight: 600; }
-  }
+.actions { display: flex; gap: 9px; align-items: center; }
 
-  .header-actions { display: flex; gap: 10px; }
+.burger { display: none; flex-direction: column; gap: 5px; background: none; border: 0; cursor: pointer; padding: 8px;
+  span { width: 22px; height: 2px; background: var(--ink); border-radius: 2px; display: block; } }
 
-  .btn {
-    display: inline-block;
-    border-radius: 9px;
-    padding: 9px 18px;
-    font-weight: 700;
-    font-size: 14px;
-    text-decoration: none;
-    transition: transform 0.15s, box-shadow 0.15s;
+.mobile-nav { display: grid; padding: 6px 20px 16px; border-top: 1px solid var(--line);
+  a { padding: 12px 10px; color: var(--text); text-decoration: none; font-size: 15px; border-bottom: 1px dashed var(--line); } }
 
-    &.primary { background: #3563e9; color: #fff !important; box-shadow: 0 6px 18px rgba(53, 99, 233, 0.25); }
-    &.ghost { border: 1px solid #d5dce8; color: #17223b !important; background: #fff; }
-    &.small { padding: 8px 16px; font-size: 13px; }
-    &:hover { transform: translateY(-1px); }
-  }
+.drop-enter-active, .drop-leave-active { transition: opacity .15s, transform .15s; }
+.drop-enter-from, .drop-leave-to { opacity: 0; transform: translateY(-6px); }
 
-  .page-body { flex: 1; }
+// ---------- Footer ----------
+.site-footer { background: var(--ink); color: #aab6cf; margin-top: 56px; }
+.f-grid { max-width: 1180px; margin: auto; padding: 52px 24px 26px; display: grid; grid-template-columns: 1.7fr 1fr 1fr 1fr; gap: 30px; }
+.f-brand p { line-height: 1.95; font-size: 13px; color: #8fa0c0; margin-top: 14px; }
+.f-col b { display: block; color: #fff; font-size: 12px; letter-spacing: 2px; margin-bottom: 13px; font-family: var(--mono); }
+.f-col a { display: block; color: #93a3c2; text-decoration: none; font-size: 13px; padding: 4px 0; transition: color .15s;
+  &:hover { color: var(--accent); } }
+.f-bottom { max-width: 1180px; margin: auto; padding: 15px 24px 22px; font-family: var(--mono); font-size: 11.5px; color: #6d7ea1; border-top: 1px solid rgba(255,255,255,.08); text-align: center; }
 
-  .site-footer { background: #101a30; color: #cbd5e4; margin-top: 40px; }
-  .footer-grid {
-    max-width: 1160px;
-    margin: auto;
-    padding: 44px 24px 28px;
-    display: grid;
-    grid-template-columns: 1.6fr 1fr 1fr 1fr;
-    gap: 28px;
-  }
-  .footer-brand-col p { line-height: 1.9; font-size: 13px; color: #94a3bd; margin-top: 10px; }
-  .footer-brand { color: #fff; font-size: 17px; font-weight: 800; }
-  .footer-col b { display: block; color: #fff; font-size: 13px; margin-bottom: 12px; letter-spacing: 0.5px; }
-  .footer-col a { display: block; color: #94a3bd; text-decoration: none; font-size: 13px; padding: 4px 0; transition: color 0.15s; }
-  .footer-col a:hover { color: #fff; }
+@media (max-width: 960px) {
+  .main-nav, .hide-m { display: none; }
+  .hide-pc { display: block; }
+  .f-grid { grid-template-columns: 1fr 1fr; }
+}
 
-  .footer-bottom {
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-    max-width: 1160px;
-    margin: auto;
-    padding: 16px 24px;
-    font-size: 12px;
-    color: #7c8aa5;
-    text-align: center;
-  }
-
-  @media (max-width: 900px) {
-    .main-nav { display: none; }
-    .footer-grid { grid-template-columns: 1fr 1fr; }
-  }
+@media (min-width: 961px) {
+  .hide-pc { display: none; }
+  .mobile-nav { display: none; }
+}
 </style>

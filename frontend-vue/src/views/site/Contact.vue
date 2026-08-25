@@ -1,10 +1,6 @@
 <template>
   <div class="contact-page">
-    <section class="page-hero">
-      <p class="eyebrow">CONTACT</p>
-      <h1>聯絡我們</h1>
-      <p>估價問題、量產洽談、合作提案——都歡迎。</p>
-    </section>
+    <site-hero eyebrow="CONTACT" title="聯絡我們" lead="估價問題、量產洽談、合作提案——都歡迎。" />
 
     <section class="block">
       <div class="contact-grid">
@@ -26,8 +22,11 @@
 </template>
 
 <script>
+  import SiteHero from '@/components/site/SiteHero'
+
   export default {
     name: 'SiteContact',
+    components: { SiteHero },
     data() {
       return {
         // 部署前請更新為實際聯絡資訊
@@ -53,6 +52,7 @@
 </script>
 
 <style lang="scss" scoped>
+  @import '@/styles/brand';
   @import '@/styles/public-pages';
 
   .contact-page {

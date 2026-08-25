@@ -1,10 +1,6 @@
 <template>
   <div class="gallery-page">
-    <section class="page-hero">
-      <p class="eyebrow">GALLERY</p>
-      <h1>作品案例</h1>
-      <p>功能件、公仔、量產零件——每一件都經過切片優化與出貨前品檢。</p>
-    </section>
+    <site-hero eyebrow="GALLERY" title="作品案例" lead="功能件、公仔、量產零件——每一件都經過切片優化與出貨前品檢。" />
 
     <section class="block">
       <div class="filter-bar">
@@ -35,6 +31,8 @@
 </template>
 
 <script>
+  import SiteHero from '@/components/site/SiteHero'
+
   import showcase1 from '@/assets/showcase/showcase-1.svg'
   import showcase2 from '@/assets/showcase/showcase-2.svg'
   import showcase3 from '@/assets/showcase/showcase-3.svg'
@@ -42,6 +40,7 @@
 
   export default {
     name: 'SiteGallery',
+    components: { SiteHero },
     data() {
       return {
         categories: ['全部', '功能零件', '公仔模型', '生活小物', '量產'],
@@ -66,6 +65,7 @@
 </script>
 
 <style lang="scss" scoped>
+  @import '@/styles/brand';
   @import '@/styles/public-pages';
 
   .gallery-page {

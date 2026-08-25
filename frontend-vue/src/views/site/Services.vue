@@ -1,10 +1,6 @@
 <template>
   <div class="services-page">
-    <section class="page-hero">
-      <p class="eyebrow">SERVICES</p>
-      <h1>服務項目</h1>
-      <p>從單一零件到上千件量產，三條產品線覆蓋你所有的 3D 製造需求。</p>
-    </section>
+    <site-hero eyebrow="SERVICES" title="服務項目" lead="從單一零件到上千件量產，三條產品線覆蓋你所有的 3D 製造需求。" />
 
     <section class="block">
       <div v-for="svc in services" :key="svc.title" class="service">
@@ -43,8 +39,11 @@
 </template>
 
 <script>
+  import SiteHero from '@/components/site/SiteHero'
+
   export default {
     name: 'SiteServices',
+    components: { SiteHero },
     data() {
       return {
         services: [
@@ -99,6 +98,7 @@
 </script>
 
 <style lang="scss" scoped>
+  @import '@/styles/brand';
   @import '@/styles/public-pages';
 
   .services-page {

@@ -1,10 +1,6 @@
 <template>
   <div class="legal-page">
-    <section class="page-hero slim">
-      <p class="eyebrow">PRIVACY</p>
-      <h1>隱私權政策</h1>
-      <p>最後更新：2026-08-24</p>
-    </section>
+    <site-hero eyebrow="PRIVACY" title="隱私權政策" lead="最後更新：2026-08-24" slim />
 
     <section class="block narrow legal">
       <!-- 草稿版本：正式上線前請由法務／法律專業審閱調整 -->
@@ -55,10 +51,13 @@
 </template>
 
 <script>
-  export default { name: 'SitePrivacy' }
+  import SiteHero from '@/components/site/SiteHero'
+
+  export default { name: 'SitePrivacy', components: { SiteHero } }
 </script>
 
 <style lang="scss" scoped>
+  @import '@/styles/brand';
   @import '@/styles/public-pages';
 
   .legal-page {

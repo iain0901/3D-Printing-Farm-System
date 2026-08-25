@@ -1,10 +1,6 @@
 <template>
   <div class="legal-page">
-    <section class="page-hero slim">
-      <p class="eyebrow">TERMS</p>
-      <h1>服務條款</h1>
-      <p>最後更新：2026-08-24</p>
-    </section>
+    <site-hero eyebrow="TERMS" title="服務條款" lead="最後更新：2026-08-24" slim />
 
     <section class="block narrow legal">
       <!-- 草稿版本：正式上線前請由法務／法律專業審閱調整 -->
@@ -63,10 +59,13 @@
 </template>
 
 <script>
-  export default { name: 'SiteTerms' }
+  import SiteHero from '@/components/site/SiteHero'
+
+  export default { name: 'SiteTerms', components: { SiteHero } }
 </script>
 
 <style lang="scss" scoped>
+  @import '@/styles/brand';
   @import '@/styles/public-pages';
 
   .legal-page {

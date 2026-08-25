@@ -1,10 +1,6 @@
 <template>
   <div class="faq-page">
-    <section class="page-hero">
-      <p class="eyebrow">FAQ</p>
-      <h1>常見問題</h1>
-      <p>找不到答案？用右下角「聯絡」或客戶入口留言，我們會盡快回覆。</p>
-    </section>
+    <site-hero eyebrow="FAQ" title="常見問題" lead="找不到答案？用右下角「聯絡」或客戶入口留言，我們會盡快回覆。" />
 
     <section class="block narrow">
       <el-collapse v-for="group in groups" :key="group.title" v-model="openGroup" class="faq-group">
@@ -24,8 +20,11 @@
 </template>
 
 <script>
+  import SiteHero from '@/components/site/SiteHero'
+
   export default {
     name: 'SiteFaq',
+    components: { SiteHero },
     data() {
       return {
         openGroup: [],
@@ -82,6 +81,7 @@
 </script>
 
 <style lang="scss" scoped>
+  @import '@/styles/brand';
   @import '@/styles/public-pages';
 
   .faq-page {

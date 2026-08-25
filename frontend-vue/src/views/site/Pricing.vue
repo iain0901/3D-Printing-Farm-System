@@ -1,10 +1,10 @@
 <template>
   <div class="pricing-page">
-    <section class="page-hero">
-      <p class="eyebrow">PRICING</p>
-      <h1>方案與價格</h1>
-      <p>透明計價：重量階梯 + 機時保護，取對你有利的方式。以下為 PETG 常見區間，實際以切片後正式報價為準。</p>
-    </section>
+    <site-hero
+      eyebrow="PRICING"
+      title="方案與價格"
+      lead="透明計價：重量階梯 + 機時保護，取對你有利的方式。以下為 PETG 常見區間，實際以切片後正式報價為準。"
+    />
 
     <section class="block">
       <div class="tiers">
@@ -96,8 +96,11 @@
 </template>
 
 <script>
+  import SiteHero from '@/components/site/SiteHero'
+
   export default {
     name: 'SitePricing',
+    components: { SiteHero },
     data() {
       return {
         tiers: [
@@ -144,6 +147,7 @@
 </script>
 
 <style lang="scss" scoped>
+  @import '@/styles/brand';
   @import '@/styles/public-pages';
 
   .pricing-page {
