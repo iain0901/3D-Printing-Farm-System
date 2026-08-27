@@ -11,7 +11,7 @@
     <section class="hero">
       <p class="eyebrow">3D 列印、建模與小量製造</p>
       <h1>建立你的列印案件</h1>
-      <p>快速估價或由專員協助都會進入同一張案件，全程可追蹤。</p>
+      <p>先取得初估或由專員協助，都會進入同一張案件，全程可追蹤。</p>
     </section>
 
     <section class="quote-shell">
@@ -145,8 +145,8 @@
             <div>
               <dl>
                 <dt>案件名稱</dt><dd>{{ form.project || '尚未填寫' }}</dd>
-                <dt>服務方式</dt><dd>{{ form.mode === 'estimate' ? '快速估價' : '專員協助' }}</dd>
-                <dt>材料／數量</dt><dd>{{ form.defaults.material }}／{{ form.defaults.quantity }}</dd>
+                <dt>服務方式</dt><dd>{{ form.mode === 'estimate' ? '快速初估' : '專員協助' }}</dd>
+                <dt>材料／數量</dt><dd>{{ form.hasModel ? `依零件設定（${parts.length} 個檔案）` : `${form.defaults.material}／${form.defaults.quantity}` }}</dd>
                 <dt>模型</dt><dd>{{ form.hasModel ? `${fileList.length} 個檔案` : '需要建模協助' }}</dd>
               </dl>
             </div>
