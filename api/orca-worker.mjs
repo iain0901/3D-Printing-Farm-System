@@ -41,7 +41,8 @@ async function api(config, pathName, init = {}) {
 }
 
 function parseDurationMinutes(text) {
-  const match = text.match(/estimated printing time[^=]*=\s*([^\r\n]+)/i);
+  const candidates = [...text.matchAll(/(?:total estimated time|model printing time|estimated printing time)[^:=]*[:=]\s*([^\r\n;]+)/gi)];
+  const match = candidates.find((item) => /total estimated time/i.test(item[0])) || candidates[0];
   if (!match) return 0;
   const value = match[1];
   const hours = Number(value.match(/(\d+)h/i)?.[1] || 0);
@@ -50,9 +51,37 @@ function parseDurationMinutes(text) {
   return Math.round(hours * 60 + minutes + seconds / 60);
 }
 
+/** Returns the actual extruded filament mass when an Orca G-code header omits it. */
+function estimateGramsFromExtrusion(text) {
+  const diameter = Number(text.match(/;\s*filament_diameter\s*[:=]\s*([\d.]+)/i)?.[1] || 1.75);
+  const headerDensity = Number(text.match(/;\s*filament_density\s*[:=]\s*([\d.]+)/i)?.[1] || 0);
+  // PLA is the selected testing profile's material. A real filament profile header wins.
+  const density = headerDensity > 0 ? headerDensity : 1.24;
+  let relative = false;
+  let currentE = 0;
+  let extrudedMm = 0;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.replace(/;.*/, "").trim();
+    if (/^M82\b/.test(line)) { relative = false; continue; }
+    if (/^M83\b/.test(line)) { relative = true; continue; }
+    const reset = line.match(/^G92\s+.*\bE([-+]?\d*\.?\d+)/i);
+    if (reset) { currentE = Number(reset[1]); continue; }
+    if (!/^G0?1\b/i.test(line)) continue;
+    const value = line.match(/\bE([-+]?\d*\.?\d+)/i);
+    if (!value) continue;
+    const nextE = Number(value[1]);
+    const delta = relative ? nextE : nextE - currentE;
+    if (delta > 0 && Number.isFinite(delta)) extrudedMm += delta;
+    if (!relative) currentE = nextE;
+  }
+  const radius = diameter / 2;
+  return Math.round((extrudedMm * Math.PI * radius * radius / 1000 * density) * 100) / 100;
+}
+
 function parseMaterialGrams(text) {
-  const match = text.match(/total filament used \[g\]\s*=\s*([\d.]+)/i) || text.match(/filament used \[g\]\s*=\s*([\d.]+)/i);
-  return match ? Math.round(Number(match[1]) * 100) / 100 : 0;
+  const match = text.match(/total filament used \[g\]\s*[:=]\s*([\d.]+)/i) || text.match(/filament used \[g\]\s*[:=]\s*([\d.]+)/i);
+  if (match) return Math.round(Number(match[1]) * 100) / 100;
+  return estimateGramsFromExtrusion(text);
 }
 
 export function buildOrcaArgs(job, inputPath, outputDir, config) {
