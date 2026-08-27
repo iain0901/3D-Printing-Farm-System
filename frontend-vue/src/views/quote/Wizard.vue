@@ -28,8 +28,8 @@
           <div class="mode-grid">
             <button class="mode-card" :class="{ selected: form.mode === 'estimate' }" @click="form.mode = 'estimate'">
               <el-icon><DataAnalysis /></el-icon>
-              <b>快速估價</b>
-              <span>先輸入條件並取得初步總價</span>
+              <b>快速初估</b>
+              <span>送出條件後取得初步預估；實際金額以真實切片結果確認</span>
             </button>
             <button class="mode-card" :class="{ selected: form.mode === 'agent' }" @click="form.mode = 'agent'">
               <el-icon><Service /></el-icon>
@@ -67,7 +67,8 @@
             </el-upload>
             <el-alert v-if="fileList.length" type="success" :closable="false" show-icon title="檔案會以私有儲存方式處理；解析異常時保留案件並交由專員檢查。" />
             <div v-if="fileList.length" class="model-preview-block">
-              <model-viewer :file="previewFile" :filename="previewName" :height="260" @error="onPreviewError" />
+              <model-viewer :file="previewFile" :filename="previewName" :height="260" :part-colors="previewPartColors" @error="onPreviewError" />
+              <p class="subtle preview-note">模型預覽只顯示組裝後的位置，不會自動拆開；灰色代表尚未選擇實際耗材色。3MF 內嵌顏色僅供辨識，仍請在下方指定成品顏色。</p>
               <div v-if="fileList.length > 1" class="preview-switch">
                 <button
                   v-for="(item, index) in fileList"
@@ -82,7 +83,7 @@
             </div>
             <div v-if="parts.length" class="part-list">
               <h3>零件設定</h3>
-              <p class="subtle">系統先以案件預設套用；可直接覆寫各零件的材料、顏色與數量。</p>
+              <p class="subtle">每一行對應一個上傳檔案。只需在這裡設定一次材料、成品顏色與數量；下個步驟不會重複要求。若選色方塊後還有 Pantone／色名，再填右側說明即可。</p>
               <div v-for="part in parts" :key="part.localId" class="part-row">
                 <el-input v-model="part.name" size="small" />
                 <el-select v-model="part.material" size="small"><el-option v-for="item in materials" :key="item" :label="item" :value="item" /></el-select>
@@ -124,11 +125,12 @@
               <el-form-item label="案件名稱" required><el-input v-model="form.project" /></el-form-item>
               <el-form-item label="希望完成日期"><el-date-picker v-model="form.dueDate" type="date" value-format="yyyy-MM-dd" style="width: 100%" /></el-form-item>
             </div>
-            <el-divider>案件預設</el-divider>
+            <el-divider>{{ form.hasModel ? '列印品質設定' : '案件預設' }}</el-divider>
+            <el-alert v-if="form.hasModel" type="info" :closable="false" show-icon title="材料、顏色與數量已在前一步按零件設定，此處不再重複詢問。" />
             <div class="form-grid">
-              <el-form-item label="材料"><el-select v-model="form.defaults.material" style="width: 100%"><el-option v-for="item in materials" :key="item" :label="item" :value="item" /></el-select></el-form-item>
-              <el-form-item label="顏色"><el-input v-model="form.defaults.color" placeholder="例如：霧黑、白色、Pantone 色號" /></el-form-item>
-              <el-form-item label="數量"><el-input-number v-model="form.defaults.quantity" :min="1" :max="10000" style="width: 100%" /></el-form-item>
+              <el-form-item v-if="!form.hasModel" label="材料"><el-select v-model="form.defaults.material" style="width: 100%"><el-option v-for="item in materials" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+              <el-form-item v-if="!form.hasModel" label="顏色"><el-input v-model="form.defaults.color" placeholder="例如：霧黑、白色、Pantone 色號" /></el-form-item>
+              <el-form-item v-if="!form.hasModel" label="數量"><el-input-number v-model="form.defaults.quantity" :min="1" :max="10000" style="width: 100%" /></el-form-item>
               <el-form-item label="品質"><el-select v-model="form.defaults.quality" style="width: 100%"><el-option label="草稿" value="Draft" /><el-option label="標準" value="Standard" /><el-option label="精細" value="Fine" /></el-select></el-form-item>
               <el-form-item label="填充率"><el-slider v-model="form.defaults.infill" :max="100" show-input /></el-form-item>
               <el-form-item label="壁數"><el-input-number v-model="form.defaults.walls" :min="1" :max="12" style="width: 100%" /></el-form-item>
@@ -244,6 +246,10 @@
       previewName() {
         const item = this.fileList[this.previewIndex] || this.fileList[0]
         return item ? item.name : ''
+      },
+      previewPartColors() {
+        const part = this.parts[this.previewIndex]
+        return part?.colorHex ? [part.colorHex] : []
       },
     },
     watch: {

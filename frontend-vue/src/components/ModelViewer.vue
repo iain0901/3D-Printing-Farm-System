@@ -16,8 +16,8 @@
   import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
   import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader.js'
 
-  // 跟常見耗材色卡對齊的預設調色盤，偵測到多零件但使用者還沒指定顏色時，依序套用讓畫面上就能分辨零件
-  const DEFAULT_PALETTE = ['#f5f5f0', '#1c1c1c', '#d64545', '#3b6fd6', '#3f9142', '#e0b400', '#e07b28', '#8752c9']
+  // 預覽的中性色；STL 不含「實際材料顏色」，不可自動用多色顯示而讓客戶誤以為已選色。
+  const DEFAULT_PALETTE = ['#d7e0e8']
   // 跟後端 api/model-metadata.mjs 的 MAX_TRIANGLES_FOR_SHELL_DETECTION 對齊，超過就不切殼，整個檔案當一個零件顯示
   const MAX_TRIANGLES_FOR_SHELL_SPLIT = 200000
 
