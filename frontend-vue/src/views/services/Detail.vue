@@ -30,7 +30,7 @@
               </p>
             </div>
             <div class="service-hero-art">
-              <studio-image :kind="service.art" />
+              <object-collage :kind="service.art" />
               <span>{{ service.tag }} ／ 製作情境示意</span>
             </div>
           </div>
@@ -186,12 +186,13 @@
 </template>
 <script>
   import PublicShell from '@/components/public/PublicShell.vue'
+  import ObjectCollage from '@/components/public/ObjectCollage.vue'
   import StudioImage from '@/components/public/StudioImage.vue'
   import { getService, getAudience, servicesForAudience, inquiryRoute } from '@/content/fdmServices.mjs'
   import '@/styles/public-services.scss'
   export default {
     name: 'ServiceDetail',
-    components: { PublicShell, StudioImage },
+    components: { PublicShell, ObjectCollage, StudioImage },
     props: { serviceId: { type: String, required: true } },
     data: () => ({ prepared: [], copyStatus: '', showCopyFallback: false }),
     computed: {

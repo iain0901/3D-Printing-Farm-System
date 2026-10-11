@@ -8,7 +8,7 @@
           <br />
           一起把它做出來。
         </h2>
-        <studio-image kind="parts" />
+        <object-collage kind="parts" />
         <div class="auth-poster-note">
           <span>從草圖，到日常。</span>
           <span>一層一層，慢慢成型 ↗</span>
@@ -27,10 +27,10 @@
 
 <script>
   import PublicShell from './PublicShell.vue'
-  import StudioImage from './StudioImage.vue'
+  import ObjectCollage from './ObjectCollage.vue'
   export default {
     name: 'AuthShell',
-    components: { PublicShell, StudioImage },
+    components: { PublicShell, ObjectCollage },
     props: { title: String, description: String, eyebrow: { type: String, default: '三點成型・會員中心' } },
   }
 </script>
@@ -58,9 +58,9 @@
     letter-spacing: -0.035em;
     margin: 16px 0 0;
   }
-  .auth-poster .workshop-art {
+  .auth-poster .object-collage {
     width: 100%;
-    max-height: 330px;
+    min-height: 270px;
     margin: -5px auto 0;
   }
   .auth-poster-note {
@@ -152,9 +152,9 @@
       position: relative;
       z-index: 1;
     }
-    .auth-poster .workshop-art {
+    .auth-poster .object-collage {
       position: absolute;
-      width: 180px;
+      width: 230px;
       right: -36px;
       bottom: -15px;
       opacity: 0.7;

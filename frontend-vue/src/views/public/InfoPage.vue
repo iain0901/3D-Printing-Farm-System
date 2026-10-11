@@ -21,7 +21,7 @@
               </router-link>
             </div>
             <div class="info-hero-art">
-              <studio-image :kind="page.art" />
+              <object-collage :kind="page.art" />
               <span>三點成型／FDM 製作筆記</span>
             </div>
           </div>
@@ -111,13 +111,13 @@
 
 <script>
   import PublicShell from '@/components/public/PublicShell.vue'
-  import StudioImage from '@/components/public/StudioImage.vue'
+  import ObjectCollage from '@/components/public/ObjectCollage.vue'
   import { getPublicPage } from '@/content/publicPages.mjs'
   import '@/styles/public-info.scss'
 
   export default {
     name: 'InfoPage',
-    components: { PublicShell, StudioImage },
+    components: { PublicShell, ObjectCollage },
     props: { pageId: { type: String, required: true } },
     computed: {
       page() {

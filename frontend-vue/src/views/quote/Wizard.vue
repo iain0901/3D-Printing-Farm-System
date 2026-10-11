@@ -19,7 +19,7 @@
           </p>
           <span class="quote-intro-note">不需登入・支援單件與小量製作</span>
         </div>
-        <studio-image kind="sketch" />
+        <object-collage kind="sketch" />
       </section>
       <section class="quote-shell">
         <el-steps :active="step" finish-status="success" align-center>
@@ -301,8 +301,8 @@
 
 <script>
   import { createPublicCase, estimateCase } from '@/api/cases'
+  import ObjectCollage from '@/components/public/ObjectCollage.vue'
   import PublicShell from '@/components/public/PublicShell.vue'
-  import StudioImage from '@/components/public/StudioImage.vue'
   import ModelViewer from '@/components/ModelViewer'
   import { fdmMaterials, getService, inquiryNotes } from '@/content/fdmServices.mjs'
 
@@ -334,7 +334,7 @@
 
   export default {
     name: 'QuoteWizard',
-    components: { ModelViewer, PublicShell, StudioImage },
+    components: { ModelViewer, ObjectCollage, PublicShell },
     data() {
       return {
         step: getService(this.$route.query.service) ? 1 : 0,
@@ -585,9 +585,8 @@
     display: inline-block;
     padding-top: 7px;
   }
-  .quote-intro .workshop-art {
-    max-height: 220px;
-    transform: rotate(8deg);
+  .quote-intro .object-collage {
+    min-height: 220px;
   }
   .subtle {
     color: #66756f;
@@ -812,8 +811,15 @@
     .quote-intro h1 {
       font-size: 29px;
     }
-    .quote-intro .workshop-art {
-      display: none;
+    .quote-intro .object-collage {
+      display: block;
+      position: absolute;
+      width: 185px;
+      right: -30px;
+      bottom: -32px;
+      min-height: 190px;
+      opacity: 0.36;
+      pointer-events: none;
     }
     .quote-intro .studio-kicker {
       font-size: 10px;
