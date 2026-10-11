@@ -8,7 +8,7 @@
           <br />
           一起把它做出來。
         </h2>
-        <workshop-art kind="parts" />
+        <studio-image kind="parts" />
         <div class="auth-poster-note">
           <span>從草圖，到日常。</span>
           <span>一層一層，慢慢成型 ↗</span>
@@ -27,10 +27,10 @@
 
 <script>
   import PublicShell from './PublicShell.vue'
-  import WorkshopArt from './WorkshopArt.vue'
+  import StudioImage from './StudioImage.vue'
   export default {
     name: 'AuthShell',
-    components: { PublicShell, WorkshopArt },
+    components: { PublicShell, StudioImage },
     props: { title: String, description: String, eyebrow: { type: String, default: '三點成型・會員中心' } },
   }
 </script>

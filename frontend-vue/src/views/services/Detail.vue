@@ -30,7 +30,7 @@
               </p>
             </div>
             <div class="service-hero-art">
-              <service-art :kind="service.art" />
+              <studio-image :kind="service.art" />
               <span>{{ service.tag }} ／ 製作情境示意</span>
             </div>
           </div>
@@ -186,12 +186,12 @@
 </template>
 <script>
   import PublicShell from '@/components/public/PublicShell.vue'
-  import ServiceArt from '@/components/public/ServiceArt.vue'
+  import StudioImage from '@/components/public/StudioImage.vue'
   import { getService, getAudience, servicesForAudience, inquiryRoute } from '@/content/fdmServices.mjs'
   import '@/styles/public-services.scss'
   export default {
     name: 'ServiceDetail',
-    components: { PublicShell, ServiceArt },
+    components: { PublicShell, StudioImage },
     props: { serviceId: { type: String, required: true } },
     data: () => ({ prepared: [], copyStatus: '', showCopyFallback: false }),
     computed: {

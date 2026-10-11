@@ -52,8 +52,10 @@
     border-radius: 45% 45% 5px 5px;
     padding: 15px 0 26px;
   }
-  .info-hero-art svg {
+  .info-hero-art .studio-image {
+    aspect-ratio: 3 / 2;
     max-height: 355px;
+    object-fit: cover;
   }
   .info-hero-art span {
     display: block;
@@ -231,7 +233,7 @@
       width: min(100%, 400px);
       margin: auto;
     }
-    .info-hero-art svg {
+    .info-hero-art .studio-image {
       max-height: 260px;
     }
     .info-content {

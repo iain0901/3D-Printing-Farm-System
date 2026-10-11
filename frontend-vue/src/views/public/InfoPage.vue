@@ -21,7 +21,7 @@
               </router-link>
             </div>
             <div class="info-hero-art">
-              <service-art :kind="page.art" />
+              <studio-image :kind="page.art" />
               <span>三點成型／FDM 製作筆記</span>
             </div>
           </div>
@@ -111,13 +111,13 @@
 
 <script>
   import PublicShell from '@/components/public/PublicShell.vue'
-  import ServiceArt from '@/components/public/ServiceArt.vue'
+  import StudioImage from '@/components/public/StudioImage.vue'
   import { getPublicPage } from '@/content/publicPages.mjs'
   import '@/styles/public-info.scss'
 
   export default {
     name: 'InfoPage',
-    components: { PublicShell, ServiceArt },
+    components: { PublicShell, StudioImage },
     props: { pageId: { type: String, required: true } },
     computed: {
       page() {

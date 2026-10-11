@@ -19,7 +19,7 @@
           </p>
           <span class="quote-intro-note">不需登入・支援單件與小量製作</span>
         </div>
-        <workshop-art kind="sketch" />
+        <studio-image kind="sketch" />
       </section>
       <section class="quote-shell">
         <el-steps :active="step" finish-status="success" align-center>
@@ -302,7 +302,7 @@
 <script>
   import { createPublicCase, estimateCase } from '@/api/cases'
   import PublicShell from '@/components/public/PublicShell.vue'
-  import WorkshopArt from '@/components/public/WorkshopArt.vue'
+  import StudioImage from '@/components/public/StudioImage.vue'
   import ModelViewer from '@/components/ModelViewer'
   import { fdmMaterials, getService, inquiryNotes } from '@/content/fdmServices.mjs'
 
@@ -334,7 +334,7 @@
 
   export default {
     name: 'QuoteWizard',
-    components: { ModelViewer, PublicShell, WorkshopArt },
+    components: { ModelViewer, PublicShell, StudioImage },
     data() {
       return {
         step: getService(this.$route.query.service) ? 1 : 0,

@@ -17,7 +17,7 @@
       >
         <div class="audience-link-art">
           <span>{{ audience.number }} ／ {{ audience.shortTitle }}</span>
-          <service-art :kind="audience.art" />
+          <studio-image :kind="audience.art" />
         </div>
         <h3>
           {{ audience.title }}
@@ -31,10 +31,10 @@
 </template>
 <script>
   import { audiences, servicesForAudience } from '@/content/fdmServices.mjs'
-  import ServiceArt from './ServiceArt.vue'
+  import StudioImage from './StudioImage.vue'
   export default {
     name: 'AudienceLinks',
-    components: { ServiceArt },
+    components: { StudioImage },
     data: () => ({ audiences }),
     methods: {
       topics(id) {
@@ -83,11 +83,13 @@
   .audience-link-art > span {
     font-size: 11px;
   }
-  .audience-link-art svg {
+  .audience-link-art .studio-image {
+    aspect-ratio: 3 / 2;
     max-height: 220px;
+    object-fit: cover;
     transition: transform 0.2s;
   }
-  .audience-link:hover svg {
+  .audience-link:hover .studio-image {
     transform: translateY(-5px);
   }
   .audience-link h3 {
@@ -125,7 +127,7 @@
       grid-template-columns: 1fr;
       gap: 30px;
     }
-    .audience-link-art svg {
+    .audience-link-art .studio-image {
       max-height: 240px;
     }
     .audience-links-heading .studio-kicker {

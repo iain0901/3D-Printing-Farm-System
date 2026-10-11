@@ -38,7 +38,7 @@
         <div class="poster-art">
           <div class="art-arch"></div>
           <span class="art-note">想像，正在成型中。</span>
-          <workshop-art kind="printer" />
+          <studio-image kind="printer" priority />
           <div class="round-stamp">
             從 0 到 1
             <br />
@@ -82,7 +82,7 @@
         <router-link v-for="service in services" :key="service.number" :to="service.to" class="service-entry" :class="service.kind">
           <div class="service-art">
             <span class="service-number">{{ service.number }}</span>
-            <workshop-art :kind="service.kind" />
+            <studio-image :kind="service.kind" />
             <span class="service-chip">{{ service.tag }}</span>
           </div>
           <div class="service-title">
@@ -97,7 +97,7 @@
       <div class="studio-wrap material-layout">
         <div class="material-display" :style="{ background: selectedMaterial.background }">
           <span class="material-big-type" aria-hidden="true">{{ selectedMaterial.name }}</span>
-          <workshop-art :kind="selectedMaterial.art" />
+          <studio-image :kind="selectedMaterial.art" />
           <span class="material-caption">材料筆記 ／ {{ selectedMaterial.note }}</span>
           <span class="material-spark" aria-hidden="true">✳</span>
         </div>
@@ -215,18 +215,18 @@
             <span aria-hidden="true">↗</span>
           </router-link>
         </div>
-        <workshop-art kind="sketch" />
+        <studio-image kind="sketch" />
       </div>
     </section>
   </public-shell>
 </template>
 <script>
   import PublicShell from '@/components/public/PublicShell.vue'
-  import WorkshopArt from '@/components/public/WorkshopArt.vue'
+  import StudioImage from '@/components/public/StudioImage.vue'
   import AudienceLinks from '@/components/public/AudienceLinks.vue'
   export default {
     name: 'Landing',
-    components: { PublicShell, WorkshopArt, AudienceLinks },
+    components: { PublicShell, StudioImage, AudienceLinks },
     data() {
       return {
         materialIndex: 0,

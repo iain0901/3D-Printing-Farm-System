@@ -24,7 +24,7 @@
               <p class="service-hero-note">{{ audience ? audience.note : '單件原型到小批量，都從確認需求開始。' }}</p>
             </div>
             <div class="service-hero-art">
-              <service-art :kind="audience ? audience.art : 'batch'" />
+              <studio-image :kind="audience ? audience.art : 'batch'" />
               <span>FDM 製作筆記 ／ {{ audience ? audience.number : '00' }}</span>
             </div>
           </div>
@@ -69,7 +69,7 @@
             >
               <div class="use-case-art">
                 <span>{{ service.tag }}</span>
-                <service-art :kind="service.art" />
+                <studio-image :kind="service.art" />
               </div>
               <h3>
                 {{ service.title }}
@@ -113,12 +113,12 @@
 </template>
 <script>
   import PublicShell from '@/components/public/PublicShell.vue'
-  import ServiceArt from '@/components/public/ServiceArt.vue'
+  import StudioImage from '@/components/public/StudioImage.vue'
   import { audiences, getAudience, servicesForAudience } from '@/content/fdmServices.mjs'
   import '@/styles/public-services.scss'
   export default {
     name: 'ServiceDirectory',
-    components: { PublicShell, ServiceArt },
+    components: { PublicShell, StudioImage },
     props: { audienceId: { type: String, default: '' } },
     data: () => ({ audiences }),
     computed: {

@@ -59,8 +59,10 @@
     border-radius: 46% 46% 5px 5px;
     padding: 16px 0 32px;
   }
-  .service-hero-art svg {
+  .service-hero-art .studio-image {
+    aspect-ratio: 3 / 2;
     max-height: 370px;
+    object-fit: cover;
   }
   .service-hero-art > span {
     display: block;
@@ -143,11 +145,13 @@
   .use-case-art > span {
     font-size: 11px;
   }
-  .use-case-art svg {
+  .use-case-art .studio-image {
+    aspect-ratio: 3 / 2;
     max-height: 215px;
+    object-fit: cover;
     transition: transform 0.2s;
   }
-  .use-case-card:hover svg {
+  .use-case-card:hover .studio-image {
     transform: translateY(-5px);
   }
   .use-case-card h3 {
@@ -448,7 +452,7 @@
       margin: auto;
       padding-bottom: 20px;
     }
-    .service-hero-art svg {
+    .service-hero-art .studio-image {
       max-height: 260px;
     }
     .service-hero-note {
@@ -481,7 +485,7 @@
       grid-template-columns: 1fr;
       gap: 32px;
     }
-    .use-case-art svg {
+    .use-case-art .studio-image {
       max-height: 240px;
     }
     .use-case-card h3 {
