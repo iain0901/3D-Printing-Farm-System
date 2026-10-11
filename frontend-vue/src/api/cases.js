@@ -1,5 +1,6 @@
 import axios from 'axios'
 import request from '@/utils/request'
+import customerRequest from '@/utils/customerRequest'
 import { baseURL, requestTimeout } from '@/config'
 
 const publicRequest = axios.create({ baseURL, timeout: Math.max(requestTimeout, 120000) })
@@ -9,14 +10,17 @@ export function estimateCase(payload) {
 }
 
 export function createPublicCase(payload, files = []) {
-  if (!files.length) return publicRequest.post('/api/public/cases', payload).then((response) => response.data)
+  if (!files.length) return customerRequest({ url: '/api/public/cases', method: 'post', data: payload })
   const body = new FormData()
   body.append('payload', JSON.stringify(payload))
   files.forEach((file) => body.append('files', file, file.name))
-  return publicRequest.post('/api/public/cases', body, {
+  return customerRequest({
+    url: '/api/public/cases',
+    method: 'post',
+    data: body,
     headers: { 'Content-Type': undefined },
     timeout: 10 * 60 * 1000,
-  }).then((response) => response.data)
+  })
 }
 
 export function fetchPublicCase(id, token) {

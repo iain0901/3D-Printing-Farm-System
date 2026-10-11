@@ -129,8 +129,28 @@ async function run() {
       .first()
       .fill("測試用桌面收納盒，僅驗證介面，不送到真實案件。");
     await page.getByRole("button", { name: "下一步" }).click();
+    await page.route("**/api/customer-auth/register", (route) =>
+      route.fulfill({
+        status: 201,
+        json: {
+          token: "member-token",
+          customer: {
+            id: "cus-ui",
+            name: "介面測試",
+            email: "ui@example.com",
+            phone: "",
+            company: "",
+          },
+        },
+      })
+    );
+    await page.getByRole("tab", { name: "建立帳號" }).click();
     await page.getByLabel("姓名", { exact: true }).fill("介面測試");
-    await page.getByLabel("案件名稱", { exact: true }).fill("桌面收納盒");
+    await page.getByLabel("電子郵件", { exact: true }).fill("ui@example.com");
+    await page.getByLabel("設定密碼", { exact: true }).fill("ui-test-password");
+    await page.getByRole("button", { name: "建立帳號並帶入資料 ↗" }).click();
+    await page.getByText("案件名稱將自動產生", { exact: true }).waitFor();
+    await page.getByRole("button", { name: "下一步" }).click();
     await page.route("**/api/public/cases/estimate", (route) =>
       route.fulfill({ json: { estimate: { total: 350, lines: [] } } })
     );
@@ -141,7 +161,11 @@ async function run() {
       submitted = route.request().postDataJSON();
       return route.fulfill({
         json: {
-          case: { id: "ui-case", caseNo: "UI-001", project: "桌面收納盒" },
+          case: {
+            id: "ui-case",
+            caseNo: "UI-001",
+            project: "20261012・介面測試・需求001",
+          },
           accessToken: "sample-token",
         },
       });
@@ -152,6 +176,7 @@ async function run() {
       .waitFor();
     assert.equal(submitted.mode, "agent");
     assert.equal(submitted.hasModel, false);
+    assert.equal(submitted.customer.name, "介面測試");
     const caseUrl = await page.locator(".success-dialog input").inputValue();
     assert.equal(
       caseUrl,
@@ -163,7 +188,7 @@ async function run() {
           case: {
             id: "ui-case",
             caseNo: "UI-001",
-            project: "桌面收納盒",
+            project: "20261012・介面測試・需求001",
             status: "new",
             paymentStatus: "unpaid",
             parts: [],
@@ -172,7 +197,9 @@ async function run() {
       })
     );
     await page.goto(caseUrl);
-    await page.getByRole("heading", { name: "桌面收納盒" }).waitFor();
+    await page
+      .getByRole("heading", { name: "20261012・介面測試・需求001" })
+      .waitFor();
     console.log(
       "PASS quote validation, preselected service, estimate, submission and share link (mock API)"
     );

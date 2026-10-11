@@ -8,8 +8,8 @@ export function claimCustomer(payload) {
   return customerRequest({ url: '/api/customer-auth/claim', method: 'post', data: payload })
 }
 
-export function loginCustomer(payload) {
-  return customerRequest({ url: '/api/customer-auth/login', method: 'post', data: payload })
+export function loginCustomer(payload, options = {}) {
+  return customerRequest({ url: '/api/customer-auth/login', method: 'post', data: payload, ...options })
 }
 
 export function requestPasswordReset(email) {

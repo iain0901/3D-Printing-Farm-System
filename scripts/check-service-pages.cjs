@@ -157,8 +157,30 @@ async function run() {
     );
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "下一步", exact: true }).click();
+    await page.route("**/api/customer-auth/register", (route) =>
+      route.fulfill({
+        status: 201,
+        json: {
+          token: "member-token",
+          customer: {
+            id: "cus-rush",
+            name: "介面測試",
+            email: "rush@example.com",
+            phone: "",
+            company: "",
+          },
+        },
+      })
+    );
+    await page.getByRole("tab", { name: "建立帳號" }).click();
     await page.getByLabel("姓名", { exact: true }).fill("介面測試");
-    await page.getByLabel("案件名稱", { exact: true }).fill("急件介面回歸測試");
+    await page.getByLabel("電子郵件", { exact: true }).fill("rush@example.com");
+    await page
+      .getByLabel("設定密碼", { exact: true })
+      .fill("rush-test-password");
+    await page.getByRole("button", { name: "建立帳號並帶入資料 ↗" }).click();
+    await page.getByText("案件名稱將自動產生", { exact: true }).waitFor();
+    await page.getByRole("button", { name: "下一步", exact: true }).click();
     assert.match(
       await page.getByLabel("備註", { exact: true }).inputValue(),
       /快速急件評估/

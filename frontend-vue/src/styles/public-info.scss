@@ -108,6 +108,56 @@
     line-height: 1.8;
     margin: 0;
   }
+  .info-comparison-wrap {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    overflow-x: auto;
+    border: 1px solid #aebfb2;
+    border-radius: 7px;
+    background: #fffefa;
+  }
+  table.info-comparison {
+    width: 100%;
+    min-width: 760px;
+    border-collapse: collapse;
+    text-align: left;
+  }
+  table.info-comparison th,
+  table.info-comparison td {
+    padding: 17px 18px;
+    border-bottom: 1px solid #d8e0d4;
+    vertical-align: top;
+    font-size: 13px;
+    line-height: 1.75;
+  }
+  table.info-comparison thead th {
+    background: #edf1e2;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+  }
+  table.info-comparison tbody tr:last-child > * {
+    border-bottom: none;
+  }
+  table.info-comparison tbody th {
+    min-width: 100px;
+    font-size: 16px;
+  }
+  table.info-comparison .recommended > * {
+    background: #e4f1df;
+  }
+  table.info-comparison tbody th span {
+    display: inline-block;
+    margin: 0 0 0 6px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: #1d694f;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    vertical-align: 2px;
+  }
   .info-list {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));

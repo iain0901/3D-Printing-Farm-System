@@ -58,6 +58,28 @@
               </component>
             </div>
           </template>
+          <template v-else-if="block.type === 'comparison'">
+            <div class="info-comparison-wrap" tabindex="0">
+              <table class="info-comparison">
+                <thead>
+                  <tr>
+                    <th v-for="column in block.columns" :key="column" scope="col">{{ column }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in block.rows" :key="row.material" :class="{ recommended: row.recommended }">
+                    <th scope="row">
+                      {{ row.material }}
+                      <span v-if="row.recommended">最推薦</span>
+                    </th>
+                    <td>{{ row.use }}</td>
+                    <td>{{ row.feature }}</td>
+                    <td>{{ row.check }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </template>
           <template v-else-if="block.type === 'split' || block.type === 'steps'">
             <ol class="info-list" :class="{ numbered: block.type === 'steps' }">
               <li v-for="(item, index) in block.items" :key="item[0]">

@@ -25,6 +25,7 @@
         <el-steps :active="step" finish-status="success" align-center>
           <el-step title="服務方式" />
           <el-step title="模型或需求" />
+          <el-step title="登入與資料" />
           <el-step title="列印設定" />
           <el-step title="確認送出" />
         </el-steps>
@@ -175,14 +176,70 @@
           </section>
 
           <section v-show="step === 2" class="step-content">
-            <h2>列印與聯絡設定</h2>
+            <h2>登入後，帶入你的聯絡資料</h2>
+            <p class="subtle">建立會員後可在會員中心查看案件；案件名稱由系統依日期、使用者與模型序號自動產生。</p>
+            <section v-if="customer" class="member-summary">
+              <div>
+                <p class="studio-kicker">已登入會員</p>
+                <h3>{{ customer.name }}</h3>
+                <p>
+                  {{ customer.email || '未提供電子郵件' }}
+                  <span v-if="customer.phone">・{{ customer.phone }}</span>
+                </p>
+              </div>
+              <el-button plain @click="switchAccount">切換帳號</el-button>
+            </section>
+            <section v-else class="account-choice">
+              <div class="account-tabs" role="tablist" aria-label="會員操作">
+                <button
+                  type="button"
+                  :class="{ active: authMode === 'login' }"
+                  role="tab"
+                  :aria-selected="authMode === 'login'"
+                  @click="authMode = 'login'"
+                >
+                  登入會員
+                </button>
+                <button
+                  type="button"
+                  :class="{ active: authMode === 'register' }"
+                  role="tab"
+                  :aria-selected="authMode === 'register'"
+                  @click="authMode = 'register'"
+                >
+                  建立帳號
+                </button>
+              </div>
+              <el-form v-if="authMode === 'login'" label-position="top" class="account-form" @submit.prevent="loginForQuote">
+                <el-form-item label="電子郵件"><el-input v-model.trim="authForm.email" type="email" autocomplete="email" /></el-form-item>
+                <el-form-item label="密碼">
+                  <el-input v-model="authForm.password" type="password" autocomplete="current-password" show-password />
+                </el-form-item>
+                <el-button type="primary" native-type="submit" :loading="authLoading">登入並帶入資料 ↗</el-button>
+              </el-form>
+              <el-form v-else label-position="top" class="account-form" @submit.prevent="registerForQuote">
+                <div class="form-grid">
+                  <el-form-item label="姓名"><el-input v-model.trim="authForm.name" autocomplete="name" /></el-form-item>
+                  <el-form-item label="電話（選填）"><el-input v-model.trim="authForm.phone" autocomplete="tel" /></el-form-item>
+                </div>
+                <el-form-item label="電子郵件"><el-input v-model.trim="authForm.email" type="email" autocomplete="email" /></el-form-item>
+                <el-form-item label="設定密碼">
+                  <el-input v-model="authForm.password" type="password" autocomplete="new-password" show-password placeholder="至少 8 碼" />
+                </el-form-item>
+                <el-button type="primary" native-type="submit" :loading="authLoading">建立帳號並帶入資料 ↗</el-button>
+              </el-form>
+            </section>
+            <dl v-if="customer" class="generated-project">
+              <dt>案件名稱將自動產生</dt>
+              <dd>{{ generatedProjectPreview }}</dd>
+              <small>送出時由系統編入當日的實際模型序號，多檔模型會連續編號。</small>
+            </dl>
+          </section>
+
+          <section v-show="step === 3" class="step-content">
+            <h2>列印設定</h2>
             <el-form label-position="top" :model="form" class="settings-form">
               <div class="form-grid">
-                <el-form-item label="姓名" required><el-input v-model="form.customer.name" /></el-form-item>
-                <el-form-item label="電子郵件"><el-input v-model="form.customer.email" /></el-form-item>
-                <el-form-item label="手機"><el-input v-model="form.customer.phone" /></el-form-item>
-                <el-form-item label="公司／工作室"><el-input v-model="form.customer.company" /></el-form-item>
-                <el-form-item label="案件名稱" required><el-input v-model="form.project" /></el-form-item>
                 <el-form-item label="希望完成日期">
                   <el-date-picker v-model="form.dueDate" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
                 </el-form-item>
@@ -228,13 +285,13 @@
             </el-form>
           </section>
 
-          <section v-show="step === 3" class="step-content review">
+          <section v-show="step === 4" class="step-content review">
             <h2>確認案件內容</h2>
             <div class="review-grid">
               <div>
                 <dl>
                   <dt>案件名稱</dt>
-                  <dd>{{ form.project || '尚未填寫' }}</dd>
+                  <dd>{{ generatedProjectPreview }}</dd>
                   <dt>服務方式</dt>
                   <dd>{{ form.mode === 'estimate' ? '自動估價' : '專員協助' }}</dd>
                   <dt>材料／數量</dt>
@@ -280,7 +337,7 @@
 
           <div class="wizard-actions">
             <el-button v-if="step" @click="step -= 1">上一步</el-button>
-            <el-button v-if="step < 3" type="primary" @click="next">下一步</el-button>
+            <el-button v-if="step < 4" type="primary" @click="next">下一步</el-button>
             <el-button v-else type="primary" :loading="submitting" @click="submit">建立案件</el-button>
           </div>
         </el-card>
@@ -301,6 +358,7 @@
 
 <script>
   import { createPublicCase, estimateCase } from '@/api/cases'
+  import { fetchCustomerMe, loginCustomer, registerCustomer } from '@/api/customerAuth'
   import ObjectCollage from '@/components/public/ObjectCollage.vue'
   import PublicShell from '@/components/public/PublicShell.vue'
   import ModelViewer from '@/components/ModelViewer'
@@ -359,6 +417,9 @@
         createdCase: null,
         accessToken: '',
         successVisible: false,
+        authMode: 'login',
+        authLoading: false,
+        authForm: { name: '', email: '', phone: '', password: '' },
       }
     },
     computed: {
@@ -379,13 +440,83 @@
         const part = this.parts[this.previewIndex]
         return part?.colorHex ? [part.colorHex] : []
       },
+      customer() {
+        return this.$store.getters['customerAuth/customer']
+      },
+      generatedProjectPreview() {
+        const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' })
+          .formatToParts(new Date())
+          .filter((part) => ['year', 'month', 'day'].includes(part.type))
+          .map((part) => part.value)
+          .join('')
+        const name = this.customer?.name || '會員'
+        return `${date}・${name}・${this.form.hasModel ? '模型' : '需求'}序號`
+      },
     },
     watch: {
       previewIndex() {
         this.previewError = ''
       },
     },
+    async created() {
+      if (this.$store.getters['customerAuth/accessToken'] && !this.customer) {
+        try {
+          const result = await fetchCustomerMe()
+          this.$store.commit('customerAuth/setCustomer', result.customer)
+          this.applyCustomer(result.customer)
+        } catch {
+          // customerRequest 會清除失效登入態並顯示訊息。
+        }
+      } else if (this.customer) {
+        this.applyCustomer(this.customer)
+      }
+    },
     methods: {
+      applyCustomer(customer) {
+        this.form.customer = {
+          id: customer.id || '',
+          name: customer.name || '',
+          email: customer.email || '',
+          phone: customer.phone || '',
+          company: customer.company || '',
+        }
+      },
+      async loginForQuote() {
+        if (this.authLoading) return
+        if (!this.authForm.email || !this.authForm.password) return this.$baseMessage('請輸入電子郵件與密碼。', 'warning')
+        this.authLoading = true
+        try {
+          const result = await loginCustomer(this.authForm, { skipCustomerAuthRedirect: true })
+          await this.$store.dispatch('customerAuth/setSession', result)
+          this.applyCustomer(result.customer)
+          this.$baseMessage('已帶入你的會員資料。', 'success')
+        } catch {
+          // customerRequest 已顯示錯誤訊息。
+        } finally {
+          this.authLoading = false
+        }
+      },
+      async registerForQuote() {
+        if (this.authLoading) return
+        if (!this.authForm.name || !this.authForm.email || this.authForm.password.length < 8)
+          return this.$baseMessage('請填寫姓名、電子郵件，密碼至少 8 碼。', 'warning')
+        this.authLoading = true
+        try {
+          const result = await registerCustomer(this.authForm)
+          await this.$store.dispatch('customerAuth/setSession', result)
+          this.applyCustomer(result.customer)
+          this.$baseMessage('帳號已建立，已帶入你的資料。', 'success')
+        } catch {
+          // customerRequest 已顯示錯誤訊息。
+        } finally {
+          this.authLoading = false
+        }
+      },
+      switchAccount() {
+        this.$store.dispatch('customerAuth/resetAccessToken')
+        this.form.customer = { name: '', email: '', phone: '', company: '' }
+        this.authForm.password = ''
+      },
       materialLabel(value) {
         return { Resin: '樹脂', Nylon: '尼龍' }[value] || value
       },
@@ -437,17 +568,14 @@
       validateStep() {
         if (this.step === 1 && this.form.hasModel && !this.fileList.length) return '請至少上傳一個模型檔案。'
         if (this.step === 1 && !this.form.hasModel && !this.form.purpose.trim()) return '請填寫用途或建模需求。'
-        if (this.step === 2) {
-          if (!this.form.customer.name.trim() || !this.form.project.trim()) return '請填寫姓名與案件名稱。'
-          if (this.form.customer.email && !/^\S+@\S+\.\S+$/.test(this.form.customer.email)) return '電子郵件格式需要確認。'
-        }
+        if (this.step === 2 && !this.customer) return '請先登入或建立帳號，才能建立案件。'
         return ''
       },
       async next() {
         const error = this.validateStep()
         if (error) return this.$baseMessage(error, 'error')
         this.step += 1
-        if (this.step === 3) await this.loadEstimate()
+        if (this.step === 4) await this.loadEstimate()
       },
       async loadEstimate() {
         this.estimating = true
@@ -477,6 +605,7 @@
         try {
           const payload = {
             ...this.form,
+            project: this.generatedProjectPreview,
             notes: [
               this.form.notes,
               this.rushRequested ? '急件需求：以系統現行 48 小時級距初估費用，不代表已承諾交期；實際收件時間與排程須另行確認。' : '',
@@ -592,6 +721,67 @@
     color: #66756f;
     line-height: 1.7;
     font-size: 13px;
+  }
+  .member-summary,
+  .account-choice,
+  .generated-project {
+    max-width: 680px;
+    border: 1px solid #b8cec1;
+    border-radius: 8px;
+    background: #fffefa;
+    padding: 22px;
+  }
+  .member-summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+  }
+  .member-summary h3 {
+    margin: 4px 0;
+  }
+  .member-summary p:not(.studio-kicker) {
+    margin: 0;
+    color: #66756f;
+    font-size: 14px;
+  }
+  .account-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 22px;
+  }
+  .account-tabs button {
+    border: 1px solid #b8cec1;
+    background: transparent;
+    border-radius: 999px;
+    padding: 8px 15px;
+    color: #173c43;
+    cursor: pointer;
+  }
+  .account-tabs button.active {
+    background: #173c43;
+    border-color: #173c43;
+    color: #fff;
+  }
+  .account-form {
+    max-width: 560px;
+  }
+  .generated-project {
+    margin-top: 18px;
+    background: #eef4e6;
+  }
+  .generated-project dt {
+    font-size: 12px;
+    color: #557067;
+  }
+  .generated-project dd {
+    margin: 5px 0;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+  }
+  .generated-project small {
+    color: #66756f;
+    line-height: 1.6;
   }
   .quote-shell {
     max-width: 980px;
@@ -853,6 +1043,12 @@
     .form-grid,
     .review-grid {
       grid-template-columns: 1fr;
+    }
+    .member-summary {
+      display: block;
+    }
+    .member-summary .el-button {
+      margin-top: 14px;
     }
     .part-row {
       grid-template-columns: 1fr 1fr;

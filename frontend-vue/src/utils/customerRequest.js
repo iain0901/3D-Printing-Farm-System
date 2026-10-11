@@ -30,7 +30,7 @@ instance.interceptors.response.use(
       return Promise.reject(error)
     }
     const message = response.data && response.data.error
-    if (response.status === 401) {
+    if (response.status === 401 && !error.config?.skipCustomerAuthRedirect) {
       store.dispatch('customerAuth/resetAccessToken').catch(() => {})
       if (router.currentRoute.path !== '/portal/login') router.push('/portal/login').catch(() => {})
     }

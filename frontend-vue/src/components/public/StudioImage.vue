@@ -13,23 +13,31 @@
 <script>
   const imageByKind = {
     research: 'fdm-education',
-    sketch: 'fdm-education',
-    engineering: 'fdm-industrial',
-    batch: 'fdm-industrial',
-    exhibition: 'fdm-industrial',
-    everyday: 'fdm-personal',
-    keepsake: 'fdm-personal',
-    rush: 'fdm-personal',
+    sketch: 'fdm-enclosure',
+    engineering: 'fdm-robot-arm',
+    batch: 'fdm-gear',
+    exhibition: 'fdm-keychain',
+    everyday: 'fdm-organizer',
+    keepsake: 'fdm-case',
+    rush: 'fdm-cable-clip',
     printer: 'fdm-workshop',
     spool: 'fdm-workshop',
-    parts: 'fdm-workshop',
+    parts: 'fdm-tray',
   }
 
   const altByImage = {
-    'fdm-workshop': 'FDM 3D 列印工作室與列印中的模型',
-    'fdm-education': 'FDM 列印、研究原型與設計草圖的工作桌',
-    'fdm-industrial': 'FDM 工業原型與小批量零件工作桌',
-    'fdm-personal': 'FDM 個人創作、桌上小物與模型代印工作桌',
+    'fdm-workshop': '橘色 FDM 線軸',
+    'fdm-education': '黃綠色 FDM 格構立方體',
+    'fdm-industrial': '橘色 FDM 手機架',
+    'fdm-personal': '藍色 FDM 花瓶',
+    'fdm-enclosure': '白色 FDM 電子外殼',
+    'fdm-cable-clip': '珊瑚紅 FDM 線材固定夾',
+    'fdm-organizer': '青綠色 FDM 桌面收納盒',
+    'fdm-case': '紫色 FDM 翻蓋收納盒',
+    'fdm-gear': '黃色 FDM 行星齒輪組',
+    'fdm-tray': '深色 FDM 格構托盤',
+    'fdm-robot-arm': '藍色 FDM 小型機械手臂',
+    'fdm-keychain': '洋紅色 FDM 鑰匙圈吊飾',
   }
 
   export default {
