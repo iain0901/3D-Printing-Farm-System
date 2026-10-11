@@ -63,6 +63,23 @@ export function resolveReferenceProfiles(material, resourcesRoot = "/opt/orca/re
   };
 }
 
+export async function resolvePresetInheritance(filename, seen = new Set()) {
+  if (seen.has(filename)) throw new Error("Cyclic Orca profile inheritance");
+  seen.add(filename);
+  const current = JSON.parse(await readFile(filename, "utf8"));
+  let merged = current;
+  if (current.inherits) {
+    const directory = path.dirname(filename);
+    const candidates = await readdir(directory, { recursive: true });
+    const parent = candidates.find(item => path.basename(item, ".json") === current.inherits);
+    if (!parent) throw new Error(`Missing Orca parent preset: ${current.inherits}`);
+    merged = { ...await resolvePresetInheritance(path.join(directory, parent), seen), ...current };
+  }
+  delete merged.inherits;
+  merged.from = "system";
+  return merged;
+}
+
 export function buildJobProcessConfig(job) {
   return {
     type: "process",
@@ -209,12 +226,18 @@ export async function runOrcaSlice(job, sourceInputs, config) {
     if (job.scope === "public-slicing-quote") {
       const profiles = resolveReferenceProfiles(job.material, config.resourcesRoot);
       const privateProcessPath = path.join(root, "private-process.json");
-      const bundledProcess = JSON.parse(await readFile(profiles.processPath, "utf8"));
-      await writeFile(privateProcessPath, JSON.stringify({ ...bundledProcess, ...buildJobProcessConfig(job) }, null, 2));
+      const privateMachinePath = path.join(root, "private-machine.json");
+      const privateFilamentPath = path.join(root, "private-filament.json");
+      const bundledProcess = await resolvePresetInheritance(profiles.processPath);
+      const processProfile = { ...bundledProcess, ...buildJobProcessConfig(job), from: "system" };
+      delete processProfile.inherits;
+      await writeFile(privateProcessPath, JSON.stringify(processProfile, null, 2));
+      await writeFile(privateMachinePath, JSON.stringify(await resolvePresetInheritance(profiles.machinePath), null, 2));
+      await writeFile(privateFilamentPath, JSON.stringify(await resolvePresetInheritance(profiles.filamentPath), null, 2));
       effectiveJob = {
         ...job,
-        settingsPath: `${profiles.machinePath};${privateProcessPath}`,
-        filamentPath: profiles.filamentPath
+        settingsPath: `${privateMachinePath};${privateProcessPath}`,
+        filamentPath: privateFilamentPath
       };
       profileName = profiles.profileName;
     }
@@ -311,7 +334,10 @@ export async function startOrcaWorker(config = parseOrcaWorkerConfig(), dependen
       if (!stopped && !config.runOnce) timer = setTimeout(() => cycle().catch((error) => console.error("[orca-worker] cycle failed", error)), config.intervalMs);
     }
   };
-  await cycle();
+  await cycle().catch((error) => {
+    if (config.runOnce) throw error;
+    console.error("[orca-worker] startup retry", error.message);
+  });
   return {
     stop: async () => {
       stopped = true;
