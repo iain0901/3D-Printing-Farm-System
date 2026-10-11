@@ -55,7 +55,7 @@
   .info-hero-art .studio-image {
     aspect-ratio: 3 / 2;
     max-height: 355px;
-    object-fit: cover;
+    object-fit: contain;
   }
   .info-hero-art span {
     display: block;

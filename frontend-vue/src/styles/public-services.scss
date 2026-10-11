@@ -62,7 +62,7 @@
   .service-hero-art .studio-image {
     aspect-ratio: 3 / 2;
     max-height: 370px;
-    object-fit: cover;
+    object-fit: contain;
   }
   .service-hero-art > span {
     display: block;
@@ -148,7 +148,7 @@
   .use-case-art .studio-image {
     aspect-ratio: 3 / 2;
     max-height: 215px;
-    object-fit: cover;
+    object-fit: contain;
     transition: transform 0.2s;
   }
   .use-case-card:hover .studio-image {

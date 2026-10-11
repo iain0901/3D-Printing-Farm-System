@@ -3,7 +3,7 @@
     class="studio-image workshop-art"
     :class="`studio-image--${imageKey}`"
     :src="`/images/studio/${imageKey}.webp`"
-    :alt="alt || image.alt"
+    :alt="decorative ? '' : alt || image.alt"
     :loading="priority ? 'eager' : 'lazy'"
     :fetchpriority="priority ? 'high' : 'auto'"
     decoding="async"
@@ -37,6 +37,7 @@
     props: {
       kind: { type: String, default: 'printer' },
       alt: { type: String, default: '' },
+      decorative: Boolean,
       priority: Boolean,
     },
     computed: {

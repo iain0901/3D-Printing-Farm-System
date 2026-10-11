@@ -86,7 +86,7 @@
   .audience-link-art .studio-image {
     aspect-ratio: 3 / 2;
     max-height: 220px;
-    object-fit: cover;
+    object-fit: contain;
     transition: transform 0.2s;
   }
   .audience-link:hover .studio-image {

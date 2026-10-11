@@ -38,7 +38,10 @@
         <div class="poster-art">
           <div class="art-arch"></div>
           <span class="art-note">想像，正在成型中。</span>
-          <studio-image kind="printer" priority />
+          <studio-image kind="printer" priority class="poster-object poster-object-spool" />
+          <studio-image kind="research" decorative class="poster-object poster-object-cube" />
+          <studio-image kind="everyday" decorative class="poster-object poster-object-vase" />
+          <studio-image kind="engineering" decorative class="poster-object poster-object-stand" />
           <div class="round-stamp">
             從 0 到 1
             <br />
@@ -337,7 +340,7 @@
 </script>
 <style lang="scss" scoped>
   .landing-poster {
-    background: #80bfc9;
+    background: #08a1dd;
     border-top: 1px solid #173c4320;
     position: relative;
     overflow: hidden;
@@ -366,7 +369,7 @@
     margin: 0;
   }
   .outline-word {
-    color: #f6f5ed;
+    color: #f7f9f6;
     -webkit-text-stroke: 1.5px #173c43;
   }
   .underlined {
@@ -430,17 +433,44 @@
   .art-arch {
     position: absolute;
     inset: 5px 22px 36px;
-    background: #e9efe2;
-    border: 1px solid #173c4340;
+    background: #08a1dd;
+    border: 1px solid #f7f9f66b;
     border-radius: 48% 48% 8px 8px;
     transform: rotate(5deg);
   }
-  .poster-art .workshop-art {
-    position: relative;
-    width: 115%;
+  .poster-art .poster-object {
+    position: absolute;
+    z-index: 1;
+    width: auto;
     max-width: none;
-    margin-left: -8%;
-    transform: rotate(-3deg);
+    height: auto;
+    margin: 0;
+    object-fit: contain;
+    filter: drop-shadow(0 18px 12px #173c2d);
+  }
+  .poster-object-spool {
+    width: min(51%, 320px) !important;
+    right: 1%;
+    bottom: 17%;
+    transform: rotate(-9deg);
+  }
+  .poster-object-cube {
+    width: min(43%, 280px) !important;
+    right: 31%;
+    top: 11%;
+    transform: rotate(10deg);
+  }
+  .poster-object-vase {
+    width: min(29%, 190px) !important;
+    left: 12%;
+    bottom: 12%;
+    transform: rotate(-6deg);
+  }
+  .poster-object-stand {
+    width: min(29%, 195px) !important;
+    right: 16%;
+    bottom: 7%;
+    transform: rotate(7deg);
   }
   .art-note {
     position: absolute;
@@ -558,6 +588,7 @@
     width: 94%;
     height: 100%;
     margin: auto;
+    object-fit: contain;
     transition: transform 0.25s;
   }
   .service-entry:hover .workshop-art {
@@ -932,6 +963,24 @@
     .poster-art .workshop-art {
       width: 100%;
       margin: 0;
+    }
+    .poster-art .poster-object-spool {
+      width: 50% !important;
+      right: 0;
+      bottom: 15%;
+    }
+    .poster-art .poster-object-cube {
+      width: 41% !important;
+      right: 30%;
+      top: 7%;
+    }
+    .poster-art .poster-object-vase {
+      width: 25% !important;
+      left: 12%;
+      bottom: 14%;
+    }
+    .poster-art .poster-object-stand {
+      display: none;
     }
     .art-arch {
       inset: 6px 25px 36px;
