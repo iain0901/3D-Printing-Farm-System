@@ -10,13 +10,13 @@ describe("3DSTU FarmFlow deployment packaging", () => {
     expect(dockerfile).toContain("FROM node:22-alpine AS runtime");
     expect(dockerfile).toContain("COPY frontend-vue/layouts ./layouts");
     expect(dockerfile).toContain("COPY frontend-vue/vab-icon ./vab-icon");
-    expect(dockerfile).toContain("single maintained Vue 2 / Element UI frontend");
+    expect(dockerfile).toContain("maintained Vue 3 / Element Plus frontend");
     expect(dockerfile).not.toContain("React frontend");
     expect(dockerfile).toContain("npm install --include=dev --no-audit --no-fund");
     expect(dockerfile).toContain("npm ci --omit=dev");
     expect(dockerfile).toContain("COPY --chown=node:node api ./api");
     expect(dockerfile).toContain("COPY --chown=node:node --from=build /app/frontend-vue/dist ./dist");
-    expect(dockerfile).toContain("chown -R node:node /app /data");
+    expect(dockerfile).toContain("chown -R node:node /data");
     expect(dockerfile).toContain('VOLUME ["/data"]');
     expect(dockerfile).toContain("USER node");
     expect(dockerfile).toContain("process.env.LAYERPILOT_API_PORT||8797");

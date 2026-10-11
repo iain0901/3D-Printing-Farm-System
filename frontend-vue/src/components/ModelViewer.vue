@@ -11,70 +11,13 @@
 </template>
 
 <script>
+  import { markRaw } from 'vue'
   import * as THREE from 'three'
   import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-  import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
   import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader.js'
 
-  // 預覽的中性色；STL 不含「實際材料顏色」，不可自動用多色顯示而讓客戶誤以為已選色。
+  // STL 不含實際材料顏色；避免用多色預覽讓客戶誤以為已完成選色。
   const DEFAULT_PALETTE = ['#d7e0e8']
-  // 跟後端 api/model-metadata.mjs 的 MAX_TRIANGLES_FOR_SHELL_DETECTION 對齊，超過就不切殼，整個檔案當一個零件顯示
-  const MAX_TRIANGLES_FOR_SHELL_SPLIT = 200000
-
-  function detectShellsFromPositions(positions) {
-    const triangleCount = positions.length / 9
-    if (!triangleCount || triangleCount > MAX_TRIANGLES_FOR_SHELL_SPLIT) return null
-    const parent = new Map()
-    const find = (key) => {
-      let root = key
-      while (parent.get(root) !== root) root = parent.get(root)
-      let current = key
-      while (parent.get(current) !== root) {
-        const next = parent.get(current)
-        parent.set(current, root)
-        current = next
-      }
-      return root
-    }
-    const union = (a, b) => {
-      const rootA = find(a)
-      const rootB = find(b)
-      if (rootA !== rootB) parent.set(rootA, rootB)
-    }
-    const vertexKey = (x, y, z) => `${Math.round(x * 1e4)}|${Math.round(y * 1e4)}|${Math.round(z * 1e4)}`
-
-    const keys = new Array(triangleCount * 3)
-    for (let t = 0; t < triangleCount; t += 1) {
-      const base = t * 9
-      for (let v = 0; v < 3; v += 1) {
-        const o = base + v * 3
-        const key = vertexKey(positions[o], positions[o + 1], positions[o + 2])
-        keys[t * 3 + v] = key
-        if (!parent.has(key)) parent.set(key, key)
-      }
-      union(keys[t * 3], keys[t * 3 + 1])
-      union(keys[t * 3 + 1], keys[t * 3 + 2])
-    }
-
-    const trianglesByRoot = new Map()
-    for (let t = 0; t < triangleCount; t += 1) {
-      const root = find(keys[t * 3])
-      if (!trianglesByRoot.has(root)) trianglesByRoot.set(root, [])
-      trianglesByRoot.get(root).push(t)
-    }
-    return Array.from(trianglesByRoot.values())
-  }
-
-  function subGeometryFromTriangles(positions, triangleIndices) {
-    const sub = new Float32Array(triangleIndices.length * 9)
-    triangleIndices.forEach((triangleIndex, i) => {
-      sub.set(positions.subarray(triangleIndex * 9, triangleIndex * 9 + 9), i * 9)
-    })
-    const geometry = new THREE.BufferGeometry()
-    geometry.setAttribute('position', new THREE.BufferAttribute(sub, 3))
-    geometry.computeVertexNormals()
-    return geometry
-  }
 
   export default {
     name: 'ModelViewer',
@@ -98,148 +41,232 @@
       arrayBuffer() {
         this.loadModel()
       },
-      partColors: {
-        deep: true,
-        handler(colors) {
-          this.applyColors(colors)
-        },
+      filename() {
+        this.loadModel()
+      },
+      partColors(colors) {
+        this.applyColors(colors)
+      },
+      height() {
+        this.handleResize()
       },
     },
     mounted() {
+      this.viewerDisposed = false
+      this.loadSequence = 0
+      this.renderHandle = 0
+      this.lastRenderWidth = 0
+      this.lastRenderHeight = 0
       this.initScene()
       this.loadModel()
-      window.addEventListener('resize', this.handleResize)
     },
     beforeUnmount() {
-      window.removeEventListener('resize', this.handleResize)
-      cancelAnimationFrame(this.frameHandle)
+      this.viewerDisposed = true
+      this.loadSequence += 1
+      this.resizeObserver?.disconnect()
+      this.cancelModelWorker('模型預覽已關閉')
+      cancelAnimationFrame(this.renderHandle)
+      this.controls?.removeEventListener('change', this.scheduleRender)
+      this.controls?.dispose()
       this.disposeMeshes()
       this.renderer?.dispose()
-      this.controls?.dispose()
+      this.renderer?.forceContextLoss()
+      this.renderer?.domElement?.remove()
     },
     methods: {
       initScene() {
         const host = this.$refs.canvasHost
-        this.scene = new THREE.Scene()
+        const width = Math.max(host.clientWidth, 1)
+        this.scene = markRaw(new THREE.Scene())
         this.scene.background = new THREE.Color(0xf4f6f8)
-        this.camera = new THREE.PerspectiveCamera(45, host.clientWidth / this.height, 0.1, 5000)
-        this.renderer = new THREE.WebGLRenderer({ antialias: true })
-        this.renderer.setPixelRatio(window.devicePixelRatio || 1)
-        this.renderer.setSize(host.clientWidth, this.height)
+        this.camera = markRaw(new THREE.PerspectiveCamera(45, width / this.height, 0.1, 5000))
+        this.renderer = markRaw(new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' }))
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
+        this.renderer.setSize(width, this.height)
         host.appendChild(this.renderer.domElement)
 
-        this.scene.add(new THREE.AmbientLight(0xffffff, 0.6))
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8)
+        this.scene.add(new THREE.AmbientLight(0xffffff, 0.75))
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.9)
         dirLight.position.set(1, 1.5, 1)
         this.scene.add(dirLight)
-        const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.35)
+        const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.4)
         dirLight2.position.set(-1, -0.5, -1)
         this.scene.add(dirLight2)
 
-        this.controls = new OrbitControls(this.camera, this.renderer.domElement)
-        this.controls.enableDamping = true
+        this.controls = markRaw(new OrbitControls(this.camera, this.renderer.domElement))
+        this.controls.enableDamping = false
+        this.controls.addEventListener('change', this.scheduleRender)
 
-        this.partsGroup = new THREE.Group()
+        this.partsGroup = markRaw(new THREE.Group())
         this.scene.add(this.partsGroup)
-
-        const animate = () => {
-          this.frameHandle = requestAnimationFrame(animate)
-          this.controls.update()
-          this.renderer.render(this.scene, this.camera)
-        }
-        animate()
+        this.resizeObserver = markRaw(new ResizeObserver(() => this.handleResize()))
+        this.resizeObserver.observe(host)
+        this.handleResize()
+        this.scheduleRender()
+      },
+      scheduleRender() {
+        if (this.viewerDisposed || this.renderHandle) return
+        this.renderHandle = requestAnimationFrame(() => {
+          this.renderHandle = 0
+          if (!this.viewerDisposed && this.renderer && this.scene && this.camera) {
+            this.renderer.render(this.scene, this.camera)
+            // Actual renderer counters support diagnostics without exposing model buffers.
+            this.renderer.domElement.dataset.renderedTriangles = String(this.renderer.info.render.triangles)
+            this.renderer.domElement.dataset.renderCount = String(Number(this.renderer.domElement.dataset.renderCount || 0) + 1)
+          }
+        })
       },
       handleResize() {
         const host = this.$refs.canvasHost
-        if (!host || !this.renderer) return
-        this.camera.aspect = host.clientWidth / this.height
+        if (!host || !this.renderer || !this.camera) return
+        const width = Math.round(host.clientWidth)
+        const renderHeight = Math.round(this.height)
+        if (width <= 0 || renderHeight <= 0) return
+        if (width === this.lastRenderWidth && renderHeight === this.lastRenderHeight) return
+        this.lastRenderWidth = width
+        this.lastRenderHeight = renderHeight
+        this.camera.aspect = width / renderHeight
         this.camera.updateProjectionMatrix()
-        this.renderer.setSize(host.clientWidth, this.height)
+        this.renderer.setSize(width, renderHeight)
+        this.scheduleRender()
+      },
+      meshList() {
+        const meshes = []
+        this.partsGroup?.traverse((child) => {
+          if (child.isMesh) meshes.push(child)
+        })
+        return meshes
       },
       disposeMeshes() {
         if (!this.partsGroup) return
-        this.partsGroup.children.slice().forEach((mesh) => {
-          mesh.geometry?.dispose()
-          mesh.material?.dispose()
-          this.partsGroup.remove(mesh)
+        this.partsGroup.traverse((child) => {
+          if (!child.isMesh) return
+          child.geometry?.dispose()
+          const materials = Array.isArray(child.material) ? child.material : [child.material]
+          materials.forEach((material) => material?.dispose())
+        })
+        this.partsGroup.clear()
+      },
+      cancelModelWorker(reason = '模型解析已由新工作取代') {
+        const rejectPending = this.workerReject
+        this.workerReject = null
+        this.modelWorker?.terminate()
+        this.modelWorker = null
+        rejectPending?.(new Error(reason))
+      },
+      parseStlInWorker(buffer, id) {
+        this.cancelModelWorker()
+        const modelWorker = markRaw(new Worker(new URL('../workers/model-preview.worker.js', import.meta.url), { type: 'module' }))
+        this.modelWorker = modelWorker
+        return new Promise((resolve, reject) => {
+          this.workerReject = reject
+          modelWorker.onmessage = ({ data }) => {
+            if (data.id !== id) return
+            if (data.error) reject(new Error(data.error))
+            else resolve(data.parts)
+          }
+          modelWorker.onerror = (event) => reject(new Error(event.message || '模型背景解析失敗'))
+          modelWorker.postMessage({ id, buffer }, [buffer])
+        }).finally(() => {
+          modelWorker.terminate()
+          if (this.modelWorker === modelWorker) {
+            this.workerReject = null
+            this.modelWorker = null
+          }
         })
       },
       async loadModel() {
+        this.loadSequence += 1
+        const loadId = this.loadSequence
         const source = this.file || this.arrayBuffer
-        if (!source) return
+        this.cancelModelWorker()
+        if (!source) {
+          this.disposeMeshes()
+          this.scheduleRender()
+          return
+        }
+
         this.loading = true
         this.errorMessage = ''
         try {
-          const buffer = this.file ? await this.file.arrayBuffer() : this.arrayBuffer
+          // Yield once so the loading state paints before reading/parsing a large file.
+          await new Promise((resolve) => requestAnimationFrame(resolve))
+          if (loadId !== this.loadSequence || this.viewerDisposed) return
           const extension = (this.filename.split('.').pop() || '').toLowerCase()
+          if (extension !== 'stl' && extension !== '3mf') throw new Error('此格式需要由專員轉檔後預覽')
+          const buffer = this.file ? await this.file.arrayBuffer() : this.arrayBuffer.slice(0)
+          if (loadId !== this.loadSequence || this.viewerDisposed) return
           this.disposeMeshes()
-          if (extension === '3mf') {
-            this.loadThreeMf(buffer)
+          if (extension === 'stl') {
+            const parts = await this.parseStlInWorker(buffer, loadId)
+            if (loadId !== this.loadSequence || this.viewerDisposed) return
+            this.loadWorkerParts(parts)
           } else {
-            this.loadStl(buffer)
+            this.loadThreeMf(buffer)
           }
+          if (loadId !== this.loadSequence || this.viewerDisposed) return
           this.frameCamera()
           this.applyColors(this.partColors)
-        } catch (err) {
+          this.scheduleRender()
+        } catch (error) {
+          if (loadId !== this.loadSequence || this.viewerDisposed) return
           this.errorMessage = '無法解析此模型檔案，可能格式不受支援或檔案損壞。'
-          this.$emit('error', err?.message || String(err))
+          this.$emit('error', error?.message || String(error))
         } finally {
-          this.loading = false
+          if (loadId === this.loadSequence && !this.viewerDisposed) this.loading = false
         }
       },
-      loadStl(buffer) {
-        const geometry = new STLLoader().parse(buffer)
-        const positions = geometry.attributes.position.array
-        const shells = detectShellsFromPositions(positions)
-        const parts = []
-        if (shells && shells.length > 1) {
-          shells.forEach((triangleIndices, index) => {
-            const subGeometry = subGeometryFromTriangles(positions, triangleIndices)
-            const material = new THREE.MeshStandardMaterial({ color: DEFAULT_PALETTE[index % DEFAULT_PALETTE.length], roughness: 0.6 })
-            const mesh = new THREE.Mesh(subGeometry, material)
-            this.partsGroup.add(mesh)
-            parts.push({ index, color: material.color.getHexString() })
-          })
-        } else {
-          geometry.computeVertexNormals()
-          const material = new THREE.MeshStandardMaterial({ color: DEFAULT_PALETTE[0], roughness: 0.6 })
-          const mesh = new THREE.Mesh(geometry, material)
-          this.partsGroup.add(mesh)
-          parts.push({ index: 0, color: material.color.getHexString() })
-        }
+      loadWorkerParts(workerParts) {
+        const parts = workerParts.map((part, index) => {
+          const geometry = new THREE.BufferGeometry()
+          geometry.setAttribute('position', new THREE.BufferAttribute(part.positions, 3))
+          geometry.setAttribute('normal', new THREE.BufferAttribute(part.normals, 3))
+          geometry.computeBoundingBox()
+          geometry.computeBoundingSphere()
+          const material = new THREE.MeshStandardMaterial({ color: DEFAULT_PALETTE[index % DEFAULT_PALETTE.length], roughness: 0.6 })
+          this.partsGroup.add(new THREE.Mesh(geometry, material))
+          return { index, color: material.color.getHexString() }
+        })
+        if (!parts.length) throw new Error('STL file has no mesh content')
         this.$emit('parts', parts)
       },
       loadThreeMf(buffer) {
         const group = new ThreeMFLoader().parse(buffer)
         const meshes = []
         group.traverse((child) => {
-          if (child.isMesh) meshes.push(child)
-        })
-        const parts = []
-        meshes.forEach((mesh, index) => {
-          const existingColor = mesh.material?.color ? mesh.material.color.clone() : new THREE.Color(DEFAULT_PALETTE[index % DEFAULT_PALETTE.length])
-          const material = new THREE.MeshStandardMaterial({ color: existingColor, roughness: 0.6 })
-          mesh.material = material
-          this.partsGroup.add(mesh)
-          parts.push({ index, color: material.color.getHexString() })
+          if (!child.isMesh) return
+          const existingColor = child.material?.color ? child.material.color.clone() : new THREE.Color(DEFAULT_PALETTE[meshes.length % DEFAULT_PALETTE.length])
+          const oldMaterials = Array.isArray(child.material) ? child.material : [child.material]
+          oldMaterials.forEach((material) => material?.dispose())
+          child.material = new THREE.MeshStandardMaterial({ color: existingColor, roughness: 0.6 })
+          meshes.push(child)
         })
         if (!meshes.length) throw new Error('3MF file has no mesh content')
-        this.$emit('parts', parts)
+        // Keep the 3MF hierarchy so nested build transforms are not lost.
+        this.partsGroup.add(group)
+        this.$emit(
+          'parts',
+          meshes.map((mesh, index) => ({ index, color: mesh.material.color.getHexString() }))
+        )
       },
       applyColors(colors) {
-        if (!colors || !colors.length || !this.partsGroup) return
-        this.partsGroup.children.forEach((mesh, index) => {
-          const hex = colors[index]
-          if (hex && mesh.material) mesh.material.color.set(hex)
+        if (!colors?.length || !this.partsGroup) return
+        this.meshList().forEach((mesh, index) => {
+          const hex = colors[index] || (colors.length === 1 ? colors[0] : '')
+          if (hex && mesh.material?.color) mesh.material.color.set(hex)
         })
+        this.scheduleRender()
       },
       frameCamera() {
         const box = new THREE.Box3().setFromObject(this.partsGroup)
-        if (box.isEmpty()) return
+        if (box.isEmpty()) throw new Error('模型沒有可顯示的邊界')
         const size = box.getSize(new THREE.Vector3())
         const center = box.getCenter(new THREE.Vector3())
         const maxDim = Math.max(size.x, size.y, size.z) || 1
         const distance = maxDim * 1.8
+        this.camera.near = Math.max(maxDim / 10000, 0.001)
+        this.camera.far = Math.max(distance * 10, this.camera.near * 1000)
+        this.camera.updateProjectionMatrix()
         this.camera.position.set(center.x + distance, center.y + distance * 0.7, center.z + distance)
         this.camera.lookAt(center)
         this.controls.target.copy(center)

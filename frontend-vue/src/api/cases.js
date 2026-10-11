@@ -9,6 +9,17 @@ export function estimateCase(payload) {
   return publicRequest.post('/api/public/cases/estimate', payload).then((response) => response.data.estimate)
 }
 
+export function createSlicingQuote(payload, files = []) {
+  const body = new FormData()
+  body.append('payload', JSON.stringify(payload))
+  files.forEach((file) => body.append('files', file, file.name))
+  return publicRequest.post('/api/public/slicing-quotes', body, { headers: { 'Content-Type': undefined }, timeout: 10 * 60 * 1000 }).then((response) => response.data)
+}
+
+export function fetchSlicingQuote(id, token) {
+  return publicRequest.get(`/api/public/slicing-quotes/${encodeURIComponent(id)}`, { params: { token }, timeout: 30000 }).then((response) => response.data)
+}
+
 export function createPublicCase(payload, files = []) {
   if (!files.length) return customerRequest({ url: '/api/public/cases', method: 'post', data: payload })
   const body = new FormData()

@@ -1,4 +1,4 @@
-# Builds the single maintained Vue 2 / Element UI frontend (frontend-vue/).
+# Builds the maintained Vue 3 / Element Plus frontend (frontend-vue/).
 FROM node:22-alpine AS build
 WORKDIR /app/frontend-vue
 
@@ -24,13 +24,13 @@ ENV LAYERPILOT_SERVE_STATIC=true
 ENV LAYERPILOT_DB_PATH=/data/layerpilot.db.json
 ENV LAYERPILOT_STORAGE_DIR=/data/storage
 
-COPY package*.json ./
+COPY --chown=node:node package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --chown=node:node api ./api
 COPY --chown=node:node --from=build /app/frontend-vue/dist ./dist
 
-RUN mkdir -p /data/storage && chown -R node:node /app /data
+RUN mkdir -p /data/storage && chown -R node:node /data
 VOLUME ["/data"]
 EXPOSE 8797
 USER node

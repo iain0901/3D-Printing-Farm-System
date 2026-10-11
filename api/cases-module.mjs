@@ -46,18 +46,94 @@ function inWorkspace(item, workspaceId) {
 }
 
 function ensureCollections(data) {
-  for (const key of [
-    "cases",
-    "caseStatusHistory",
-    "chatwootCaseLinks",
-    "afterSalesCases",
-    "files",
-    "customers",
-    "queue",
-    "events",
-  ]) {
+  for (const key of ["cases", "caseStatusHistory", "chatwootCaseLinks", "afterSalesCases", "files", "customers", "queue", "events", "slicingQuotes"]) {
     if (!Array.isArray(data[key])) data[key] = [];
   }
+}
+
+const PUBLIC_SLICE_MATERIALS = ["PLA", "PETG", "ASA", "TPU"];
+const PUBLIC_SLICE_EXTENSIONS = new Set(["STL", "3MF", "OBJ"]);
+const PUBLIC_SLICE_MAX_FILES = 5;
+const PUBLIC_SLICE_MAX_FILE_BYTES = 50 * 1024 * 1024;
+const PUBLIC_SLICE_MAX_TOTAL_BYTES = 100 * 1024 * 1024;
+
+const publicSlicingQuoteSchema = z.object({
+  material: z.enum(PUBLIC_SLICE_MATERIALS),
+  quantity: z.coerce.number().int().min(1).max(20).default(1),
+  quantities: z.array(z.coerce.number().int().min(1).max(20)).max(5).optional(),
+  layerHeight: z.coerce.number().min(0.08).max(0.4).default(0.2),
+  infill: z.coerce.number().min(0).max(100).default(15),
+  walls: z.coerce.number().int().min(1).max(12).default(2),
+  autoSupports: z.boolean().default(true),
+  businessTier: z.enum(["economy", "standard", "premium"]).default("economy"),
+  quality: z.enum(["standard", "appearance", "functional"]).default("standard")
+});
+
+function publicSlicingQuote(record) {
+  const value = {
+    id: record.id,
+    status: record.status,
+    material: record.material,
+    quantity: record.quantity,
+    fileCount: record.sourceFileIds.length,
+    layerHeight: record.layerHeight,
+    infill: record.infill,
+    walls: record.walls,
+    engine: record.engine,
+    engineVersion: record.engineVersion,
+    profileName: record.profileName,
+    profileDisclosure: record.profileDisclosure,
+    autoOrient: true,
+    autoArrange: true,
+    autoSupports: record.autoSupports,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt
+  };
+  if (record.status === "completed") Object.assign(value, {
+    modelGrams: record.modelGrams,
+    supportGrams: record.supportGrams,
+    otherGrams: record.otherGrams,
+    totalGrams: record.totalGrams,
+    estimatedMinutes: record.estimatedMinutes,
+    price: record.quote?.total,
+    quote: record.quote,
+    warnings: record.warnings || [],
+    completedAt: record.completedAt
+  });
+  if (record.status === "failed") Object.assign(value, { error: record.error, completedAt: record.completedAt });
+  return value;
+}
+
+async function parsePublicSlicingQuote(request, storeCaseFile, workspaceId) {
+  if (!request.isMultipart?.()) throw new Error("Expected multipart/form-data with payload and model file(s)");
+  const uploads = [];
+  let input = null;
+  let totalBytes = 0;
+  for await (const part of request.parts({ limits: { fileSize: PUBLIC_SLICE_MAX_FILE_BYTES, files: PUBLIC_SLICE_MAX_FILES, fields: 20, parts: PUBLIC_SLICE_MAX_FILES + 20 } })) {
+    if (part.type !== "file") {
+      if (part.fieldname === "payload") input = JSON.parse(String(part.value || "{}"));
+      continue;
+    }
+    const extension = String(part.filename || "").split(".").pop()?.toUpperCase();
+    if (!PUBLIC_SLICE_EXTENSIONS.has(extension)) throw new Error("Only STL, 3MF and OBJ model files are supported");
+    const buffer = await part.toBuffer();
+    if (part.file?.truncated || part.truncated) throw new Error(`Each model file must be at most ${PUBLIC_SLICE_MAX_FILE_BYTES / 1024 / 1024} MB`);
+    if (!buffer.length) throw new Error("Uploaded model file is empty");
+    totalBytes += buffer.length;
+    if (totalBytes > PUBLIC_SLICE_MAX_TOTAL_BYTES) throw new Error(`Combined model files must be at most ${PUBLIC_SLICE_MAX_TOTAL_BYTES / 1024 / 1024} MB`);
+    uploads.push({ filename: part.filename, buffer });
+  }
+  if (!uploads.length) throw new Error("At least one model file is required");
+  if (uploads.length > PUBLIC_SLICE_MAX_FILES) throw new Error(`At most ${PUBLIC_SLICE_MAX_FILES} model files are allowed`);
+  const parsed = publicSlicingQuoteSchema.safeParse(input || {});
+  if (!parsed.success) return { validationError: parsed.error };
+  if (parsed.data.quantities && parsed.data.quantities.length !== uploads.length) throw new Error("Each model requires one matching quantity");
+  const quantities = parsed.data.quantities || uploads.map(() => parsed.data.quantity);
+  if (quantities.reduce((a,b) => a+b,0) > 100) throw new Error("At most 100 printed objects per quote");
+  parsed.data.quantities = quantities;
+  const stored = [];
+  for (const upload of uploads) stored.push(await storeCaseFile({ ...upload, material: parsed.data.material, workspaceId }));
+  return { input: parsed.data, stored, sourceBytes: totalBytes };
 }
 
 function appendEvent(database, type, message, data, actor, workspaceId) {
@@ -301,6 +377,7 @@ export function publicCase(caseRecord) {
       readiness: part.readiness,
     })),
     quote: publicQuoteVersion(currentQuote),
+    slicingQuote: caseRecord.slicingQuote || null,
     paymentStatus: caseRecord.paymentStatus,
     delivery: caseRecord.delivery
       ? {
@@ -607,146 +684,129 @@ export async function registerCaseRoutes(app, options) {
   } = options;
   ensureCollections(database.data);
 
-  app.post(
-    "/api/public/cases/estimate",
-    {
-      config: {
-        rateLimit: {
-          max: 120,
-          timeWindow: "1 minute",
-          groupId: "case-estimate",
-        },
-      },
-    },
-    async (request, reply) => {
-      const parsed = preliminaryEstimateSchema.safeParse(request.body || {});
-      if (!parsed.success)
-        return reply
-          .code(400)
-          .send({ error: "估價條件格式錯誤", issues: parsed.error.issues });
-      const value = parsed.data;
-      // 自動報價引擎：參考件用量模型 → 階梯價/機時/最低消費取高 + 多色/急件/風險規則。
-      // 這是「未切片前的初步估計」，正式報價仍由專員以實際切片數據確認。
-      const catalog = costCatalogForWorkspace?.(database.data) || {};
-      const autoConfig = catalog.autoQuote || defaultAutoQuoteConfig;
-      const usage = referencePartUsage({
-        infill: value.infill,
-        walls: value.walls,
-        support: value.support,
-        quality: value.quality,
-      });
-      const materialDensity =
-        {
-          PLA: 1,
-          PETG: 1.08,
-          ABS: 0.98,
-          ASA: 1,
-          TPU: 1.1,
-          Resin: 1.15,
-          Nylon: 1.05,
-        }[value.material] || 1;
-      const services = [];
-      if (!value.hasModel) services.push("modeling");
-      const engineResult = computeAutoQuote(autoConfig, {
-        scope: "order",
-        grams: usage.grams * materialDensity * value.quantity,
-        minutes: usage.minutes * value.quantity,
-        quantity: 1,
-        material: value.material,
-        colorMode: (value.colors || 1) > 1 ? "separated" : "single",
-        colorCount: value.colors || 1,
-        dueInHours: value.rush ? 48 : null,
-        services,
-      });
-      const escalations = [...engineResult.escalationReasons];
-      if (!value.hasModel)
-        escalations.push({
-          code: "modeling",
-          message: "需要建模協助，正式報價由專員提供",
-        });
-      if (engineResult.total <= 0) {
-        // 引擎不可用時的保守底線（不應發生；防禦式回退）
-        const legacyBase = Math.max(
-          300,
-          Math.round(220 * value.quantity * (value.rush ? 1.25 : 1))
-        );
-        return {
-          ok: true,
-          estimate: {
-            currency: "TWD",
-            total: legacyBase,
-            kind: "preliminary",
-            requiresSpecialistApproval: true,
-          },
-        };
-      }
-      return {
-        ok: true,
-        engine: "auto-quote",
-        reference: {
-          grams: usage.grams,
-          minutes: usage.minutes,
-          note: "Reference-part estimate before slicing; final price confirmed by specialist with real slice data",
-        },
-        estimate: {
-          currency: engineResult.currency,
-          total: engineResult.total,
-          kind: "preliminary",
-          requiresSpecialistApproval: engineResult.escalated || !value.hasModel,
-          lines: engineResult.lines.filter((line) => line.amount !== 0),
-          escalations,
-        },
-      };
+  app.post("/api/public/slicing-quotes", { config: { rateLimit: { max: 10, timeWindow: "1 minute", groupId: "public-slicing-quotes" } } }, async (request, reply) => {
+    const workspaceId = DEFAULT_WORKSPACE_ID;
+    const used = database.data.slicingQuotes.reduce((sum, item) => sum + (item.sourceBytes || 0) + (item.artifactBytes || 0), 0);
+    if (used >= 8 * 1024 ** 3 || database.data.slicingQuotes.filter(item => ["queued", "processing"].includes(item.status)).length >= 20) return reply.code(503).send({ error: "切片報價容量暫滿，請交由專員處理" });
+    let incoming;
+    try {
+      incoming = await parsePublicSlicingQuote(request, storeCaseFile, workspaceId);
+    } catch (error) {
+      return reply.code(400).send({ error: "切片報價檔案或參數無效", detail: error instanceof Error ? error.message : String(error) });
     }
-  );
+    if (incoming.validationError) return reply.code(400).send({ error: "切片報價參數格式錯誤", issues: incoming.validationError.issues });
+    const accessToken = randomBytes(32).toString("base64url");
+    const now = nowIso();
+    const quote = {
+      id: `slice-quote-${randomUUID().slice(0, 12)}`,
+      workspaceId,
+      publicAccessTokenHash: tokenDigest(accessToken),
+      status: "queued",
+      sourceFileIds: incoming.stored.map((item) => item.file.id),
+      sourceBytes: incoming.sourceBytes,
+      material: incoming.input.material,
+      quantity: incoming.input.quantities.reduce((a,b) => a+b,0),
+      quantities: incoming.input.quantities,
+      layerHeight: incoming.input.layerHeight,
+      infill: incoming.input.infill,
+      walls: incoming.input.walls,
+      autoSupports: incoming.input.autoSupports,
+      businessTier: incoming.input.businessTier,
+      quality: incoming.input.quality,
+      engine: "OrcaSlicer",
+      engineVersion: process.env.ORCA_SLICER_VERSION || "2.4.2",
+      profileName: "Artillery M1 Pro bundled reference profiles (pending worker resolution)",
+      profileDisclosure: "Reference machine and vendor filament profiles are used for estimation; this is not represented as the customer's configured printer.",
+      createdAt: now,
+      updatedAt: now
+    };
+    database.data.slicingQuotes.unshift(quote);
+    await database.write();
+    return reply.code(202).send({ ok: true, slicingQuote: publicSlicingQuote(quote), accessToken });
+  });
 
-  app.post(
-    "/api/public/cases",
-    {
-      config: {
-        rateLimit: { max: 20, timeWindow: "1 minute", groupId: "case-intake" },
-      },
-    },
-    async (request, reply) => {
-      const workspaceId = DEFAULT_WORKSPACE_ID;
-      let parsedIncoming;
-      try {
-        parsedIncoming = await parseIntake(request, storeCaseFile, workspaceId);
-      } catch (error) {
-        return reply
-          .code(400)
-          .send({ error: "案件檔案或表單內容格式錯誤", detail: error.message });
-      }
-      const authenticatedCustomer =
-        customerFromRequest?.(database, request).customer || null;
-      if (authenticatedCustomer) {
-        parsedIncoming.input.customer = {
-          id: authenticatedCustomer.id,
-          name: authenticatedCustomer.name,
-          email: authenticatedCustomer.email || "",
-          phone: authenticatedCustomer.phone || "",
-          company: authenticatedCustomer.company || "",
-        };
-      }
-      const parsed = caseIntakeSchema.safeParse(parsedIncoming.input);
-      if (!parsed.success)
-        return reply
-          .code(400)
-          .send({ error: "案件資料未完成", issues: parsed.error.issues });
-      const created = createCaseFromIntake(database, parsed.data, {
-        workspaceId,
-        uploadResults: parsedIncoming.uploadResults,
-        actor: authenticatedCustomer,
-        systemGeneratedProject: Boolean(authenticatedCustomer),
-      });
-      await database.write();
-      return reply.code(201).send({
-        ok: true,
-        case: publicCase(created.caseRecord),
-        accessToken: created.accessToken,
-      });
+  app.get("/api/public/slicing-quotes/:id", async (request, reply) => {
+    reply.header("cache-control", "no-store");
+    const quote = database.data.slicingQuotes.find((item) => item.id === request.params.id && inWorkspace(item, DEFAULT_WORKSPACE_ID));
+    if (!quote || !safeTokenMatches(quote, request.query?.token)) return reply.code(404).send({ error: "切片報價不存在" });
+    return { ok: true, slicingQuote: publicSlicingQuote(quote) };
+  });
+
+  app.post("/api/public/cases/estimate", { config: { rateLimit: { max: 120, timeWindow: "1 minute", groupId: "case-estimate" } } }, async (request, reply) => {
+    const parsed = preliminaryEstimateSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.code(400).send({ error: "估價條件格式錯誤", issues: parsed.error.issues });
+    const value = parsed.data;
+    // 自動報價引擎：參考件用量模型 → 階梯價/機時/最低消費取高 + 多色/急件/風險規則。
+    // 這是「未切片前的初步估計」，正式報價仍由專員以實際切片數據確認。
+    const catalog = costCatalogForWorkspace?.(database.data) || {};
+    const autoConfig = catalog.autoQuote || defaultAutoQuoteConfig;
+    const usage = referencePartUsage({ infill: value.infill, walls: value.walls, support: value.support, quality: value.quality });
+    const materialDensity = { PLA: 1, PETG: 1.08, ABS: 0.98, ASA: 1, TPU: 1.1, Resin: 1.15, Nylon: 1.05 }[value.material] || 1;
+    const services = [];
+    if (!value.hasModel) services.push("modeling");
+    const engineResult = computeAutoQuote(autoConfig, {
+      scope: "order",
+      grams: usage.grams * materialDensity * value.quantity,
+      minutes: usage.minutes * value.quantity,
+      quantity: 1,
+      material: value.material,
+      colorMode: (value.colors || 1) > 1 ? "separated" : "single",
+      colorCount: value.colors || 1,
+      dueInHours: value.rush ? 48 : null,
+      services
+    });
+    const escalations = [...engineResult.escalationReasons];
+    if (!value.hasModel) escalations.push({ code: "modeling", message: "需要建模協助，正式報價由專員提供" });
+    if (engineResult.total <= 0) {
+      // 引擎不可用時的保守底線（不應發生；防禦式回退）
+      const legacyBase = Math.max(300, Math.round(220 * value.quantity * (value.rush ? 1.25 : 1)));
+      return { ok: true, estimate: { currency: "TWD", total: legacyBase, kind: "preliminary", requiresSpecialistApproval: true } };
     }
-  );
+    return {
+      ok: true,
+      engine: "auto-quote",
+      reference: { grams: usage.grams, minutes: usage.minutes, note: "Reference-part estimate before slicing; final price confirmed by specialist with real slice data" },
+      estimate: {
+        currency: engineResult.currency,
+        total: engineResult.total,
+        kind: "preliminary",
+        requiresSpecialistApproval: engineResult.escalated || !value.hasModel,
+        lines: engineResult.lines.filter((line) => line.amount !== 0),
+        escalations
+      }
+    };
+  });
+
+  app.post("/api/public/cases", { config: { rateLimit: { max: 20, timeWindow: "1 minute", groupId: "case-intake" } } }, async (request, reply) => {
+    const workspaceId = DEFAULT_WORKSPACE_ID;
+    let parsedIncoming;
+    try {
+      parsedIncoming = await parseIntake(request, storeCaseFile, workspaceId);
+    } catch (error) {
+      return reply.code(400).send({ error: "案件檔案或表單內容格式錯誤", detail: error.message });
+    }
+    const authenticatedCustomer = customerFromRequest?.(database, request).customer || null;
+    if (authenticatedCustomer) parsedIncoming.input.customer = { id: authenticatedCustomer.id, name: authenticatedCustomer.name, email: authenticatedCustomer.email || "", phone: authenticatedCustomer.phone || "", company: authenticatedCustomer.company || "" };
+    const parsed = caseIntakeSchema.safeParse(parsedIncoming.input);
+    if (!parsed.success) return reply.code(400).send({ error: "案件資料未完成", issues: parsed.error.issues });
+    let measuredQuote = null;
+    const quoteId = parsedIncoming.input.slicingQuoteId;
+    if (quoteId) {
+      measuredQuote = database.data.slicingQuotes.find(item => item.id === quoteId && inWorkspace(item, workspaceId));
+      if (!measuredQuote || !safeTokenMatches(measuredQuote, parsedIncoming.input.slicingQuoteToken) || measuredQuote.status !== "completed") return reply.code(409).send({ error: "切片報價無效或尚未完成" });
+      const sourceModels = measuredQuote.sourceFileIds.map(id => database.data.files.find(file => file.id === id));
+      const intakeModels = parsedIncoming.uploadResults.map(item => item.file).filter(file => PUBLIC_SLICE_EXTENSIONS.has(String(file.name).split(".").pop().toUpperCase()));
+      const digest = async file => createHash("sha256").update(await readCaseFile(file)).digest("hex");
+      const hashes = async files => (await Promise.all(files.map(digest))).sort().join(",");
+      if (sourceModels.some(file => !file) || sourceModels.length !== intakeModels.length || await hashes(sourceModels) !== await hashes(intakeModels)) return reply.code(409).send({ error: "模型已變更，請重新切片" });
+      const quantities = parsed.data.parts.map(part => Number(part.quantity || parsed.data.defaults.quantity || 1));
+      if (quantities.join(",") !== measuredQuote.quantities.join(",") || parsed.data.parts.some(part => (part.material || parsed.data.defaults.material) !== measuredQuote.material)) return reply.code(409).send({ error: "材質或數量已變更，請重新切片" });
+    }
+    const created = createCaseFromIntake(database, parsed.data, { workspaceId, uploadResults: parsedIncoming.uploadResults, actor: authenticatedCustomer, systemGeneratedProject: Boolean(authenticatedCustomer) });
+    if (measuredQuote) created.caseRecord.slicingQuote = publicSlicingQuote(measuredQuote);
+    await database.write();
+    return reply.code(201).send({ ok: true, case: publicCase(created.caseRecord), accessToken: created.accessToken });
+  });
 
   app.get("/api/public/cases/:id", async (request, reply) => {
     const caseRecord = database.data.cases.find(
@@ -1257,10 +1317,29 @@ export async function registerCaseRoutes(app, options) {
 
   app.post("/api/internal/orca/jobs/claim", async (request, reply) => {
     if (!workerAllowed(request, reply)) return;
-    const claimedBy = String(request.body?.workerId || "orca-worker").slice(
-      0,
-      120
-    );
+    const claimedBy = String(request.body?.workerId || "orca-worker").slice(0, 120);
+    for (const stale of database.data.slicingQuotes.filter(item => item.status === "processing" && Date.now() - Date.parse(item.claimedAt) > 30 * 60 * 1000)) {
+      stale.status = "failed"; stale.error = "切片工作逾時，請重新切片或交由專員處理"; stale.updatedAt = stale.completedAt = nowIso();
+    }
+    const publicQuote = database.data.slicingQuotes
+      .filter((item) => item.status === "queued")
+      .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))[0];
+    if (publicQuote) {
+      const sourceFiles = publicQuote.sourceFileIds.map((id) => database.data.files.find((item) => item.id === id && inWorkspace(item, publicQuote.workspaceId))).filter(Boolean);
+      if (sourceFiles.length !== publicQuote.sourceFileIds.length) {
+        publicQuote.status = "failed";
+        publicQuote.error = "切片來源檔案不存在";
+        publicQuote.completedAt = nowIso();
+        publicQuote.updatedAt = publicQuote.completedAt;
+      } else {
+        publicQuote.status = "processing";
+        publicQuote.claimedBy = claimedBy;
+        publicQuote.claimedAt = nowIso();
+        publicQuote.updatedAt = publicQuote.claimedAt;
+        await database.write();
+        return { job: { ...publicQuote, scope: "public-slicing-quote", sourceFiles: sourceFiles.map((file) => ({ id: file.id, name: file.name, type: file.type })) } };
+      }
+    }
     for (const caseRecord of database.data.cases) {
       const job = (caseRecord.slicerJobs || []).find(
         (item) => item.engine === "OrcaSlicer" && item.status === "queued"
@@ -1327,9 +1406,54 @@ export async function registerCaseRoutes(app, options) {
     const part = await request.file();
     if (!part) return reply.code(400).send({ error: "G-code file missing" });
     const jobId = request.params.id;
-    const caseRecord = database.data.cases.find((item) =>
-      (item.slicerJobs || []).some((job) => job.id === jobId)
-    );
+    const publicQuote = database.data.slicingQuotes.find((item) => item.id === jobId);
+    if (publicQuote) {
+      if (publicQuote.status !== "processing") return reply.code(409).send({ error: "OrcaSlicer quote job is not processing" });
+      const buffer = await part.toBuffer();
+      if (!buffer.length) return reply.code(400).send({ error: "Generated G-code is empty" });
+      const fields = part.fields || {};
+      const field = (name, fallback = "") => typeof fields[name]?.value === "string" ? fields[name].value : fallback;
+      const metrics = {
+        estimatedMinutes: Number(field("estimatedMinutes")),
+        modelGrams: Number(field("modelGrams")),
+        supportGrams: Number(field("supportGrams")),
+        otherGrams: Number(field("otherGrams")),
+        totalGrams: Number(field("totalGrams"))
+      };
+      const values = Object.values(metrics);
+      const componentTotal = metrics.modelGrams + metrics.supportGrams + metrics.otherGrams;
+      if (values.some((value) => !Number.isFinite(value)) || metrics.estimatedMinutes <= 0 || metrics.totalGrams <= 0 || metrics.modelGrams < 0 || metrics.supportGrams < 0 || metrics.otherGrams < 0 || Math.abs(componentTotal - metrics.totalGrams) > Math.max(0.05, metrics.totalGrams * 0.01)) {
+        return reply.code(400).send({ error: "Worker result must contain positive real slice time and consistent extrusion measurements" });
+      }
+      const profileName = field("profileName").trim();
+      if (!profileName) return reply.code(400).send({ error: "Worker result is missing its reference profile name" });
+      const gcode = await storeGcodeFile({ filename: part.filename || `${publicQuote.id}.gcode`, buffer, workspaceId: publicQuote.workspaceId, caseId: publicQuote.id, slicerJobId: publicQuote.id });
+      const round = (value) => Math.round(value * 1000) / 1000;
+      Object.assign(publicQuote, Object.fromEntries(Object.entries(metrics).map(([key, value]) => [key, round(value)])));
+      const supportPercent = publicQuote.totalGrams > 0 ? publicQuote.supportGrams / publicQuote.totalGrams * 100 : 0;
+      const catalog = costCatalogForWorkspace?.(database.data, publicQuote.workspaceId) || {};
+      publicQuote.quote = computeAutoQuote(catalog.autoQuote || defaultAutoQuoteConfig, {
+        scope: "order",
+        grams: publicQuote.totalGrams,
+        minutes: publicQuote.estimatedMinutes,
+        quantity: publicQuote.quantity,
+        material: publicQuote.material,
+        businessTier: publicQuote.businessTier,
+        quality: publicQuote.quality,
+        supportPercent
+      });
+      publicQuote.status = "completed";
+      publicQuote.profileName = profileName;
+      publicQuote.gcodeFileId = gcode.file.id;
+      publicQuote.artifactBytes = buffer.length;
+      publicQuote.warnings = field("warnings").split("\n").map((item) => item.trim()).filter(Boolean);
+      publicQuote.workerVersion = field("workerVersion");
+      publicQuote.completedAt = nowIso();
+      publicQuote.updatedAt = publicQuote.completedAt;
+      await database.write();
+      return { slicingQuote: publicSlicingQuote(publicQuote) };
+    }
+    const caseRecord = database.data.cases.find((item) => (item.slicerJobs || []).some((job) => job.id === jobId));
     const job = caseRecord?.slicerJobs.find((item) => item.id === jobId);
     if (!caseRecord || !job || job.status !== "running")
       return reply.code(409).send({ error: "OrcaSlicer job is not running" });
@@ -1378,9 +1502,17 @@ export async function registerCaseRoutes(app, options) {
   app.post("/api/internal/orca/jobs/:id/fail", async (request, reply) => {
     if (!workerAllowed(request, reply)) return;
     const jobId = request.params.id;
-    const caseRecord = database.data.cases.find((item) =>
-      (item.slicerJobs || []).some((job) => job.id === jobId)
-    );
+    const publicQuote = database.data.slicingQuotes.find((item) => item.id === jobId);
+    if (publicQuote) {
+      if (!["queued", "processing"].includes(publicQuote.status)) return reply.code(409).send({ error: "OrcaSlicer quote job is not active" });
+      publicQuote.status = "failed";
+      publicQuote.error = String(request.body?.error || "OrcaSlicer failed").slice(0, 1000);
+      publicQuote.completedAt = nowIso();
+      publicQuote.updatedAt = publicQuote.completedAt;
+      await database.write();
+      return { ok: true };
+    }
+    const caseRecord = database.data.cases.find((item) => (item.slicerJobs || []).some((job) => job.id === jobId));
     const job = caseRecord?.slicerJobs.find((item) => item.id === jobId);
     if (!caseRecord || !job)
       return reply.code(404).send({ error: "OrcaSlicer job is not found" });

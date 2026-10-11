@@ -36,7 +36,7 @@ import { createLineClient, operatorMessageText, quoteReadyText, resolveLineTarge
 
 const execFileAsync = promisify(execFile);
 
-const COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "cases", "caseStatusHistory", "chatwootCaseLinks", "afterSalesCases", "orders", "customers", "profiles", "addons", "aiKnowledge", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns", "coupons"];
+const COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "slicingQuotes", "cases", "caseStatusHistory", "chatwootCaseLinks", "afterSalesCases", "orders", "customers", "profiles", "addons", "aiKnowledge", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns", "coupons"];
 const RESTORABLE_EXTRA_KEYS = ["users", "workspaces", "workspaceSettings", "costCatalog", "costCatalogs", "profileDefaults", "profileMatchingPolicy", "billingSessions", "invoices", "dataMeta"];
 const RESTORABLE_KEYS = [...COLLECTIONS, ...RESTORABLE_EXTRA_KEYS];
 const defaultCostCatalog = {
@@ -4133,10 +4133,10 @@ async function createStoredCaseFile(database, payload, options = {}) {
   const workspaceId = options.workspaceId || payload.workspaceId || DEFAULT_WORKSPACE_ID;
   const filename = path.basename(payload.filename || "model.stl");
   const extension = path.extname(filename).slice(1).toUpperCase();
-  const accepted = new Set(["STL", "3MF", "STEP", "STP", "PNG", "JPG", "JPEG", "WEBP", "PDF"]);
-  if (!accepted.has(extension)) throw new Error("模型接受 STL、3MF、STEP／STP；需求附件接受 PNG、JPG、WEBP 或 PDF");
+  const accepted = new Set(["STL", "3MF", "OBJ", "STEP", "STP", "PNG", "JPG", "JPEG", "WEBP", "PDF"]);
+  if (!accepted.has(extension)) throw new Error("模型接受 STL、3MF、OBJ、STEP／STP；需求附件接受 PNG、JPG、WEBP 或 PDF");
   if (!payload.buffer?.length) throw new Error("上傳檔案是空的");
-  if (["PNG", "JPG", "JPEG", "WEBP", "PDF"].has(extension)) {
+  if (new Set(["PNG", "JPG", "JPEG", "WEBP", "PDF"]).has(extension)) {
     const id = randomUUID();
     const folderResult = ensureFileFolder(database.data, { name: "3DRFM Cases", purpose: "case-intake", workspaceId });
     const stored = await storeObject(`uploads/${id}/${filename}`, payload.buffer, { filename, type: extension });
@@ -6904,7 +6904,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
 
   app.addHook("preHandler", async (request, reply) => {
     const routePath = request.url.split("?")[0];
-    const publicRoute = routePath === "/api/health" || routePath === "/api/readiness" || routePath === "/api/metrics" && hasValidMetricsToken(request) || routePath === "/api/internal/worker-broadcast" && hasValidWorkerToken(request) || routePath.startsWith("/api/internal/orca/") || routePath === "/api/integrations/chatwoot/webhook" || routePath === "/api/integrations/chatwoot/context" || routePath === "/api/billing/webhook/stripe" || routePath === "/api/public/quoteRequests" || routePath.startsWith("/api/public/quoteRequests/") || routePath === "/api/public/cases" || routePath.startsWith("/api/public/cases/") || routePath === "/api/public/pricing-estimate" || routePath === "/api/public/model-preview" || routePath.startsWith("/api/auth/") || routePath.startsWith("/api/customer-auth/") || routePath.startsWith("/api/customer/") || routePath === "/api/events/stream" || routePath === "/api/events/ws" || serveStatic && !routePath.startsWith("/api/");
+    const publicRoute = routePath === "/api/health" || routePath === "/api/readiness" || routePath === "/api/metrics" && hasValidMetricsToken(request) || routePath === "/api/internal/worker-broadcast" && hasValidWorkerToken(request) || routePath.startsWith("/api/internal/orca/") || routePath === "/api/integrations/chatwoot/webhook" || routePath === "/api/integrations/chatwoot/context" || routePath === "/api/billing/webhook/stripe" || routePath === "/api/public/quoteRequests" || routePath.startsWith("/api/public/quoteRequests/") || routePath === "/api/public/slicing-quotes" || routePath.startsWith("/api/public/slicing-quotes/") || routePath === "/api/public/cases" || routePath.startsWith("/api/public/cases/") || routePath === "/api/public/pricing-estimate" || routePath === "/api/public/model-preview" || routePath.startsWith("/api/auth/") || routePath.startsWith("/api/customer-auth/") || routePath.startsWith("/api/customer/") || routePath === "/api/events/stream" || routePath === "/api/events/ws" || serveStatic && !routePath.startsWith("/api/");
     if (publicRoute) return;
     if (await replayCommittedRestoreRequest(database, request, reply)) return;
     const { session, user, apiKey } = userFromRequest(database, request);

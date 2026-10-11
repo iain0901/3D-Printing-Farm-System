@@ -286,6 +286,7 @@
 
           <section v-show="step === 4" class="step-content review">
             <h2>確認案件內容</h2>
+            <el-alert v-if="sliceError" type="error" :closable="false" :title="sliceError" />
             <div class="review-grid">
               <div>
                 <dl>
@@ -306,9 +307,23 @@
                 </dl>
               </div>
               <aside class="estimate-card" v-loading="estimating">
-                <p>系統自動估價（初估）</p>
-                <strong>NT$ {{ estimate ? estimate.total.toLocaleString() : '—' }}</strong>
-                <small>系統以參考件用量試算，尚非上傳模型的實際切片價格。最終金額需確認模型、OrcaSlicer 切片與製程。</small>
+                <p>{{ form.hasModel && form.mode === 'estimate' ? 'OrcaSlicer 實際切片計價' : '建模／專員協助初估' }}</p>
+                <strong>NT$ {{ estimate ? Number(estimate.total).toLocaleString() : '—' }}</strong>
+                <template v-if="sliceStatus === 'completed' && sliceQuote">
+                  <dl class="slicing-metrics">
+                    <dt>模型克重</dt><dd>{{ grams(sliceQuote.modelGrams) }} g</dd>
+                    <dt>支撐克重</dt><dd>{{ grams(sliceQuote.supportGrams) }} g</dd>
+                    <dt v-if="sliceQuote.otherGrams > 0">底邊／清料等其他耗材</dt><dd v-if="sliceQuote.otherGrams > 0">{{ grams(sliceQuote.otherGrams) }} g</dd>
+                    <dt>耗材總重</dt><dd>{{ grams(sliceQuote.totalGrams) }} g</dd>
+                    <dt>切片列印時間</dt><dd>{{ printDuration(sliceQuote.estimatedMinutes) }}</dd>
+                  </dl>
+                  <small>以上重量與時間取自實際 G-code，價格依目前系統費率計算；不是用體積或參考件猜測。列印時間為切片器預測，並非實體機台已完成列印。</small>
+                  <small>{{ sliceQuote.profileName }} · {{ sliceQuote.engine || 'OrcaSlicer' }}。參考機台設定；正式機台、耗材及多色換料條件仍需製程確認。</small>
+                  <small>自動方向（減少支撐）／自動支撐／自動擺盤；實際啟用項目依此次切片設定。</small>
+                </template>
+                <small v-else-if="form.hasModel && form.mode === 'estimate'">{{ estimating ? '模型已送到真實切片器，等待自動方向、支撐與擺盤；完成後才顯示價格。' : '尚無成功切片結果，不顯示猜測的重量或價格。' }}</small>
+                <small v-else>尚無可切片模型時僅提供建模／人工服務初估，由專員確認。</small>
+                <el-button v-if="sliceError" size="small" @click="loadEstimate">重新切片</el-button>
                 <ul v-if="estimate && estimate.lines && estimate.lines.length" class="estimate-lines">
                   <li v-for="line in estimate.lines" :key="line.key">
                     <span>{{ line.label }}</span>
@@ -330,14 +345,14 @@
               type="info"
               :closable="false"
               show-icon
-              title="客戶端只顯示最終總價；材料、工時、風險、折扣與稅額等明細由內部人員管理。"
+              title="重量與時間為本次切片資料；送出案件不會自動啟動印表機，正式製程仍需審核。"
             />
           </section>
 
           <div class="wizard-actions">
             <el-button v-if="step" @click="step -= 1">上一步</el-button>
             <el-button v-if="step < 4" type="primary" @click="next">下一步</el-button>
-            <el-button v-else type="primary" :loading="submitting" @click="submit">建立案件</el-button>
+            <el-button v-else type="primary" :loading="submitting" :disabled="form.hasModel && form.mode === 'estimate' && sliceStatus !== 'completed'" @click="submit">建立案件</el-button>
           </div>
         </el-card>
 
@@ -356,7 +371,9 @@
 </template>
 
 <script>
-  import { createPublicCase, estimateCase } from '@/api/cases'
+  import { markRaw } from 'vue'
+  import { createPublicCase, estimateCase, createSlicingQuote, fetchSlicingQuote } from '@/api/cases'
+  import ObjectCollage from '@/components/public/ObjectCollage.vue'
   import { fetchCustomerMe, loginCustomer, registerCustomer } from '@/api/customerAuth'
   import PublicShell from '@/components/public/PublicShell.vue'
   import ModelViewer from '@/components/ModelViewer'
@@ -410,7 +427,14 @@
         previewIndex: 0,
         previewError: '',
         estimate: null,
+        sliceQuote: null,
+        sliceStatus: '',
+        sliceError: '',
+        sliceRun: 0,
+        quoteDisposed: false,
         estimating: false,
+        sliceJobId: '',
+        sliceAccessToken: '',
         submitting: false,
         createdCase: null,
         accessToken: '',
@@ -455,6 +479,20 @@
       previewIndex() {
         this.previewError = ''
       },
+      step(value) {
+        if (value !== 4) {
+          this.sliceRun += 1
+          clearTimeout(this.slicePollTimer)
+          this.slicePollResolve?.()
+          this.estimating = false
+        }
+      },
+    },
+    beforeUnmount() {
+      this.quoteDisposed = true
+      this.sliceRun += 1
+      clearTimeout(this.slicePollTimer)
+      this.slicePollResolve?.()
     },
     async created() {
       if (this.$store.getters['customerAuth/accessToken'] && !this.customer) {
@@ -515,6 +553,21 @@
         this.form.customer = { name: '', email: '', phone: '', company: '' }
         this.authForm.password = ''
       },
+      grams(value) { return value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value)) ? Number(value).toFixed(2) : '—' },
+      printDuration(value) {
+        const mins = Number(value)
+        if (!Number.isFinite(mins)) return '—'
+        const seconds = Math.round(mins * 60)
+        return `${Math.floor(seconds / 3600)} 小時 ${Math.floor((seconds % 3600) / 60)} 分 ${seconds % 60} 秒`
+      },
+      keepUploadFilesRaw(files, validator) {
+        return files.filter((item) => validator(item.raw || item)).map((item) => {
+          // File/Blob methods depend on native internal slots and large buffers must
+          // never be traversed or proxied by Vue's deep reactivity.
+          if (item.raw) markRaw(item.raw)
+          return markRaw(item)
+        })
+      },
       materialLabel(value) {
         return { Resin: '樹脂', Nylon: '尼龍' }[value] || value
       },
@@ -534,7 +587,7 @@
       },
       onFileChange(file, files) {
         if (!this.validateModelFile(file.raw || file)) return
-        this.fileList = files.filter((item) => this.validateModelFile(item.raw || item))
+        this.fileList = this.keepUploadFilesRaw(files, this.validateModelFile)
         this.parts = this.fileList.map(
           (item, index) =>
             this.parts[index] || {
@@ -553,15 +606,15 @@
         this.previewError = 'preview-failed'
       },
       onFileRemove(file, files) {
-        this.fileList = files
+        this.fileList = this.keepUploadFilesRaw(files, this.validateModelFile)
         this.parts = this.parts.filter((part) => part.localId !== file.uid)
       },
       onAttachmentChange(file, files) {
         if (!this.validateAttachmentFile(file.raw || file)) return
-        this.attachmentList = files.filter((item) => this.validateAttachmentFile(item.raw || item))
+        this.attachmentList = this.keepUploadFilesRaw(files, this.validateAttachmentFile)
       },
       onAttachmentRemove(_, files) {
-        this.attachmentList = files
+        this.attachmentList = this.keepUploadFilesRaw(files, this.validateAttachmentFile)
       },
       validateStep() {
         if (this.step === 1 && this.form.hasModel && !this.fileList.length) return '請至少上傳一個模型檔案。'
@@ -576,23 +629,77 @@
         if (this.step === 4) await this.loadEstimate()
       },
       async loadEstimate() {
+        const run = ++this.sliceRun
         this.estimating = true
         try {
+          this.sliceError = ''
+          this.estimate = null
+          this.sliceQuote = null
           const colorCount = new Set(this.parts.map((part) => (part.colorHex || part.color || '').toLowerCase()).filter(Boolean)).size || 1
-          this.estimate = await estimateCase({
-            material: this.form.defaults.material,
-            quantity: this.form.defaults.quantity,
-            quality: this.form.defaults.quality,
-            infill: this.form.defaults.infill,
-            walls: this.form.defaults.walls,
-            support: this.form.defaults.support === 'Required',
-            postProcessing: this.form.defaults.postProcessing,
-            hasModel: this.form.hasModel,
-            rush: this.rushRequested,
-            colors: colorCount,
-          })
+          if (this.form.hasModel && this.form.mode === 'estimate') {
+            const files = this.fileList.map((item) => item.raw || item)
+            if (files.some((file) => !/\.(stl|3mf)$/i.test(file.name))) throw new Error('自動切片目前接受 STL／3MF；STEP／STP 請先轉檔，或改由專員處理。')
+            const materials = new Set(this.parts.map((part) => part.material || this.form.defaults.material))
+            if (materials.size > 1) throw new Error('不同材料請分開切片估價，或交由專員確認；不會把其他材料默默套用 PLA 費率。')
+            this.sliceStatus = 'queued'
+            let response = await createSlicingQuote({
+              material: this.parts[0]?.material || this.form.defaults.material,
+              quantity: this.form.defaults.quantity,
+              quality: this.form.defaults.quality === 'Fine' ? 'appearance' : 'standard',
+              layerHeight: Number(this.form.defaults.layerHeight) || ({ Draft: 0.28, Standard: 0.2, Fine: 0.12 }[this.form.defaults.quality] || 0.2),
+              infill: this.form.defaults.infill,
+              walls: this.form.defaults.walls,
+              autoSupports: this.form.defaults.support !== 'None',
+              support: this.form.defaults.support,
+              postProcessing: this.form.defaults.postProcessing,
+              colors: colorCount,
+              rush: this.rushRequested,
+              parts: this.parts.map((part) => ({ name: part.name, material: part.material, quantity: part.quantity })),
+              autoOrient: true, autoArrange: true,
+            }, files)
+            if (run !== this.sliceRun || this.quoteDisposed) return
+            let job = response.slicingQuote || response.job || response
+            const token = response.accessToken || response.token || job.accessToken || job.token
+            const id = job.id || response.id
+            if (!id || !token) throw new Error('切片任務未回傳有效識別碼，請稍後重試。')
+            this.sliceJobId = id
+            this.sliceAccessToken = token
+            let pollFailures = 0
+            const deadline = Date.now() + 20 * 60 * 1000
+            while (!['completed', 'failed'].includes(job.status)) {
+              if (run !== this.sliceRun || this.quoteDisposed) return
+              if (Date.now() > deadline) throw new Error('切片等待逾時，請稍後重試或交由專員確認。')
+              this.sliceStatus = job.status || 'queued'
+              await new Promise((resolve) => { this.slicePollResolve = resolve; this.slicePollTimer = setTimeout(resolve, 1500) })
+              if (run !== this.sliceRun || this.quoteDisposed) return
+              try {
+                response = await fetchSlicingQuote(id, token)
+                pollFailures = 0
+                job = response.slicingQuote || response.job || response
+              } catch (error) {
+                if (++pollFailures > 3 || error.response?.status === 404) throw error
+              }
+            }
+            if (run !== this.sliceRun || this.quoteDisposed) return
+            if (job.status === 'failed') throw new Error(job.error || '真實切片失敗；目前不提供猜測的價格。')
+            const measured = job.result?.metrics || job.result || job.metrics || job
+            const quote = job.quote || job.result?.quote || job.pricing || response.quote
+            if (measured.modelGrams == null || measured.supportGrams == null || measured.estimatedMinutes == null || !Number.isFinite(Number(measured.modelGrams)) || !Number.isFinite(Number(measured.supportGrams)) || !Number.isFinite(Number(measured.estimatedMinutes)) || !quote || !Number.isFinite(Number(quote.total))) throw new Error('切片結果缺少實際重量、時間或價格，不顯示參考件估值。')
+            this.sliceQuote = { ...measured, profileName: measured.profileName || job.profileName, engine: measured.engine || job.engine }
+            this.estimate = quote
+            this.sliceStatus = 'completed'
+          } else if (!this.form.hasModel) {
+            this.sliceStatus = ''
+            this.estimate = await estimateCase({ material: this.form.defaults.material, quantity: this.form.defaults.quantity, quality: this.form.defaults.quality, hasModel: false, rush: this.rushRequested, colors: colorCount })
+          } else {
+            this.sliceStatus = ''
+          }
+        } catch (error) {
+          if (run !== this.sliceRun || this.quoteDisposed) return
+          this.sliceStatus = 'failed'
+          this.sliceError = error.response?.data?.error || error.message || '切片服務暫時無法使用。'
         } finally {
-          this.estimating = false
+          if (run === this.sliceRun && !this.quoteDisposed) this.estimating = false
         }
       },
       async submit() {
@@ -604,6 +711,8 @@
           const payload = {
             ...this.form,
             project: this.generatedProjectPreview,
+            slicingQuoteId: this.sliceStatus === 'completed' ? this.sliceJobId : '',
+            slicingQuoteToken: this.sliceStatus === 'completed' ? this.sliceAccessToken : '',
             notes: [
               this.form.notes,
               this.rushRequested ? '急件需求：以系統現行 48 小時級距初估費用，不代表已承諾交期；實際收件時間與排程須另行確認。' : '',
