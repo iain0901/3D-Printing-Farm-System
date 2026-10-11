@@ -1,14 +1,14 @@
 {
-  "name": "3DRFM 三點成型",
-  "short_name": "3DRFM 三點成型",
-  "description": "3DRFM 三點成型客戶入口與生產管理",
+  "name": "3DRFM 3D 列印製造服務",
+  "short_name": "3DRFM",
+  "description": "3DRFM 自動估價與會員案件管理",
   "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#f8fafc",
-  "theme_color": "#2563eb",
+  "theme_color": "#17343d",
   "categories": ["productivity", "business", "utilities"],
   "icons": [
     {
@@ -20,17 +20,17 @@
   ],
   "shortcuts": [
     {
-      "name": "Dashboard",
-      "short_name": "Dashboard",
-      "description": "Open the production cockpit.",
-      "url": "/",
+      "name": "會員中心",
+      "short_name": "會員中心",
+      "description": "登入查看個人案件與製作進度。",
+      "url": "/#/portal/dashboard",
       "icons": [{ "src": "/layerpilot-icon.svg", "sizes": "any", "type": "image/svg+xml" }]
     },
     {
-      "name": "Print Queue",
-      "short_name": "Queue",
-      "description": "Review queued and active production jobs.",
-      "url": "/?view=queue",
+      "name": "自動估價",
+      "short_name": "自動估價",
+      "description": "上傳模型並整理製作需求。",
+      "url": "/#/quote",
       "icons": [{ "src": "/layerpilot-icon.svg", "sizes": "any", "type": "image/svg+xml" }]
     }
   ]

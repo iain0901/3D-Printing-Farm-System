@@ -102,6 +102,7 @@ async function run() {
     }
     await page.goto(base + "/#/portal/login");
     await page.getByRole("button", { name: "選單" }).click();
+    await page.getByRole("button", { name: "技術資源" }).click();
     await page
       .locator(".public-nav")
       .getByRole("link", { name: "材料指南" })

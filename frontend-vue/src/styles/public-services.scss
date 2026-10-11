@@ -1,7 +1,8 @@
 .services-page {
   .service-hero {
-    background: var(--service-color);
-    padding: 22px 0 45px;
+    background: #edf2ee;
+    padding: 26px 0 58px;
+    border-top: 1px solid #dce5df;
   }
   .service-breadcrumb {
     display: flex;
@@ -54,10 +55,8 @@
   }
   .service-hero-art {
     position: relative;
-    background: #fffdf348;
-    border: 1px solid #173c4325;
-    border-radius: 46% 46% 5px 5px;
-    padding: 16px 0 32px;
+    background: var(--service-color);
+    padding: 10px 12px 20px;
   }
   .service-hero-art .studio-image {
     aspect-ratio: 3 / 2;
@@ -104,7 +103,7 @@
     border-bottom: 1px solid #a4bbb0;
   }
   .audience-priorities li > span {
-    font: italic 30px Georgia, serif;
+    font: 26px Arial, sans-serif;
     color: #247f93;
   }
   .service-options {
@@ -136,11 +135,19 @@
   }
   .use-case-card {
     min-width: 0;
+    padding: 26px;
+    background: #fff;
+    border: 1px solid #d1ddd8;
+    border-top: 3px solid #326879;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .use-case-card:hover {
+    border-color: #167c91;
+    background: #f0f5f1;
   }
   .use-case-art {
-    background: var(--card-color);
-    border-radius: 6px;
-    padding: 15px 20px 0;
+    color: #377889;
+    letter-spacing: 0.08em;
   }
   .use-case-art > span {
     font-size: 11px;
@@ -222,7 +229,6 @@
     font-size: 13px;
     padding: 10px 18px;
     background: #e3ed97;
-    transform: rotate(-4deg);
   }
   .service-priority-grid {
     display: grid;
@@ -235,7 +241,7 @@
     padding-top: 20px;
   }
   .service-index {
-    font: italic 34px Georgia, serif;
+    font: 30px Arial, sans-serif;
     color: #247f93;
   }
   .service-priority-grid p {
@@ -278,7 +284,7 @@
     padding: 32px;
     border: 1px solid #9cad9d;
     background: #fffdf3;
-    border-radius: 4px 40px 4px 4px;
+    border-radius: 3px;
   }
   .service-boundary h3 {
     font-size: 23px;

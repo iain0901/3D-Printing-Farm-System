@@ -1,5 +1,5 @@
 <template>
-  <auth-shell title="歡迎回來。" eyebrow="三點成型・工作人員專區" description="登入管理系統，接續今天的製作進度。">
+  <auth-shell title="歡迎回來。" eyebrow="3DRFM・工作人員專區" description="登入管理系統，接續今天的製作進度。">
     <el-form ref="form" label-position="top" :model="form" :rules="rules" size="large" @submit.prevent="handleLogin">
       <el-form-item label="電子郵件" prop="email">
         <el-input v-model.trim="form.email" type="email" autocomplete="username" placeholder="請輸入電子郵件" />

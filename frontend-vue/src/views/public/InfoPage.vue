@@ -1,6 +1,6 @@
 <template>
   <public-shell>
-    <article v-if="page" class="info-page" :style="{ '--page-tone': page.tone }">
+    <article v-if="page" class="info-page" :class="{ 'info-page--text': !hasArtwork }" :style="{ '--page-tone': page.tone }">
       <header class="info-hero">
         <div class="studio-wrap">
           <nav class="info-breadcrumb" aria-label="麵包屑">
@@ -20,14 +20,13 @@
                 <span aria-hidden="true">↗</span>
               </router-link>
             </div>
-            <div class="info-hero-art">
-              <object-collage :kind="page.art" />
-              <span>三點成型／FDM 製作筆記</span>
+            <div v-if="hasArtwork" class="info-hero-art">
+              <object-collage />
             </div>
           </div>
         </div>
       </header>
-      <main class="studio-wrap info-content">
+      <div class="studio-wrap info-content">
         <section
           v-for="block in page.blocks"
           :key="block.heading"
@@ -43,12 +42,12 @@
           <template v-if="block.type === 'cards' || block.type === 'actions'">
             <div class="info-card-grid">
               <component
-                :is="isExternal(card[2]) ? 'a' : 'router-link'"
+                :is="!card[2] ? 'article' : isExternal(card[2]) ? 'a' : 'router-link'"
                 v-for="card in block.cards"
                 :key="card[0]"
                 class="info-card"
                 :href="isExternal(card[2]) ? card[2] : undefined"
-                :to="!isExternal(card[2]) ? card[2] : undefined"
+                :to="card[2] && !isExternal(card[2]) ? card[2] : undefined"
               >
                 <h3>
                   {{ card[0] }}
@@ -59,7 +58,7 @@
             </div>
           </template>
           <template v-else-if="block.type === 'comparison'">
-            <div class="info-comparison-wrap" tabindex="0">
+            <div class="info-comparison-wrap" tabindex="0" role="region" :aria-label="block.heading">
               <table class="info-comparison">
                 <thead>
                   <tr>
@@ -110,7 +109,7 @@
             </div>
           </template>
         </section>
-      </main>
+      </div>
       <section class="info-end">
         <div class="studio-wrap">
           <div>
@@ -134,6 +133,7 @@
 <script>
   import PublicShell from '@/components/public/PublicShell.vue'
   import ObjectCollage from '@/components/public/ObjectCollage.vue'
+  import { routeArtwork } from '@/content/publicArtwork.mjs'
   import { getPublicPage } from '@/content/publicPages.mjs'
   import '@/styles/public-info.scss'
 
@@ -142,6 +142,9 @@
     components: { PublicShell, ObjectCollage },
     props: { pageId: { type: String, required: true } },
     computed: {
+      hasArtwork() {
+        return Boolean(routeArtwork[this.$route.path])
+      },
       page() {
         return getPublicPage(this.pageId)
       },

@@ -10,16 +10,15 @@
       </div>
       <section class="quote-intro">
         <div>
-          <p class="studio-kicker">把好點子，交給我們</p>
-          <h1>這次，想做點什麼？</h1>
+          <p class="studio-kicker">3DRFM・線上製作需求</p>
+          <h1>開始你的製作計畫</h1>
           <p>
             從一個模型或一段描述開始。
             <br />
             先整理需求，再一起確認製作方式與報價。
           </p>
-          <span class="quote-intro-note">不需登入・支援單件與小量製作</span>
+          <span class="quote-intro-note">先整理需求・第三步登入或註冊帶入資料</span>
         </div>
-        <object-collage kind="sketch" />
       </section>
       <section class="quote-shell">
         <el-steps :active="step" finish-status="success" align-center>
@@ -359,7 +358,6 @@
 <script>
   import { createPublicCase, estimateCase } from '@/api/cases'
   import { fetchCustomerMe, loginCustomer, registerCustomer } from '@/api/customerAuth'
-  import ObjectCollage from '@/components/public/ObjectCollage.vue'
   import PublicShell from '@/components/public/PublicShell.vue'
   import ModelViewer from '@/components/ModelViewer'
   import { fdmMaterials, getService, inquiryNotes } from '@/content/fdmServices.mjs'
@@ -392,7 +390,7 @@
 
   export default {
     name: 'QuoteWizard',
-    components: { ModelViewer, ObjectCollage, PublicShell },
+    components: { ModelViewer, PublicShell },
     data() {
       return {
         step: getService(this.$route.query.service) ? 1 : 0,

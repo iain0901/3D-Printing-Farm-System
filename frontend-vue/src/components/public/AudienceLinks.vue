@@ -2,8 +2,8 @@
   <section class="audience-links studio-wrap" aria-labelledby="audience-links-title">
     <div class="audience-links-heading">
       <div>
-        <p class="studio-kicker">同樣是 FDM，每個需求都有自己的起點</p>
-        <h2 id="audience-links-title">找到你的製作入口。</h2>
+        <p class="studio-kicker">應用領域</p>
+        <h2 id="audience-links-title">你的產業，我們的製作起點。</h2>
       </div>
       <router-link to="/services">看全部用途 ↗</router-link>
     </div>
@@ -17,7 +17,6 @@
       >
         <div class="audience-link-art">
           <span>{{ audience.number }} ／ {{ audience.shortTitle }}</span>
-          <studio-image :kind="audience.art" />
         </div>
         <h3>
           {{ audience.title }}
@@ -31,10 +30,8 @@
 </template>
 <script>
   import { audiences, servicesForAudience } from '@/content/fdmServices.mjs'
-  import StudioImage from './StudioImage.vue'
   export default {
     name: 'AudienceLinks',
-    components: { StudioImage },
     data: () => ({ audiences }),
     methods: {
       topics(id) {
@@ -73,12 +70,16 @@
   }
   .audience-link {
     min-width: 0;
+    border-top: 2px solid #17343d;
+    padding: 22px 24px;
+    background: #f0f3ee;
+    transition: background 0.2s;
+  }
+  .audience-link:hover {
+    background: #e5eee9;
   }
   .audience-link-art {
-    background: var(--audience-color);
-    border-radius: 6px;
-    overflow: hidden;
-    padding: 15px 20px 0;
+    color: #367886;
   }
   .audience-link-art > span {
     font-size: 11px;

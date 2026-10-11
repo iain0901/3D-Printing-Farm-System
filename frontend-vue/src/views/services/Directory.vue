@@ -24,8 +24,7 @@
               <p class="service-hero-note">{{ audience ? audience.note : '單件原型到小批量，都從確認需求開始。' }}</p>
             </div>
             <div class="service-hero-art">
-              <object-collage :kind="audience ? audience.art : 'batch'" />
-              <span>FDM 製作筆記 ／ {{ audience ? audience.number : '00' }}</span>
+              <object-collage />
             </div>
           </div>
         </div>
@@ -69,7 +68,6 @@
             >
               <div class="use-case-art">
                 <span>{{ service.tag }}</span>
-                <studio-image :kind="service.art" />
               </div>
               <h3>
                 {{ service.title }}
@@ -114,12 +112,11 @@
 <script>
   import PublicShell from '@/components/public/PublicShell.vue'
   import ObjectCollage from '@/components/public/ObjectCollage.vue'
-  import StudioImage from '@/components/public/StudioImage.vue'
   import { audiences, getAudience, servicesForAudience } from '@/content/fdmServices.mjs'
   import '@/styles/public-services.scss'
   export default {
     name: 'ServiceDirectory',
-    components: { PublicShell, ObjectCollage, StudioImage },
+    components: { PublicShell, ObjectCollage },
     props: { audienceId: { type: String, default: '' } },
     data: () => ({ audiences }),
     computed: {
@@ -130,12 +127,12 @@
         return this.audience ? [this.audience] : audiences
       },
       headline() {
-        return this.audience ? this.audience.headline : ['不同的好點子，', '各有成型的方式。']
+        return this.audience ? this.audience.headline : ['FDM 製作服務，', '從需求到實體。']
       },
       description() {
         return this.audience
           ? this.audience.description
-          : '你是準備發表的學生、驗證設計的工程師，還是想做一件小物的創作者？找到你的情境，看看我們可以怎麼一起製作。'
+          : '提供學校研究、企業開發與個人創作所需的 FDM 代印服務。依用途確認材料、模型與製作條件，從單件原型到小批量交付。'
       },
     },
     methods: {

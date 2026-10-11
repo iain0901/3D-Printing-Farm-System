@@ -23,6 +23,8 @@
     printer: 'fdm-workshop',
     spool: 'fdm-workshop',
     parts: 'fdm-tray',
+    stand: 'fdm-industrial',
+    vase: 'fdm-personal',
   }
 
   const altByImage = {

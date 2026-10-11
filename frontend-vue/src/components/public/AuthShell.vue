@@ -2,20 +2,33 @@
   <public-shell>
     <section class="auth-workspace studio-wrap">
       <aside class="auth-poster">
-        <p class="studio-kicker">每個作品，都從一個想法開始</p>
+        <p class="studio-kicker">3DRFM・{{ isStaff ? '內部作業平台' : '客戶服務平台' }}</p>
         <h2>
-          下一個好點子，
+          {{ isStaff ? '製作協作，' : '你的製作計畫，' }}
           <br />
-          一起把它做出來。
+          {{ isStaff ? '從這裡接續。' : '在這裡接續。' }}
         </h2>
-        <object-collage kind="parts" />
+        <ol class="auth-capabilities">
+          <li>
+            <span>01</span>
+            {{ isStaff ? '依授權角色進入工作區' : '集中查看自己的製作案件' }}
+          </li>
+          <li>
+            <span>02</span>
+            {{ isStaff ? '接續案件與生產作業' : '帶入聯絡資料，接續估價流程' }}
+          </li>
+          <li>
+            <span>03</span>
+            {{ isStaff ? '保護客戶資料與模型檔案' : '查看報價與案件進度' }}
+          </li>
+        </ol>
         <div class="auth-poster-note">
-          <span>從草圖，到日常。</span>
-          <span>一層一層，慢慢成型 ↗</span>
+          <span>3DRFM</span>
+          <span>{{ isStaff ? '限授權工作人員使用' : '從需求確認到製作交付' }}</span>
         </div>
       </aside>
       <div class="auth-form-panel">
-        <router-link to="/" class="auth-back">← 回到工作室</router-link>
+        <router-link to="/" class="auth-back">← 回到 3DRFM 官網</router-link>
         <p class="studio-kicker">{{ eyebrow }}</p>
         <h1>{{ title }}</h1>
         <p class="auth-description">{{ description }}</p>
@@ -27,11 +40,15 @@
 
 <script>
   import PublicShell from './PublicShell.vue'
-  import ObjectCollage from './ObjectCollage.vue'
   export default {
     name: 'AuthShell',
-    components: { PublicShell, ObjectCollage },
-    props: { title: String, description: String, eyebrow: { type: String, default: '三點成型・會員中心' } },
+    components: { PublicShell },
+    computed: {
+      isStaff() {
+        return this.$route.path === '/login'
+      },
+    },
+    props: { title: String, description: String, eyebrow: { type: String, default: '3DRFM・會員中心' } },
   }
 </script>
 
@@ -44,7 +61,8 @@
     align-items: stretch;
   }
   .auth-poster {
-    background: #c5ddd4;
+    background: #17343d;
+    color: #e6f0eb;
     padding: 38px 38px 26px;
     border-radius: 8px 0 0 8px;
     display: flex;
@@ -53,21 +71,34 @@
     overflow: hidden;
   }
   .auth-poster h2 {
+    color: white;
     font-size: clamp(26px, 3vw, 39px);
     line-height: 1.5;
     letter-spacing: -0.035em;
     margin: 16px 0 0;
   }
-  .auth-poster .object-collage {
-    width: 100%;
-    min-height: 270px;
-    margin: -5px auto 0;
+  .auth-capabilities {
+    list-style: none;
+    padding: 24px 0;
+    margin: 20px 0;
+  }
+  .auth-capabilities li {
+    padding-block: 22px;
+    border-bottom: 1px solid #49626a;
+    font-size: 14px;
+    display: flex;
+    gap: 18px;
+  }
+  .auth-capabilities li > span {
+    color: #dff08f;
+    font-size: 11px;
+    padding-top: 3px;
   }
   .auth-poster-note {
     display: flex;
     justify-content: space-between;
     font-size: 11px;
-    border-top: 1px solid #79978b;
+    border-top: 1px solid #49626a;
     padding-top: 18px;
     gap: 10px;
   }
@@ -152,12 +183,8 @@
       position: relative;
       z-index: 1;
     }
-    .auth-poster .object-collage {
-      position: absolute;
-      width: 230px;
-      right: -36px;
-      bottom: -15px;
-      opacity: 0.7;
+    .auth-capabilities {
+      display: none;
     }
     .auth-poster-note {
       display: none;
