@@ -8,7 +8,33 @@
 import { createRouter, createWebHashHistory, createWebHistory } from 'vue-router'
 import Layout from '@/layouts'
 import { publicPath, routerMode } from '@/config'
+import { audiences, services } from '@/content/fdmServices.mjs'
 export const constantRoutes = [
+  {
+    path: '/services',
+    name: 'Services',
+    component: () => import('@/views/services/Directory.vue'),
+    meta: { title: 'FDM 服務總覽', publicService: true },
+    hidden: true,
+  },
+  ...audiences.map((audience) => ({
+    path: `/for/${audience.id}`,
+    name: `Audience-${audience.id}`,
+    component: () => import('@/views/services/Directory.vue'),
+    props: { audienceId: audience.id },
+    meta: { title: `${audience.title}｜FDM 列印`, publicService: true },
+    hidden: true,
+  })),
+  ...services.map((service) => ({
+    path: `/services/${service.id}`,
+    name: `Service-${service.id}`,
+    component: () => import('@/views/services/Detail.vue'),
+    props: { serviceId: service.id },
+    meta: { title: `${service.title}｜FDM 列印`, publicService: true },
+    hidden: true,
+  })),
+  { path: '/services/:pathMatch(.*)*', redirect: '/404', hidden: true },
+  { path: '/for/:pathMatch(.*)*', redirect: '/404', hidden: true },
   {
     // 品牌落地頁：公開行銷首頁（服務、流程、方案、FAQ），CTA 導向 /quote 估價。
     path: '/',
@@ -100,7 +126,7 @@ export const asyncRoutes = [
         name: 'Dashboard',
         component: () => import('@/views/dashboard/index'),
         meta: {
-          title: '生产总览',
+          title: '生產總覽',
           icon: 'chart-line',
           affix: true,
         },
@@ -117,7 +143,7 @@ export const asyncRoutes = [
         name: 'Printers',
         component: () => import('@/views/printers/index'),
         meta: {
-          title: '打印机',
+          title: '印表機',
           icon: 'print',
         },
       },
@@ -133,7 +159,7 @@ export const asyncRoutes = [
         name: 'Files',
         component: () => import('@/views/files/index'),
         meta: {
-          title: '档案库',
+          title: '檔案庫',
           icon: 'folder-open',
         },
       },
@@ -149,7 +175,7 @@ export const asyncRoutes = [
         name: 'Queue',
         component: () => import('@/views/queue/index'),
         meta: {
-          title: '打印队列',
+          title: '列印佇列',
           icon: 'list-check',
         },
       },
@@ -181,7 +207,7 @@ export const asyncRoutes = [
         name: 'Todos',
         component: () => import('@/views/todos/index'),
         meta: {
-          title: '自动待办',
+          title: '自動待辦',
           icon: 'tasks',
         },
       },
@@ -197,7 +223,7 @@ export const asyncRoutes = [
         name: 'Slicer',
         component: () => import('@/views/slicer/index'),
         meta: {
-          title: '云端切片',
+          title: '雲端切片',
           icon: 'cube',
         },
       },
@@ -213,7 +239,7 @@ export const asyncRoutes = [
         name: 'Orders',
         component: () => import('@/views/orders/index'),
         meta: {
-          title: '订单',
+          title: '訂單',
           icon: 'receipt',
         },
       },
@@ -229,7 +255,7 @@ export const asyncRoutes = [
         name: 'Products',
         component: () => import('@/views/products/index'),
         meta: {
-          title: '产品',
+          title: '產品',
           icon: 'box-open',
         },
       },
@@ -245,7 +271,7 @@ export const asyncRoutes = [
         name: 'Customers',
         component: () => import('@/views/customers/index'),
         meta: {
-          title: '客户',
+          title: '客戶',
           icon: 'users',
         },
       },
@@ -261,7 +287,7 @@ export const asyncRoutes = [
         name: 'Filament',
         component: () => import('@/views/filament/index'),
         meta: {
-          title: '线材库存',
+          title: '線材庫存',
           icon: 'layer-group',
         },
       },
@@ -277,7 +303,7 @@ export const asyncRoutes = [
         name: 'Profiles',
         component: () => import('@/views/profiles/index'),
         meta: {
-          title: '设定档',
+          title: '設定檔',
           icon: 'sliders-h',
         },
       },
@@ -309,7 +335,7 @@ export const asyncRoutes = [
         name: 'History',
         component: () => import('@/views/history/index'),
         meta: {
-          title: '历史记录',
+          title: '歷史紀錄',
           icon: 'history',
         },
       },
@@ -325,7 +351,7 @@ export const asyncRoutes = [
         name: 'Maintenance',
         component: () => import('@/views/maintenance/index'),
         meta: {
-          title: '维护',
+          title: '維護',
           icon: 'wrench',
         },
       },
@@ -341,7 +367,7 @@ export const asyncRoutes = [
         name: 'Team',
         component: () => import('@/views/team/index'),
         meta: {
-          title: '团队',
+          title: '團隊',
           icon: 'user-friends',
           permissions: ['users:write'],
         },
@@ -423,7 +449,7 @@ export const asyncRoutes = [
         name: 'Settings',
         component: () => import('@/views/settings/index'),
         meta: {
-          title: '设置',
+          title: '設定',
           icon: 'cog',
         },
       },
@@ -439,10 +465,11 @@ export const asyncRoutes = [
 const router = createRouter({
   history:
     routerMode === 'history' ? createWebHistory(publicPath) : createWebHashHistory(publicPath),
-  scrollBehavior: () => ({
-    top: 0,
-    left: 0,
-  }),
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) return savedPosition
+    if (to.hash) return { el: to.hash, top: 24 }
+    return { top: 0, left: 0 }
+  },
   routes: constantRoutes,
 })
 

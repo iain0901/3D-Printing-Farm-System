@@ -52,9 +52,9 @@ const actions = {
     const data = await login(credentials)
     commit('setAccessToken', data.token)
     const hour = new Date().getHours()
-    const greeting = hour < 8 ? '早上好' : hour <= 11 ? '上午好' : hour <= 13 ? '中午好' : hour < 18 ? '下午好' : '晚上好'
+    const greeting = hour < 8 ? '早安' : hour <= 11 ? '上午好' : hour <= 13 ? '午安' : hour < 18 ? '下午好' : '晚安'
     ElNotification({
-      title: `欢迎登录${title}`,
+      title: `歡迎登入 ${title}`,
       message: `${greeting}，${data.user?.name || data.user?.email}！`,
       position: 'top-right',
       type: 'success',

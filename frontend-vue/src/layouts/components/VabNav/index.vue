@@ -12,7 +12,7 @@
           <vab-error-log />
           <vab-full-screen @refresh="refreshRoute" />
           <vab-theme class="hidden-xs-only" />
-          <vab-icon :icon="['fas', 'sync-alt']" :pulse="pulse" title="重载所有路由" @click="refreshRoute" />
+          <vab-icon :icon="['fas', 'sync-alt']" :pulse="pulse" title="重新載入所有路由" @click="refreshRoute" />
           <vab-avatar />
           <!--  <vab-icon
             title="退出系统"

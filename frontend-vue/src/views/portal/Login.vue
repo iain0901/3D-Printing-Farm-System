@@ -1,30 +1,40 @@
 <template>
-  <div class="portal-auth-card">
-    <h2>客戶登入</h2>
-    <el-form label-width="70px" size="small">
-      <el-form-item label="Email"><el-input v-model="form.email" /></el-form-item>
-      <el-form-item label="密碼"><el-input v-model="form.password" type="password" show-password @keyup.enter="submit" /></el-form-item>
-      <el-button type="primary" :loading="loading" style="width: 100%" @click="submit">登入</el-button>
+  <auth-shell title="歡迎回來。" description="登入會員中心，接著完成你的下一件作品。">
+    <el-form label-position="top" size="large" @submit.prevent="submit">
+      <el-form-item label="電子郵件">
+        <el-input v-model.trim="form.email" type="email" autocomplete="email" placeholder="請輸入電子郵件" />
+      </el-form-item>
+      <el-form-item label="密碼">
+        <el-input v-model="form.password" type="password" autocomplete="current-password" show-password placeholder="請輸入密碼" />
+      </el-form-item>
+      <el-button class="auth-submit" type="primary" native-type="submit" :loading="loading">登入會員中心 ↗</el-button>
     </el-form>
-    <div class="portal-auth-links">
-      <router-link to="/portal/register">還沒有帳號？註冊</router-link>
+    <div class="auth-links">
+      <router-link to="/portal/register">第一次來？建立帳號</router-link>
       <router-link to="/portal/reset">忘記密碼？</router-link>
     </div>
-  </div>
+    <p class="auth-note">
+      只是想先了解價格？
+      <router-link to="/quote">不用登入，也可以開始估價 ↗</router-link>
+    </p>
+  </auth-shell>
 </template>
 
 <script>
+  import AuthShell from '@/components/public/AuthShell.vue'
   import { loginCustomer } from '@/api/customerAuth'
 
   export default {
+    components: { AuthShell },
     name: 'PortalLogin',
     data() {
       return { form: { email: '', password: '' }, loading: false }
     },
     methods: {
       async submit() {
+        if (this.loading) return
         if (!this.form.email || !this.form.password) {
-          this.$baseMessage('請輸入 Email 與密碼', 'warning')
+          this.$baseMessage('請輸入電子郵件與密碼', 'warning')
           return
         }
         this.loading = true
@@ -32,6 +42,8 @@
           const result = await loginCustomer(this.form)
           this.$store.dispatch('customerAuth/setSession', result)
           this.$router.push('/portal/dashboard')
+        } catch {
+          // customerRequest 已顯示錯誤訊息，保留輸入內容以便重試。
         } finally {
           this.loading = false
         }
@@ -39,26 +51,3 @@
     },
   }
 </script>
-
-<style lang="scss" scoped>
-  .portal-auth-card {
-    max-width: 360px;
-    margin: 60px auto;
-    background: #fff;
-    border-radius: $base-border-radius;
-    padding: 32px;
-    box-shadow: $base-box-shadow;
-
-    h2 {
-      margin-top: 0;
-      text-align: center;
-    }
-  }
-
-  .portal-auth-links {
-    display: flex;
-    justify-content: space-between;
-    margin-top: 16px;
-    font-size: 13px;
-  }
-</style>

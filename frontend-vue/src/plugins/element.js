@@ -1,5 +1,5 @@
 import ElementPlus from 'element-plus'
-import zhCn from 'element-plus/es/locale/lang/zh-cn'
+import zhTw from 'element-plus/es/locale/lang/zh-tw'
 import 'element-plus/dist/index.css'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 
@@ -9,8 +9,8 @@ const setupElement = (app) => {
   for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
     app.component(key, component)
   }
-  // size 与语言保持原 Element UI 行为（默认 small、zh-CN 文案）
-  app.use(ElementPlus, { locale: zhCn, size: 'small' })
+  // 統一採用繁體中文元件文案。
+  app.use(ElementPlus, { locale: zhTw, size: 'small' })
 }
 
 export default setupElement

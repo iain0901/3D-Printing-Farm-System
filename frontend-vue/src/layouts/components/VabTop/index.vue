@@ -26,7 +26,7 @@
               <vab-full-screen @refresh="refreshRoute" />
               <vab-theme class="hidden-md-and-down" />
             </div>
-            <vab-icon :icon="['fas', 'sync-alt']" :pulse="pulse" title="重载路由" @click="refreshRoute" />
+            <vab-icon :icon="['fas', 'sync-alt']" :pulse="pulse" title="重新載入路由" @click="refreshRoute" />
             <vab-avatar />
           </div>
         </el-col>

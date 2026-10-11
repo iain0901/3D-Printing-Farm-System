@@ -63,7 +63,7 @@ instance.interceptors.response.use(
     }
 
     if (!response) {
-      const message = error.message === 'Network Error' ? '后端接口连接异常' : error.message && error.message.includes('timeout') ? '后端接口请求超时' : '后端接口未知异常'
+      const message = error.message === 'Network Error' ? '後端介面連線異常' : error.message && error.message.includes('timeout') ? '後端介面請求逾時' : '後端介面發生未知異常'
       baseMessage(message, 'error')
       return Promise.reject(error)
     }
@@ -73,20 +73,20 @@ instance.interceptors.response.use(
 
     switch (status) {
       case invalidCode: // 401：未登录或 token 失效
-        baseMessage(serverMessage || '登录状态已失效，请重新登录', 'error')
+        baseMessage(serverMessage || '登入狀態已失效，請重新登入', 'error')
         if (loginInterception) {
           store.dispatch('user/resetAccessToken').catch(() => {})
           redirectToLogin()
         }
         break
       case noPermissionCode: // 403：已登录但无权限，不登出
-        baseMessage(serverMessage || '没有权限执行此操作', 'error')
+        baseMessage(serverMessage || '你沒有權限執行此操作', 'error')
         break
       case lockedCode: // 423：账户临时锁定
-        baseMessage(serverMessage || '账户已被临时锁定，请稍后再试', 'error')
+        baseMessage(serverMessage || '帳號已被暫時鎖定，請稍後再試', 'error')
         break
       default:
-        baseMessage(serverMessage || `后端接口 ${status} 异常`, 'error')
+        baseMessage(serverMessage || `後端介面 ${status} 異常`, 'error')
         break
     }
     return Promise.reject(error)

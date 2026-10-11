@@ -3,7 +3,7 @@
     <div class="upload">
       <el-alert
         :closable="false"
-        :title="`支持jpg、jpeg、png格式，单次可最多选择${limit}张图片，每张不可大于${size}M，如果大于${size}M会自动为您过滤`"
+        :title="`支援 jpg、jpeg、png 格式；單次最多可選擇 ${limit} 張圖片，每張不可大於 ${size}M，超出大小會自動排除。`"
         type="info"
       />
       <br />
@@ -30,7 +30,7 @@
         :on-success="handleSuccess"
       >
         <template #trigger><i class="el-icon-plus"></i></template>
-        <el-dialog append-to-body title="查看大图" v-model="dialogVisible">
+        <el-dialog append-to-body title="查看大圖" v-model="dialogVisible">
           <div>
             <img alt="" :src="dialogImageUrl" width="100%" />
           </div>
@@ -39,10 +39,10 @@
     </div>
     <template #footer><div class="dialog-footer" style="position: relative; padding-right: 15px; text-align: right">
       <div v-if="show" style="position: absolute; top: 10px; left: 15px; color: #999">
-        正在上传中... 当前上传成功数:{{ imgSuccessNum }}张 当前上传失败数:{{ imgErrorNum }}张
+        正在上傳…目前成功：{{ imgSuccessNum }} 張；失敗：{{ imgErrorNum }} 張
       </div>
-      <el-button type="primary" @click="handleClose">关闭</el-button>
-      <el-button :loading="loading" size="small" style="margin-left: 10px" type="success" @click="submitUpload">开始上传</el-button>
+      <el-button type="primary" @click="handleClose">關閉</el-button>
+      <el-button :loading="loading" size="small" style="margin-left: 10px" type="success" @click="submitUpload">開始上傳</el-button>
     </div></template>
   </el-dialog>
 </template>
@@ -86,7 +86,7 @@
         imgSuccessNum: 0,
         imgErrorNum: 0,
         typeList: null,
-        title: '上传',
+        title: '上傳',
         dialogFormVisible: false,
         data: {},
       }
@@ -122,7 +122,7 @@
         this.imgSuccessNum = this.imgSuccessNum + 1
         if (fileList.length === this.imgNum) {
           setTimeout(() => {
-            this.$baseMessage(`上传完成! 共上传${fileList.length}张图片`, 'success')
+            this.$baseMessage(`上傳完成！共上傳 ${fileList.length} 張圖片`, 'success')
           }, 1000)
         }
 
@@ -134,7 +134,7 @@
       handleError() {
         this.imgNum = this.imgNum + 1
         this.imgErrorNum = this.imgErrorNum + 1
-        this.$baseMessage(`文件[${file.raw.name}]上传失败,文件大小为${this.$baseLodash.round(file.raw.size / 1024, 0)}KB`, 'error')
+        this.$baseMessage(`檔案 [${file.raw.name}] 上傳失敗，檔案大小為 ${this.$baseLodash.round(file.raw.size / 1024, 0)}KB`, 'error')
         setTimeout(() => {
           this.loading = false
           this.show = false
@@ -150,14 +150,14 @@
       },
       handleExceed(files, fileList) {
         this.$baseMessage(
-          `当前限制选择 ${this.limit} 个文件，本次选择了
+          `目前限制選擇 ${this.limit} 個檔案，本次選擇了
              ${files.length}
-             个文件`,
+             個檔案`,
           'error'
         )
       },
       handleShow(data) {
-        this.title = '上传'
+        this.title = '上傳'
         this.data = data
         this.dialogFormVisible = true
       },

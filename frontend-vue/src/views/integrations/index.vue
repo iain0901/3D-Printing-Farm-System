@@ -2,7 +2,7 @@
   <div class="integrations-container">
     <el-tabs v-model="tab">
       <el-tab-pane label="硬體橋接" name="bridges">
-        <p class="hint">將打印機連上 OctoPrint / Moonraker / PrusaLink，讓後端能直接下發控制指令。</p>
+        <p class="hint">將印表機連上 OctoPrint / Moonraker / PrusaLink，讓後端能直接下發控制指令。</p>
         <div class="quickbar">
           <el-button v-permissions="['printers:control']" type="primary" icon="CirclePlus" @click="bridgeDialogVisible = true" :disabled="!printers.length">新增橋接</el-button>
         </div>

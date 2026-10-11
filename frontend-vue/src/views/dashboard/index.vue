@@ -2,7 +2,7 @@
   <div class="dashboard-container">
     <div class="quickbar">
       <el-button type="primary" icon="CirclePlus" disabled>新增打印机</el-button>
-      <el-button icon="Upload" disabled>上传檔案</el-button>
+      <el-button icon="Upload" disabled>上傳檔案</el-button>
       <el-button icon="Calendar" disabled>排程</el-button>
       <el-button icon="DocumentChecked" disabled>檢視待辦</el-button>
       <span class="quickbar-note">（動作按鈕將在 Phase 3/4 對應視圖完成後啟用）</span>

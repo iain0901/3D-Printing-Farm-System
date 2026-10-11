@@ -1,25 +1,25 @@
 <template>
   <span v-if="themeBar">
-    <vab-icon :icon="['fas', 'crown']" title="主题配置" @click="handleOpenTheme" />
+    <vab-icon :icon="['fas', 'crown']" title="主題設定" @click="handleOpenTheme" />
     <div class="theme-setting">
       <div @click="handleOpenTheme">
         <vab-icon :icon="['fas', 'crown']" />
-        <p>主题配置</p>
+        <p>主題設定</p>
       </div>
       <div @click="handleGetCode">
         <vab-icon :icon="['fas', 'laptop-code']"></vab-icon>
-        <p>拷贝源码</p>
+        <p>複製原始碼</p>
       </div>
     </div>
 
-    <el-drawer v-model="drawerVisible" append-to-body direction="rtl" size="300px" title="主题配置">
+    <el-drawer v-model="drawerVisible" append-to-body direction="rtl" size="300px" title="主題設定">
       <el-scrollbar style="height: 80vh; overflow: hidden">
         <div class="el-drawer__body">
           <div class="theme-config-container">
             <div class="config-section">
               <div class="section-header">
                 <el-icon><Picture /></el-icon>
-                <span>主题风格</span>
+                <span>主題風格</span>
               </div>
               <div class="theme-options">
                 <div
@@ -32,7 +32,7 @@
                     <div class="preview-sidebar"></div>
                     <div class="preview-content"></div>
                   </div>
-                  <span class="theme-name">默认主题</span>
+                  <span class="theme-name">預設主題</span>
                 </div>
                 <div
                   class="theme-option"
@@ -44,7 +44,7 @@
                     <div class="preview-sidebar"></div>
                     <div class="preview-content"></div>
                   </div>
-                  <span class="theme-name">绿荫草场</span>
+                  <span class="theme-name">綠蔭草場</span>
                 </div>
                 <div
                   class="theme-option"
@@ -56,7 +56,7 @@
                     <div class="preview-sidebar"></div>
                     <div class="preview-content"></div>
                   </div>
-                  <span class="theme-name">荣耀典藏</span>
+                  <span class="theme-name">榮耀典藏</span>
                 </div>
               </div>
             </div>
@@ -64,7 +64,7 @@
             <div class="config-section">
               <div class="section-header">
                 <el-icon><Grid /></el-icon>
-                <span>布局设置</span>
+                <span>版面配置</span>
               </div>
               <div class="layout-options">
                 <div
@@ -77,7 +77,7 @@
                     <div class="preview-sidebar"></div>
                     <div class="preview-content"></div>
                   </div>
-                  <span class="layout-name">纵向布局</span>
+                  <span class="layout-name">垂直版面</span>
                 </div>
                 <div
                   class="layout-option"
@@ -91,7 +91,7 @@
                       <div class="preview-content"></div>
                     </div>
                   </div>
-                  <span class="layout-name">横向布局</span>
+                  <span class="layout-name">水平版面</span>
                 </div>
               </div>
             </div>
@@ -99,20 +99,20 @@
             <div class="config-section">
               <div class="section-header">
                 <el-icon><Setting /></el-icon>
-                <span>功能设置</span>
+                <span>功能設定</span>
               </div>
               <div class="feature-options">
                 <div class="feature-item">
                   <div class="feature-info">
-                    <span class="feature-name">固定头部</span>
-                    <span class="feature-desc">头部始终固定在页面顶部</span>
+                    <span class="feature-name">固定頁首</span>
+                    <span class="feature-desc">頁首固定在頁面頂端</span>
                   </div>
                   <el-switch v-model="theme.header" active-value="fixed" inactive-value="noFixed" @change="handleSaveTheme" />
                 </div>
                 <div class="feature-item">
                   <div class="feature-info">
-                    <span class="feature-name">多标签页</span>
-                    <span class="feature-desc">开启页面标签页功能</span>
+                    <span class="feature-name">多分頁</span>
+                    <span class="feature-desc">啟用頁面分頁功能</span>
                   </div>
                   <el-switch v-model="theme.tabsBar" active-value="true" inactive-value="false" @change="handleSaveTheme" />
                 </div>
@@ -123,7 +123,7 @@
       </el-scrollbar>
 
       <div class="el-drawer__footer">
-        <el-button type="primary" @click="handleSaveTheme">保存设置</el-button>
+        <el-button type="primary" @click="handleSaveTheme">儲存設定</el-button>
         <el-button @click="drawerVisible = false">取消</el-button>
       </div>
     </el-drawer>

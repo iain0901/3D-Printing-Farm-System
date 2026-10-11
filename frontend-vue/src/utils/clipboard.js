@@ -2,11 +2,11 @@ import baseMessage from '@/utils/baseMessage'
 import Clipboard from 'clipboard'
 
 function clipboardSuccess() {
-  baseMessage('复制成功', 'success')
+  baseMessage('複製成功', 'success')
 }
 
 function clipboardError() {
-  baseMessage('复制失败', 'error')
+  baseMessage('複製失敗', 'error')
 }
 
 /**

@@ -12,23 +12,23 @@
     <el-dialog
       v-model="dialogTableVisible"
       append-to-body
-      title="vue-admin-better异常捕获(温馨提示：错误必须解决)"
+      title="vue-admin-better 異常擷取（提示：錯誤必須處理）"
       width="70%"
     >
       <el-table :data="errorLogs">
-        <el-table-column label="报错路由">
+        <el-table-column label="發生錯誤的路由">
           <template #default="{ row }">
             <a :href="row.url" target="_blank">
               <el-tag type="success">{{ row.url }}</el-tag>
             </a>
           </template>
         </el-table-column>
-        <el-table-column label="错误信息">
+        <el-table-column label="錯誤訊息">
           <template #default="{ row }">
             <el-tag type="danger">{{ decodeUnicode(row.err.message) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="错误详情" width="120">
+        <el-table-column label="錯誤詳情" width="120">
           <template #default="scope">
             <el-popover placement="top-start" trigger="hover">
               <div style="color: red">
@@ -57,7 +57,7 @@
       <template #footer><span class="dialog-footer">
         <el-button @click="dialogTableVisible = false">取 消</el-button>
         <el-button icon="Delete" type="danger" @click="clearAll">
-          暂不显示
+          暫不顯示
         </el-button>
       </span></template>
     </el-dialog>
@@ -78,15 +78,15 @@
         abbreviation: abbreviation,
         searchList: [
           {
-            title: '百度搜索',
+            title: '百度搜尋',
             url: 'https://www.baidu.com/baidu?wd=',
           },
           {
-            title: '谷歌搜索',
+            title: 'Google 搜尋',
             url: 'https://www.google.com/search?q=',
           },
           {
-            title: 'Magi搜索',
+            title: 'Magi 搜尋',
             url: 'https://magi.com/search?q=',
           },
         ],

@@ -1,5 +1,5 @@
 <template>
-  <span :title="isFullscreen ? '退出全屏' : '进入全屏'">
+  <span :title="isFullscreen ? '離開全螢幕' : '進入全螢幕'">
     <vab-icon :icon="['fas', isFullscreen ? 'compress' : 'expand']" @click="click"></vab-icon>
   </span>
 </template>
@@ -23,7 +23,7 @@
     methods: {
       click() {
         if (!screenfull.isEnabled) {
-          this.$baseMessage('开启全屏失败', 'error')
+          this.$baseMessage('開啟全螢幕失敗', 'error')
           return false
         }
         screenfull.toggle()
