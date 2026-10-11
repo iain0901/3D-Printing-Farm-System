@@ -31,14 +31,14 @@
             </router-link>
           </div>
         </div>
-        <div class="poster-art">
+        <hero-layer-field class="poster-art">
           <span class="hero-object-caption">逐層堆疊，立體成型。</span>
           <studio-image kind="signature" priority class="signature-object" />
           <span class="hero-sample-label">
             <span>FDM 成型概念</span>
             <small>品牌示意物件</small>
           </span>
-        </div>
+        </hero-layer-field>
       </div>
       <div class="studio-wrap poster-footnote">
         <span>塑膠線材 FDM 列印</span>
@@ -290,9 +290,10 @@
 <script>
   import PublicShell from '@/components/public/PublicShell.vue'
   import StudioImage from '@/components/public/StudioImage.vue'
+  import HeroLayerField from '@/components/public/HeroLayerField.vue'
   export default {
     name: 'Landing',
-    components: { PublicShell, StudioImage },
+    components: { PublicShell, StudioImage, HeroLayerField },
     data() {
       return {
         materialIndex: 1,
@@ -507,7 +508,8 @@
     object-fit: contain;
     top: -6px;
     left: -5%;
-    transform: rotate(-10deg);
+    transform: translate3d(var(--object-x, 0px), var(--object-y, 0px), 0) rotate(calc(-10deg + var(--object-turn, 0deg)));
+    transition: transform 0.3s ease-out;
   }
   .hero-object-caption {
     position: absolute;
