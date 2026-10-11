@@ -1,6 +1,6 @@
 // Curated per-route placements, not a kind-based fallback: every asset appears at most twice.
 // Home placements live here too, so tests can audit the entire public site budget.
-export const homeArtwork = ['engineering', 'sketch', 'batch', 'parts', 'keepsake', 'everyday', 'printer']
+export const homeArtwork = ['signature', 'parts', 'sketch', 'everyday', 'printer', 'batch', 'keepsake']
 export const routeArtwork = {
   '/services': 'parts',
   '/for/education': 'research',

@@ -1,23 +1,28 @@
 <template>
-  <public-shell>
+  <public-shell class="brand-home">
     <section class="landing-poster">
+      <div class="studio-wrap hero-edition">
+        <span>3DRFM・FDM 製造服務</span>
+        <span>一件開始，也可以。</span>
+      </div>
       <div class="studio-wrap poster-grid">
         <div class="poster-copy">
-          <p class="studio-kicker">3DRFM・FDM 3D 列印製造服務</p>
+          <p class="hero-category">模型代印 ／ 原型開發 ／ 小量製作</p>
           <h1>
-            從設計原型，
-            <br />
-            到小量製造
-            <span>。</span>
+            <span>把想法，</span>
+            <span class="headline-last">
+              印出來
+              <span class="headline-stop">。</span>
+            </span>
           </h1>
           <p class="poster-description">
-            為研究、產品開發與日常創作，
+            你的模型，值得離開螢幕。
             <br />
-            把數位模型轉化為可測試、可使用的實體。
+            從單件原型到小量製作，讓設計有個實體。
           </p>
           <div class="poster-actions">
             <router-link to="/quote" class="studio-button">
-              開始自動估價
+              上傳模型・自動估價
               <span aria-hidden="true">↗</span>
             </router-link>
             <router-link :to="{ path: '/', hash: '#services' }" class="text-link">
@@ -25,180 +30,230 @@
               <span aria-hidden="true">↓</span>
             </router-link>
           </div>
-          <p class="poster-footnote">單件代印 ／ 功能原型 ／ 小批量製作</p>
         </div>
         <div class="poster-art">
-          <span class="poster-art-type" aria-hidden="true">FDM</span>
-          <studio-image kind="engineering" priority class="hero-object hero-object-main" />
-          <studio-image kind="sketch" decorative class="hero-object hero-object-front" />
-          <studio-image kind="batch" decorative class="hero-object hero-object-back" />
-          <div class="object-label">
-            <span>設計驗證 → 實體製作</span>
-            <small>FDM 應用示意物件</small>
-          </div>
+          <span class="hero-object-caption">逐層堆疊，立體成型。</span>
+          <studio-image kind="signature" priority class="signature-object" />
+          <span class="hero-sample-label">
+            <span>FDM 成型概念</span>
+            <small>品牌示意物件</small>
+          </span>
         </div>
       </div>
-      <div class="studio-wrap capability-strip">
-        <div>
-          <strong>01</strong>
-          <span>線上自動初估</span>
-        </div>
-        <div>
-          <strong>02</strong>
-          <span>依用途確認材料</span>
-        </div>
-        <div>
-          <strong>03</strong>
-          <span>登入追蹤案件</span>
-        </div>
-        <router-link to="/process">了解訂製流程 ↗</router-link>
+      <div class="studio-wrap poster-footnote">
+        <span>塑膠線材 FDM 列印</span>
+        <span>STL ／ 3MF ／ STEP</span>
+        <router-link to="/guides/file-prep">上傳前，先確認檔案 ↗</router-link>
       </div>
     </section>
-    <audience-links />
-    <section id="services" class="studio-wrap studio-section">
-      <div class="section-heading">
-        <div>
-          <p class="studio-kicker">製作服務</p>
-          <h2>
-            每個製作階段，
-            <br />
-            都有清楚的下一步。
-          </h2>
-        </div>
-        <p>
-          有模型，直接上傳估價。
+
+    <section id="services" class="studio-wrap applications-section">
+      <header class="editorial-heading">
+        <p class="section-index">01 ／ 製作的可能</p>
+        <h2>
+          研究的、工作的、
           <br />
-          還沒有模型，先整理用途、草圖與尺寸。
+          <span>你自己的。</span>
+        </h2>
+        <router-link to="/services" class="text-link">所有 FDM 製作服務 ↗</router-link>
+      </header>
+      <div class="application-layout">
+        <article class="application-story story-school">
+          <router-link to="/for/education" class="application-visual" aria-label="探索學校與實驗室製作">
+            <span class="specimen-number" aria-hidden="true">01</span>
+            <studio-image kind="parts" />
+            <span class="specimen-label">結構探索 ／ 格構示意</span>
+            <span class="visual-arrow" aria-hidden="true">↗</span>
+          </router-link>
+          <div class="story-copy">
+            <span class="story-category">學校・實驗室</span>
+            <h3>
+              從一個假設，
+              <br />
+              做到一個原型。
+            </h3>
+            <p>實驗治具、專題外殼，或畢業展桌上的那件作品。先把模型做出來，讓測試與討論繼續。</p>
+            <div class="story-links">
+              <router-link to="/services/research-lab">研究模型 ↗</router-link>
+              <router-link to="/services/student-project">專題製作 ↗</router-link>
+              <router-link to="/services/campus-gifts">文創紀念品 ↗</router-link>
+            </div>
+          </div>
+        </article>
+        <article class="application-story story-business">
+          <div class="story-copy">
+            <span class="story-category">企業・設計團隊</span>
+            <h3>
+              下一次提案，
+              <br />
+              帶實物來。
+            </h3>
+            <p>從外觀樣品、組裝驗證到小批量零件，將關鍵尺寸、材料與驗收條件，一次說清楚。</p>
+            <div class="story-links">
+              <router-link to="/services/exhibition">展示模型 ↗</router-link>
+              <router-link to="/services/industrial-parts">工業件 ↗</router-link>
+              <router-link to="/services/small-batch">小批量 ↗</router-link>
+            </div>
+          </div>
+          <router-link to="/for/business" class="application-visual" aria-label="探索企業製作">
+            <span class="specimen-number" aria-hidden="true">02</span>
+            <studio-image kind="sketch" />
+            <span class="specimen-label">從外觀，確認到組裝</span>
+            <span class="visual-arrow" aria-hidden="true">↗</span>
+          </router-link>
+        </article>
+      </div>
+      <article class="personal-story">
+        <div class="personal-title">
+          <span class="section-index">03 ／ 個人・創作者</span>
+          <h3>
+            剛好，
+            <br />
+            你也想做一個。
+          </h3>
+        </div>
+        <studio-image kind="everyday" decorative />
+        <div class="personal-copy">
+          <p>一個桌上小物、一件模型配件，或網路找到的設計檔。單件也能製作，先告訴我們要怎麼用。</p>
+          <router-link to="/for/personal" class="text-link">個人代印專區 ↗</router-link>
+          <router-link to="/services/rush-print" class="personal-rush">趕時間？先確認急件可行性 ↗</router-link>
+        </div>
+      </article>
+    </section>
+
+    <section class="material-section" id="materials">
+      <div class="studio-wrap material-heading">
+        <p class="section-index">02 ／ 材料研究室</p>
+        <h2>
+          個性不同。
+          <br />
+          用途也是。
+        </h2>
+        <p>
+          材料不是配色選單。
+          <br />
+          受力、溫度、組裝方式，才是選擇的起點。
         </p>
       </div>
-      <div class="service-grid">
-        <router-link v-for="service in services" :key="service.number" :to="service.to" class="service-entry">
-          <div class="service-art">
-            <span class="service-number">{{ service.number }}</span>
-            <studio-image :kind="service.kind" decorative />
-            <span class="service-chip">{{ service.tag }}</span>
-          </div>
-          <div class="service-title">
-            <h3>{{ service.title }}</h3>
-            <span aria-hidden="true">↗</span>
-          </div>
-          <p>{{ service.description }}</p>
-        </router-link>
-      </div>
-    </section>
-    <section class="platform-section">
-      <div class="studio-wrap platform-layout">
-        <div>
-          <p class="studio-kicker">官網了解服務・會員中心管理製作</p>
-          <h2>
-            需求到進度，
+      <div class="studio-wrap material-layout">
+        <div class="material-display">
+          <span class="material-big-type" aria-hidden="true">PETG</span>
+          <studio-image kind="printer" decorative />
+          <span class="material-recommendation">
+            最推薦的
             <br />
-            在同一個地方接續。
-          </h2>
-          <p>先透過自動估價整理模型、材料與數量，第三步登入或註冊帶入個人資料。建立案件後，再進會員中心查看自己的案件。</p>
-          <router-link to="/portal/login" class="studio-button light">登入會員中心 ↗</router-link>
-          <router-link to="/process" class="platform-link">查看完整訂製流程 →</router-link>
+            <strong>選材起點 ↗</strong>
+          </span>
+          <span class="material-caption">線材示意 ／ 一般功能件優先討論 PETG</span>
         </div>
-        <ol class="platform-flow">
-          <li>
-            <span>01</span>
-            <div>
-              <h3>上傳模型與設定規格</h3>
-              <p>依材料、品質與數量取得切片前初估。</p>
-            </div>
-          </li>
-          <li>
-            <span>02</span>
-            <div>
-              <h3>登入接續案件</h3>
-              <p>帶入聯絡資料，整理需求並確認送出。</p>
-            </div>
-          </li>
-          <li>
-            <span>03</span>
-            <div>
-              <h3>查看報價與製作進度</h3>
-              <p>從會員中心進入案件，依確認結果安排製作。</p>
-            </div>
-          </li>
-        </ol>
-      </div>
-    </section>
-    <section id="materials" class="studio-wrap studio-section material-layout">
-      <div class="material-display">
-        <span class="material-big-type" aria-hidden="true">PETG</span>
-        <studio-image kind="printer" decorative />
-        <div class="material-caption">
-          <strong>我們最推薦的選材起點</strong>
-          <span>PETG・兼顧韌性與日常實用性</span>
-        </div>
-      </div>
-      <div class="material-copy">
-        <p class="studio-kicker">材料與製程</p>
-        <h2>
-          先確認使用條件，
-          <br />
-          再選合適的材料。
-        </h2>
-        <p>一般功能件與日常用品，優先從 PETG 討論。特殊耐熱、戶外或柔性需求，仍需個別確認。</p>
-        <div class="material-tabs" role="group" aria-label="選擇材料">
-          <button
-            v-for="(material, index) in materials"
-            :key="material.name"
-            :aria-pressed="materialIndex === index"
-            :class="{ active: materialIndex === index }"
-            @click="materialIndex = index"
-          >
-            {{ material.name }}
-          </button>
-        </div>
-        <div class="material-details" aria-live="polite" aria-atomic="true">
-          <h3>{{ selectedMaterial.title }}</h3>
-          <p>{{ selectedMaterial.description }}</p>
-          <dl>
-            <div>
-              <dt>適合製作</dt>
-              <dd>{{ selectedMaterial.uses }}</dd>
-            </div>
-            <div>
-              <dt>注意事項</dt>
-              <dd>{{ selectedMaterial.caution }}</dd>
-            </div>
-          </dl>
-        </div>
-        <router-link to="/materials" class="text-link">比較六種 FDM 材料 ↗</router-link>
-      </div>
-    </section>
-    <section id="process" class="process-section">
-      <div class="studio-wrap studio-section">
-        <div class="section-heading">
-          <div>
-            <p class="studio-kicker">訂製流程</p>
-            <h2>
-              從第一份檔案，
-              <br />
-              到下一件成品。
-            </h2>
+        <div class="material-copy">
+          <div class="material-tabs" role="group" aria-label="選擇材料">
+            <button
+              v-for="(material, index) in materials"
+              :key="material.name"
+              :aria-pressed="materialIndex === index"
+              :class="{ active: materialIndex === index }"
+              @click="materialIndex = index"
+            >
+              {{ material.name }}
+              <span v-if="material.name === 'PETG'" aria-hidden="true">推薦</span>
+            </button>
           </div>
-          <router-link to="/process" class="text-link">了解各階段須知 ↗</router-link>
+          <div class="material-details" aria-live="polite" aria-atomic="true">
+            <span class="material-selected">{{ selectedMaterial.name }}</span>
+            <h3>{{ selectedMaterial.title }}</h3>
+            <p>{{ selectedMaterial.description }}</p>
+            <dl>
+              <div>
+                <dt>適合製作</dt>
+                <dd>{{ selectedMaterial.uses }}</dd>
+              </div>
+              <div>
+                <dt>先確認</dt>
+                <dd>{{ selectedMaterial.caution }}</dd>
+              </div>
+            </dl>
+          </div>
+          <router-link to="/materials" class="text-link">比較六種 FDM 材料 ↗</router-link>
+          <div class="material-sample">
+            <studio-image kind="batch" decorative />
+            <p>
+              形狀與列印方向，
+              <br />
+              也是材料選擇的一部分。
+              <small>功能原型示意・實際規格依案件確認</small>
+            </p>
+          </div>
         </div>
-        <ol class="process-track">
-          <li v-for="(item, i) in steps" :key="item.title">
-            <span class="step-index">0{{ i + 1 }}</span>
-            <h3>{{ item.title }}</h3>
-            <p>{{ item.description }}</p>
-          </li>
-        </ol>
-        <p class="process-note">線上初估供規劃參考；正式價格、材料供應與交期，依案件審查確認後安排。</p>
       </div>
     </section>
-    <section id="faq" class="studio-wrap studio-section faq-section">
-      <div>
-        <p class="studio-kicker">常見問題</p>
+
+    <section class="studio-wrap commission-section">
+      <div class="commission-title">
+        <p class="section-index">03 ／ 開始製作</p>
         <h2>
-          製作前，
+          有檔案，
           <br />
-          你可能想了解。
+          <span>就差這一步。</span>
+        </h2>
+        <p>
+          不用另外填一張詢價表。
+          <br />
+          直接使用 3DRFM 自動估價，接續你的製作需求。
+        </p>
+        <router-link to="/quote" class="studio-button">
+          開始自動估價
+          <span aria-hidden="true">↗</span>
+        </router-link>
+        <router-link to="/portal/login" class="member-link">已有案件？登入會員中心 →</router-link>
+      </div>
+      <ol class="commission-steps">
+        <li>
+          <span>01</span>
+          <div>
+            <h3>上傳模型</h3>
+            <p>提供檔案、實際尺寸與用途；沒有模型可選建模協助。</p>
+          </div>
+        </li>
+        <li>
+          <span>02</span>
+          <div>
+            <h3>登入，帶入資料</h3>
+            <p>流程第三步登入或註冊，讓需求與個人案件連結。</p>
+          </div>
+        </li>
+        <li>
+          <span>03</span>
+          <div>
+            <h3>設定條件，取得初估</h3>
+            <p>選擇材料、品質與數量。正式報價及交期仍需個別確認。</p>
+          </div>
+        </li>
+        <li>
+          <span>04</span>
+          <div>
+            <h3>確認製作，追蹤交付</h3>
+            <p>確認報價與付款安排後，透過案件查看製作進度。</p>
+          </div>
+        </li>
+      </ol>
+      <aside class="model-note">
+        <studio-image kind="keepsake" decorative />
+        <div>
+          <h3>還停在草圖？</h3>
+          <p>帶著尺寸、照片與用途，先確認建模範圍。</p>
+        </div>
+        <router-link to="/quote?mode=agent&amp;model=no" class="text-link">我需要建模協助 ↗</router-link>
+      </aside>
+    </section>
+
+    <section id="faq" class="faq-section studio-wrap">
+      <div>
+        <p class="section-index">04 ／ 製作前須知</p>
+        <h2>
+          先問清楚，
+          <br />
+          再開始。
         </h2>
         <router-link to="/faq" class="text-link">查看所有問題 ↗</router-link>
       </div>
@@ -213,14 +268,21 @@
         </details>
       </div>
     </section>
-    <section class="start-banner">
-      <div class="studio-wrap start-inner">
-        <div>
-          <p class="studio-kicker">開始你的製作計畫</p>
-          <h2>下一個設計，交給 3DRFM。</h2>
-          <p>已有模型就開始估價，尚未建模也能提交需求。</p>
+    <section class="closing-poster">
+      <div class="studio-wrap">
+        <div class="closing-top">
+          <p>
+            螢幕裡的下一個設計，
+            <br />
+            我們手上見。
+          </p>
+          <router-link to="/quote" aria-label="開始自動估價" class="closing-arrow">↗</router-link>
         </div>
-        <router-link to="/quote" class="studio-button">開始自動估價 ↗</router-link>
+        <span class="closing-wordmark" aria-hidden="true">3DRFM</span>
+        <div class="closing-baseline">
+          <span>FDM 3D 列印製造服務</span>
+          <router-link to="/contact">與我們聯絡 ↗</router-link>
+        </div>
       </div>
     </section>
   </public-shell>
@@ -228,39 +290,12 @@
 <script>
   import PublicShell from '@/components/public/PublicShell.vue'
   import StudioImage from '@/components/public/StudioImage.vue'
-  import AudienceLinks from '@/components/public/AudienceLinks.vue'
   export default {
     name: 'Landing',
-    components: { PublicShell, StudioImage, AudienceLinks },
+    components: { PublicShell, StudioImage },
     data() {
       return {
         materialIndex: 1,
-        services: [
-          {
-            number: '01',
-            kind: 'parts',
-            tag: '已經有模型',
-            title: '模型代印與原型製作',
-            description: '上傳 STL、3MF 或 STEP，選擇材料與數量，從你的第一件作品開始。',
-            to: '/quote',
-          },
-          {
-            number: '02',
-            kind: 'keepsake',
-            tag: '還在想像中',
-            title: '建模需求協作',
-            description: '帶著草圖、尺寸或使用需求，由專員協助確認建模與製作方式。',
-            to: '/quote?mode=agent&model=no',
-          },
-          {
-            number: '03',
-            kind: 'everyday',
-            tag: '不只做一件',
-            title: '小批量製造',
-            description: '從原型測試到小量製造，一起確認數量、材料與交付時間。',
-            to: '/services/small-batch',
-          },
-        ],
         materials: [
           {
             name: 'PLA',
@@ -303,12 +338,6 @@
             caution: '請提供軟硬需求；薄壁與細節需先確認。',
           },
         ],
-        steps: [
-          { title: '分享你的需求', description: '上傳模型，或描述用途、尺寸與想完成的樣子。' },
-          { title: '確認製作細節', description: '取得初估，再由專員確認材料、切片結果與正式報價。' },
-          { title: '開始列印製作', description: '確認報價與付款安排後，依案件約定進入製作。' },
-          { title: '把成品交給你', description: '完成後依確認的交付方式出貨，透過案件連結追蹤進度。' },
-        ],
         faqs: [
           {
             question: '沒有 3D 模型，也可以委託嗎？',
@@ -341,406 +370,589 @@
   }
 </script>
 <style lang="scss" scoped>
+  .brand-home {
+    --ink: #192e53;
+    --paper: #f7f3e9;
+    --blue: #173cc5;
+    --lime: #f1ecd8;
+    --accent: #e94b28;
+  }
+  .brand-home :deep(.public-utility) {
+    background: #192e53;
+    color: #f7f3e9;
+  }
+  .brand-home :deep(.public-header) {
+    background: var(--paper);
+    padding-block: 22px;
+  }
+  .brand-home :deep(.studio-brand strong) {
+    font-size: 38px;
+    letter-spacing: -2px;
+  }
+  .brand-home :deep(.studio-brand strong span) {
+    color: var(--accent);
+  }
+  .brand-home :deep(.studio-button) {
+    border-radius: 0;
+  }
+  .brand-home :deep(.public-footer) {
+    background: #192e53;
+  }
+  .brand-home :deep(.footer-inquiry) {
+    color: #ffaf91 !important;
+  }
+  .brand-home :deep(.public-footer .footer-top) {
+    padding-block: 50px;
+  }
+  .brand-home :deep(.nav-trigger[aria-expanded='true']),
+  .brand-home :deep(.nav-trigger.is-current) {
+    color: #be391b;
+  }
+  .brand-home :deep(.nav-panel) {
+    border-bottom-color: var(--accent);
+  }
   .landing-poster {
-    background: #edf2ee;
     overflow: hidden;
+  }
+  .hero-edition {
+    border-top: 1px solid #192e53;
+    display: flex;
+    justify-content: space-between;
+    padding-top: 17px;
+    font-size: 11px;
+    letter-spacing: 0.1em;
   }
   .poster-grid {
     display: grid;
-    grid-template-columns: 1.08fr 1fr;
+    grid-template-columns: 1.05fr 1fr;
     align-items: center;
-    min-height: 600px;
-    gap: 20px;
-    padding-block: 64px 42px;
+    position: relative;
+    min-height: 660px;
   }
   .poster-copy {
     position: relative;
-    z-index: 1;
+    z-index: 2;
+    padding-block: 42px;
   }
-  .poster-copy .studio-kicker {
+  .hero-category {
+    font-size: 12px;
     margin: 0 0 28px;
+    letter-spacing: 0.1em;
   }
   h1 {
-    font-size: clamp(42px, 4.6vw, 68px);
-    font-weight: 800;
-    line-height: 1.35;
-    letter-spacing: -0.055em;
-    margin: 0 0 27px;
+    font-size: clamp(65px, 7.8vw, 114px);
+    line-height: 1.16;
+    letter-spacing: -0.085em;
+    font-weight: 900;
+    margin: 0 0 26px;
   }
   h1 > span {
-    color: #1091ad;
+    display: block;
+    white-space: nowrap;
+  }
+  .headline-last {
+    padding-left: 0.32em;
+  }
+  .headline-stop {
+    color: var(--accent);
   }
   .poster-description {
-    font-size: 17px;
-    line-height: 1.95;
-    color: #546a70;
+    font-size: 15px;
+    line-height: 1.9;
+    margin: 0 0 25px 7px;
   }
   .poster-actions {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    gap: 28px;
-    margin-top: 32px;
+    flex-wrap: wrap;
+    gap: 24px;
+    margin-left: 7px;
+  }
+  .poster-actions .studio-button,
+  .commission-title .studio-button {
+    background: #c43f22;
+    color: #fff;
+    border-color: #c43f22;
+    font-size: 14px;
+    padding: 18px 23px;
+  }
+  .poster-actions .studio-button:hover,
+  .commission-title .studio-button:hover {
+    background: #be391b;
+    border-color: #be391b;
   }
   .text-link {
+    display: inline-flex;
+    gap: 25px;
+    align-items: center;
+    padding-bottom: 6px;
+    border-bottom: 1px solid currentColor;
     font-size: 13px;
     font-weight: 700;
-    display: inline-block;
-    padding-block: 7px;
-    border-bottom: 1px solid #91a6a8;
   }
-  .poster-footnote {
-    font-size: 11px;
-    letter-spacing: 0.1em;
-    color: #526c73;
-    margin-top: 38px;
+  .text-link:hover {
+    color: #b8371a;
   }
   .poster-art {
     position: relative;
-    min-height: 475px;
+    height: 650px;
+    margin-left: -45px;
   }
-  .poster-art-type {
+  .signature-object {
     position: absolute;
-    right: -10px;
-    top: -32px;
-    font: 900 clamp(100px, 15vw, 215px) / 1 Arial, sans-serif;
-    letter-spacing: -0.07em;
-    color: #d6e2dc;
-  }
-  .hero-object {
-    position: absolute;
+    pointer-events: none;
+    width: 118%;
+    max-width: none;
+    height: 650px;
     object-fit: contain;
-    filter: drop-shadow(0 20px 13px #29455018);
+    top: -6px;
+    left: -5%;
+    transform: rotate(-10deg);
   }
-  .hero-object-main {
-    width: 65%;
-    height: 375px;
-    right: -1%;
-    top: 12px;
-    transform: rotate(4deg);
-  }
-  .hero-object-front {
-    width: 53%;
-    height: 220px;
-    left: -4%;
-    bottom: 15px;
-    transform: rotate(-9deg);
-  }
-  .hero-object-back {
-    width: 35%;
-    height: 190px;
-    left: 1%;
-    top: 3px;
-    transform: rotate(-15deg);
-  }
-  .object-label {
+  .hero-object-caption {
     position: absolute;
-    bottom: 6px;
-    right: 0;
-    display: grid;
-    gap: 5px;
-    border-left: 2px solid #1694aa;
-    padding-left: 14px;
+    z-index: 1;
+    right: -12px;
+    top: 62px;
+    writing-mode: vertical-rl;
     font-size: 11px;
+    letter-spacing: 0.22em;
   }
-  .object-label small {
-    font-size: 10px;
-    color: #687b7f;
-  }
-  .capability-strip {
-    border-top: 1px solid #bdceca;
+  .hero-sample-label {
+    position: absolute;
+    bottom: 48px;
+    right: 20px;
+    border-left: 1px solid;
+    padding-left: 12px;
+    font-size: 11px;
     display: grid;
-    grid-template-columns: repeat(3, 1fr) auto;
-    padding-block: 23px;
-    gap: 20px;
+    gap: 4px;
   }
-  .capability-strip > div {
-    display: flex;
-    gap: 18px;
-    align-items: center;
-    font-size: 12px;
+  .hero-sample-label small {
+    font-size: 9px;
+    color: #677183;
   }
-  .capability-strip strong {
-    color: #718d92;
-    font: 12px Arial, sans-serif;
-  }
-  .capability-strip > a {
-    font-size: 12px;
-    font-weight: 700;
-  }
-  .studio-section {
-    padding-block: 90px;
-  }
-  .section-heading {
+  .poster-footnote {
     display: flex;
     justify-content: space-between;
-    align-items: end;
-    gap: 32px;
-    margin-bottom: 38px;
+    gap: 20px;
+    border-top: 1px solid #192e53;
+    border-bottom: 1px solid #192e53;
+    padding-block: 18px;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+  }
+  .applications-section {
+    padding-block: 90px 100px;
+  }
+  .editorial-heading {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    align-items: start;
+    column-gap: 40px;
+    padding-bottom: 55px;
+  }
+  .section-index {
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    font-weight: 700;
+    margin: 10px 0 20px;
   }
   h2 {
-    font-size: clamp(28px, 3vw, 40px);
-    line-height: 1.5;
-    letter-spacing: -0.04em;
-    margin: 16px 0;
+    font-size: clamp(37px, 4.4vw, 62px);
+    line-height: 1.28;
+    letter-spacing: -0.065em;
+    font-weight: 900;
+    margin: 0;
   }
-  .section-heading p:not(.studio-kicker) {
-    color: #5d7278;
-    font-size: 14px;
-    line-height: 1.9;
+  .editorial-heading h2 > span {
+    color: #e94b28;
   }
-  .service-grid {
+  .editorial-heading > a {
+    grid-column: 2;
+    justify-self: start;
+    margin-top: 25px;
+  }
+  .application-layout {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 30px;
+    grid-template-columns: 1.2fr 1fr;
+    gap: 8%;
+    align-items: start;
   }
-  .service-art {
+  .application-visual {
     position: relative;
-    height: 255px;
-    background: #eef1ec;
+    display: block;
     overflow: hidden;
+    height: 400px;
+    background: #e9e2cc;
   }
-  .service-entry:nth-child(2) .service-art {
-    background: #eae7f0;
-  }
-  .service-entry:nth-child(3) .service-art {
-    background: #e3eeeb;
-  }
-  .service-art .studio-image {
-    height: 240px;
-    width: 83%;
-    margin: auto;
+  .application-visual .studio-image {
+    height: 100%;
     object-fit: contain;
-    transition: transform 0.25s;
+    padding: 20px;
+    transition: transform 0.4s;
   }
-  .service-entry:hover .studio-image {
-    transform: translateY(-5px);
+  .application-visual:hover .studio-image {
+    transform: rotate(-4deg) scale(1.03);
   }
-  .service-number {
+  .specimen-number {
     position: absolute;
-    top: 18px;
-    left: 20px;
-    font-size: 12px;
+    top: 12px;
+    left: 22px;
+    font: 80px/1 Arial, sans-serif;
+    letter-spacing: -0.06em;
+    color: #192e5325;
   }
-  .service-chip {
+  .specimen-label {
     position: absolute;
     bottom: 17px;
-    left: 20px;
+    left: 22px;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+  }
+  .visual-arrow {
+    position: absolute;
+    right: 20px;
+    bottom: 13px;
+    font-size: 30px;
+  }
+  .story-copy {
+    padding-block: 25px 0;
+  }
+  .story-category {
     font-size: 11px;
-    background: #ffffffdc;
-    padding: 4px 9px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
   }
-  .service-title {
+  .story-copy h3 {
+    font-size: clamp(28px, 3vw, 42px);
+    line-height: 1.35;
+    letter-spacing: -0.04em;
+    margin: 15px 0;
+  }
+  .story-copy p {
+    font-size: 14px;
+    line-height: 1.95;
+    max-width: 390px;
+    margin: 0 0 22px;
+  }
+  .story-links {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    margin-top: 18px;
+    flex-wrap: wrap;
+    gap: 12px 24px;
+    font-size: 12px;
+    font-weight: 700;
+    border-top: 1px solid #acb0a5;
+    padding-top: 16px;
   }
-  .service-title h3 {
-    font-size: 20px;
+  .story-links a:hover {
+    color: #b8371a;
+  }
+  .story-business {
+    padding-top: 100px;
+  }
+  .story-business .story-copy {
+    padding-top: 0;
+    padding-bottom: 30px;
+  }
+  .story-business .application-visual {
+    background: #bfcbe2;
+    height: 360px;
+  }
+  .story-business .application-visual .studio-image {
+    transform: rotate(-12deg);
+    padding: 25px 8px;
+  }
+  .story-business .application-visual:hover .studio-image {
+    transform: rotate(-7deg);
+  }
+  .personal-story {
+    margin-top: 95px;
+    display: grid;
+    grid-template-columns: 1fr 1.1fr 1fr;
+    align-items: center;
+    gap: 28px;
+    border-top: 1px solid #192e53;
+    border-bottom: 1px solid #192e53;
+    padding-block: 30px;
+    position: relative;
+  }
+  .personal-title h3 {
+    font-size: clamp(28px, 3vw, 40px);
+    line-height: 1.35;
+    letter-spacing: -0.055em;
     margin: 0;
   }
-  .service-entry > p {
-    font-size: 13px;
-    line-height: 1.85;
-    color: #5b7076;
+  .personal-story > .studio-image {
+    height: 295px;
+    object-fit: contain;
+    transform: rotate(7deg);
   }
-  .platform-section {
-    background: #17343d;
-    color: #eef7f5;
-    padding-block: 70px;
-  }
-  .platform-layout {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 90px;
-    align-items: center;
-  }
-  .platform-layout h2 {
-    color: white;
-  }
-  .platform-layout > div > p:not(.studio-kicker) {
-    max-width: 470px;
-    color: #bdcfd1;
+  .personal-copy p {
     font-size: 14px;
     line-height: 1.9;
-    margin-bottom: 28px;
+    margin-bottom: 25px;
   }
-  .platform-link {
+  .personal-rush {
     display: block;
-    font-size: 12px;
+    font-size: 11px;
     margin-top: 20px;
-    color: #c5d8d8;
   }
-  .platform-flow {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    border-top: 1px solid #48636b;
+  .material-section {
+    background: #203ec3;
+    color: #f7f3e9;
+    padding-block: 65px 70px;
+    overflow: hidden;
   }
-  .platform-flow li {
-    display: flex;
-    gap: 24px;
-    padding: 26px 0;
-    border-bottom: 1px solid #48636b;
+  .material-heading {
+    display: grid;
+    grid-template-columns: 1fr 1.4fr 1fr;
+    gap: 40px;
+    align-items: start;
+    margin-bottom: 45px;
   }
-  .platform-flow li > span {
-    color: #dff08f;
-    font-size: 12px;
-    padding-top: 6px;
+  .material-heading h2 {
+    color: #f7f3e9;
   }
-  .platform-flow h3 {
-    color: white;
-    font-size: 19px;
-    margin: 0 0 8px;
-  }
-  .platform-flow p {
-    margin: 0;
+  .material-heading > p:last-child {
     font-size: 13px;
-    color: #bdcfd1;
+    line-height: 1.9;
+    margin-top: 20px;
   }
   .material-layout {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 80px;
-    align-items: center;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 9%;
+    align-items: start;
   }
   .material-display {
     position: relative;
-    background: #e8eddf;
-    min-height: 510px;
-    display: flex;
-    flex-direction: column;
-    justify-content: end;
-    overflow: hidden;
+    min-height: 535px;
   }
   .material-big-type {
     position: absolute;
-    top: 27px;
-    left: 25px;
-    font: 900 clamp(65px, 8vw, 113px) / 1 Arial, sans-serif;
-    letter-spacing: -0.05em;
-    color: #cad7be;
+    top: 0;
+    left: -6px;
+    font: 900 clamp(100px, 12vw, 170px) / 1 Arial, sans-serif;
+    letter-spacing: -0.06em;
+    color: #f7f3e9;
   }
-  .material-display .studio-image {
-    position: relative;
-    height: 370px;
-    width: 90%;
-    margin: 40px auto 0;
+  .material-display > .studio-image {
+    position: absolute;
+    top: 32px;
+    left: -15px;
+    height: 465px;
+    width: 105%;
     object-fit: contain;
+    transform: rotate(-15deg);
+  }
+  .material-recommendation {
+    position: absolute;
+    right: -15px;
+    top: 270px;
+    padding: 14px 18px;
+    background: #f4edb5;
+    color: #192e53;
+    font-size: 13px;
+    line-height: 1.6;
+    transform: rotate(8deg);
   }
   .material-caption {
-    display: grid;
-    gap: 8px;
-    padding: 0 30px 30px;
-    font-size: 13px;
-  }
-  .material-caption span {
-    font-size: 11px;
-    color: #5f7366;
-  }
-  .material-copy > p:not(.studio-kicker) {
-    font-size: 14px;
-    color: #607277;
-    line-height: 1.9;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid #8b9ae4;
+    padding-bottom: 10px;
+    width: 100%;
   }
   .material-tabs {
     display: flex;
-    gap: 6px;
-    margin-top: 25px;
-    border-bottom: 1px solid #c7d3ca;
+    border-bottom: 1px solid #778de5;
+    gap: 7px;
   }
   .material-tabs button {
-    background: transparent;
-    color: var(--ink);
-    cursor: pointer;
+    background: none;
     border: 0;
-    padding: 13px 16px;
-    font-size: 13px;
+    border-bottom: 3px solid transparent;
+    padding: 10px 15px 17px;
+    cursor: pointer;
+    color: #e0e6ff;
+    font-size: 14px;
+    position: relative;
+  }
+  .material-tabs button > span {
+    position: absolute;
+    font-size: 8px;
+    top: -6px;
+    right: 8px;
+    color: #f4edb5;
   }
   .material-tabs button.active {
-    border-bottom: 3px solid #177c91;
+    color: #fff;
+    border-bottom-color: #f4edb5;
     font-weight: 800;
   }
   .material-details {
-    min-height: 245px;
-    padding-block: 18px;
+    padding-block: 20px 15px;
+    min-height: 295px;
+  }
+  .material-selected {
+    font: 900 35px/1 Arial, sans-serif;
+    letter-spacing: -0.03em;
   }
   .material-details h3 {
-    font-size: 19px;
-    margin: 0 0 10px;
+    font-size: 20px;
+    color: #f7f3e9;
+    margin: 16px 0 12px;
   }
-  .material-details p,
-  .material-details dl {
+  .material-details p {
     font-size: 13px;
-    color: #546b72;
     line-height: 1.9;
+    color: #e0e6ff;
+  }
+  .material-details dl {
+    font-size: 12px;
+    line-height: 1.85;
   }
   .material-details dl > div {
     display: grid;
     grid-template-columns: 65px 1fr;
     gap: 10px;
-    margin-top: 10px;
+    margin-top: 12px;
   }
   .material-details dt {
-    font-weight: 700;
+    color: #d4dafa;
   }
   .material-details dd {
     margin: 0;
   }
-  .process-section {
-    background: #f0f3ef;
+  .material-copy > .text-link:hover {
+    color: #f4edb5;
   }
-  .process-track {
-    list-style: none;
+  .material-sample {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    margin-top: 22px;
+  }
+  .material-sample .studio-image {
+    width: 115px;
+    height: 125px;
+    object-fit: contain;
+    transform: rotate(12deg);
+  }
+  .material-sample p {
+    font-size: 12px;
+    line-height: 1.8;
+  }
+  .material-sample small {
+    display: block;
+    font-size: 9px;
+    margin-top: 7px;
+    color: #d1dafb;
+  }
+  .commission-section {
+    padding-block: 100px 55px;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 30px;
+    grid-template-columns: 1fr 1.2fr;
+    column-gap: 10%;
+  }
+  .commission-title h2 {
+    margin-top: 30px;
+  }
+  .commission-title h2 > span {
+    color: #e94b28;
+  }
+  .commission-title > p:not(.section-index) {
+    font-size: 14px;
+    line-height: 1.9;
+    margin: 26px 0;
+  }
+  .member-link {
+    display: block;
+    margin-top: 22px;
+    font-size: 12px;
+  }
+  .commission-steps {
+    list-style: none;
     padding: 0;
-    margin: 40px 0 30px;
-  }
-  .process-track li {
-    border-top: 1px solid #9fb7b5;
-    padding-top: 22px;
-  }
-  .step-index {
-    font: 28px/1 Arial, sans-serif;
-    color: #18819a;
-  }
-  .process-track h3 {
-    font-size: 18px;
-    margin: 18px 0 10px;
-  }
-  .process-track p {
-    font-size: 13px;
-    color: #5c7075;
-    line-height: 1.85;
-  }
-  .process-note {
-    font-size: 11px;
-    color: #63767c;
-    border-top: 1px solid #cad7d0;
-    padding-top: 20px;
     margin: 0;
+    border-top: 1px solid #192e53;
+  }
+  .commission-steps li {
+    display: grid;
+    grid-template-columns: 55px 1fr;
+    gap: 18px;
+    padding-block: 23px;
+    border-bottom: 1px solid #aeb5b6;
+  }
+  .commission-steps li > span {
+    font: 32px/1.4 Arial, sans-serif;
+    letter-spacing: -0.05em;
+    color: #e94b28;
+  }
+  .commission-steps h3 {
+    font-size: 20px;
+    margin: 0 0 8px;
+  }
+  .commission-steps p {
+    font-size: 13px;
+    line-height: 1.85;
+    margin: 0;
+    color: #515d70;
+  }
+  .model-note {
+    grid-column: 1 / -1;
+    margin-top: 65px;
+    display: flex;
+    align-items: center;
+    gap: 35px;
+    padding: 10px 30px;
+    background: #e9e2cc;
+  }
+  .model-note .studio-image {
+    width: 165px;
+    height: 145px;
+    object-fit: contain;
+    transform: rotate(-9deg);
+  }
+  .model-note h3 {
+    font-size: 23px;
+    margin: 0 0 8px;
+  }
+  .model-note p {
+    font-size: 13px;
+    margin: 0;
+  }
+  .model-note .text-link {
+    margin-left: auto;
+    flex-shrink: 0;
   }
   .faq-section {
     display: grid;
-    grid-template-columns: 1fr 1.65fr;
-    gap: 70px;
+    grid-template-columns: 1fr 1.5fr;
+    gap: 8%;
+    padding-block: 50px 95px;
+  }
+  .faq-section h2 {
+    font-size: 40px;
+    margin: 25px 0;
   }
   .faq-list {
-    border-top: 1px solid #c7d3ca;
+    border-top: 1px solid #192e53;
   }
   .faq-list details {
-    border-bottom: 1px solid #c7d3ca;
+    border-bottom: 1px solid #b4b9b5;
   }
   .faq-list summary {
     display: flex;
-    gap: 20px;
+    gap: 18px;
     align-items: baseline;
-    padding-block: 23px;
-    font-size: 15px;
+    padding-block: 22px;
+    font-size: 14px;
     font-weight: 700;
     list-style: none;
     cursor: pointer;
@@ -749,8 +961,8 @@
     display: none;
   }
   .faq-index {
-    font-size: 10px;
-    color: #6c878c;
+    font: 11px Arial, sans-serif;
+    color: #697486;
   }
   .faq-plus {
     margin-left: auto;
@@ -760,194 +972,385 @@
     transform: rotate(45deg);
   }
   .faq-list details p {
-    margin: 0;
-    padding: 0 30px 24px;
     font-size: 13px;
-    line-height: 1.85;
-    color: #5a7076;
+    line-height: 1.9;
+    color: #515d70;
+    margin: 0;
+    padding: 0 28px 24px;
   }
-  .start-banner {
-    background: #dff08f;
-    padding-block: 56px;
+  .closing-poster {
+    background: #f2663f;
+    color: #142344;
+    padding-block: 42px 20px;
+    overflow: hidden;
   }
-  .start-inner {
+  .closing-top {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 30px;
   }
-  .start-inner h2 {
-    font-size: clamp(26px, 3vw, 38px);
+  .closing-top p {
+    font-size: clamp(24px, 3vw, 40px);
+    font-weight: 800;
+    line-height: 1.4;
+    letter-spacing: -0.04em;
+    margin: 0;
   }
-  .start-inner p:not(.studio-kicker) {
-    font-size: 13px;
+  .closing-arrow {
+    font: 90px/1 Arial, sans-serif;
+    padding: 0 15px;
+    transition: transform 0.2s;
   }
-  .start-inner > a {
-    flex-shrink: 0;
+  .closing-arrow:hover {
+    transform: translate(5px, -5px);
   }
-  @media (max-width: 1000px) {
-    .platform-layout,
-    .material-layout {
-      gap: 40px;
-    }
+  .closing-wordmark {
+    display: block;
+    font: 900 clamp(75px, 21vw, 305px) / 1.03 Arial, sans-serif;
+    letter-spacing: -0.07em;
+    margin-left: -0.015em;
+    margin-top: 22px;
+    white-space: nowrap;
+  }
+  .closing-baseline {
+    border-top: 1px solid #192e53;
+    display: flex;
+    justify-content: space-between;
+    padding-top: 16px;
+    font-size: 11px;
+  }
+  @media (max-width: 1100px) {
     .poster-grid {
-      min-height: 560px;
+      min-height: 565px;
     }
-    .hero-object-main {
+    .poster-art {
+      height: 550px;
+    }
+    .signature-object {
+      height: 550px;
+    }
+    .application-visual {
       height: 330px;
     }
-    .service-art {
-      height: 225px;
+    .story-business .application-visual {
+      height: 300px;
     }
-    .service-art .studio-image {
-      height: 210px;
+    .material-heading {
+      grid-template-columns: 0.8fr 1.2fr 1fr;
+      gap: 20px;
+    }
+    .material-layout {
+      gap: 5%;
+    }
+    .material-display {
+      min-height: 485px;
+    }
+    .material-display > .studio-image {
+      height: 425px;
+    }
+    .commission-section {
+      column-gap: 6%;
+    }
+    .closing-wordmark {
+      font-size: 21.5vw;
     }
   }
   @media (max-width: 760px) {
+    .brand-home :deep(.public-header) {
+      padding-block: 17px;
+    }
+    .brand-home :deep(.studio-brand strong) {
+      font-size: 32px;
+    }
+    .hero-edition {
+      font-size: 9px;
+      padding-top: 13px;
+      letter-spacing: 0.04em;
+    }
     .poster-grid {
-      grid-template-columns: 1fr;
-      padding-block: 40px 10px;
-      gap: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      min-height: 0;
+    }
+    .poster-copy {
+      padding-block: 25px 0;
+    }
+    .hero-category {
+      font-size: 10px;
+      margin-bottom: 17px;
     }
     h1 {
-      font-size: clamp(35px, 8vw, 52px);
-      margin-bottom: 20px;
+      font-size: clamp(60px, 14.8vw, 104px);
+      margin-bottom: 17px;
+      line-height: 1.12;
     }
-    .poster-copy .studio-kicker {
+    .headline-last {
+      padding-left: 0.33em;
+    }
+    .poster-description {
+      font-size: 13px;
+      margin-left: 0;
+    }
+    .poster-actions {
+      gap: 18px;
+      margin-left: 0;
+    }
+    .poster-actions .studio-button {
+      font-size: 12px;
+      padding: 14px 17px;
+      gap: 20px;
+    }
+    .poster-actions .text-link {
+      font-size: 11px;
+      gap: 8px;
+    }
+    .poster-art {
+      height: 330px;
+      width: min(100%, 480px);
+      align-self: center;
+      margin: 5px 0 0;
+    }
+    .signature-object {
+      height: 350px;
+      width: 112%;
+      left: -6%;
+      top: -15px;
+    }
+    .hero-object-caption {
+      right: 0;
+      top: 60px;
+      font-size: 9px;
+    }
+    .hero-sample-label {
+      bottom: 20px;
+      right: 0;
+      font-size: 9px;
+    }
+    .hero-sample-label small {
+      font-size: 8px;
+    }
+    .poster-footnote {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      font-size: 9px;
+      padding-block: 14px;
+    }
+    .poster-footnote a {
+      grid-column: 1 / -1;
+    }
+    .applications-section {
+      padding-block: 50px;
+    }
+    .editorial-heading {
+      display: block;
+      padding-bottom: 35px;
+    }
+    .section-index {
       font-size: 10px;
       margin-bottom: 22px;
     }
-    .poster-description {
-      font-size: 14px;
-    }
-    .poster-actions {
-      gap: 16px;
-      margin-top: 24px;
-    }
-    .poster-actions .studio-button {
-      font-size: 13px;
-      padding: 13px 18px;
-    }
-    .poster-footnote {
-      margin-top: 24px;
-      font-size: 10px;
-    }
-    .poster-art {
-      min-height: 320px;
-      width: min(100%, 470px);
-      margin: auto;
-    }
-    .poster-art-type {
-      top: 8px;
-      right: 5px;
-      font-size: 125px;
-    }
-    .hero-object-main {
-      height: 255px;
-      top: 0;
-      right: 0;
-    }
-    .hero-object-front {
-      height: 160px;
-      bottom: 8px;
-      left: 0;
-    }
-    .hero-object-back {
-      height: 125px;
-      top: 10px;
-    }
-    .object-label {
-      font-size: 9px;
-      bottom: 20px;
-    }
-    .object-label small {
-      font-size: 8px;
-    }
-    .capability-strip {
-      grid-template-columns: repeat(3, 1fr);
-      gap: 10px;
-      padding-block: 18px;
-    }
-    .capability-strip > div {
-      flex-direction: column;
-      align-items: start;
-      gap: 5px;
-      font-size: 10px;
-    }
-    .capability-strip > a {
-      grid-column: 1 / -1;
-      margin-top: 8px;
-      font-size: 11px;
-    }
-    .studio-section {
-      padding-block: 50px;
-    }
-    .section-heading {
-      display: block;
-      margin-bottom: 27px;
-    }
     h2 {
+      font-size: clamp(34px, 8vw, 48px);
+    }
+    .editorial-heading > a {
+      margin-top: 23px;
+    }
+    .application-layout {
+      grid-template-columns: 1fr;
+      gap: 45px;
+    }
+    .application-visual {
+      height: 310px;
+    }
+    .story-copy h3 {
+      font-size: 32px;
+    }
+    .story-copy p {
+      font-size: 13px;
+    }
+    .story-links {
+      font-size: 11px;
+      gap: 16px;
+    }
+    .story-business {
+      padding-top: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .story-business .application-visual {
+      order: -1;
+      height: 290px;
+    }
+    .story-business .story-copy {
+      padding-top: 25px;
+      padding-bottom: 0;
+    }
+    .personal-story {
+      margin-top: 45px;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      padding-block: 25px;
+    }
+    .personal-title h3 {
       font-size: 28px;
     }
-    .service-grid {
-      grid-template-columns: 1fr;
-      gap: 28px;
+    .personal-title .section-index {
+      font-size: 9px;
     }
-    .service-art {
-      height: 240px;
+    .personal-story > .studio-image {
+      height: 200px;
     }
-    .service-art .studio-image {
-      height: 230px;
+    .personal-copy {
+      grid-column: 1 / -1;
     }
-    .platform-section {
+    .personal-copy p {
+      font-size: 13px;
+      margin-top: 0;
+    }
+    .personal-rush {
+      font-size: 10px;
+    }
+    .material-section {
       padding-block: 45px;
     }
-    .platform-layout,
-    .material-layout,
-    .faq-section {
+    .material-heading {
+      display: block;
+      margin-bottom: 20px;
+    }
+    .material-heading > p:last-child {
+      margin-top: 22px;
+      font-size: 12px;
+    }
+    .material-layout {
       grid-template-columns: 1fr;
       gap: 35px;
     }
     .material-display {
-      min-height: 350px;
-    }
-    .material-display .studio-image {
-      height: 270px;
-      margin-top: 20px;
+      min-height: 390px;
+      max-width: 420px;
+      width: 100%;
+      margin: auto;
     }
     .material-big-type {
-      font-size: 95px;
-      top: 17px;
+      font-size: clamp(105px, 28vw, 140px);
+      top: 7px;
+    }
+    .material-display > .studio-image {
+      height: 335px;
+      top: 28px;
+      left: -10px;
+    }
+    .material-recommendation {
+      top: 195px;
+      right: 3px;
+      font-size: 11px;
+      padding: 10px 13px;
     }
     .material-caption {
-      padding: 0 23px 23px;
+      font-size: 8px;
     }
     .material-tabs button {
-      padding: 12px 13px;
+      font-size: 12px;
+      padding: 13px 14px;
     }
     .material-details {
       min-height: 0;
     }
-    .process-track {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 25px;
+    .material-details h3 {
+      font-size: 19px;
     }
-    .process-track h3 {
-      font-size: 16px;
+    .material-sample {
+      margin-top: 20px;
     }
-    .process-track p {
+    .material-sample .studio-image {
+      width: 100px;
+      height: 110px;
+    }
+    .material-sample p {
+      font-size: 11px;
+    }
+    .material-sample small {
+      font-size: 8px;
+    }
+    .commission-section {
+      padding-block: 50px 25px;
+      grid-template-columns: 1fr;
+      gap: 40px;
+    }
+    .commission-title h2 {
+      margin-top: 20px;
+    }
+    .commission-title > p:not(.section-index) {
+      font-size: 13px;
+    }
+    .commission-steps li {
+      grid-template-columns: 40px 1fr;
+      gap: 12px;
+      padding-block: 20px;
+    }
+    .commission-steps li > span {
+      font-size: 26px;
+    }
+    .commission-steps h3 {
+      font-size: 18px;
+    }
+    .commission-steps p {
       font-size: 12px;
     }
+    .model-note {
+      margin-top: 0;
+      display: grid;
+      grid-template-columns: 95px 1fr;
+      gap: 5px 14px;
+      padding: 18px;
+    }
+    .model-note .studio-image {
+      width: 95px;
+      height: 110px;
+    }
+    .model-note h3 {
+      font-size: 21px;
+    }
+    .model-note p {
+      font-size: 11px;
+      line-height: 1.8;
+    }
+    .model-note .text-link {
+      grid-column: 1 / -1;
+      margin: 5px 0;
+      justify-self: start;
+      font-size: 12px;
+    }
+    .faq-section {
+      grid-template-columns: 1fr;
+      gap: 28px;
+      padding-block: 30px 50px;
+    }
+    .faq-section h2 {
+      font-size: 34px;
+    }
     .faq-list summary {
-      gap: 13px;
-      font-size: 14px;
+      font-size: 13px;
+      gap: 12px;
     }
-    .start-inner {
-      display: block;
+    .closing-poster {
+      padding-block: 30px 18px;
     }
-    .start-inner > a {
-      margin-top: 15px;
-      font-size: 14px;
+    .closing-top p {
+      font-size: 25px;
+    }
+    .closing-arrow {
+      font-size: 65px;
+      padding-right: 0;
+    }
+    .closing-wordmark {
+      font-size: 21vw;
+      margin-block: 20px 10px;
+    }
+    .closing-baseline {
+      font-size: 9px;
     }
   }
 </style>

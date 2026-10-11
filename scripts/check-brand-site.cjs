@@ -90,13 +90,13 @@ async function run() {
         images.set(image.src, [...(images.get(image.src) || []), route]);
       }
     }
-    assert.equal(images.size, 12);
+    assert.equal(images.size, 13);
     for (const [src, usages] of images)
       assert.ok(usages.length <= 2, src + " repeated on " + usages.join(", "));
     console.log(
       "PASS " +
         routes.length +
-        " public routes, 12 distinct image assets used at most twice"
+        " public routes, 13 distinct image assets used at most twice"
     );
     for (const width of [1440, 1024, 768, 390, 320]) {
       await page.setViewportSize({ width, height: 1000 });

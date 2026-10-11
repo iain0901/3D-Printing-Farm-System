@@ -25,9 +25,11 @@
     parts: 'fdm-tray',
     stand: 'fdm-industrial',
     vase: 'fdm-personal',
+    signature: 'fdm-signature-three',
   }
 
   const altByImage = {
+    'fdm-signature-three': '橘紅色 FDM 逐層成型的立體數字 3 品牌示意物件',
     'fdm-workshop': '橘色 FDM 線軸',
     'fdm-education': '黃綠色 FDM 格構立方體',
     'fdm-industrial': '橘色 FDM 手機架',

@@ -38,11 +38,11 @@ describe("3DRFM public brand information architecture", () => {
       }
     }
   });
-  it("curates at most two placements for each of the 12 illustrations", () => {
+  it("curates at most two placements for each of the 13 illustrations", () => {
     const counts = new Map();
     for (const kind of [...homeArtwork, ...Object.values(routeArtwork)])
       counts.set(kind, (counts.get(kind) || 0) + 1);
-    expect(counts.size).toBe(12);
+    expect(counts.size).toBe(13);
     for (const count of counts.values()) expect(count).toBeLessThanOrEqual(2);
     for (const path of Object.keys(routeArtwork))
       expect(routes.has(path)).toBe(true);
