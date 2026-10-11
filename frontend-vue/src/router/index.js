@@ -9,6 +9,7 @@ import { createRouter, createWebHashHistory, createWebHistory } from 'vue-router
 import Layout from '@/layouts'
 import { publicPath, routerMode } from '@/config'
 import { audiences, services } from '@/content/fdmServices.mjs'
+import { publicPages } from '@/content/publicPages.mjs'
 export const constantRoutes = [
   {
     path: '/services',
@@ -33,8 +34,26 @@ export const constantRoutes = [
     meta: { title: `${service.title}｜FDM 列印`, publicService: true },
     hidden: true,
   })),
-  { path: '/services/:pathMatch(.*)*', redirect: '/404', hidden: true },
-  { path: '/for/:pathMatch(.*)*', redirect: '/404', hidden: true },
+  ...publicPages.map((page) => ({
+    path: page.path,
+    name: `Public-${page.id}`,
+    component: () => import('@/views/public/InfoPage.vue'),
+    props: { pageId: page.id },
+    meta: { title: page.title, publicService: true },
+    hidden: true,
+  })),
+  {
+    path: '/services/:pathMatch(.*)*',
+    redirect: '/404',
+    meta: { publicService: true },
+    hidden: true,
+  },
+  {
+    path: '/for/:pathMatch(.*)*',
+    redirect: '/404',
+    meta: { publicService: true },
+    hidden: true,
+  },
   {
     // 品牌落地頁：公開行銷首頁（服務、流程、方案、FAQ），CTA 導向 /quote 估價。
     path: '/',
@@ -89,12 +108,20 @@ export const constantRoutes = [
     path: '/401',
     name: '401',
     component: () => import('@/views/401'),
+    meta: { publicService: true },
     hidden: true,
   },
   {
     path: '/404',
     name: '404',
     component: () => import('@/views/404'),
+    meta: { publicService: true },
+    hidden: true,
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    redirect: '/404',
+    meta: { publicService: true },
     hidden: true,
   },
 ]
@@ -455,16 +482,10 @@ export const asyncRoutes = [
       },
     ],
   },
-  {
-    path: '/:pathMatch(.*)*',
-    redirect: '/404',
-    hidden: true,
-  },
 ]
 
 const router = createRouter({
-  history:
-    routerMode === 'history' ? createWebHistory(publicPath) : createWebHashHistory(publicPath),
+  history: routerMode === 'history' ? createWebHistory(publicPath) : createWebHashHistory(publicPath),
   scrollBehavior(to, from, savedPosition) {
     if (savedPosition) return savedPosition
     if (to.hash) return { el: to.hash, top: 24 }

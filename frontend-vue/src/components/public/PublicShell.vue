@@ -17,8 +17,9 @@
       </button>
       <nav id="public-nav" class="public-nav" :class="{ 'is-open': menuOpen }" aria-label="主要導覽">
         <router-link to="/services" @click="menuOpen = false">製作服務</router-link>
-        <router-link :to="{ path: '/', hash: '#materials' }" @click="menuOpen = false">材料指南</router-link>
-        <router-link :to="{ path: '/', hash: '#process' }" @click="menuOpen = false">製作流程</router-link>
+        <router-link to="/materials" @click="menuOpen = false">材料指南</router-link>
+        <router-link to="/guides/file-prep" @click="menuOpen = false">檔案準備</router-link>
+        <router-link to="/faq" @click="menuOpen = false">常見問題</router-link>
         <router-link to="/portal/login" @click="menuOpen = false">會員登入</router-link>
         <router-link to="/quote" class="studio-button small" @click="menuOpen = false">
           自動估價
@@ -37,6 +38,9 @@
           <router-link to="/for/education">學校與實驗室 ↗</router-link>
           <router-link to="/for/business">企業製作 ↗</router-link>
           <router-link to="/for/personal">個人代印 ↗</router-link>
+          <router-link to="/guides/fdm-design">設計注意事項 ↗</router-link>
+          <router-link to="/process">製作流程 ↗</router-link>
+          <router-link to="/contact">聯絡與合作 ↗</router-link>
           <router-link to="/quote">自動估價 ↗</router-link>
           <router-link to="/portal/login">會員中心 ↗</router-link>
           <router-link to="/login">工作人員登入 ↗</router-link>
@@ -44,7 +48,11 @@
       </div>
       <div class="footer-bottom">
         <span>© {{ year }} 三點成型 3DRFM</span>
-        <span>FDM 列印・建模・小量製造</span>
+        <span>
+          <router-link to="/privacy">隱私權說明</router-link>
+          　
+          <router-link to="/terms">服務使用說明</router-link>
+        </span>
       </div>
     </footer>
   </div>

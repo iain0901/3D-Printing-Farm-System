@@ -106,20 +106,15 @@ async function run() {
       .locator(".public-nav")
       .getByRole("link", { name: "材料指南" })
       .click();
-    await page.waitForFunction(
-      () =>
-        location.hash.endsWith("#materials") &&
-        Math.abs(
-          document.querySelector("#materials").getBoundingClientRect().top - 24
-        ) < 5
-    );
+    await page.locator(".info-page h1").waitFor();
+    assert.match(await page.title(), /FDM 材料指南/);
     assert.equal(
       await page
         .getByRole("button", { name: "選單" })
         .getAttribute("aria-expanded"),
       "false"
     );
-    console.log("PASS mobile menu and cross-page anchor");
+    console.log("PASS mobile menu and materials guide route");
     await page.goto(base + "/#/quote?mode=agent&model=no");
     assert.equal(
       await page.locator(".mode-card").nth(1).getAttribute("aria-pressed"),

@@ -7,10 +7,17 @@
     <link href="<%= BASE_URL %>favicon.ico" rel="icon" />
     <link rel="manifest" href="<%= BASE_URL %>manifest.webmanifest" />
     <meta name="theme-color" content="#2563eb" />
-    <meta content="3DRFM 三點成型｜FDM 3D 列印代印、建模與小量製造服務，上傳模型即時估價" name="description" />
+    <meta
+      content="3DRFM 三點成型｜FDM 3D 列印、模型代印、建模協助與小量製作。上傳 STL、3MF、STEP 模型，使用自動估價系統開始規劃。"
+      name="description"
+    />
+    <meta content="三點成型,3DRFM,FDM,3D列印,模型代印,自動估價,小量製作" name="keywords" />
+    <meta content="三點成型｜FDM 3D 列印工作室" property="og:title" />
+    <meta content="從模型、專題、展覽到小批量製作，先用自動估價系統規劃你的 FDM 作品。" property="og:description" />
+    <meta content="website" property="og:type" />
     <meta content="<%= VUE_APP_AUTHOR %>" name="author" />
     <link href="<%= BASE_URL %>static/css/loading.css" rel="stylesheet" />
-    <title><%= VUE_APP_TITLE %></title>
+    <title>三點成型｜FDM 3D 列印與自動估價</title>
   </head>
   <body>
     <div id="vue-admin-better">
@@ -27,8 +34,8 @@
       </div>
     </div>
     <script>
-      if ("serviceWorker" in navigator) {
-        window.addEventListener("load", () => navigator.serviceWorker.register("<%= BASE_URL %>sw.js"));
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => navigator.serviceWorker.register('<%= BASE_URL %>sw.js'))
       }
     </script>
   </body>

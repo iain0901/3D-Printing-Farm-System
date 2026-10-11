@@ -10,24 +10,42 @@
 - 文案採繁體中文，保留材料／檔案格式等專有名詞。不新增未經證實的銷量、評價或交期承諾。
 - 材料按鈕可切換說明，常見問題使用原生 `details`；支援鍵盤操作與減少動態效果設定。
 
+## 正式公開資訊頁
+
+新增 9 個可從導覽或頁尾抵達的公開路由，內容集中於 `frontend-vue/src/content/publicPages.mjs`。它們共用 `InfoPage.vue` 的版型，因此新增或更新文字時，不會散落在多個元件中。
+
+| 路由                 | 用途                             |
+| -------------------- | -------------------------------- |
+| `/materials`         | FDM 材料選擇與特性               |
+| `/guides/file-prep`  | 檔案格式、輸出與上傳前檢查       |
+| `/guides/fdm-design` | FDM 設計限制與可製造性準備       |
+| `/process`           | 從估價到確認需求的服務流程       |
+| `/faq`               | 公開常見問題                     |
+| `/about`             | 工作室定位與 FDM 服務範圍        |
+| `/contact`           | 自動估價、會員查詢與技術合作入口 |
+| `/privacy`           | 隱私說明草案                     |
+| `/terms`             | 服務使用說明草案                 |
+
+聯絡頁只使用專案既有的 `support@3dstu.com` 與現有會員／估價流程；未捏造客服電話、地址、付款方式、物流商或保證交期。隱私與服務頁是公開資訊版面，不取代正式的法務審閱。
+
 ## FDM 客群與用途專頁
 
 新增 12 個公開路由，內容集中於 `frontend-vue/src/content/fdmServices.mjs`，導覽、路由與用途提示共用此資料，不需複製整份頁面。
 
-| 層級 | 路由 | 內容 |
-| --- | --- | --- |
-| 服務總覽 | `/services` | 三大客群、八種用途 |
-| 校園入口 | `/for/education` | 實驗室、專題、文創紀念品 |
-| 企業入口 | `/for/business` | 展覽、工業件、小批量 |
-| 個人入口 | `/for/personal` | 一般代印、急件 |
-| 用途專頁 | `/services/research-lab` | 實驗室與研究模型 |
-| 用途專頁 | `/services/student-project` | 專題與畢業製作 |
-| 用途專頁 | `/services/campus-gifts` | 文創與活動紀念品 |
-| 用途專頁 | `/services/exhibition` | 展覽與展示模型 |
-| 用途專頁 | `/services/industrial-parts` | 工業件與治具原型 |
-| 用途專頁 | `/services/small-batch` | 小批量製作 |
-| 用途專頁 | `/services/personal-print` | 一般模型代印 |
-| 用途專頁 | `/services/rush-print` | 快速急件評估 |
+| 層級     | 路由                         | 內容                     |
+| -------- | ---------------------------- | ------------------------ |
+| 服務總覽 | `/services`                  | 三大客群、八種用途       |
+| 校園入口 | `/for/education`             | 實驗室、專題、文創紀念品 |
+| 企業入口 | `/for/business`              | 展覽、工業件、小批量     |
+| 個人入口 | `/for/personal`              | 一般代印、急件           |
+| 用途專頁 | `/services/research-lab`     | 實驗室與研究模型         |
+| 用途專頁 | `/services/student-project`  | 專題與畢業製作           |
+| 用途專頁 | `/services/campus-gifts`     | 文創與活動紀念品         |
+| 用途專頁 | `/services/exhibition`       | 展覽與展示模型           |
+| 用途專頁 | `/services/industrial-parts` | 工業件與治具原型         |
+| 用途專頁 | `/services/small-batch`      | 小批量製作               |
+| 用途專頁 | `/services/personal-print`   | 一般模型代印             |
+| 用途專頁 | `/services/rush-print`       | 快速急件評估             |
 
 每頁包含不同的製作重點、材料討論方向、FDM 限制、準備清單、常見問題及相關頁面。`ServiceArt.vue` 增加實驗、工業外殼、批量、紀念品、展覽、桌上小物及急件原創向量插圖。準備清單只在頁面內暫存，不送出客戶資料；剪貼簿被拒絕時提供可手動複製的文字框。
 
@@ -54,6 +72,8 @@ node scripts/check-public-ui.cjs
 ```
 
 相同環境變數也可執行 `node scripts/check-service-pages.cjs`：檢查全部 12 頁的四種尺寸、匿名存取、客群切換、每個自動估價入口、剪貼簿拒絕情境及無效網址。此腳本會上傳瀏覽器端測試模型並實際呼叫不建立案件的估價 API，驗證既有引擎回傳價格與急件旗標；建立案件請求仍由測試攔截，不寫入真實訂單。
+
+`node scripts/check-info-pages.cjs` 會檢查 9 個正式公開資訊頁於 1440、768、390、320px 的無溢位呈現、FAQ 展開、支援信箱連結、估價 CTA、頁尾法律連結和無效網址處理；同時輸出材料、聯絡與政策頁的截圖。
 
 未指定 `PLAYWRIGHT_MODULE` 時載入標準 `playwright` 套件；未指定 `CHROMIUM_PATH` 時使用 Playwright 的瀏覽器。測試目標應為隔離的本機開發／測試服務。
 
