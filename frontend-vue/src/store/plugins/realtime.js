@@ -31,7 +31,14 @@ export default function realtimePlugin(store) {
     },
   })
 
+  let active = false
+  const allowed = () => {
+    const user = store.getters['user/currentUser']
+    return Boolean(store.getters['user/accessToken'] && store.getters['user/userInfoLoaded'] && user && (!['Owner', 'Admin'].includes(user.role) || user.twoFactorEnabled))
+  }
   async function start() {
+    if (active || !allowed()) return
+    active = true
     try {
       const data = await fetchState()
       applyStateSnapshot(store, data)
@@ -39,19 +46,21 @@ export default function realtimePlugin(store) {
     } catch {
       store.commit('app/setBackendStatus', 'local')
     }
-    client.connect()
+    if (allowed()) client.connect()
+    else stop()
   }
 
   function stop() {
+    active = false
     client.disconnect()
     store.commit('app/setBackendStatus', 'local')
   }
 
-  if (store.getters['user/accessToken']) start()
+  if (allowed()) start()
 
   store.subscribe((mutation) => {
-    if (mutation.type !== 'user/setAccessToken') return
-    if (mutation.payload) start()
+    if (!['user/setAccessToken', 'user/setCurrentUser'].includes(mutation.type)) return
+    if (allowed()) start()
     else stop()
   })
 }

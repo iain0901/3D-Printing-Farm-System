@@ -45,8 +45,10 @@ router.beforeResolve(async (to, from, next) => {
     } else {
       // 不能用 permissions.length 判断是否已加载过用户信息：Viewer 角色的 scopes 合法地为空数组
       const userInfoLoaded = store.getters['user/userInfoLoaded']
-      if (userInfoLoaded) {
-        next()
+      if (userInfoLoaded && router.hasRoute('Dashboard')) {
+        const user = store.getters['user/currentUser']
+        if (['Owner', 'Admin'].includes(user?.role) && !user?.twoFactorEnabled && to.path !== '/settings/index') next('/settings/index')
+        else next()
       } else {
         try {
           let permissions
@@ -55,7 +57,7 @@ router.beforeResolve(async (to, from, next) => {
             await store.dispatch('user/setPermissions', ['*'])
             permissions = ['*']
           } else {
-            permissions = await store.dispatch('user/getUserInfo')
+            permissions = userInfoLoaded ? store.getters['user/permissions'] : await store.dispatch('user/getUserInfo')
           }
 
           let accessRoutes = []
@@ -67,7 +69,9 @@ router.beforeResolve(async (to, from, next) => {
           accessRoutes.forEach((item) => {
             router.addRoute(item)
           })
-          next({ ...to, replace: true })
+          const user = store.getters['user/currentUser']
+          const enrollment = ['Owner', 'Admin'].includes(user?.role) && !user?.twoFactorEnabled
+          next(enrollment ? { path: '/settings/index', replace: true } : { ...to, replace: true })
         } catch {
           await store.dispatch('user/resetAccessToken')
           if (progressBar) VabProgress.done()

@@ -92,6 +92,7 @@ export const autoQuoteConfigSchema = z.object({
     { upToGrams: null, pricePerGram: 0.7 }
   ]),
   machineHourlyRate: z.number().nonnegative().default(15),
+  materialWeightMultipliers: z.record(z.string(), z.number().positive()).default({}),
   // 各商務檔位的倍率與最低消費
   businessTiers: businessTiersSchema.default(
     businessTiersSchema.parse({
@@ -132,6 +133,17 @@ export const autoQuoteConfigSchema = z.object({
 });
 
 export const defaultAutoQuoteConfig = autoQuoteConfigSchema.parse({});
+// Owner-approved Taiwan retail FDM policy; configurable engine, not material-cost guessing.
+export const taiwanFdmQuoteConfig = autoQuoteConfigSchema.parse({
+  currency: "TWD",
+  weightTiers: [{ upToGrams: 100, pricePerGram: 4 }, { upToGrams: 500, pricePerGram: 3.6 }, { upToGrams: null, pricePerGram: 3.2 }],
+  materialWeightMultipliers: { PLA: 1, PETG: 4.5 / 4, ASA: 5.5 / 4, TPU: 6.5 / 4 },
+  machineHourlyRate: 80,
+  businessTiers: { economy: { multiplier: 1, minimumCharge: 200 }, standard: { multiplier: 1.15, minimumCharge: 300 }, premium: { multiplier: 1.3, minimumCharge: 450 } },
+  serviceFees: { assembly: 100, sanding: 150, painting: 300, inspection: 50, packaging: 30, modeling: 800 },
+  taxPercent: 5,
+  roundTo: 0
+});
 
 // ---------------------------------------------------------------------------
 // 輸入 schema
@@ -208,7 +220,8 @@ export function computeAutoQuote(rawConfig, rawInput) {
 
   // -- 1) 重量階梯價：以「單組克重」決定適用階梯單價，再乘總量 --
   const perUnitGrams = input.scope === "unit" ? input.grams : totalGrams / input.quantity;
-  const tierPrice = weightTierPrice(config, perUnitGrams);
+  const materialMultiplier = config.materialWeightMultipliers[input.material] || 1;
+  const tierPrice = weightTierPrice(config, perUnitGrams) * materialMultiplier;
   const weightFee = money(totalGrams * tierPrice, 2);
 
   // -- 2) 機時價 --
@@ -316,7 +329,7 @@ export function computeAutoQuote(rawConfig, rawInput) {
     // 若套用量產% 折扣作用於「以第一階單價計算的重量費」，比較何者較優：
     // A) 現況：階梯單價已降價的 weightFee，無量產折
     // B) 以最貴第一階單價計算的重量費 × (1 - volume%)
-    const firstTierPrice = config.weightTiers[0].pricePerGram;
+    const firstTierPrice = config.weightTiers[0].pricePerGram * materialMultiplier;
     const alternativeWeightFee = money(totalGrams * firstTierPrice * (1 - volumePercent / 100), 2);
     if (alternativeWeightFee < weightFee) {
       discountAmount = money(weightFee - alternativeWeightFee, 2);

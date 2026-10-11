@@ -6904,6 +6904,8 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
 
   app.addHook("preHandler", async (request, reply) => {
     const routePath = request.url.split("?")[0];
+    // The endpoint still validates customer ownership; this is not an anonymous bypass.
+    if (request.method === "GET" && /^\/api\/quote-messages\/[^/]+\/[^/]+\/attachments\/\d+$/.test(routePath) && customerFromRequest(database, request).customer) return;
     const publicRoute = routePath === "/api/health" || routePath === "/api/readiness" || routePath === "/api/metrics" && hasValidMetricsToken(request) || routePath === "/api/internal/worker-broadcast" && hasValidWorkerToken(request) || routePath.startsWith("/api/internal/orca/") || routePath === "/api/integrations/chatwoot/webhook" || routePath === "/api/integrations/chatwoot/context" || routePath === "/api/billing/webhook/stripe" || routePath === "/api/public/quoteRequests" || routePath.startsWith("/api/public/quoteRequests/") || routePath === "/api/public/slicing-quotes" || routePath.startsWith("/api/public/slicing-quotes/") || routePath === "/api/public/cases" || routePath.startsWith("/api/public/cases/") || routePath === "/api/public/pricing-estimate" || routePath === "/api/public/model-preview" || routePath.startsWith("/api/auth/") || routePath.startsWith("/api/customer-auth/") || routePath.startsWith("/api/customer/") || routePath === "/api/events/stream" || routePath === "/api/events/ws" || serveStatic && !routePath.startsWith("/api/");
     if (publicRoute) return;
     if (await replayCommittedRestoreRequest(database, request, reply)) return;

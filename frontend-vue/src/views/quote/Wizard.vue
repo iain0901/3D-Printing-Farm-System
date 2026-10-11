@@ -686,7 +686,7 @@
             const quote = job.quote || job.result?.quote || job.pricing || response.quote
             if (measured.modelGrams == null || measured.supportGrams == null || measured.estimatedMinutes == null || !Number.isFinite(Number(measured.modelGrams)) || !Number.isFinite(Number(measured.supportGrams)) || !Number.isFinite(Number(measured.estimatedMinutes)) || !quote || !Number.isFinite(Number(quote.total))) throw new Error('切片結果缺少實際重量、時間或價格，不顯示參考件估值。')
             this.sliceQuote = { ...measured, profileName: measured.profileName || job.profileName, engine: measured.engine || job.engine }
-            this.estimate = quote
+            this.estimate = { ...quote, lines: quote.lines?.filter(line => line.amount !== 0) }
             this.sliceStatus = 'completed'
           } else if (!this.form.hasModel) {
             this.sliceStatus = ''

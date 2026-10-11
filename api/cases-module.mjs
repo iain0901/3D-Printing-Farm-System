@@ -18,6 +18,7 @@ import {
 import {
   computeAutoQuote,
   defaultAutoQuoteConfig,
+  taiwanFdmQuoteConfig,
   referencePartUsage,
 } from "./pricing-engine.mjs";
 
@@ -65,6 +66,9 @@ const publicSlicingQuoteSchema = z.object({
   infill: z.coerce.number().min(0).max(100).default(15),
   walls: z.coerce.number().int().min(1).max(12).default(2),
   autoSupports: z.boolean().default(true),
+  rush: z.boolean().default(false),
+  colors: z.coerce.number().int().min(1).max(4).default(1),
+  postProcessing: z.array(z.enum(["assembly", "sanding", "painting", "inspection", "packaging"])).default([]),
   businessTier: z.enum(["economy", "standard", "premium"]).default("economy"),
   quality: z.enum(["standard", "appearance", "functional"]).default("standard")
 });
@@ -83,6 +87,7 @@ function publicSlicingQuote(record) {
     engineVersion: record.engineVersion,
     profileName: record.profileName,
     profileDisclosure: record.profileDisclosure,
+    pricingPolicy: record.pricingPolicyVersion || "Legacy configured rates",
     autoOrient: true,
     autoArrange: true,
     autoSupports: record.autoSupports,
@@ -711,6 +716,9 @@ export async function registerCaseRoutes(app, options) {
       infill: incoming.input.infill,
       walls: incoming.input.walls,
       autoSupports: incoming.input.autoSupports,
+      rush: incoming.input.rush,
+      colors: incoming.input.colors,
+      postProcessing: incoming.input.postProcessing,
       businessTier: incoming.input.businessTier,
       quality: incoming.input.quality,
       engine: "OrcaSlicer",
@@ -799,6 +807,9 @@ export async function registerCaseRoutes(app, options) {
       const digest = async file => createHash("sha256").update(await readCaseFile(file)).digest("hex");
       const hashes = async files => (await Promise.all(files.map(digest))).sort().join(",");
       if (sourceModels.some(file => !file) || sourceModels.length !== intakeModels.length || await hashes(sourceModels) !== await hashes(intakeModels)) return reply.code(409).send({ error: "模型已變更，請重新切片" });
+      const requested = parsed.data.defaults;
+      const layer = Number(requested.layerHeight) || ({ Draft: 0.28, Standard: 0.2, Fine: 0.12 }[requested.quality] || 0.2);
+      if (Math.abs(layer - measuredQuote.layerHeight) > 0.0001 || Number(requested.infill ?? 15) !== measuredQuote.infill || Number(requested.walls ?? 2) !== measuredQuote.walls || (requested.support !== "None") !== measuredQuote.autoSupports) return reply.code(409).send({ error: "切片設定已變更，請重新切片" });
       const quantities = parsed.data.parts.map(part => Number(part.quantity || parsed.data.defaults.quantity || 1));
       if (quantities.join(",") !== measuredQuote.quantities.join(",") || parsed.data.parts.some(part => (part.material || parsed.data.defaults.material) !== measuredQuote.material)) return reply.code(409).send({ error: "材質或數量已變更，請重新切片" });
     }
@@ -1432,7 +1443,7 @@ export async function registerCaseRoutes(app, options) {
       Object.assign(publicQuote, Object.fromEntries(Object.entries(metrics).map(([key, value]) => [key, round(value)])));
       const supportPercent = publicQuote.totalGrams > 0 ? publicQuote.supportGrams / publicQuote.totalGrams * 100 : 0;
       const catalog = costCatalogForWorkspace?.(database.data, publicQuote.workspaceId) || {};
-      publicQuote.quote = computeAutoQuote(catalog.autoQuote || defaultAutoQuoteConfig, {
+      publicQuote.quote = computeAutoQuote(taiwanFdmQuoteConfig, {
         scope: "order",
         grams: publicQuote.totalGrams,
         minutes: publicQuote.estimatedMinutes,
@@ -1440,8 +1451,13 @@ export async function registerCaseRoutes(app, options) {
         material: publicQuote.material,
         businessTier: publicQuote.businessTier,
         quality: publicQuote.quality,
-        supportPercent
+        supportPercent,
+        dueInHours: publicQuote.rush ? 48 : null,
+        colorMode: publicQuote.colors > 1 ? "separated" : "single",
+        colorCount: publicQuote.colors || 1,
+        services: publicQuote.postProcessing || []
       });
+      publicQuote.pricingPolicyVersion = "TW-FDM-v1 (TWD, 5% tax; max of material, machine time and minimum order)";
       publicQuote.status = "completed";
       publicQuote.profileName = profileName;
       publicQuote.gcodeFileId = gcode.file.id;

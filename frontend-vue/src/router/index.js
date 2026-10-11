@@ -118,12 +118,6 @@ export const constantRoutes = [
     meta: { publicService: true },
     hidden: true,
   },
-  {
-    path: '/:pathMatch(.*)*',
-    redirect: '/404',
-    meta: { publicService: true },
-    hidden: true,
-  },
 ]
 
 export const asyncRoutes = [
@@ -483,6 +477,8 @@ export const asyncRoutes = [
     ],
   },
 ]
+
+asyncRoutes.push({ path: '/:pathMatch(.*)*', redirect: '/404', hidden: true })
 
 const router = createRouter({
   history: routerMode === 'history' ? createWebHistory(publicPath) : createWebHashHistory(publicPath),
