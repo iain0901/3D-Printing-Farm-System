@@ -27,6 +27,7 @@ async function run() {
     "/services",
     "/free-print",
     "/free-print/nthu-shuimu",
+    "/free-print/nthu-shuimu/slicer",
     ...audiences.map((a) => "/for/" + a.id),
     ...services.map((s) => "/services/" + s.id),
     ...publicPages.map((p) => p.path),

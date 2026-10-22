@@ -17,6 +17,6 @@ export function getFreePrintStation(id) {
 export const freePrintSteps = [
   { title: '選擇站點', detail: '先確認你要前往的地點，再查看該站的使用說明。' },
   { title: '準備模型', detail: '準備 3D 模型，確認尺寸、單位與列印方向。' },
-  { title: '確認切片與排隊', detail: '待線上送印開放後，依站點規範確認設定與列印順序。' },
+  { title: '線上切片', detail: '上傳 STL、調整模型與設定，查看切片時間、用料與逐層路徑；尚不會自動排隊送印。' },
   { title: '到場確認與取件', detail: '依現場指引確認平台與操作方式，完成後取件並整理工作區。' },
 ]

@@ -12,6 +12,14 @@ import { audiences, services } from '@/content/fdmServices.mjs'
 import { publicPages } from '@/content/publicPages.mjs'
 import { freePrintStations } from '@/content/freePrintStations.mjs'
 export const constantRoutes = [
+  ...freePrintStations.map((station) => ({
+    path: `${station.path}/slicer`,
+    name: `StationSlicer-${station.id}`,
+    component: () => import('@/views/free-print/Slicer.vue'),
+    props: { stationId: station.id },
+    meta: { title: `${station.name}・線上切片`, publicService: true },
+    hidden: true,
+  })),
   {
     path: '/free-print',
     name: 'FreePrint',

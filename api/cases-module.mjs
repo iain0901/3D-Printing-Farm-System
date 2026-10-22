@@ -5,6 +5,7 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import { z } from "zod";
+import { buildLayerPreview } from "./layer-preview.mjs";
 import {
   CASE_STATUSES,
   canTransitionCase,
@@ -53,12 +54,16 @@ function ensureCollections(data) {
 }
 
 const PUBLIC_SLICE_MATERIALS = ["PLA", "PETG", "ASA", "TPU"];
+export const FREE_PRINT_STATION_IDS = ["nthu-shuimu"];
 const PUBLIC_SLICE_EXTENSIONS = new Set(["STL", "3MF", "OBJ"]);
 const PUBLIC_SLICE_MAX_FILES = 5;
 const PUBLIC_SLICE_MAX_FILE_BYTES = 50 * 1024 * 1024;
 const PUBLIC_SLICE_MAX_TOTAL_BYTES = 100 * 1024 * 1024;
 
 const publicSlicingQuoteSchema = z.object({
+  purpose: z.enum(["quote", "free-print"]).default("quote"),
+  stationId: z.string().optional(),
+  autoOrient: z.boolean().default(true),
   material: z.enum(PUBLIC_SLICE_MATERIALS),
   quantity: z.coerce.number().int().min(1).max(20).default(1),
   quantities: z.array(z.coerce.number().int().min(1).max(20)).max(5).optional(),
@@ -76,6 +81,8 @@ const publicSlicingQuoteSchema = z.object({
 function publicSlicingQuote(record) {
   const value = {
     id: record.id,
+    purpose: record.purpose || "quote",
+    stationId: record.stationId,
     status: record.status,
     material: record.material,
     quantity: record.quantity,
@@ -88,7 +95,7 @@ function publicSlicingQuote(record) {
     profileName: record.profileName,
     profileDisclosure: record.profileDisclosure,
     pricingPolicy: record.pricingPolicyVersion || "Legacy configured rates",
-    autoOrient: true,
+    autoOrient: record.autoOrient !== false,
     autoArrange: true,
     autoSupports: record.autoSupports,
     createdAt: record.createdAt,
@@ -106,6 +113,11 @@ function publicSlicingQuote(record) {
     completedAt: record.completedAt
   });
   if (record.status === "failed") Object.assign(value, { error: record.error, completedAt: record.completedAt });
+  if (record.purpose === "free-print") {
+    delete value.price;
+    delete value.quote;
+    delete value.pricingPolicy;
+  }
   return value;
 }
 
@@ -132,6 +144,12 @@ async function parsePublicSlicingQuote(request, storeCaseFile, workspaceId) {
   if (uploads.length > PUBLIC_SLICE_MAX_FILES) throw new Error(`At most ${PUBLIC_SLICE_MAX_FILES} model files are allowed`);
   const parsed = publicSlicingQuoteSchema.safeParse(input || {});
   if (!parsed.success) return { validationError: parsed.error };
+  if (parsed.data.purpose === "free-print") {
+    if (!FREE_PRINT_STATION_IDS.includes(parsed.data.stationId)) throw new Error("請選擇有效的免費列印站點");
+    if (uploads.length !== 1 || !/\.stl$/i.test(uploads[0].filename) || totalBytes > 10 * 1024 * 1024) throw new Error("站點切片限單一 STL，最大 10 MB");
+    if (parsed.data.quantity !== 1 || parsed.data.quantities?.some(value => value !== 1)) throw new Error("站點切片一次限一個模型");
+    if (parsed.data.layerHeight > 0.28) throw new Error("參考噴嘴層高上限為 0.28 mm");
+  }
   if (parsed.data.quantities && parsed.data.quantities.length !== uploads.length) throw new Error("Each model requires one matching quantity");
   const quantities = parsed.data.quantities || uploads.map(() => parsed.data.quantity);
   if (quantities.reduce((a,b) => a+b,0) > 100) throw new Error("At most 100 printed objects per quote");
@@ -690,6 +708,7 @@ export async function registerCaseRoutes(app, options) {
   ensureCollections(database.data);
 
   app.post("/api/public/slicing-quotes", { config: { rateLimit: { max: 10, timeWindow: "1 minute", groupId: "public-slicing-quotes" } } }, async (request, reply) => {
+    reply.header("cache-control", "no-store");
     const workspaceId = DEFAULT_WORKSPACE_ID;
     const used = database.data.slicingQuotes.reduce((sum, item) => sum + (item.sourceBytes || 0) + (item.artifactBytes || 0), 0);
     if (used >= 8 * 1024 ** 3 || database.data.slicingQuotes.filter(item => ["queued", "processing"].includes(item.status)).length >= 20) return reply.code(503).send({ error: "切片報價容量暫滿，請交由專員處理" });
@@ -705,6 +724,9 @@ export async function registerCaseRoutes(app, options) {
     const quote = {
       id: `slice-quote-${randomUUID().slice(0, 12)}`,
       workspaceId,
+      purpose: incoming.input.purpose,
+      stationId: incoming.input.purpose === "free-print" ? incoming.input.stationId : undefined,
+      autoOrient: incoming.input.autoOrient,
       publicAccessTokenHash: tokenDigest(accessToken),
       status: "queued",
       sourceFileIds: incoming.stored.map((item) => item.file.id),
@@ -736,8 +758,29 @@ export async function registerCaseRoutes(app, options) {
   app.get("/api/public/slicing-quotes/:id", async (request, reply) => {
     reply.header("cache-control", "no-store");
     const quote = database.data.slicingQuotes.find((item) => item.id === request.params.id && inWorkspace(item, DEFAULT_WORKSPACE_ID));
-    if (!quote || !safeTokenMatches(quote, request.query?.token)) return reply.code(404).send({ error: "切片報價不存在" });
+    if (!quote || !safeTokenMatches(quote, request.headers["x-slicing-token"] || request.query?.token)) return reply.code(404).send({ error: "切片工作不存在" });
     return { ok: true, slicingQuote: publicSlicingQuote(quote) };
+  });
+
+  app.delete("/api/public/slicing-quotes/:id", async (request, reply) => {
+    reply.header("cache-control", "no-store");
+    const job = database.data.slicingQuotes.find(item => item.id === request.params.id && inWorkspace(item, DEFAULT_WORKSPACE_ID));
+    if (!job || job.purpose !== "free-print" || !safeTokenMatches(job, request.headers["x-slicing-token"])) return reply.code(404).send({ error: "切片工作不存在" });
+    if (["queued", "processing"].includes(job.status)) {
+      job.status = "cancelled";
+      job.updatedAt = job.completedAt = nowIso();
+      await database.write();
+    }
+    return { slicingQuote: publicSlicingQuote(job) };
+  });
+
+  app.get("/api/public/slicing-quotes/:id/layers", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async (request, reply) => {
+    reply.header("cache-control", "no-store");
+    const job = database.data.slicingQuotes.find(item => item.id === request.params.id && inWorkspace(item, DEFAULT_WORKSPACE_ID));
+    if (!job || job.purpose !== "free-print" || !safeTokenMatches(job, request.headers["x-slicing-token"])) return reply.code(404).send({ error: "切片工作不存在" });
+    if (job.status !== "completed") return reply.code(409).send({ error: "切片尚未完成" });
+    if (!job.layerPreview) return reply.code(422).send({ error: "此工作沒有可用的逐層預覽，請重新切片" });
+    return { preview: job.layerPreview };
   });
 
   app.post("/api/public/cases/estimate", { config: { rateLimit: { max: 120, timeWindow: "1 minute", groupId: "case-estimate" } } }, async (request, reply) => {
@@ -801,7 +844,7 @@ export async function registerCaseRoutes(app, options) {
     const quoteId = parsedIncoming.input.slicingQuoteId;
     if (quoteId) {
       measuredQuote = database.data.slicingQuotes.find(item => item.id === quoteId && inWorkspace(item, workspaceId));
-      if (!measuredQuote || !safeTokenMatches(measuredQuote, parsedIncoming.input.slicingQuoteToken) || measuredQuote.status !== "completed") return reply.code(409).send({ error: "切片報價無效或尚未完成" });
+      if (!measuredQuote || measuredQuote.purpose === "free-print" || !safeTokenMatches(measuredQuote, parsedIncoming.input.slicingQuoteToken) || measuredQuote.status !== "completed") return reply.code(409).send({ error: "切片報價無效或尚未完成" });
       const sourceModels = measuredQuote.sourceFileIds.map(id => database.data.files.find(file => file.id === id));
       const intakeModels = parsedIncoming.uploadResults.map(item => item.file).filter(file => PUBLIC_SLICE_EXTENSIONS.has(String(file.name).split(".").pop().toUpperCase()));
       const digest = async file => createHash("sha256").update(await readCaseFile(file)).digest("hex");
@@ -1439,11 +1482,13 @@ export async function registerCaseRoutes(app, options) {
       const profileName = field("profileName").trim();
       if (!profileName) return reply.code(400).send({ error: "Worker result is missing its reference profile name" });
       const gcode = await storeGcodeFile({ filename: part.filename || `${publicQuote.id}.gcode`, buffer, workspaceId: publicQuote.workspaceId, caseId: publicQuote.id, slicerJobId: publicQuote.id });
+      // Cancellation can arrive while the artifact is being persisted.
+      if (publicQuote.status !== "processing") return reply.code(409).send({ error: "切片工作已停止，不再採用此結果" });
       const round = (value) => Math.round(value * 1000) / 1000;
       Object.assign(publicQuote, Object.fromEntries(Object.entries(metrics).map(([key, value]) => [key, round(value)])));
       const supportPercent = publicQuote.totalGrams > 0 ? publicQuote.supportGrams / publicQuote.totalGrams * 100 : 0;
       const catalog = costCatalogForWorkspace?.(database.data, publicQuote.workspaceId) || {};
-      publicQuote.quote = computeAutoQuote(taiwanFdmQuoteConfig, {
+      if (publicQuote.purpose !== "free-print") publicQuote.quote = computeAutoQuote(taiwanFdmQuoteConfig, {
         scope: "order",
         grams: publicQuote.totalGrams,
         minutes: publicQuote.estimatedMinutes,
@@ -1462,6 +1507,7 @@ export async function registerCaseRoutes(app, options) {
       publicQuote.profileName = profileName;
       publicQuote.gcodeFileId = gcode.file.id;
       publicQuote.artifactBytes = buffer.length;
+      if (publicQuote.purpose === "free-print") publicQuote.layerPreview = buildLayerPreview(buffer.toString("utf8"));
       publicQuote.warnings = field("warnings").split("\n").map((item) => item.trim()).filter(Boolean);
       publicQuote.workerVersion = field("workerVersion");
       publicQuote.completedAt = nowIso();

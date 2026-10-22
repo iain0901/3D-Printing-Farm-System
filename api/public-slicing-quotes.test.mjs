@@ -3,6 +3,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildServer, openDatabase } from "./server.mjs";
+import { FREE_PRINT_STATION_IDS } from "./cases-module.mjs";
+import { freePrintStations } from "../frontend-vue/src/content/freePrintStations.mjs";
 
 const cleanups = [];
 afterEach(async () => {
@@ -58,6 +60,78 @@ const postQuote = (app, payload = {}, files = [{ name: "cube.stl", content: cube
 const workerHeaders = () => ({ "x-layerpilot-worker-token": "test-worker-token" });
 
 describe("public real Orca slicing quote jobs", () => {
+  it("cancels only token-owned station jobs and refuses late worker results", async () => {
+    process.env.LAYERPILOT_WORKER_TOKEN = "test-worker-token";
+    const { app } = await createApp();
+    const paid = (await postQuote(app)).json();
+    expect((await app.inject({ method: "DELETE", url: `/api/public/slicing-quotes/${paid.slicingQuote.id}`, headers: { "x-slicing-token": paid.accessToken } })).statusCode).toBe(404);
+    for (const processing of [false, true]) {
+      const created = (await postQuote(app, { purpose: "free-print", stationId: "nthu-shuimu", quantity: 1 })).json();
+      if (processing) {
+        // The paid quote remains first in FIFO; claim it and then the station job.
+        await app.inject({ method: "POST", url: "/api/internal/orca/jobs/claim", headers: workerHeaders(), payload: {} });
+        await app.inject({ method: "POST", url: "/api/internal/orca/jobs/claim", headers: workerHeaders(), payload: {} });
+      }
+      const url = `/api/public/slicing-quotes/${created.slicingQuote.id}`;
+      expect((await app.inject({ method: "DELETE", url, headers: { "x-slicing-token": "wrong" } })).statusCode).toBe(404);
+      const cancelled = await app.inject({ method: "DELETE", url, headers: { "x-slicing-token": created.accessToken } });
+      expect(cancelled.json().slicingQuote.status).toBe("cancelled");
+      const late = await app.inject({ method: "POST", url: `/api/internal/orca/jobs/${created.slicingQuote.id}/result`, headers: { ...workerHeaders(), "content-type": "multipart/form-data; boundary=late-result" }, payload: multipart({ boundary: "late-result", files: [{ name: "late.gcode", content: "G1 X1 E1" }] }) });
+      expect(late.statusCode).toBe(409);
+    }
+    await app.close();
+  });
+  it("keeps the public station registry aligned with the server allowlist", () => {
+    expect(FREE_PRINT_STATION_IDS).toEqual(freePrintStations.map(station => station.id));
+  });
+
+  it("validates free station jobs before storing files, and restricts them to one STL", async () => {
+    const { app, db } = await createApp();
+    const before = db.data.files.length;
+    const free = { purpose: "free-print", stationId: "nthu-shuimu", quantity: 1 };
+    for (const invalid of [{ stationId: "unknown" }, { stationId: undefined }, { quantity: 2 }, { quantities: [2] }, { layerHeight: 0.4 }]) {
+      expect((await postQuote(app, { ...free, ...invalid })).statusCode).toBe(400);
+    }
+    expect((await postQuote(app, free, [{ name: "project.3mf", content: "bad" }])).statusCode).toBe(400);
+    expect((await postQuote(app, free, [{ name: "a.stl", content: cubeStl }, { name: "b.stl", content: cubeStl }])).statusCode).toBe(400);
+    expect(db.data.files.length).toBe(before);
+    await app.close();
+  });
+
+  it("returns token-scoped actual layers for a station slice without a price, order or print queue", async () => {
+    process.env.LAYERPILOT_WORKER_TOKEN = "test-worker-token";
+    const { app, db } = await createApp();
+    const counts = [db.data.cases.length, db.data.queue.length];
+    const created = (await postQuote(app, { purpose: "free-print", stationId: "nthu-shuimu", quantity: 1, autoOrient: false })).json();
+    expect(created.slicingQuote).toMatchObject({ purpose: "free-print", stationId: "nthu-shuimu", autoOrient: false });
+    const url = `/api/public/slicing-quotes/${created.slicingQuote.id}`;
+    const headers = { "x-slicing-token": created.accessToken };
+    expect((await app.inject({ url: `${url}/layers`, headers })).statusCode).toBe(409);
+    const claim = await app.inject({ method: "POST", url: "/api/internal/orca/jobs/claim", headers: workerHeaders(), payload: {} });
+    expect(claim.json().job).toMatchObject({ purpose: "free-print", stationId: "nthu-shuimu", autoOrient: false });
+    const boundary = "free-station-result";
+    const result = await app.inject({
+      method: "POST", url: `/api/internal/orca/jobs/${created.slicingQuote.id}/result`,
+      headers: { ...workerHeaders(), "content-type": `multipart/form-data; boundary=${boundary}` },
+      payload: multipart({ boundary, fields: { estimatedMinutes: "10", modelGrams: "2", supportGrams: "1", otherGrams: "0", totalGrams: "3", profileName: "reference-test-profile" },
+        files: [{ name: "test.gcode", content: "G90\nM83\nG1 Z0.2\nG1 X10 E1\nG1 Y10 E1\nG1 Z0.4\nG1 X0 E1\n" }] })
+    });
+    expect(result.statusCode).toBe(200);
+    const fetched = await app.inject({ url, headers });
+    expect(fetched.headers["cache-control"]).toBe("no-store");
+    expect(fetched.json().slicingQuote).toMatchObject({ status: "completed", estimatedMinutes: 10, totalGrams: 3 });
+    expect(fetched.json().slicingQuote).not.toHaveProperty("price");
+    expect(db.data.slicingQuotes[0]).not.toHaveProperty("quote");
+    expect(fetched.json().slicingQuote).not.toHaveProperty("gcodeFileId");
+    for (const wrongHeaders of [{}, { "x-slicing-token": "wrong" }]) expect((await app.inject({ url: `${url}/layers`, headers: wrongHeaders })).statusCode).toBe(404);
+    const preview = (await app.inject({ url: `${url}/layers`, headers })).json().preview;
+    expect(preview.layers).toEqual([
+      { z: 0.2, moves: 2, segments: [[0, 0, 10, 0], [10, 0, 10, 10]] },
+      { z: 0.4, moves: 1, segments: [[10, 10, 0, 10]] }
+    ]);
+    expect([db.data.cases.length, db.data.queue.length]).toEqual(counts);
+    await app.close();
+  });
   it("persists a token-scoped queued job and never presents it as a completed quote", async () => {
     process.env.LAYERPILOT_WORKER_TOKEN = "test-worker-token";
     const { app, db, dbFile } = await createApp();

@@ -95,7 +95,8 @@ export function buildJobProcessConfig(job) {
     enable_support: job.autoSupports ? "1" : "0",
     support_type: "tree(auto)",
     support_style: "default",
-    gcode_comments: "1"
+    gcode_comments: "1",
+    ...(job.purpose === "free-print" ? { enable_arc_fitting: "0" } : {})
   };
 }
 
@@ -181,7 +182,7 @@ export function parseGcodeMetrics(text) {
 }
 
 export function buildOrcaArgs(job, inputPaths, outputDir, config) {
-  const args = ["--arrange", "1", "--orient", "1", "--ensure-on-bed", "--slice", "0", "--outputdir", outputDir];
+  const args = ["--arrange", "1", "--orient", job.autoOrient === false ? "0" : "1", "--ensure-on-bed", "--slice", "0", "--outputdir", outputDir];
   const settingsPath = job.settingsPath || config.settingsPath;
   const filamentPath = job.filamentPath || config.filamentPath;
   if (settingsPath) args.push("--load-settings", settingsPath);

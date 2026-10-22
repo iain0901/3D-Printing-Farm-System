@@ -2,7 +2,8 @@
   <div class="model-viewer">
     <div ref="canvasHost" class="model-viewer-canvas" :style="{ height: height + 'px' }" />
     <div v-if="loading" class="model-viewer-overlay">
-      <el-icon><Loading /></el-icon> 載入模型中…
+      <el-icon><Loading /></el-icon>
+      載入模型中…
     </div>
     <div v-else-if="errorMessage" class="model-viewer-overlay error">
       {{ errorMessage }}
@@ -57,8 +58,13 @@
       this.renderHandle = 0
       this.lastRenderWidth = 0
       this.lastRenderHeight = 0
-      this.initScene()
-      this.loadModel()
+      try {
+        this.initScene()
+        this.loadModel()
+      } catch {
+        this.errorMessage = '此裝置無法啟用 3D 預覽。'
+        this.$emit('error', this.errorMessage)
+      }
     },
     beforeUnmount() {
       this.viewerDisposed = true
@@ -176,6 +182,7 @@
         })
       },
       async loadModel() {
+        if (!this.renderer || !this.partsGroup) return
         this.loadSequence += 1
         const loadId = this.loadSequence
         const source = this.file || this.arrayBuffer
@@ -235,7 +242,9 @@
         const meshes = []
         group.traverse((child) => {
           if (!child.isMesh) return
-          const existingColor = child.material?.color ? child.material.color.clone() : new THREE.Color(DEFAULT_PALETTE[meshes.length % DEFAULT_PALETTE.length])
+          const existingColor = child.material?.color
+            ? child.material.color.clone()
+            : new THREE.Color(DEFAULT_PALETTE[meshes.length % DEFAULT_PALETTE.length])
           const oldMaterials = Array.isArray(child.material) ? child.material : [child.material]
           oldMaterials.forEach((material) => material?.dispose())
           child.material = new THREE.MeshStandardMaterial({ color: existingColor, roughness: 0.6 })

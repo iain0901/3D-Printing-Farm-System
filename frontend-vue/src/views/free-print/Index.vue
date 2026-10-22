@@ -90,9 +90,13 @@
         </div>
         <div class="free-notice" role="note">
           <span class="free-tag">線上送印準備中</span>
-          <h3>站點可以先選，送印尚未開放。</h3>
-          <p>這個頁面目前提供站點選擇與流程說明，尚不能線上提交免費列印、切片、排隊或操作機器。選擇站點不代表已取得名額或預約成功。</p>
+          <h3>先把模型準備好，從線上切片開始。</h3>
+          <p>
+            現在可以免登入上傳
+            STL、調整模型並進行切片。切片使用參考機型，不代表現場設備；完成切片不等於取得免費名額，也不會加入列印佇列或操作機器。
+          </p>
           <p>開放資格、免費額度、服務時段、可用材料與設備，請依站點公告及現場指引確認。</p>
+          <router-link :to="`${station.path}/slicer`" class="studio-button">開啟線上切片 ↗</router-link>
           <router-link to="/guides/file-prep" class="free-text-link">先看模型檔案準備指南 ↗</router-link>
         </div>
       </section>

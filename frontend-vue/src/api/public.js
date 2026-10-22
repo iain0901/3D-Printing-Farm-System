@@ -12,6 +12,29 @@ const publicRequest = axios.create({
   headers: { 'Content-Type': contentType },
 })
 
+export function createStationSlice(file, settings) {
+  const data = new FormData()
+  data.append('payload', JSON.stringify({ ...settings, purpose: 'free-print', quantity: 1 }))
+  data.append('file', file)
+  return publicRequest
+    .post('/api/public/slicing-quotes', data, { headers: { 'Content-Type': undefined }, timeout: 120000 })
+    .then((r) => r.data)
+}
+
+export function fetchStationSlice(id, token, layers = false) {
+  return publicRequest
+    .get(`/api/public/slicing-quotes/${encodeURIComponent(id)}${layers ? '/layers' : ''}`, {
+      headers: { 'x-slicing-token': token },
+    })
+    .then((r) => r.data)
+}
+
+export function cancelStationSlice(id, token) {
+  return publicRequest
+    .delete(`/api/public/slicing-quotes/${encodeURIComponent(id)}`, { headers: { 'x-slicing-token': token } })
+    .then((r) => r.data)
+}
+
 // file 是可選的瀏覽器 File 物件；有帶檔案時走 multipart（後端 parsePublicQuoteRequestPayload 會解析並做
 // 模型解析/分件偵測），沒有檔案時走一般 JSON（維持原本免上傳也能送出估價需求的路徑）。
 export function submitPublicQuoteRequest(payload, file) {
@@ -27,9 +50,7 @@ export function submitPublicQuoteRequest(payload, file) {
       formData.append(key, Array.isArray(value) ? value.join(',') : String(value))
     }
   })
-  return publicRequest
-    .post('/api/public/quoteRequests', formData, { headers: { 'Content-Type': undefined } })
-    .then((r) => r.data)
+  return publicRequest.post('/api/public/quoteRequests', formData, { headers: { 'Content-Type': undefined } }).then((r) => r.data)
 }
 
 export function fetchPublicQuoteStatus(id, token) {
