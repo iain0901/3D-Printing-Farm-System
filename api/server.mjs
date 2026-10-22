@@ -26,6 +26,7 @@ import { createPersistenceAdapter } from "./persistence.mjs";
 import { solveScheduleAssignments } from "./schedule-solver.mjs";
 import { seedData } from "./seed.mjs";
 import { registerCaseRoutes } from "./cases-module.mjs";
+import { registerMemberWorkspace, MEMBER_COLLECTIONS } from "./member-workspace.mjs";
 import { createAiEngine } from "./ai-engine.mjs";
 import { findRelevantAiKnowledge } from "./ai-knowledge.mjs";
 import { createChatwootClient } from "./chatwoot.mjs";
@@ -38,6 +39,7 @@ const execFileAsync = promisify(execFile);
 
 const COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "slicingQuotes", "cases", "caseStatusHistory", "chatwootCaseLinks", "afterSalesCases", "orders", "customers", "profiles", "addons", "aiKnowledge", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns", "coupons"];
 const RESTORABLE_EXTRA_KEYS = ["users", "workspaces", "workspaceSettings", "costCatalog", "costCatalogs", "profileDefaults", "profileMatchingPolicy", "billingSessions", "invoices", "dataMeta"];
+COLLECTIONS.push(...MEMBER_COLLECTIONS);
 const RESTORABLE_KEYS = [...COLLECTIONS, ...RESTORABLE_EXTRA_KEYS];
 const defaultCostCatalog = {
   currency: "USD",
@@ -104,6 +106,7 @@ const API_KEY_GRANTABLE_SCOPES = [
 const apiKeyGrantableScopeSet = new Set(API_KEY_GRANTABLE_SCOPES);
 const TENANT_COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "cases", "caseStatusHistory", "chatwootCaseLinks", "afterSalesCases", "orders", "customers", "profiles", "addons", "aiKnowledge", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns", "billingSessions", "invoices", "coupons"];
 const printerStatusSchema = z.enum(["idle", "printing", "paused", "offline", "error", "maintenance"]);
+TENANT_COLLECTIONS.push(...MEMBER_COLLECTIONS);
 const jobStatusSchema = z.enum(["queued", "printing", "paused", "complete", "failed", "cancelled"]);
 const prioritySchema = z.enum(["Rush", "High", "Normal", "Low"]);
 const taskStageSchema = z.enum(["needs slicing", "needs scheduling", "scheduled", "printing", "post processing", "done", "blocked"]);
@@ -1130,7 +1133,7 @@ function touchSession(data, session, token, now = new Date()) {
   markSessionStoreDirty(data);
 }
 
-function createCustomerSession({ token, customer, workspaceId, now = new Date() }) {
+function createCustomerSession({ token, customer, workspaceId, now = new Date(), request = null }) {
   const at = now.toISOString();
   return {
     id: randomUUID(),
@@ -1139,6 +1142,7 @@ function createCustomerSession({ token, customer, workspaceId, now = new Date() 
     workspaceId: workspaceId || customer.workspaceId || DEFAULT_WORKSPACE_ID,
     createdAt: at,
     lastSeenAt: at,
+    device: String(request?.headers?.["user-agent"] || "").slice(0, 200),
     ...sessionExpiryFields(now)
   };
 }
@@ -6835,6 +6839,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   database.realtimeTickets ||= new Map();
   database.mqttPublisher = mqttPublisher;
   const startedAt = new Date();
+  const paymentLocks = new Set();
   const app = Fastify({ logger: false });
   app.removeContentTypeParser("application/json");
   app.addContentTypeParser("application/json", { parseAs: "string" }, (request, body, done) => {
@@ -6908,7 +6913,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (request.method === "GET" && /^\/api\/quote-messages\/[^/]+\/[^/]+\/attachments\/\d+$/.test(routePath) && customerFromRequest(database, request).customer) return;
     const publicRoute = routePath === "/api/health" || routePath === "/api/readiness" || routePath === "/api/metrics" && hasValidMetricsToken(request) || routePath === "/api/internal/worker-broadcast" && hasValidWorkerToken(request) || routePath.startsWith("/api/internal/orca/") || routePath === "/api/integrations/chatwoot/webhook" || routePath === "/api/integrations/chatwoot/context" || routePath === "/api/billing/webhook/stripe" || routePath === "/api/public/quoteRequests" || routePath.startsWith("/api/public/quoteRequests/") || routePath === "/api/public/slicing-quotes" || routePath.startsWith("/api/public/slicing-quotes/") || routePath === "/api/public/cases" || routePath.startsWith("/api/public/cases/") || routePath === "/api/public/pricing-estimate" || routePath === "/api/public/model-preview" || routePath.startsWith("/api/auth/") || routePath.startsWith("/api/customer-auth/") || routePath.startsWith("/api/customer/") || routePath === "/api/events/stream" || routePath === "/api/events/ws" || serveStatic && !routePath.startsWith("/api/");
     if (publicRoute) return;
-    if (await replayCommittedRestoreRequest(database, request, reply)) return;
+    if (await replayCommittedRestoreRequest(database, request, reply)) return reply;
     const { session, user, apiKey } = userFromRequest(database, request);
     if (!user) return reply.code(401).send({ error: "Authentication required" });
     if (apiKey && !isApiKeyIpAllowed(workspaceScopeForUser(database.data, user).workspaceSettings, request)) {
@@ -6928,9 +6933,9 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     }
     const workspaceId = user.workspaceId || DEFAULT_WORKSPACE_ID;
     const actorId = idempotencyActorForRequest(request);
-    if (!apiKey && await prepareRestoreCommitIdempotentRequest(database, request, reply, { workspaceId, actorId })) return;
+    if (!apiKey && await prepareRestoreCommitIdempotentRequest(database, request, reply, { workspaceId, actorId })) return reply;
     const uploadMultipartRoute = String(request.method || "").toUpperCase() === "POST" && routePath === "/api/files/upload";
-    if (!uploadMultipartRoute && await prepareIdempotentRequest(database, request, reply, { workspaceId, actorId })) return;
+    if (!uploadMultipartRoute && await prepareIdempotentRequest(database, request, reply, { workspaceId, actorId })) return reply;
     const now = new Date().toISOString();
     if (session) session.lastSeenAt = now;
     if (apiKey) apiKey.lastUsedAt = now;
@@ -6980,6 +6985,12 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     hasValidWorkerToken,
     customerFromRequest,
     costCatalogForWorkspace: (data) => costCatalogForWorkspace(data || database.data)
+  });
+  await registerMemberWorkspace(app, {
+    database, customerFromRequest, createPasswordHash, verifyPassword, sanitizeCustomer,
+    storeFile: (payload) => createStoredCaseFile(database, payload, { workspaceId: payload.workspaceId }),
+    readFile: (file) => objectStorage().get(file),
+    sensitiveRateLimit, emailClient, lineClient,
   });
   await registerChatwootRoutes(app, {
     database,
@@ -7225,7 +7236,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     customer.passwordHash = createPasswordHash(parsed.data.password);
     customer.lastLoginAt = now;
     const token = randomBytes(32).toString("hex");
-    const session = createCustomerSession({ token, customer, workspaceId, now: new Date(now) });
+    const session = createCustomerSession({ token, customer, workspaceId, now: new Date(now), request });
     database.data.customerSessions ||= [];
     database.data.customerSessions.push(session);
     await dispatchEvent(database, "customer.portal_registered", `${customer.name} created a customer portal account`, { workspaceId, customerId: customer.id, email: customer.email });
@@ -7253,7 +7264,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     customer.lastLoginAt = now;
     customer.updatedAt = now;
     const token = randomBytes(32).toString("hex");
-    const session = createCustomerSession({ token, customer, workspaceId: customer.workspaceId, now: new Date(now) });
+    const session = createCustomerSession({ token, customer, workspaceId: customer.workspaceId, now: new Date(now), request });
     database.data.customerSessions ||= [];
     database.data.customerSessions.push(session);
     await dispatchEvent(database, "customer.portal_claimed", `${customer.name} set up portal access from a quote link`, { workspaceId: customer.workspaceId, customerId: customer.id, quoteRequestId: quote.id });
@@ -7272,7 +7283,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const now = new Date().toISOString();
     customer.lastLoginAt = now;
     const token = randomBytes(32).toString("hex");
-    const session = createCustomerSession({ token, customer, workspaceId: customer.workspaceId, now: new Date(now) });
+    const session = createCustomerSession({ token, customer, workspaceId: customer.workspaceId, now: new Date(now), request });
     database.data.customerSessions ||= [];
     database.data.customerSessions.push(session);
     await dispatchEvent(database, "customer.portal_login", `${customer.name} signed in to the customer portal`, { workspaceId: customer.workspaceId, customerId: customer.id });
@@ -7383,20 +7394,36 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsed.success) return reply.code(400).send({ error: "Invalid checkout payload", issues: parsed.error.issues });
     const order = customerOwnedOrder(database, customer, request.params.id);
     if (!order) return reply.code(404).send({ error: "Order not found" });
+    if (order.payment?.status === "paid" || ["cancelled", "canceled", "refunded"].includes(order.status)) return reply.code(409).send({ error: "此訂單目前無法付款" });
+    const linkedCase = order.caseId ? (database.data.cases || []).find(c => c.id === order.caseId && c.workspaceId === order.workspaceId) : null;
+    if (order.caseId && (!linkedCase || linkedCase.currentQuoteVersionId !== order.quoteVersionId || linkedCase.paymentStatus === "paid" || !["accepted", "awaiting_payment"].includes(linkedCase.status))) return reply.code(409).send({ error: "案件報價或狀態已更新，請回到案件確認" });
+    if (linkedCase && Date.parse(linkedCase.quoteVersions.find(q => q.id === order.quoteVersionId)?.validUntil || "") < Date.now()) return reply.code(409).send({ error: "報價已過期，請專員更新報價" });
+    if (paymentLocks.has(order.id)) return reply.code(409).send({ error: "付款處理中，請稍後再試" });
+    if (order.payment?.status === "pending" && order.payment.redirectUrl) return { ok: true, payment: order.payment };
     const provider = createPaymentProvider(parsed.data.paymentMethod, process.env);
     if (!provider) return reply.code(400).send({ error: "Unknown payment method" });
     const publicUrl = String(process.env.LAYERPILOT_PUBLIC_URL || "").replace(/\/$/, "");
+    if (provider.configured && !/^https:\/\/[^\s]+$/.test(publicUrl)) return reply.code(503).send({ error: "付款服務尚未完成設定" });
+    if (provider.configured && order.currency !== "TWD") return reply.code(409).send({ error: "請先由專員確認訂單以新臺幣計價" });
+    const amount = Math.round(Math.max(0, Number(order.value || 0) - Number(order.discount || 0)));
+    if (!Number.isSafeInteger(amount) || amount <= 0) return reply.code(409).send({ error: "訂單金額待專員確認" });
+    paymentLocks.add(order.id);
+    try {
     const result = await provider.createPayment({
       orderId: order.id,
-      amount: Number(order.value || 0),
+      amount,
       currency: "TWD",
-      returnUrl: `${publicUrl}/#/portal/dashboard`,
+      returnUrl: `${publicUrl}/api/customer/payments/linepay/return?order=${encodeURIComponent(order.id)}`,
+      cancelUrl: `${publicUrl}/#/portal/dashboard?tab=orders`,
       notifyUrl: `${publicUrl}/api/customer/orders/${order.id}/checkout/callback`
     });
     order.payment = {
       provider: provider.id,
       status: result.status,
       providerOrderId: result.providerOrderId || "",
+      transactionId: result.transactionId || "",
+      amount,
+      currency: "TWD",
       redirectUrl: result.redirectUrl || "",
       message: result.message || "",
       updatedAt: new Date().toISOString()
@@ -7404,6 +7431,49 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     await dispatchEvent(database, "order.checkout_initiated", `${order.id} checkout via ${provider.name}`, { workspaceId: order.workspaceId, orderId: order.id, provider: provider.id, status: result.status }, { actor: null });
     await database.write();
     return { ok: result.ok, payment: order.payment };
+    } finally { paymentLocks.delete(order.id); }
+  });
+
+  app.get("/api/customer/payments/linepay/return", async (request, reply) => {
+    const query = new URLSearchParams({ section: "billing", confirmOrder: String(request.query.order || "").slice(0, 100), transactionId: String(request.query.transactionId || "").slice(0, 30) });
+    return reply.redirect(`/#/portal/workspace?${query}`);
+  });
+  app.post("/api/customer/payments/linepay/confirm", { config: { rateLimit: customerAuthRateLimit } }, async (request, reply) => {
+    const { customer } = customerFromRequest(database, request);
+    if (!customer) return reply.code(401).send({ error: "請登入原下單會員以確認付款" });
+    const input = z.object({ orderId: z.string().max(100), transactionId: z.string().regex(/^\d{10,30}$/) }).safeParse(request.body);
+    if (!input.success) return reply.code(400).send({ error: "付款確認資料不正確" });
+    const order = customerOwnedOrder(database, customer, input.data.orderId);
+    if (!order || order.payment?.provider !== "linepay" || order.payment.transactionId !== input.data.transactionId) return reply.code(404).send({ error: "找不到相符付款" });
+    if (order.payment.status === "paid") return { ok: true, payment: order.payment };
+    if (paymentLocks.has(order.id)) return reply.code(409).send({ error: "付款正在驗證中" });
+    if (order.payment.status !== "pending" || order.payment.amount !== Math.round(Math.max(0, Number(order.value || 0) - Number(order.discount || 0)))) return reply.code(409).send({ error: "付款金額或狀態已改變，請聯絡專員" });
+    if (order.caseId) {
+      const item = (database.data.cases || []).find(c => c.id === order.caseId && c.workspaceId === order.workspaceId);
+      if (!item || item.currentQuoteVersionId !== order.quoteVersionId || !["accepted", "awaiting_payment"].includes(item.status) || item.paymentStatus === "paid") return reply.code(409).send({ error: "案件報價或狀態已變更，請聯絡專員確認付款" });
+    }
+    paymentLocks.add(order.id);
+    try {
+      const result = await createPaymentProvider("linepay").verifyCallback({ transactionId: input.data.transactionId, orderId: order.id, amount: order.payment.amount });
+      if (!result.ok) return reply.code(409).send({ error: result.message || "尚無已驗證付款紀錄" });
+      Object.assign(order.payment, result, { paidAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      if (order.caseId) {
+        const item = (database.data.cases || []).find(c => c.id === order.caseId && c.workspaceId === order.workspaceId);
+        if (item) {
+          item.payments ||= [];
+          item.payments.unshift({ id: randomUUID(), status: "paid", method: "line_pay", amount: result.amount, reference: result.transactionId, recordedBy: "LINE Pay", recordedAt: new Date().toISOString() });
+          item.paymentStatus = "paid";
+          if (["accepted", "awaiting_payment"].includes(item.status)) {
+            const from = item.status; item.status = "paid";
+            const entry = { id: randomUUID(), workspaceId: item.workspaceId, caseId: item.id, from, to: "paid", reason: "LINE Pay 已驗證付款", actorName: "LINE Pay", at: new Date().toISOString() };
+            item.statusHistory.push(entry); database.data.caseStatusHistory.push(entry);
+          }
+          item.updatedAt = new Date().toISOString();
+        }
+      }
+      await dispatchEvent(database, "order.payment_verified", `${order.id} LINE Pay payment confirmed`, { workspaceId: order.workspaceId, customerId: customer.id, orderId: order.id });
+      await database.write(); return { ok: true, payment: order.payment };
+    } finally { paymentLocks.delete(order.id); }
   });
 
   // Track.TW 尚未有正式 API 憑證，這個端點回傳的是「串接點已備妥、尚未實際查詢」的佔位結果，
@@ -7481,8 +7551,10 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       items: [...(source.items || [])],
       status: "received",
       due: "Flexible",
-      value: source.value,
+      value: null,
       reorderedFromOrderId: source.id,
+      requiresRequote: true,
+      previousQuotedValue: source.value,
       updatedAt: now
     };
     database.data.orders.push(order);
@@ -7496,11 +7568,14 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!customer) return reply.code(401).send({ error: "Authentication required" });
     const order = customerOwnedOrder(database, customer, request.params.id);
     if (!order) return reply.code(404).send({ error: "Order not found" });
+    if (["pending", "paid"].includes(order.payment?.status) || paymentLocks.has(order.id)) return reply.code(409).send({ error: "付款處理中或已完成，無法變更優惠" });
     const parsed = z.object({ code: z.string().min(1).max(40) }).safeParse(request.body || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid coupon payload", issues: parsed.error.issues });
     const code = parsed.data.code.trim().toUpperCase();
+    if (order.appliedCouponCode === code) return { ok: true, order, discount: order.discount || 0 };
     const coupon = (database.data.coupons || []).find((item) => item.code === code && itemInWorkspace(item, order.workspaceId));
     if (!coupon || !coupon.enabled) return reply.code(404).send({ error: "Coupon not found or disabled" });
+    if (order.appliedCouponCode || order.pointsRedeemed) return reply.code(409).send({ error: "已有優惠或點數折抵，請聯絡專員協助變更，避免折抵遺失" });
     if (coupon.validUntil && Date.parse(coupon.validUntil) < Date.now()) return reply.code(400).send({ error: "Coupon has expired" });
     if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit) return reply.code(400).send({ error: "Coupon usage limit reached" });
     if (Number(order.value || 0) < coupon.minOrderValue) return reply.code(400).send({ error: `Order must be at least $${coupon.minOrderValue} to use this coupon` });
@@ -7519,11 +7594,14 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!customer) return reply.code(401).send({ error: "Authentication required" });
     const order = customerOwnedOrder(database, customer, request.params.id);
     if (!order) return reply.code(404).send({ error: "Order not found" });
+    if (["pending", "paid"].includes(order.payment?.status) || paymentLocks.has(order.id)) return reply.code(409).send({ error: "付款處理中或已完成，無法變更折抵" });
     const parsed = z.object({ points: z.number().int().positive() }).safeParse(request.body || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid points redemption payload", issues: parsed.error.issues });
     const available = Math.max(0, Number(customer.loyaltyPoints || 0));
     if (parsed.data.points > available) return reply.code(400).send({ error: "Not enough points", available });
     const payable = Math.max(0, Number(order.value || 0) - Number(order.discount || 0));
+    const maximumPoints = Math.floor((payable + 0.000001) / POINT_REDEMPTION_VALUE);
+    if (parsed.data.points > maximumPoints) return reply.code(400).send({ error: `本訂單最多可折抵 ${maximumPoints} 點，未扣除任何點數`, maximumPoints });
     const redemptionValue = Math.min(payable, Math.round(parsed.data.points * POINT_REDEMPTION_VALUE * 100) / 100);
     customer.loyaltyPoints = available - parsed.data.points;
     order.discount = Math.round((Number(order.discount || 0) + redemptionValue) * 100) / 100;
@@ -7583,7 +7661,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsed.success) return reply.code(400).send({ error: "Invalid quote decision payload", issues: parsed.error.issues });
     const quote = customerLinkedQuotes(database, customer).find((item) => item.id === request.params.id);
     if (!quote) return reply.code(404).send({ error: "Quote request not found" });
-    if (await prepareIdempotentRequest(database, request, reply, { workspaceId: customer.workspaceId, actorId: `customer:${customer.id}`, bodyDigest: requestBodyDigest(parsed.data) })) return;
+    if (await prepareIdempotentRequest(database, request, reply, { workspaceId: customer.workspaceId, actorId: `customer:${customer.id}`, bodyDigest: requestBodyDigest(parsed.data) })) return reply;
     const result = await applyQuoteDecision(database, quote, { decision: parsed.data.decision, note: parsed.data.note });
     return reply.code(result.statusCode).send(result.body);
   });
@@ -7700,7 +7778,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (attachmentError) return reply.code(400).send({ error: attachmentError });
     const quote = customerLinkedQuotes(database, customer).find((item) => item.id === request.params.id);
     if (!quote) return reply.code(404).send({ error: "Quote request not found" });
-    if (await prepareIdempotentRequest(database, request, reply, { workspaceId: customer.workspaceId, actorId: `customer:${customer.id}`, bodyDigest: requestBodyDigest({ body: messageBody }) })) return;
+    if (await prepareIdempotentRequest(database, request, reply, { workspaceId: customer.workspaceId, actorId: `customer:${customer.id}`, bodyDigest: requestBodyDigest({ body: messageBody }) })) return reply;
     const message = { id: randomUUID(), author: "customer", authorName: customer.name, body: messageBody, createdAt: new Date().toISOString() };
     if (uploadedFiles.length) {
       message.attachments = await storeQuoteMessageAttachments(database, quote.id, message.id, uploadedFiles);
@@ -7912,7 +7990,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   app.post("/api/public/quoteRequests", { config: { rateLimit: { max: 20, timeWindow: "1 minute", groupId: "quote-intake" } } }, async (request, reply) => {
     const incoming = await parsePublicQuoteRequestPayload(request);
     const publicIdempotency = publicIdempotencyContext("POST", "/api/public/quoteRequests");
-    if (publicIdempotency && await prepareIdempotentRequest(database, request, reply, { ...publicIdempotency, bodyDigest: publicQuoteIntakeDigest(incoming) })) return;
+    if (publicIdempotency && await prepareIdempotentRequest(database, request, reply, { ...publicIdempotency, bodyDigest: publicQuoteIntakeDigest(incoming) })) return reply;
     const parsed = publicQuoteRequestSchema.safeParse(incoming.payload || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid quote request payload", issues: parsed.error.issues });
     const workspace = workspaceForId(database.data, DEFAULT_WORKSPACE_ID);
@@ -7979,7 +8057,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const quote = database.data.quoteRequests.find((item) => item.id === request.params.id && itemInWorkspace(item, DEFAULT_WORKSPACE_ID));
     if (!quote || !quoteTokenMatches(quote, parsed.data.token)) return reply.code(404).send({ error: "Quote request not found" });
     const publicIdempotency = publicIdempotencyContext("POST", `/api/public/quoteRequests/${request.params.id}/decision`);
-    if (publicIdempotency && await prepareIdempotentRequest(database, request, reply, { ...publicIdempotency, bodyDigest: requestBodyDigest(parsed.data) })) return;
+    if (publicIdempotency && await prepareIdempotentRequest(database, request, reply, { ...publicIdempotency, bodyDigest: requestBodyDigest(parsed.data) })) return reply;
     const result = await applyQuoteDecision(database, quote, { decision: parsed.data.decision, note: parsed.data.note });
     return reply.code(result.statusCode).send(result.body);
   });
@@ -8948,7 +9026,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const workspaceId = request.user.workspaceId || DEFAULT_WORKSPACE_ID;
     const actorId = idempotencyActorForRequest(request);
     const bodyDigest = uploadRequestBodyDigest({ filename, material, folder, buffer });
-    if (await prepareIdempotentRequest(database, request, reply, { workspaceId, actorId, bodyDigest })) return;
+    if (await prepareIdempotentRequest(database, request, reply, { workspaceId, actorId, bodyDigest })) return reply;
     const { file } = await createStoredModelFile(database, { filename, buffer, material, folder, tags: ["uploaded", "parsed"], source: "Operator upload" }, { workspaceId: request.user.workspaceId });
     await dispatchEvent(database, "file.uploaded", `${filename} parsed and stored`, { fileId: file.id, filename, material, folder: file.folder, bytes: buffer.length }, { actor: request.user });
     await database.write();

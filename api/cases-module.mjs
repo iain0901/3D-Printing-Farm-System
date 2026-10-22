@@ -407,7 +407,7 @@ export function publicCase(caseRecord) {
       quality: part.quality,
       readiness: part.readiness,
     })),
-    quote: publicQuoteVersion(currentQuote),
+    quote: currentQuote?.sentAt ? publicQuoteVersion(currentQuote) : null,
     slicingQuote: caseRecord.slicingQuote || null,
     paymentStatus: caseRecord.paymentStatus,
     delivery: caseRecord.delivery
@@ -950,6 +950,10 @@ export async function registerCaseRoutes(app, options) {
           customerOwnsCase(item, customer)
       );
       if (!caseRecord) return reply.code(404).send({ error: "Case not found" });
+      if (parsed.data.decision === "accepted") {
+        const quote = (caseRecord.quoteVersions || []).find(q => q.id === caseRecord.currentQuoteVersionId);
+        if (!quote || quote.status !== "sent" || !Number.isFinite(Date.parse(quote.validUntil || "")) || Date.parse(quote.validUntil) < Date.now()) return reply.code(409).send({ error: "正式報價不存在、已更新或已過期，請專員重新確認" });
+      }
       const result = applyCustomerDecision(
         database,
         caseRecord,

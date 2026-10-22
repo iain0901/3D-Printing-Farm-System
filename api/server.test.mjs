@@ -5649,8 +5649,8 @@ endsolid part`;
     });
   });
 
-  it("lets a customer check out with a stubbed payment provider and query stubbed logistics tracking for their own order", async () => {
-    await withApp(async ({ app }) => {
+  it("reports unavailable payment providers and validates ownership of logistics tracking", async () => {
+    await withApp(async ({ app, db }) => {
       const quote = await app.inject({
         method: "POST",
         url: "/api/public/quoteRequests",
@@ -5663,6 +5663,10 @@ endsolid part`;
       const converted = await app.inject({ method: "POST", url: `/api/quoteRequests/${quoteId}/convert-order`, headers: auth(staffToken) });
       expect(converted.statusCode).toBe(201);
       const orderId = converted.json().order.id;
+
+      // A provider availability test needs a payable order; zero-value orders are now blocked.
+      db.data.orders.find(order => order.id === orderId).value = 120;
+      await db.write();
 
       const register = await app.inject({
         method: "POST",

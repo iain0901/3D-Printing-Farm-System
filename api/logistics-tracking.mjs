@@ -25,28 +25,35 @@ function createTrackTwProvider(env) {
   return {
     id: "tracktw",
     name: "Track.TW",
-    configured: complete,
+    configured: false,
     // carrier: 物流公司名稱（例如「黑貓宅急便」「7-ELEVEN 交貨便」），trackingNumber: 追蹤號碼
     async queryStatus({ carrier, trackingNumber }) {
       if (!complete) {
-        return { ok: false, status: "not_configured", carrier, trackingNumber, message: "缺少 LAYERPILOT_TRACKTW_API_KEY，且 Track.TW 尚未提供公開技術文件，需先向其申請 API 存取權" };
+        return {
+          ok: false,
+          status: "not_configured",
+          carrier,
+          trackingNumber,
+          message:
+            "缺少 LAYERPILOT_TRACKTW_API_KEY，且 Track.TW 尚未提供公開技術文件，需先向其申請 API 存取權",
+        };
       }
       // TODO: 拿到 Track.TW 正式 API 文件後，在這裡補上真正的 HTTP 呼叫，例如：
       // const response = await fetch(`${baseUrl}/api/...`, { headers: { Authorization: `Bearer ${values.LAYERPILOT_TRACKTW_API_KEY}` }, ... })
       return {
-        ok: true,
-        status: "pending",
+        ok: false,
+        status: "not_configured",
         carrier,
         trackingNumber,
         events: [],
-        message: `Track.TW 串接點已備妥（base=${baseUrl}），尚未實際查詢（無正式 API 文件與金鑰）`
+        message: "即時物流追蹤尚未開放，請使用物流公司網站查詢",
       };
-    }
+    },
   };
 }
 
 const PROVIDER_FACTORIES = {
-  tracktw: createTrackTwProvider
+  tracktw: createTrackTwProvider,
 };
 
 export function createLogisticsProvider(id = "tracktw", env = process.env) {

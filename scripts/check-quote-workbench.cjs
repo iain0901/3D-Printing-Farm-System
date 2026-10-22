@@ -79,6 +79,13 @@ async function run() {
           authFail ? 401 : 200
         );
       if (path.endsWith("/customer-auth/logout")) return reply({ ok: true });
+      if (path.endsWith("/customer/workspace"))
+        return reply(
+          expired ? { error: "expired" } : { projects: [] },
+          expired ? 401 : 200
+        );
+      if (path.endsWith("/customer/addresses"))
+        return reply(expired ? { error: "expired" } : [], expired ? 401 : 200);
       if (
         /slicing-quotes|\/public\/cases|\/printers|\/queue|\/orders/.test(path)
       ) {

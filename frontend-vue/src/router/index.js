@@ -129,6 +129,12 @@ export const constantRoutes = [
     hidden: true,
   },
   {
+    path: '/portal/workspace',
+    component: () => import('@/layouts/PortalLayout'),
+    children: [{ path: '', component: () => import('@/views/portal/Workspace.vue') }],
+    hidden: true,
+  },
+  {
     path: '/portal/dashboard',
     component: () => import('@/layouts/PortalLayout'),
     children: [{ path: '', component: () => import('@/views/portal/Dashboard') }],
@@ -487,6 +493,18 @@ export const asyncRoutes = [
           title: '通知',
           icon: 'bell',
         },
+      },
+    ],
+  },
+  {
+    path: '/member-service',
+    component: Layout,
+    children: [
+      {
+        path: '',
+        name: 'MemberService',
+        component: () => import('@/views/portal/MemberService.vue'),
+        meta: { title: '會員服務', icon: 'comment-dots', permissions: ['orders:write'] },
       },
     ],
   },

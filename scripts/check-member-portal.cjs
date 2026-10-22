@@ -121,6 +121,7 @@ async function run() {
         });
       if (path.endsWith("/logout")) return reply({ ok: true });
       if (path.endsWith("/cases")) return reply({ cases: empty ? [] : cases });
+      if (path === "/api/customer/workspace") return reply({ projects: [] });
       if (path.endsWith("/cases/case-1/decision")) {
         cases[0].status = "accepted";
         return reply({ case: cases[0] });
@@ -297,7 +298,7 @@ async function run() {
       .filter({ hasText: "列印案件" })
       .waitFor();
     await page.getByRole("button", { name: "登出", exact: true }).click();
-    await page.waitForURL("**/portal/login");
+    await page.waitForURL(/\/portal\/login(?:\?|$)/);
     assert.equal(
       await page.evaluate(() =>
         localStorage.getItem("layerpilot-customer-token")
@@ -305,11 +306,11 @@ async function run() {
       null
     );
     await page.goto(base + "/#/portal/dashboard");
-    await page.waitForURL("**/portal/login");
+    await page.waitForURL(/\/portal\/login(?:\?|$)/);
     unauthorized = true;
     await page.reload();
     await page.goto(base + "/#/portal/dashboard");
-    await page.waitForURL("**/portal/login");
+    await page.waitForURL(/\/portal\/login(?:\?|$)/);
     assert.deepEqual(errors, []);
     assert.ok(writes.some((w) => w.path.endsWith("/decision")));
     assert.ok(writes.some((w) => w.path.endsWith("/messages")));

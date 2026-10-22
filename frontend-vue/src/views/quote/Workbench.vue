@@ -13,7 +13,8 @@
       <aside class="backend-notice" role="note">
         <b>先準備模型與設定，新機型切片估價即將接上。</b>
         <p>
-          目前可在瀏覽器調整擺放、選材與配色；尚不執行付費切片、不產生價格或送出案件。260 × 260 × 260 mm 僅為編輯參考平台，並非新機型規格。
+          可調整擺放、選材與配色，登入後保存雲端草稿或送交專員報價。260 × 260 × 260 mm
+          為編輯參考平台；自動切片價格將於新機型設定完成後開放。
         </p>
       </aside>
       <nav class="workbench-steps" aria-label="估價流程">
@@ -40,10 +41,11 @@
             </div>
           </div>
           <station-layout
+            ref="stationLayout"
             :automatic="settings.autoArrange"
             :model-appearance="appearance"
             :painting="painting"
-            empty-hint="模型只在瀏覽器內處理，不會自動上傳。先加入 STL，再調整方向、位置與配色。"
+            empty-hint="先加入 STL，再調整方向、位置與配色。登入並保存草稿時會上傳模型。"
             @change="changeLayout"
             @paint="paintStroke"
           >
@@ -323,7 +325,66 @@
         </div>
         <p v-if="!reviewing">完成模型與配色後，按下「確認設定」即可在此登入或註冊。</p>
         <template v-else>
+          <p v-if="authNotice" class="validation-note" role="alert">{{ authNotice }}</p>
           <quote-account />
+          <div v-if="memberToken" class="cloud-draft-panel">
+            <h3>保存到會員工作台</h3>
+            <label class="field">
+              草稿名稱
+              <input v-model="cloudName" maxlength="120" placeholder="例如：專題外殼・第二版" />
+            </label>
+            <label class="field">
+              所屬專案
+              <select v-model="cloudProject" aria-label="所屬專案">
+                <option value="">未分類</option>
+                <option v-for="project in cloudProjects" :key="project.id" :value="project.id">{{ project.name }}</option>
+              </select>
+            </label>
+            <button type="button" :disabled="cloudBusy || !!issues.length" @click="saveCloud(false)">
+              {{ cloudBusy ? '保存中…' : submittedCaseId ? '另存新草稿' : '保存雲端草稿' }}
+            </button>
+            <label class="check-field">
+              <input v-model="autosaveEnabled" type="checkbox" :disabled="!cloudId" />
+              自動保存後續修改（需先保存一次）
+            </label>
+            <p v-if="cloudMessage" role="status">{{ cloudMessage }}</p>
+            <router-link to="/portal/workspace?section=drafts">查看我的雲端草稿 ↗</router-link>
+            <h3>送出製作需求</h3>
+            <label class="field">
+              交付方式
+              <select v-model="deliveryMethod" aria-label="交付方式">
+                <option value="pickup">現場取件（地點由專員確認）</option>
+                <option value="delivery">配送</option>
+              </select>
+            </label>
+            <label v-if="deliveryMethod === 'delivery'" class="field">
+              收件地址
+              <select v-model="addressId" aria-label="收件地址">
+                <option value="">請選擇地址</option>
+                <option v-for="address in addresses" :key="address.id" :value="address.id">
+                  {{ address.recipient }}・{{ address.line1 }}
+                </option>
+              </select>
+            </label>
+            <router-link v-if="deliveryMethod === 'delivery' && !addresses.length" to="/portal/dashboard?tab=addresses">
+              新增收件地址 ↗
+            </router-link>
+            <label class="check-field">
+              <input v-model="checksAccepted" type="checkbox" />
+              我已確認材料、尺寸與配色；支撐痕跡、薄壁及強度仍需專員檢查，價格與交期以正式報價為準。
+            </label>
+            <button
+              class="primary-button"
+              type="button"
+              :disabled="cloudBusy || !!issues.length || !checksAccepted || !!submittedCaseId"
+              @click="submitCloud"
+            >
+              {{ submittedCaseId ? '此草稿已送出' : '送交專員確認報價' }}
+            </button>
+            <router-link v-if="submittedCaseId" :to="{ path: '/portal/workspace', query: { section: 'case', id: submittedCaseId } }">
+              查看已送出的案件 ↗
+            </router-link>
+          </div>
           <div class="draft-summary">
             <h3>本次設定摘要</h3>
             <p>
@@ -358,8 +419,11 @@
 </template>
 
 <script setup>
-  import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
+  import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
   import { useRoute } from 'vue-router'
+  import { useStore } from 'vuex'
+  import { workspace, uploadWorkspace, modelFile } from '@/api/memberWorkspace'
+  import { fetchAddresses } from '@/api/customerPortal'
   import PublicShell from '@/components/public/PublicShell.vue'
   import StationLayout from '@/components/StationLayout.vue'
   import QuoteAccount from '@/components/QuoteAccount.vue'
@@ -376,6 +440,26 @@
     modelAppearance,
   } from '@/utils/quote-workspace.mjs'
   const emit = defineEmits(['assistance'])
+  const authNotice = ref('')
+  const store = useStore(),
+    stationLayout = ref(null)
+  const memberToken = computed(() => store.getters['customerAuth/accessToken'])
+  const cloudName = ref('我的列印草稿'),
+    cloudId = ref(''),
+    cloudRevision = ref(0),
+    cloudProject = ref(''),
+    cloudProjects = ref([]),
+    cloudBusy = ref(false),
+    cloudMessage = ref(''),
+    autosaveEnabled = ref(false),
+    submittedCaseId = ref(''),
+    addresses = ref([]),
+    addressId = ref(''),
+    deliveryMethod = ref('pickup'),
+    checksAccepted = ref(false)
+  let autosaveTimer,
+    cloudGeneration = 0,
+    restoringCloud = false
   const route = useRoute(),
     service = computed(() => getService(route.query.service))
   const settings = reactive({
@@ -411,6 +495,139 @@
   const totalQuantity = computed(() => layout.value.models.reduce((sum, m) => sum + (Number(assignments[m.id]?.quantity) || 0), 0))
   const issues = computed(() => validateQuoteDraft(layout.value, settings, slots, assignments))
   const appearance = computed(() => modelAppearance(layout.value.models, settings, slots, assignments))
+  async function memberResources() {
+    if (!memberToken.value) return
+    const [result, addressList] = await Promise.all([
+      workspace('', 'get', undefined, { skipCustomerAuthRedirect: true }),
+      fetchAddresses({ skipCustomerAuthRedirect: true }),
+    ])
+    cloudProjects.value = result.projects.filter((p) => p.isOwner)
+    addresses.value = addressList
+    authNotice.value = ''
+  }
+  watch(
+    memberToken,
+    () => {
+      if (memberToken.value)
+        memberResources().catch((err) => {
+          if (err.response?.status === 401) {
+            store.dispatch('customerAuth/resetAccessToken')
+            authNotice.value = '無法確認會員資料，請重新登入；模型與設定仍保留在此頁。'
+          } else error.value = err.response?.data?.error || '無法載入會員資料'
+        })
+    },
+    { immediate: true }
+  )
+  onMounted(async () => {
+    if (!route.query.draft && !route.query.model) return
+    try {
+      if (!memberToken.value) throw new Error('請先登入會員，再從模型庫或草稿重新開啟工作台。')
+      restoringCloud = true
+      await memberResources()
+      if (route.query.draft) {
+        const { draft } = await workspace(`/drafts/${encodeURIComponent(route.query.draft)}`)
+        const files = await Promise.all(draft.modelIds.map((id) => modelFile(id, true)))
+        Object.assign(settings, draft.manifest.settings)
+        slots.splice(0, slots.length, ...draft.manifest.colorSlots)
+        slotSequence = Math.max(1, ...slots.map((s) => Number(s.id.replace('slot-', '')) || 0))
+        paintSlot.value = slots[0].id
+        for (const model of draft.manifest.models)
+          assignments[model.id] = {
+            quantity: model.quantity,
+            slotId: model.baseSlotId,
+            bands: model.heightBands.map((b) => ({ ...b, id: ++bandSequence })),
+            surfacePaint: Object.fromEntries(model.surfacePaint?.faces || []),
+          }
+        cloudId.value = draft.id
+        cloudRevision.value = draft.revision
+        cloudName.value = draft.name
+        cloudProject.value = draft.projectId
+        submittedCaseId.value = draft.caseId || ''
+        stationLayout.value.restoreModels(
+          draft.manifest.models.map((m, i) => ({
+            id: m.id,
+            name: m.name,
+            file: new File([files[i]], m.name),
+            transform: m.sourceTransform,
+            position: m.placement,
+          }))
+        )
+        reviewing.value = true
+        cloudMessage.value = '雲端草稿已載入，模型處理完成後可繼續編輯。'
+      } else {
+        const bytes = await modelFile(route.query.model)
+        stationLayout.value.selectFiles([new File([bytes], '模型庫模型.stl')])
+      }
+    } catch (err) {
+      error.value = err.response?.data?.error || err.message
+    } finally {
+      restoringCloud = false
+    }
+  })
+  watch(
+    [settings, slots, assignments, layout, cloudName, cloudProject],
+    () => {
+      cloudGeneration++
+      clearTimeout(autosaveTimer)
+      if (autosaveEnabled.value && cloudId.value && !restoringCloud && !submittedCaseId.value && !issues.value.length)
+        autosaveTimer = setTimeout(() => saveCloud(true), 2500)
+    },
+    { deep: true }
+  )
+  async function saveCloud(automatic = false) {
+    if (cloudBusy.value || issues.value.length || !memberToken.value) return null
+    cloudBusy.value = true
+    const generation = cloudGeneration
+    try {
+      const manifest = createQuoteDraft(layout.value, settings, slots, assignments)
+      const update = !!cloudId.value && !submittedCaseId.value
+      const result = await uploadWorkspace(
+        update ? `/drafts/${cloudId.value}` : '/drafts',
+        { name: cloudName.value.trim() || '我的列印草稿', revision: cloudRevision.value, projectId: cloudProject.value, manifest },
+        layout.value.files,
+        layout.value.sources,
+        update ? 'put' : 'post',
+        { skipCustomerAuthRedirect: true }
+      )
+      cloudId.value = result.draft.id
+      cloudRevision.value = result.draft.revision
+      submittedCaseId.value = result.draft.caseId || ''
+      cloudMessage.value = `${automatic ? '已自動保存' : '已保存'}・${new Date().toLocaleTimeString('zh-TW')}・版本 ${cloudRevision.value}`
+      if (!cloudProjects.value.length) memberResources().catch(() => {})
+      return generation === cloudGeneration ? result.draft : null
+    } catch (err) {
+      autosaveEnabled.value = false
+      if (err.response?.status === 401) await store.dispatch('customerAuth/resetAccessToken')
+      error.value = err.response?.data?.error || '草稿保存失敗，請重試'
+      return null
+    } finally {
+      cloudBusy.value = false
+      if (autosaveEnabled.value && generation !== cloudGeneration && !issues.value.length) {
+        clearTimeout(autosaveTimer)
+        autosaveTimer = setTimeout(() => saveCloud(true), 2500)
+      }
+    }
+  }
+  async function submitCloud() {
+    if (!checksAccepted.value || submittedCaseId.value) return
+    const saved = await saveCloud(false)
+    if (!saved) return
+    cloudBusy.value = true
+    try {
+      const result = await workspace(`/drafts/${saved.id}/submit`, 'post', {
+        checksAccepted: true,
+        deliveryMethod: deliveryMethod.value,
+        addressId: addressId.value,
+      })
+      submittedCaseId.value = result.case.id
+      autosaveEnabled.value = false
+      cloudMessage.value = '需求已送出，專員確認後將提供正式報價。'
+    } catch (err) {
+      error.value = err.response?.data?.error || '送出失敗，請重試'
+    } finally {
+      cloudBusy.value = false
+    }
+  }
   watch(
     () => settings.colorMode,
     (value) => {
@@ -549,11 +766,21 @@
     emit('assistance')
   }
   onBeforeUnmount(() => {
+    clearTimeout(autosaveTimer)
     if (downloadUrl) URL.revokeObjectURL(downloadUrl)
   })
 </script>
 
 <style scoped>
+  .cloud-draft-panel {
+    margin: 20px 0;
+    padding: 20px;
+    border: 1px solid #cdd7cc;
+    border-radius: 6px;
+    background: #f1f5ed;
+    display: grid;
+    gap: 14px;
+  }
   .surface-tools {
     padding: 16px;
     margin: 18px 0 0;

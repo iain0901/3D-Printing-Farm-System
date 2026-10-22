@@ -30,6 +30,10 @@
           噴嘴參考設定，尚未對應水木書苑的實際機台。切片結果可供準備與討論，不代表免費額度或預約成功；現階段不提供直接送印或機器控制。
         </p>
       </aside>
+      <p class="slicer-small">
+        <router-link to="/portal/workspace?section=free-print">會員免費列印申請與取件進度 ↗</router-link>
+        · 正式申請請先在會員工作台保存單色 PETG 草稿。
+      </p>
       <div class="slicer-grid">
         <section class="slicer-panel model-panel" aria-labelledby="model-title">
           <div class="panel-title">

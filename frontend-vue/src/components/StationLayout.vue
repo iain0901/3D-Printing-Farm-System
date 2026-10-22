@@ -155,6 +155,7 @@
   function publish() {
     emit('change', {
       files: items.map((i) => i.file).filter(Boolean),
+      sources: items.map((i) => i.source),
       names: items.map((i) => i.name),
       placements: items.map((i) => ({ ...i.position })),
       models: items.map((i) => ({
@@ -197,6 +198,31 @@
       })
     selected.value = items.length - added.length
   }
+  function restoreModels(models) {
+    if (!Array.isArray(models) || models.length > 5 || models.reduce((n, m) => n + m.file.size, 0) > 10 * 1024 * 1024)
+      throw new Error('草稿模型超過工作台容量')
+    clearTimeout(timer)
+    worker?.terminate()
+    worker = null
+    pendingPack = false
+    items.splice(
+      0,
+      items.length,
+      ...models.map((model) => ({
+        id: model.id,
+        name: model.name,
+        source: markRaw(model.file),
+        transform: { ...initialTransform(), ...model.transform },
+        position: { ...model.position },
+        file: null,
+        dimensions: null,
+      }))
+    )
+    sequence = Math.max(0, ...models.map((m) => Number(m.id) || 0))
+    selected.value = 0
+    schedule()
+  }
+  defineExpose({ restoreModels, selectFiles })
   function schedule() {
     clearTimeout(timer)
     worker?.terminate()

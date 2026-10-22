@@ -32,7 +32,8 @@ instance.interceptors.response.use(
     const message = response.data && response.data.error
     if (response.status === 401 && !error.config?.skipCustomerAuthRedirect) {
       store.dispatch('customerAuth/resetAccessToken').catch(() => {})
-      if (router.currentRoute.path !== '/portal/login') router.push('/portal/login').catch(() => {})
+      const current = router.currentRoute.value || router.currentRoute
+      if (current.path !== '/portal/login') router.push({ path: '/portal/login', query: { redirect: current.fullPath } }).catch(() => {})
     }
     baseMessage(message || `請求失敗（${response.status}）`, 'error')
     return Promise.reject(error)

@@ -7,6 +7,13 @@ export const portalSections = [
 export function portalSection(id) {
   return portalSections.find((section) => section.id === id) || portalSections[0]
 }
+export function trackingPortal(carrier = '') {
+  if (/黑貓|t.?cat/i.test(carrier)) return 'https://www.t-cat.com.tw/Inquire/Trace.aspx'
+  if (/新竹|hct/i.test(carrier)) return 'https://www.hct.com.tw/Search/SearchGoods_n.aspx'
+  if (/郵局|中華郵政|post/i.test(carrier)) return 'https://postserv.post.gov.tw/pstmail/main_mail.html'
+  if (/7.?eleven|7-11|交貨便/i.test(carrier)) return 'https://eservice.7-11.com.tw/e-tracking/search.aspx'
+  return null
+}
 const statusLabels = {
   new: '新案件',
   submitted: '已送出',

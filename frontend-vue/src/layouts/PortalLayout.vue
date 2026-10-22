@@ -12,7 +12,7 @@
         <router-link
           v-for="item in sections"
           :key="item.id"
-          :to="{ path: '/portal/dashboard', query: { tab: item.id } }"
+          :to="item.path ? { path: item.path, query: { section: item.id } } : { path: '/portal/dashboard', query: { tab: item.id } }"
           :class="{ selected: activeSection === item.id }"
           :aria-current="activeSection === item.id ? 'page' : undefined"
         >
@@ -64,13 +64,34 @@
 
   export default {
     name: 'PortalLayout',
-    data: () => ({ sections: portalSections }),
+    data: () => ({
+      sections: [
+        ...portalSections.slice(0, 1),
+        { id: 'models', number: '02', label: '模型與草稿', path: '/portal/workspace' },
+        ...portalSections.slice(1, 3),
+        portalSections[3],
+        { id: 'projects', number: '05', label: '專案協作', path: '/portal/workspace' },
+        { id: 'notifications', number: '06', label: '通知中心', path: '/portal/workspace' },
+        { id: 'settings', number: '07', label: '帳號與服務', path: '/portal/workspace' },
+      ].map((item, index) => ({ ...item, number: String(index + 1).padStart(2, '0') })),
+    }),
     computed: {
       ...mapGetters({ customer: 'customerAuth/customer' }),
       activeSection() {
+        if (this.$route.path === '/portal/workspace') {
+          const section = this.$route.query.section || 'models'
+          return ['drafts'].includes(section)
+            ? 'models'
+            : ['billing', 'support', 'rewards', 'free-print'].includes(section)
+            ? 'settings'
+            : section === 'case'
+            ? 'cases'
+            : section
+        }
         return portalSection(this.$route.query.tab).id
       },
       sectionTitle() {
+        if (this.$route.path === '/portal/workspace') return this.sections.find((s) => s.id === this.activeSection)?.label || '會員工作台'
         return portalSection(this.$route.query.tab).label
       },
     },
@@ -169,6 +190,7 @@
     position: sticky;
     top: 0;
     height: 100vh;
+    overflow-y: auto;
   }
   .portal-brand {
     font-size: 30px;

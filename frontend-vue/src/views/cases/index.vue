@@ -30,6 +30,13 @@
           <el-tab-pane label="案件內容" name="overview">
             <div class="detail-grid"><div><span>服務方式</span><b>{{ selected.mode === 'estimate' ? '快速估價' : '專員協助' }}</b></div><div><span>來源</span><b>{{ selected.source }}</b></div><div><span>希望日期</span><b>{{ selected.dueDate || '未指定' }}</b></div><div><span>預算</span><b>NT$ {{ selected.budget || 0 }}</b></div></div>
             <h3>零件</h3>
+            <section v-if="selected.workspaceDraft" class="workspace-intake">
+              <h3>會員工作台製作設定</h3>
+              <p>{{ selected.workspaceDraft.settings.material }} · 層高 {{ selected.workspaceDraft.settings.layerHeight }} mm · 填充 {{ selected.workspaceDraft.settings.infill }}% · 外壁 {{ selected.workspaceDraft.settings.walls }} 圈</p>
+              <p>{{ selected.workspaceDraft.settings.colorMode === 'multi' ? '多色' : '單色' }} · {{ selected.workspaceDraft.colorSlots.map(s=>s.label).join('／') }}。模型已套用縮放與旋轉，請勿再次套用來源變換。</p>
+              <el-alert type="info" :closable="false" title="此需求尚未使用新機型自動切片。多色、逐面上色與擺放需先核對保存的完整設定，再安排正式切片。" />
+              <el-button size="small" @click="downloadWorkspaceSettings">下載完整擺放與配色設定</el-button>
+            </section>
             <el-table :data="selected.parts" size="small"><el-table-column prop="name" label="零件" /><el-table-column prop="material" label="材料" /><el-table-column prop="color" label="顏色" /><el-table-column prop="quantity" label="數量" width="70" /><el-table-column prop="readiness" label="準備" width="100" /></el-table>
             <h3>內部備註</h3><p class="notes">{{ selected.notes || '—' }}</p>
             <div class="section-head"><h3>付款紀錄</h3><el-button size="small" type="primary" @click="openPayment">登錄付款</el-button></div>
@@ -236,6 +243,7 @@
       async openAfterSales() { try { await createCaseAfterSales(this.selected.id, { type: 'reprint', description: '由內部案件面板建立的售後重印', reopenProduction: true }); this.$baseMessage('售後重印案件已建立', 'success'); await this.refreshSelected() } catch (_) {} },
       statusLabel(status) { return (this.statuses.find((item) => item.value === status) || {}).label || status || '' },
       statusType(status) { return ['completed', 'ready_to_print', 'paid'].includes(status) ? 'success' : ['cancelled'].includes(status) ? 'danger' : ['supplement_requested', 'revision_requested', 'awaiting_payment'].includes(status) ? 'warning' : 'info' },
+      downloadWorkspaceSettings() { const url = URL.createObjectURL(new Blob([JSON.stringify(this.selected.workspaceDraft,null,2)],{type:'application/json'})); const a=document.createElement('a'); a.href=url; a.download=`${this.selected.caseNo}-製作設定.json`; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000) },
       paymentLabel(status) { return { paid: '已付款', monthly_terms: '月結', waived: '免付款', refunded: '已退款', unpaid: '未付款' }[status] || status },
       workflowIndex(status) { if (['new', 'under_review', 'supplement_requested', 'awaiting_customer'].includes(status)) return 0; if (['formal_quote_sent', 'accepted', 'revision_requested'].includes(status)) return 1; if (['awaiting_payment', 'paid'].includes(status)) return 2; if (['production_pending', 'ready_to_print', 'printing', 'quality_check'].includes(status)) return 3; return 4 },
       readinessLabel(key) { return { acceptedCurrentQuote: '客戶已接受目前報價版本', paymentSatisfied: '付款、月結或免付款條件完成', printerAssigned: '已指派印表機', orcaSliceComplete: 'OrcaSlicer 已產生 G-code', gcodeApproved: 'G-code 已由人員核准', allItemsReady: '全部零件已完成準備' }[key] || key },

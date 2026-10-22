@@ -50,7 +50,7 @@ async function run() {
     assert.equal(await page.locator("h1").innerText(), "水木書苑");
     assert.match(
       await page.locator(".free-notice").innerText(),
-      /線上送印準備中/
+      /線上切片與會員申請/
     );
     assert.match(await page.title(), /水木書苑/);
     await page.reload();

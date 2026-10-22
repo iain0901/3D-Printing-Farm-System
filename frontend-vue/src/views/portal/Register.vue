@@ -15,7 +15,7 @@
     </el-form>
     <div class="auth-links">
       <span>已經有帳號了？</span>
-      <router-link to="/portal/login">直接登入 →</router-link>
+      <router-link :to="{ path: '/portal/login', query: { redirect: $route.query.redirect } }">直接登入 →</router-link>
     </div>
   </auth-shell>
 </template>
@@ -23,6 +23,7 @@
 <script>
   import AuthShell from '@/components/public/AuthShell.vue'
   import { registerCustomer } from '@/api/customerAuth'
+  import { memberReturnPath } from '@/utils/member-return.mjs'
 
   export default {
     components: { AuthShell },
@@ -41,7 +42,7 @@
         try {
           const result = await registerCustomer(this.form)
           this.$store.dispatch('customerAuth/setSession', result)
-          this.$router.push('/portal/dashboard')
+          this.$router.push(memberReturnPath(this.$route.query.redirect))
         } catch {
           // customerRequest 已顯示錯誤訊息，保留輸入內容以便重試。
         } finally {

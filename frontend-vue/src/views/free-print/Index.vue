@@ -89,7 +89,7 @@
           <p>你已選擇{{ station.institution }}・{{ station.name }}。</p>
         </div>
         <div class="free-notice" role="note">
-          <span class="free-tag">線上送印準備中</span>
+          <span class="free-tag">線上切片與會員申請</span>
           <h3>先把模型準備好，從線上切片開始。</h3>
           <p>
             現在可以免登入上傳
@@ -97,6 +97,7 @@
           </p>
           <p>免費列印固定使用 3DSTU_PETG。開放資格、免費額度、服務時段與設備，請依站點公告及現場指引確認。</p>
           <router-link :to="`${station.path}/slicer`" class="studio-button">開啟線上切片 ↗</router-link>
+          <router-link to="/portal/workspace?section=free-print" class="free-text-link">會員免費列印申請與進度 ↗</router-link>
           <router-link to="/guides/file-prep" class="free-text-link">先看模型檔案準備指南 ↗</router-link>
         </div>
       </section>
@@ -105,7 +106,7 @@
         <div class="free-section-heading">
           <p class="free-eyebrow">02 ／ 使用流程</p>
           <h2 id="free-process-heading">從模型，到手上的物件。</h2>
-          <p>以下為規劃流程；線上送印功能開放後，將依各站規範提供服務。</p>
+          <p>登入會員、保存單色 PETG 模型草稿後可提出申請；由站點確認資格與製作安排。</p>
         </div>
         <ol class="free-steps">
           <li v-for="(step, index) in steps" :key="step.title">
@@ -129,7 +130,10 @@
         </details>
         <details>
           <summary>免費列印有材料、尺寸或時間限制嗎？</summary>
-          <p>免費列印固定使用 3DSTU_PETG，不提供其他材料選項。列印尺寸、單次額度與服務時段仍依站點規範確認；本站不顯示尚未確認的額度或機台資訊。</p>
+          <p>
+            免費列印固定使用
+            3DSTU_PETG，不提供其他材料選項。列印尺寸、單次額度與服務時段仍依站點規範確認；本站不顯示尚未確認的額度或機台資訊。
+          </p>
         </details>
         <details>
           <summary>選擇站點後，就已經排到列印了嗎？</summary>

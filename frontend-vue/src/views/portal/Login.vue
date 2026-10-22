@@ -10,7 +10,7 @@
       <el-button class="auth-submit" type="primary" native-type="submit" :loading="loading">登入會員中心 ↗</el-button>
     </el-form>
     <div class="auth-links">
-      <router-link to="/portal/register">第一次來？建立帳號</router-link>
+      <router-link :to="{ path: '/portal/register', query: { redirect: $route.query.redirect } }">第一次來？建立帳號</router-link>
       <router-link to="/portal/reset">忘記密碼？</router-link>
     </div>
     <p class="auth-note">
@@ -23,6 +23,7 @@
 <script>
   import AuthShell from '@/components/public/AuthShell.vue'
   import { loginCustomer } from '@/api/customerAuth'
+  import { memberReturnPath } from '@/utils/member-return.mjs'
 
   export default {
     components: { AuthShell },
@@ -41,7 +42,7 @@
         try {
           const result = await loginCustomer(this.form)
           this.$store.dispatch('customerAuth/setSession', result)
-          this.$router.push('/portal/dashboard')
+          this.$router.push(memberReturnPath(this.$route.query.redirect))
         } catch {
           // customerRequest 已顯示錯誤訊息，保留輸入內容以便重試。
         } finally {

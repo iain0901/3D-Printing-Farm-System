@@ -73,6 +73,9 @@
               <el-tag size="small" :type="statusType(caseItem.status)">{{ statusLabel(caseItem.status) }}</el-tag>
             </div>
             <p class="quote-meta">案件編號：{{ caseItem.caseNo }} · {{ caseItem.parts.length }} 個零件</p>
+            <router-link class="case-detail-link" :to="{ path: '/portal/workspace', query: { section: 'case', id: caseItem.id } }">
+              查看完整案件、進度與對話 ↗
+            </router-link>
             <p v-if="caseItem.quote" class="quote-price">
               {{ money(caseItem.quote.total) }}
               <span>報價總額</span>
@@ -85,7 +88,7 @@
               <el-button size="small" @click="decideUnifiedCase(caseItem, 'revision')">要求修改</el-button>
               <el-button size="small" @click="contactSpecialist">取消請聯絡專員</el-button>
             </div>
-            <p class="hint">聯絡與補件請在原 LINE 對話中進行。</p>
+            <p class="hint">可在案件詳情留言、確認進度或提交售後申請。</p>
           </div>
           <div v-if="!cases.length" class="empty-hint">
             <span class="empty-index">01 / 開始製作</span>
@@ -213,6 +216,7 @@
             <span>訂單金額</span>
           </p>
           <p v-if="order.payment" class="quote-meta">付款狀態：{{ statusLabel(order.payment.status) }}</p>
+          <p v-if="order.requiresRequote" class="quote-meta">再次製作需求已建立，價格與交期將重新確認。</p>
 
           <div class="order-tracking" v-if="trackingByOrder[order.id]">
             <p class="quote-meta">
@@ -222,6 +226,14 @@
               </template>
               <template v-if="trackingByOrder[order.id].status === 'not_configured'">·（Track.TW 尚未設定，暫無法查詢即時貨態）</template>
             </p>
+            <a
+              v-if="trackingPortal(trackingByOrder[order.id].carrier)"
+              :href="trackingPortal(trackingByOrder[order.id].carrier)"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              前往物流公司查詢 ↗
+            </a>
           </div>
 
           <div class="order-actions">
@@ -381,8 +393,16 @@
     redeemPoints,
   } from '@/api/customerPortal'
   import { fetchCustomerMe } from '@/api/customerAuth'
+  import { workspace } from '@/api/memberWorkspace'
   import ModelViewer from '@/components/ModelViewer'
-  import { portalSection, portalStatus, portalStatusType, portalMoney, portalSummary } from '@/utils/portal-presentation.mjs'
+  import {
+    portalSection,
+    portalStatus,
+    portalStatusType,
+    portalMoney,
+    portalSummary,
+    trackingPortal,
+  } from '@/utils/portal-presentation.mjs'
 
   export default {
     name: 'PortalDashboard',
@@ -450,6 +470,7 @@
       this.load()
     },
     methods: {
+      trackingPortal,
       statusLabel: portalStatus,
       statusType: portalStatusType,
       money: portalMoney,
@@ -558,9 +579,14 @@
         this.trackingByOrder[order.id] = result
       },
       async startReorder(order) {
+        if (order.caseId) {
+          const result = await workspace(`/cases/${order.caseId}/reorder-draft`, 'post', {})
+          await this.$router.push({ path: '/quote', query: { draft: result.draft.id } })
+          return
+        }
         const created = await reorder(order.id)
         this.orders.push(created)
-        this.$baseMessage(`已建立新訂單 ${created.id}`, 'success')
+        this.$baseMessage(`已建立重新報價需求 ${created.id}`, 'success')
       },
       async openCheckout(order) {
         this.checkoutOrderTarget = order
@@ -580,6 +606,7 @@
           if (index !== -1) this.orders[index].payment = result.payment
           this.$baseMessage(result.payment.message || '結帳請求已送出', result.ok ? 'success' : 'warning')
           this.checkoutVisible = false
+          if (result.ok && result.payment.redirectUrl) window.location.assign(result.payment.redirectUrl)
         } finally {
           this.checkingOut = false
         }

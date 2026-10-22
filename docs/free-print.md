@@ -1,5 +1,7 @@
 # 免費列印站點入口
 
+會員免費列印申請已加入 `/portal/workspace?section=free-print`：選擇保存的單色 PETG 草稿送交站點審核、追蹤回覆及取件碼。這與下列免登入試切片工作分開；申請不自動保留機台或加入列印佇列。詳見 [會員工作台](member-workspace.md)。
+
 公開入口：`/#/free-print`。目前唯一站點為「國立清華大學・水木書苑」，專頁為 `/#/free-print/nthu-shuimu`，可供直接連結或未來製作站點 QR code。網址保留站點選擇，重新整理後仍顯示同一站；未知站點轉入 404，不回退成已知站點。
 
 首頁、製作服務導覽與頁尾均有免費列印入口。不需登入即可瀏覽與選站；不新增圖片，避免超過全站插圖重複上限。站點資料集中於 `frontend-vue/src/content/freePrintStations.mjs`。
