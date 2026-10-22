@@ -19,12 +19,22 @@ describe("quote model preview performance regressions", () => {
       readFrontend("src/workers/model-preview.worker.js"),
     ]);
 
-    expect(viewer).toContain("new Worker(new URL('../workers/model-preview.worker.js', import.meta.url)");
-    expect(viewer).toContain("postMessage({ id, buffer }, [buffer])");
+    expect(viewer).toContain(
+      "new Worker(new URL('../workers/model-preview.worker.js', import.meta.url)"
+    );
+    expect(viewer).toContain(
+      "postMessage({ id, buffer, painting: this.paintEnabled }, [buffer])"
+    );
     expect(viewer).not.toContain("new STLLoader().parse(buffer)");
     expect(worker).toContain("new STLLoader().parse(buffer)");
-    expect(worker).toContain("postMessage({ id, parts }");
+    expect(worker).toContain(
+      "postMessage({ id, parts, topology }, transferables)"
+    );
     expect(worker).toContain("transferables");
+    expect(worker).toContain("painting ? buildPaintTopology(positions) : null");
+    expect(worker).toContain("topology.neighbors.buffer");
+    expect(worker).toContain("part.faceIds.buffer");
+    expect(viewer).not.toContain("buildPaintTopology(positions)");
   });
 
   it("renders on demand and bounds resize work instead of running a permanent frame loop", async () => {
@@ -42,8 +52,14 @@ describe("quote model preview performance regressions", () => {
 
     expect(viewer).toContain("this.loadSequence += 1");
     expect(viewer).toContain("this.modelWorker?.terminate()");
-    expect(viewer).toContain("if (loadId !== this.loadSequence || this.viewerDisposed) return");
-    expect(viewer).toContain("this.camera.near = Math.max(maxDim / 10000, 0.001)");
-    expect(viewer).toContain("this.camera.far = Math.max(distance * 10, this.camera.near * 1000)");
+    expect(viewer).toContain(
+      "if (loadId !== this.loadSequence || this.viewerDisposed) return"
+    );
+    expect(viewer).toContain(
+      "this.camera.near = Math.max(maxDim / 10000, 0.001)"
+    );
+    expect(viewer).toContain(
+      "this.camera.far = Math.max(distance * 10, this.camera.near * 1000)"
+    );
   });
 });

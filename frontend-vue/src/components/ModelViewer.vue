@@ -1,6 +1,9 @@
 <template>
   <div class="model-viewer">
     <div ref="canvasHost" class="model-viewer-canvas" :style="{ height: height + 'px' }" />
+    <p v-if="paintEnabled && !loading" class="paint-status" role="status">
+      {{ paintTool === 'orbit' ? '旋轉檢視：拖曳旋轉、滾輪縮放。' : '上色模式：拖曳塗色；切換「旋轉」以查看背面。' }}
+    </p>
     <div v-if="loading" class="model-viewer-overlay">
       <el-icon><Loading /></el-icon>
       載入模型中…
@@ -16,6 +19,7 @@
   import * as THREE from 'three'
   import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
   import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader.js'
+  import { selectPaintFaces } from '@/utils/surface-paint.mjs'
 
   // STL 不含實際材料顏色；避免用多色預覽讓客戶誤以為已完成選色。
   const DEFAULT_PALETTE = ['#d7e0e8']
@@ -31,6 +35,12 @@
       // Presentation only: local model Z ranges, never interpreted as sliced layers.
       heightColors: { type: Array, default: () => [] },
       zUp: { type: Boolean, default: false },
+      paintEnabled: { type: Boolean, default: false },
+      paintTool: { type: String, default: 'orbit' },
+      paintSlotId: { type: String, default: '' },
+      brushRadius: { type: Number, default: 5 },
+      paintPalette: { type: Array, default: () => [] },
+      surfacePaint: { type: Object, default: () => ({}) },
     },
     data() {
       return {
@@ -41,6 +51,30 @@
     watch: {
       file() {
         this.loadModel()
+      },
+      paintEnabled() {
+        this.loadModel()
+        this.updatePaintControls()
+      },
+      paintTool() {
+        this.finishPaint(false)
+        this.updatePaintControls()
+      },
+      paintSlotId() {
+        this.finishPaint(false)
+      },
+      surfacePaint: {
+        deep: true,
+        handler() {
+          this.applySurfacePaint()
+        },
+      },
+      paintPalette: {
+        deep: true,
+        handler() {
+          this.applyHeightColors()
+          this.applySurfacePaint()
+        },
       },
       arrayBuffer() {
         this.loadModel()
@@ -76,6 +110,14 @@
       }
     },
     beforeUnmount() {
+      this.finishPaint(true)
+      if (this.paintFrame) cancelAnimationFrame(this.paintFrame)
+      const canvas = this.renderer?.domElement
+      canvas?.removeEventListener('pointerdown', this.beginPaint, true)
+      canvas?.removeEventListener('pointermove', this.movePaint, true)
+      canvas?.removeEventListener('pointerup', this.endPaint, true)
+      canvas?.removeEventListener('pointercancel', this.cancelPaint, true)
+      canvas?.removeEventListener('lostpointercapture', this.cancelPaint, true)
       this.viewerDisposed = true
       this.loadSequence += 1
       this.resizeObserver?.disconnect()
@@ -112,6 +154,14 @@
         this.controls = markRaw(new OrbitControls(this.camera, this.renderer.domElement))
         this.controls.enableDamping = false
         this.controls.addEventListener('change', this.scheduleRender)
+        const canvas = this.renderer.domElement
+        canvas.addEventListener('pointerdown', this.beginPaint, true)
+        canvas.addEventListener('pointermove', this.movePaint, true)
+        canvas.addEventListener('pointerup', this.endPaint, true)
+        canvas.addEventListener('pointercancel', this.cancelPaint, true)
+        canvas.addEventListener('lostpointercapture', this.cancelPaint, true)
+        canvas.setAttribute('aria-label', '模型表面上色畫布')
+        this.updatePaintControls()
 
         this.partsGroup = markRaw(new THREE.Group())
         this.scene.add(this.partsGroup)
@@ -179,10 +229,13 @@
           modelWorker.onmessage = ({ data }) => {
             if (data.id !== id) return
             if (data.error) reject(new Error(data.error))
-            else resolve(data.parts)
+            else {
+              this.paintTopology = data.topology
+              resolve(data.parts)
+            }
           }
           modelWorker.onerror = (event) => reject(new Error(event.message || '模型背景解析失敗'))
-          modelWorker.postMessage({ id, buffer }, [buffer])
+          modelWorker.postMessage({ id, buffer, painting: this.paintEnabled }, [buffer])
         }).finally(() => {
           modelWorker.terminate()
           if (this.modelWorker === modelWorker) {
@@ -193,6 +246,9 @@
       },
       async loadModel() {
         if (!this.renderer || !this.partsGroup) return
+        this.finishPaint(true)
+        this.paintTopology = null
+        this.paintFaceLookup = new Map()
         this.loadSequence += 1
         const loadId = this.loadSequence
         const source = this.file || this.arrayBuffer
@@ -225,6 +281,7 @@
           this.frameCamera()
           this.applyColors(this.partColors)
           this.applyHeightColors()
+          this.applySurfacePaint()
           this.scheduleRender()
         } catch (error) {
           if (loadId !== this.loadSequence || this.viewerDisposed) return
@@ -242,7 +299,10 @@
           geometry.computeBoundingBox()
           geometry.computeBoundingSphere()
           const material = new THREE.MeshStandardMaterial({ color: DEFAULT_PALETTE[index % DEFAULT_PALETTE.length], roughness: 0.6 })
-          this.partsGroup.add(new THREE.Mesh(geometry, material))
+          const mesh = new THREE.Mesh(geometry, material)
+          mesh.userData.faceIds = part.faceIds
+          if (part.faceIds) part.faceIds.forEach((face, local) => this.paintFaceLookup.set(face, { mesh, local }))
+          this.partsGroup.add(mesh)
           return { index, color: material.color.getHexString() }
         })
         if (!parts.length) throw new Error('STL file has no mesh content')
@@ -284,30 +344,41 @@
           .slice(0, 8)
         for (const mesh of this.meshList()) {
           const material = mesh.material
-          if (!material.userData.heightUniforms && !bands.length) continue
+          if (!material.userData.heightUniforms && !bands.length && !this.paintEnabled) continue
           if (!material.userData.heightUniforms) {
+            mesh.geometry.setAttribute(
+              'quotePaintSlot',
+              new THREE.BufferAttribute(new Float32Array(mesh.geometry.attributes.position.count), 1)
+            )
             const uniforms = {
               quoteBandCount: { value: 0 },
               quoteBandRanges: { value: Array.from({ length: 8 }, () => new THREE.Vector2()) },
               quoteBandColors: { value: Array.from({ length: 8 }, () => new THREE.Color()) },
+              quotePaintColors: { value: Array.from({ length: 8 }, () => new THREE.Color()) },
             }
             material.userData.heightUniforms = uniforms
             material.onBeforeCompile = (shader) => {
               Object.assign(shader.uniforms, uniforms)
               shader.vertexShader =
-                'varying float quoteLocalZ;\n' +
-                shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nquoteLocalZ = position.z;')
+                'varying float quoteLocalZ;\nattribute float quotePaintSlot;\nvarying float quoteFaceSlot;\n' +
+                shader.vertexShader.replace(
+                  '#include <begin_vertex>',
+                  '#include <begin_vertex>\nquoteLocalZ = position.z;\nquoteFaceSlot = quotePaintSlot;'
+                )
               shader.fragmentShader =
-                'varying float quoteLocalZ;\nuniform int quoteBandCount;\nuniform vec2 quoteBandRanges[8];\nuniform vec3 quoteBandColors[8];\n' +
+                'varying float quoteLocalZ;\nvarying float quoteFaceSlot;\nuniform vec3 quotePaintColors[8];\nuniform int quoteBandCount;\nuniform vec2 quoteBandRanges[8];\nuniform vec3 quoteBandColors[8];\n' +
                 shader.fragmentShader.replace(
                   '#include <color_fragment>',
-                  '#include <color_fragment>\nfor (int i = 0; i < 8; i++) { if (i < quoteBandCount && quoteLocalZ >= quoteBandRanges[i].x - 0.0001 && quoteLocalZ <= quoteBandRanges[i].y + 0.0001) diffuseColor.rgb = quoteBandColors[i]; }'
+                  '#include <color_fragment>\nfor (int i = 0; i < 8; i++) { if (i < quoteBandCount && quoteLocalZ >= quoteBandRanges[i].x - 0.0001 && quoteLocalZ <= quoteBandRanges[i].y + 0.0001) diffuseColor.rgb = quoteBandColors[i]; }\nfor (int i = 0; i < 8; i++) { if (abs(quoteFaceSlot - float(i + 1)) < 0.1) diffuseColor.rgb = quotePaintColors[i]; }'
                 )
             }
-            material.customProgramCacheKey = () => '3drfm-height-color-preview-v1'
+            material.customProgramCacheKey = () => '3drfm-surface-color-preview-v2'
             material.needsUpdate = true
           }
           const uniforms = material.userData.heightUniforms
+          this.paintPalette.slice(0, 8).forEach((slot, i) => {
+            if (/^#[0-9a-f]{6}$/i.test(slot.hex)) uniforms.quotePaintColors.value[i].set(slot.hex)
+          })
           uniforms.quoteBandCount.value = bands.length
           bands.forEach((band, i) => {
             uniforms.quoteBandRanges.value[i].set(band.from, band.to)
@@ -315,6 +386,100 @@
           })
         }
         this.scheduleRender()
+      },
+      updatePaintControls() {
+        if (this.controls) this.controls.enabled = !this.paintEnabled || this.paintTool === 'orbit'
+        if (this.renderer) this.renderer.domElement.style.cursor = this.paintEnabled && this.paintTool !== 'orbit' ? 'crosshair' : 'grab'
+      },
+      setFaceSlot(face, slotId) {
+        const entry = this.paintFaceLookup?.get(face)
+        const attr = entry?.mesh.geometry.getAttribute('quotePaintSlot')
+        if (!attr) return
+        const value = slotId ? this.paintPalette.findIndex((s) => s.id === slotId) + 1 : 0
+        attr.array.fill(value, entry.local * 3, entry.local * 3 + 3)
+        attr.needsUpdate = true
+      },
+      applySurfacePaint() {
+        for (const mesh of this.meshList()) {
+          const attr = mesh.geometry.getAttribute('quotePaintSlot')
+          if (attr) {
+            attr.array.fill(0)
+            attr.needsUpdate = true
+          }
+        }
+        if (this.paintEnabled) for (const [face, slot] of Object.entries(this.surfacePaint)) this.setFaceSlot(Number(face), slot)
+        this.scheduleRender()
+      },
+      beginPaint(event) {
+        if (
+          !this.paintEnabled ||
+          this.paintTool === 'orbit' ||
+          this.loading ||
+          !this.paintTopology ||
+          event.button !== 0 ||
+          this.paintStroke
+        )
+          return
+        event.preventDefault()
+        event.stopImmediatePropagation()
+        this.paintStroke = new Map()
+        this.paintPointer = event.pointerId
+        this.renderer.domElement.setPointerCapture(event.pointerId)
+        this.samplePaint(event.clientX, event.clientY)
+      },
+      movePaint(event) {
+        if (!this.paintStroke || event.pointerId !== this.paintPointer) return
+        event.preventDefault()
+        event.stopImmediatePropagation()
+        this.paintPoint = [event.clientX, event.clientY]
+        if (!this.paintFrame)
+          this.paintFrame = requestAnimationFrame(() => {
+            this.paintFrame = 0
+            if (this.paintStroke && this.paintPoint) this.samplePaint(...this.paintPoint)
+          })
+      },
+      samplePaint(x, y) {
+        if (!this.paintStroke || !this.paintTopology) return
+        const rect = this.renderer.domElement.getBoundingClientRect()
+        if (x < rect.left || y < rect.top || x > rect.right || y > rect.bottom) return
+        const ray = new THREE.Raycaster()
+        ray.setFromCamera(new THREE.Vector2(((x - rect.left) / rect.width) * 2 - 1, (-(y - rect.top) / rect.height) * 2 + 1), this.camera)
+        const hit = ray.intersectObjects(this.meshList(), false)[0]
+        if (!hit || !hit.object.userData.faceIds) return
+        const face = hit.object.userData.faceIds[hit.faceIndex],
+          point = hit.object.worldToLocal(hit.point.clone())
+        const after = this.paintTool === 'erase' ? null : this.paintSlotId
+        if (after && !this.paintPalette.some((s) => s.id === after)) return
+        const faces = selectPaintFaces(this.paintTopology, face, point, this.brushRadius, this.paintTool === 'fill')
+        for (const id of faces) {
+          const before = this.surfacePaint[id] || null
+          if (!this.paintStroke.has(id)) this.paintStroke.set(id, { face: id, before, after })
+          else this.paintStroke.get(id).after = after
+          this.setFaceSlot(id, after)
+        }
+        this.scheduleRender()
+      },
+      endPaint(event) {
+        if (!this.paintStroke || event.pointerId !== this.paintPointer) return
+        event.preventDefault()
+        event.stopImmediatePropagation()
+        this.samplePaint(event.clientX, event.clientY)
+        this.finishPaint(false)
+      },
+      cancelPaint() {
+        this.finishPaint(true)
+      },
+      finishPaint(cancel) {
+        if (!this.paintStroke) return
+        if (this.paintFrame) cancelAnimationFrame(this.paintFrame)
+        this.paintFrame = 0
+        this.paintPoint = null
+        const changes = [...this.paintStroke.values()].filter((c) => c.before !== c.after)
+        const pointer = this.paintPointer
+        this.paintStroke = null
+        if (this.renderer?.domElement.hasPointerCapture(pointer)) this.renderer.domElement.releasePointerCapture(pointer)
+        if (cancel) this.applySurfacePaint()
+        else if (changes.length) this.$emit('paint', changes)
       },
       frameCamera() {
         const box = new THREE.Box3().setFromObject(this.partsGroup)
@@ -337,6 +502,13 @@
 </script>
 
 <style lang="scss" scoped>
+  .paint-status {
+    margin: 0;
+    padding: 10px 12px;
+    font-size: 12px;
+    background: #eef3eb;
+    color: #315644;
+  }
   .model-viewer {
     position: relative;
     width: 100%;

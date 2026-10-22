@@ -1,4 +1,5 @@
 // Frontend draft contract. This deliberately does NOT call the legacy slicer.
+import { validateSurfacePaint } from './surface-paint.mjs'
 export const quoteMaterials = [
   { id: 'PETG', label: 'PETG', note: '優先推薦・兼顧韌性與日常功能件需求', recommended: true },
   { id: 'PLA', label: 'PLA', note: '展示、外觀原型與一般模型' },
@@ -57,6 +58,8 @@ export function validateQuoteDraft(layout, settings, slots, assignments) {
       continue
     }
     if (settings.colorMode === 'single') continue
+    const paintError = validateSurfacePaint(assignment.surfacePaint, model, slots)
+    if (paintError) issues.push(`${model.name}：${paintError}`)
     if (!slots.some((s) => s.id === assignment.slotId)) issues.push(`${model.name}：請指定基底色槽。`)
     const bands = assignment.bands || []
     if (bands.length > MAX_HEIGHT_BANDS) issues.push(`${model.name}：最多 ${MAX_HEIGHT_BANDS} 個換色區間。`)
@@ -84,7 +87,7 @@ export function createQuoteDraft(layout, settings, slots, assignments) {
   if (issues.length) throw new Error(issues.join('；'))
   const activeSlots = settings.colorMode === 'single' ? slots.slice(0, 1) : slots
   return {
-    schemaVersion: '3drfm.quote-workspace.v1',
+    schemaVersion: '3drfm.quote-workspace.v2',
     purpose: 'paid-quote',
     status: 'awaiting_machine_profile',
     machineProfileId: null,
@@ -115,6 +118,18 @@ export function createQuoteDraft(layout, settings, slots, assignments) {
       baseSlotId: settings.colorMode === 'single' ? slots[0].id : assignments[model.id].slotId,
       heightBands:
         settings.colorMode === 'single' ? [] : assignments[model.id].bands.map((b) => ({ from: b.from, to: b.to, slotId: b.slotId })),
+      surfacePaint:
+        settings.colorMode === 'single' || !Object.keys(assignments[model.id].surfacePaint || {}).length
+          ? null
+          : {
+              encoding: 'stl-triangle-slot-v1',
+              geometrySha256: model.geometryHash,
+              triangleCount: model.triangleCount,
+              priority: 'surface-over-height-over-base',
+              faces: Object.entries(assignments[model.id].surfacePaint)
+                .map(([face, slotId]) => [Number(face), slotId])
+                .sort((a, b) => a[0] - b[0]),
+            },
     })),
     estimate: null,
   }
@@ -129,6 +144,7 @@ export function modelAppearance(models, settings, slots, assignments) {
         model.id,
         {
           color: getColor(settings.colorMode === 'single' ? slots[0]?.id : a?.slotId),
+          faces: settings.colorMode === 'single' ? {} : a?.surfacePaint || {},
           bands:
             settings.colorMode === 'single'
               ? []

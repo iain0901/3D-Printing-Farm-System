@@ -102,6 +102,7 @@
         調整後尺寸
         <strong>{{ current.dimensions.map((v) => v.toFixed(2)).join(' × ') }} mm</strong>
       </p>
+      <slot v-if="current?.file" name="surface-tools" :model="current" />
       <model-viewer
         v-if="current?.file"
         :file="current.file"
@@ -110,6 +111,13 @@
         z-up
         :part-colors="modelAppearance[current.id]?.color ? [modelAppearance[current.id].color] : []"
         :height-colors="modelAppearance[current.id]?.bands || []"
+        :paint-enabled="!!painting"
+        :paint-tool="disabled ? 'orbit' : painting?.tool || 'orbit'"
+        :paint-slot-id="painting?.slotId || ''"
+        :brush-radius="painting?.radius || 5"
+        :paint-palette="painting?.slots || []"
+        :surface-paint="modelAppearance[current.id]?.faces || {}"
+        @paint="emit('paint', { modelId: String(current.id), changes: $event })"
       />
       <p class="hint">上方是選取模型的 3D 方向預覽，環視不會改變模型。手動數值旋轉後才套用「自動平躺」；這不是支撐最少的最佳化判斷。</p>
     </template>
@@ -125,9 +133,10 @@
     disabled: Boolean,
     automatic: Boolean,
     modelAppearance: { type: Object, default: () => ({}) },
+    painting: { type: Object, default: null },
     emptyHint: { type: String, default: '先加入模型，再手動擺放或一鍵自動排版。按下「開始切片」才會上傳。' },
   })
-  const emit = defineEmits(['change'])
+  const emit = defineEmits(['change', 'paint'])
   const items = reactive([]),
     selected = ref(0),
     input = ref(null),
@@ -154,6 +163,8 @@
         dimensions: i.dimensions ? [...i.dimensions] : null,
         transform: { ...i.transform },
         position: { ...i.position },
+        triangleCount: i.triangleCount,
+        geometryHash: i.geometryHash,
       })),
       ready: !!items.length && !preparing.value && items.every((i) => i.file) && (!warning.value || props.automatic),
     })
@@ -214,6 +225,8 @@
       data.models.forEach((model, i) => {
         snapshot[i].file = markRaw(new File([model.buffer], snapshot[i].name, { type: 'application/octet-stream' }))
         snapshot[i].dimensions = model.dimensions
+        snapshot[i].triangleCount = model.triangleCount
+        snapshot[i].geometryHash = model.geometryHash
       })
       error.value = ''
       preparing.value = false

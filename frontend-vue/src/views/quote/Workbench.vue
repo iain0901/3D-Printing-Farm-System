@@ -42,11 +42,63 @@
           <station-layout
             :automatic="settings.autoArrange"
             :model-appearance="appearance"
+            :painting="painting"
             empty-hint="模型只在瀏覽器內處理，不會自動上傳。先加入 STL，再調整方向、位置與配色。"
             @change="changeLayout"
-          />
+            @paint="paintStroke"
+          >
+            <template #surface-tools="{ model }">
+              <section v-if="settings.colorMode === 'multi'" class="surface-tools" aria-label="模型表面上色工具">
+                <h3>直接為 {{ model.name }} 上色</h3>
+                <div class="paint-tool-buttons" aria-label="上色操作">
+                  <button
+                    v-for="tool in paintTools"
+                    :key="tool.id"
+                    type="button"
+                    :aria-pressed="paintTool === tool.id"
+                    @click="paintTool = tool.id"
+                  >
+                    {{ tool.label }}
+                  </button>
+                </div>
+                <div class="field-pair">
+                  <label class="field">
+                    筆刷色槽
+                    <select v-model="paintSlot" aria-label="筆刷色槽">
+                      <option v-for="(slot, index) in slots" :key="slot.id" :value="slot.id">{{ index + 1 }}・{{ slot.label }}</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    筆刷半徑（mm）
+                    <input v-model.number="paintRadius" type="range" min="1" max="30" step="1" />
+                    <span>{{ paintRadius }} mm</span>
+                  </label>
+                </div>
+                <div class="paint-tool-buttons">
+                  <button type="button" :disabled="!paintHistory[model.id]?.undo.length" @click="undoPaint(model.id)">復原上色</button>
+                  <button type="button" :disabled="!paintHistory[model.id]?.redo.length" @click="redoPaint(model.id)">重做上色</button>
+                  <button
+                    type="button"
+                    :disabled="!Object.keys(assignments[model.id]?.surfacePaint || {}).length"
+                    @click="clearPaint(model.id)"
+                  >
+                    清除模型上色
+                  </button>
+                </div>
+                <p class="workbench-note" role="status">
+                  已塗色 {{ Object.keys(assignments[model.id]?.surfacePaint || {}).length }}／{{ model.triangleCount }}
+                  個三角面。表面塗色優先於高度換色，橡皮擦會恢復高度色或基底色。
+                </p>
+                <p class="workbench-note">
+                  筆刷沿相連、相近朝向的三角面上色；平面填色以點選面的方向為準（夾角 30°
+                  內），不跨越分離零件。低面數模型會有較粗的上色邊界；手機可切換旋轉模式查看另一面。
+                </p>
+              </section>
+              <p v-else class="workbench-note">想直接在模型上塗色？請在右側選擇「多色列印」。</p>
+            </template>
+          </station-layout>
           <p class="workbench-note">
-            目前工作台接受 STL。3MF 多物件、筆刷塗色與 STEP 轉檔請先由專員處理；不會把整份多色 3MF 當成單色檔送出。
+            目前工作台接受 STL，支援三角面上色。3MF 多物件與 STEP 轉檔請先由專員處理；不會把整份多色 3MF 當成單色檔送出。
           </p>
         </section>
         <section id="quote-settings" class="workbench-panel settings-panel" tabindex="-1" aria-labelledby="quote-settings-title">
@@ -311,6 +363,7 @@
   import PublicShell from '@/components/public/PublicShell.vue'
   import StationLayout from '@/components/StationLayout.vue'
   import QuoteAccount from '@/components/QuoteAccount.vue'
+  import { applyPaintChanges, appendPaintHistory } from '@/utils/surface-paint.mjs'
   import { getService, inquiryNotes } from '@/content/fdmServices.mjs'
   import {
     quoteMaterials,
@@ -336,6 +389,19 @@
   const reviewing = ref(false),
     error = ref(''),
     downloaded = ref(false)
+  const paintTool = ref('orbit'),
+    paintSlot = ref('slot-1'),
+    paintRadius = ref(5),
+    paintHistory = reactive({})
+  const paintTools = [
+    { id: 'orbit', label: '旋轉檢視' },
+    { id: 'brush', label: '筆刷上色' },
+    { id: 'fill', label: '相連平面填色' },
+    { id: 'erase', label: '橡皮擦' },
+  ]
+  const painting = computed(() =>
+    settings.colorMode === 'multi' ? { tool: paintTool.value, slotId: paintSlot.value, radius: paintRadius.value, slots } : null
+  )
   let slotSequence = 1,
     bandSequence = 0,
     downloadUrl = ''
@@ -375,8 +441,16 @@
     { deep: true }
   )
   function changeLayout(value) {
-    for (const model of value.models) if (!assignments[model.id]) assignments[model.id] = { slotId: slots[0].id, quantity: 1, bands: [] }
-    for (const id of Object.keys(assignments)) if (!value.models.some((m) => m.id === id)) delete assignments[id]
+    for (const model of value.models)
+      if (!assignments[model.id]) {
+        assignments[model.id] = { slotId: slots[0].id, quantity: 1, bands: [], surfacePaint: {} }
+        paintHistory[model.id] = { undo: [], redo: [] }
+      }
+    for (const id of Object.keys(assignments))
+      if (!value.models.some((m) => m.id === id)) {
+        delete assignments[id]
+        delete paintHistory[id]
+      }
     layout.value = value
   }
   function addSlot() {
@@ -396,7 +470,39 @@
     for (const a of Object.values(assignments)) {
       if (a.slotId === id) a.slotId = slots[0].id
       for (const band of a.bands) if (band.slotId === id) band.slotId = slots[0].id
+      for (const face of Object.keys(a.surfacePaint)) if (a.surfacePaint[face] === id) a.surfacePaint[face] = slots[0].id
     }
+    if (paintSlot.value === id) paintSlot.value = slots[0].id
+    // A removed slot cannot be resurrected by undo/redo.
+    for (const history of Object.values(paintHistory)) {
+      history.undo = []
+      history.redo = []
+    }
+  }
+  function paintStroke({ modelId, changes }) {
+    if (!assignments[modelId] || !changes.length) return
+    assignments[modelId].surfacePaint = applyPaintChanges(assignments[modelId].surfacePaint, changes)
+    paintHistory[modelId].undo = appendPaintHistory(paintHistory[modelId].undo, changes)
+    paintHistory[modelId].redo = []
+  }
+  function undoPaint(id) {
+    const changes = paintHistory[id]?.undo.pop()
+    if (!changes) return
+    assignments[id].surfacePaint = applyPaintChanges(assignments[id].surfacePaint, changes, true)
+    paintHistory[id].redo.push(changes)
+  }
+  function redoPaint(id) {
+    const changes = paintHistory[id]?.redo.pop()
+    if (!changes) return
+    assignments[id].surfacePaint = applyPaintChanges(assignments[id].surfacePaint, changes)
+    paintHistory[id].undo.push(changes)
+  }
+  function clearPaint(id) {
+    if (!window.confirm('清除此模型的表面上色？基底色與高度換色將保留，清除後也可復原。')) return
+    paintStroke({
+      modelId: id,
+      changes: Object.entries(assignments[id].surfacePaint).map(([face, before]) => ({ face: Number(face), before, after: null })),
+    })
   }
   function addBand(model) {
     const bands = assignments[model.id].bands
@@ -448,6 +554,23 @@
 </script>
 
 <style scoped>
+  .surface-tools {
+    padding: 16px;
+    margin: 18px 0 0;
+    border: 1px solid #cdd7cc;
+    border-bottom: 0;
+    background: #f1f5ed;
+    border-radius: 6px 6px 0 0;
+  }
+  .paint-tool-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .paint-tool-buttons button[aria-pressed='true'] {
+    background: #244d3f;
+    color: white;
+  }
   .workbench-wrap {
     padding-block: 46px 70px;
   }

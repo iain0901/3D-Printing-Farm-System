@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
+import { buildPaintTopology } from '../utils/surface-paint.mjs'
 
 // Shell analysis is useful for small multi-body STL files, but its vertex map is
 // deliberately bounded. Large files still parse and render as one mesh.
@@ -60,7 +61,7 @@ function copyTriangles(source, triangleIndices) {
   return copy
 }
 
-function parseStl(buffer) {
+function parseStl(buffer, painting) {
   const geometry = new STLLoader().parse(buffer)
   const positions = geometry.getAttribute('position')?.array
   if (!positions?.length) throw new Error('STL file has no mesh content')
@@ -74,18 +75,34 @@ function parseStl(buffer) {
   const shells = detectShells(positions)
   const parts =
     shells && shells.length > 1
-      ? shells.map((triangles) => ({ positions: copyTriangles(positions, triangles), normals: copyTriangles(normals, triangles) }))
-      : [{ positions: new Float32Array(positions), normals: new Float32Array(normals) }]
+      ? shells.map((triangles) => ({
+          positions: copyTriangles(positions, triangles),
+          normals: copyTriangles(normals, triangles),
+          faceIds: painting ? Uint32Array.from(triangles) : null,
+        }))
+      : [
+          {
+            positions: new Float32Array(positions),
+            normals: new Float32Array(normals),
+            faceIds: painting ? Uint32Array.from({ length: positions.length / 9 }, (_, i) => i) : null,
+          },
+        ]
 
+  const topology = painting ? buildPaintTopology(positions) : null
   geometry.dispose()
-  return parts
+  return { parts, topology }
 }
 
-self.onmessage = ({ data: { id, buffer } }) => {
+self.onmessage = ({ data: { id, buffer, painting } }) => {
   try {
-    const parts = parseStl(buffer)
-    const transferables = parts.flatMap((part) => [part.positions.buffer, part.normals.buffer])
-    self.postMessage({ id, parts }, transferables)
+    const { parts, topology } = parseStl(buffer, painting)
+    const transferables = parts.flatMap((part) => [
+      part.positions.buffer,
+      part.normals.buffer,
+      ...(part.faceIds ? [part.faceIds.buffer] : []),
+    ])
+    if (topology) transferables.push(topology.neighbors.buffer, topology.centers.buffer, topology.normals.buffer)
+    self.postMessage({ id, parts, topology }, transferables)
   } catch (error) {
     self.postMessage({ id, error: error?.message || String(error) })
   }
