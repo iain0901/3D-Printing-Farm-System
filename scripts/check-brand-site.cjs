@@ -25,6 +25,8 @@ async function run() {
   const routes = [
     "/",
     "/services",
+    "/free-print",
+    "/free-print/nthu-shuimu",
     ...audiences.map((a) => "/for/" + a.id),
     ...services.map((s) => "/services/" + s.id),
     ...publicPages.map((p) => p.path),

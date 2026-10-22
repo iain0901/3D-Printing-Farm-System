@@ -16,6 +16,7 @@ import { publicPages } from "../frontend-vue/src/content/publicPages.mjs";
 const routes = new Set([
   "/",
   "/services",
+  "/free-print",
   "/quote",
   "/portal/login",
   "/portal/register",

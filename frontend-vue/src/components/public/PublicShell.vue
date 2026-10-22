@@ -106,7 +106,8 @@
     methods: {
       isCurrentGroup(group) {
         const path = this.$route.path
-        if (group.id === 'services') return path === '/services' || path.startsWith('/services/')
+        if (group.id === 'services')
+          return path === '/services' || path.startsWith('/services/') || path === '/free-print' || path.startsWith('/free-print/')
         if (group.id === 'applications') return path.startsWith('/for/')
         return group.links.some((link) => link.to === path)
       },

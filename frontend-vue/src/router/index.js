@@ -10,7 +10,29 @@ import Layout from '@/layouts'
 import { publicPath, routerMode } from '@/config'
 import { audiences, services } from '@/content/fdmServices.mjs'
 import { publicPages } from '@/content/publicPages.mjs'
+import { freePrintStations } from '@/content/freePrintStations.mjs'
 export const constantRoutes = [
+  {
+    path: '/free-print',
+    name: 'FreePrint',
+    component: () => import('@/views/free-print/Index.vue'),
+    meta: { title: '免費列印・選擇站點', publicService: true },
+    hidden: true,
+  },
+  ...freePrintStations.map((station) => ({
+    path: station.path,
+    name: `FreePrintStation-${station.id}`,
+    component: () => import('@/views/free-print/Index.vue'),
+    props: { stationId: station.id },
+    meta: { title: `${station.institution}・${station.name}｜免費列印`, publicService: true },
+    hidden: true,
+  })),
+  {
+    path: '/free-print/:pathMatch(.*)*',
+    redirect: '/404',
+    meta: { publicService: true },
+    hidden: true,
+  },
   {
     path: '/services',
     name: 'Services',

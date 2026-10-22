@@ -7,6 +7,7 @@ export const publicNavigation = [
     description: '依製作階段，找到適合的服務。',
     links: [
       { label: 'FDM 服務總覽', to: '/services', description: '認識我們的製作範圍' },
+      { label: '免費列印', to: '/free-print', description: '選擇校園站點・清華大學水木書苑' },
       { label: '模型代印', to: '/services/personal-print', description: '已有模型，從單件開始' },
       { label: '小批量製作', to: '/services/small-batch', description: '樣品確認、版本與批次規劃' },
       { label: '快速急件', to: '/services/rush-print', description: '提供需求日期，確認可行排程' },
@@ -53,6 +54,7 @@ export const footerGroups = [
     title: '製作與應用',
     links: [
       { label: 'FDM 服務總覽', to: '/services' },
+      { label: '免費列印站點', to: '/free-print' },
       { label: '學校與實驗室', to: '/for/education' },
       { label: '企業製作', to: '/for/business' },
       { label: '個人代印', to: '/for/personal' },

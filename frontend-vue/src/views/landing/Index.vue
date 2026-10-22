@@ -47,6 +47,14 @@
       </div>
     </section>
 
+    <aside class="studio-wrap free-print-entry" aria-label="免費列印站點入口">
+      <div>
+        <span>校園免費列印</span>
+        <p>第一站，清華大學・水木書苑。</p>
+      </div>
+      <router-link to="/free-print" class="text-link">選擇免費列印站點 ↗</router-link>
+    </aside>
+
     <section id="services" class="studio-wrap applications-section">
       <header class="editorial-heading">
         <p class="section-index">01 ／ 製作的可能</p>
@@ -498,6 +506,36 @@
     position: relative;
     height: 650px;
     margin-left: -45px;
+  }
+  .free-print-entry {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 25px;
+    padding-block: 30px;
+    border-bottom: 1px solid #192e5333;
+  }
+  .free-print-entry span {
+    font-size: 11px;
+    font-weight: 700;
+    color: #be391b;
+    letter-spacing: 0.12em;
+  }
+  .free-print-entry p {
+    font-size: clamp(17px, 2.2vw, 26px);
+    font-weight: 700;
+    margin: 8px 0 0;
+  }
+  .free-print-entry > a {
+    flex-shrink: 0;
+  }
+  @media (max-width: 560px) {
+    .free-print-entry {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 12px;
+      padding-block: 25px;
+    }
   }
   .signature-object {
     position: absolute;
