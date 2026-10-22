@@ -8,6 +8,9 @@ export function uploadWorkspace(path, payload, files = [], sources = [], method 
   sources.forEach((file) => form.append('sources', file, file.name))
   return workspace(path, method, form, { headers: { 'Content-Type': undefined }, timeout: 120000, ...options })
 }
-export async function modelFile(id, source = false) {
-  return workspace(`/models/${encodeURIComponent(id)}/file${source ? '?source=1' : ''}`, 'get', undefined, { responseType: 'arraybuffer' })
+export async function modelFile(id, source = false, options = {}) {
+  return workspace(`/models/${encodeURIComponent(id)}/file${source ? '?source=1' : ''}`, 'get', undefined, {
+    responseType: 'arraybuffer',
+    ...options,
+  })
 }

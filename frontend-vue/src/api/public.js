@@ -28,6 +28,19 @@ export function fetchStationSlice(id, token, layers = false) {
     })
     .then((r) => r.data)
 }
+export function createStudioSlice(files, settings) {
+  const data = new FormData()
+  data.append('payload', JSON.stringify({ ...settings, purpose: 'studio', quantity: 1 }))
+  for (const file of files) data.append('file', file)
+  return publicRequest
+    .post('/api/public/slicing-quotes', data, { headers: { 'Content-Type': undefined }, timeout: 120000 })
+    .then((r) => r.data)
+}
+export function fetchToolpaths(id, token) {
+  return publicRequest
+    .get(`/api/public/slicing-quotes/${encodeURIComponent(id)}/toolpaths`, { headers: { 'x-slicing-token': token } })
+    .then((r) => r.data)
+}
 
 export function cancelStationSlice(id, token) {
   return publicRequest

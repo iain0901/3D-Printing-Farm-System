@@ -181,14 +181,18 @@ async function run() {
     await page.waitForFunction(
       () =>
         Number(
-          document.querySelector(".model-viewer canvas")?.dataset
+          document.querySelector(".stage-canvas canvas")?.dataset
             .renderedTriangles
         ) > 0
     );
     // Inspect the actual rendered WebGL image, not only the selected labels.
-    await page.locator(".model-viewer-overlay").waitFor({ state: "hidden" });
+    await page
+      .locator(".stage-message")
+      .filter({ hasText: "正在準備" })
+      .waitFor({ state: "hidden" });
+    await page.getByRole("button", { name: "適合視窗", exact: true }).click();
     const rendered = await page
-      .locator(".model-viewer canvas")
+      .locator(".stage-canvas canvas")
       .screenshot({ path: join(screenshots, "rendered-colors.png") });
     const colorCounts = await page.evaluate(async (data) => {
       const img = new Image();
@@ -290,11 +294,10 @@ async function run() {
       .getByLabel("cap.stl 基底色", { exact: true })
       .selectOption("slot-2");
     await page
-      .locator(".model-tabs button")
-      .filter({ hasText: "body.stl" })
+      .getByRole("button", { name: "選取 body.stl", exact: true })
       .click();
     await page
-      .getByRole("button", { name: "移除選取模型", exact: true })
+      .getByRole("button", { name: "刪除選取模型", exact: true })
       .click();
     await page.waitForFunction(
       () =>

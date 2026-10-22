@@ -42,6 +42,7 @@
           </div>
           <station-layout
             ref="stationLayout"
+            studio
             :automatic="settings.autoArrange"
             :model-appearance="appearance"
             :painting="painting"
@@ -311,6 +312,7 @@
             製作備註
             <textarea v-model="settings.notes" rows="3" maxlength="4000" placeholder="用途、尺寸公差、配色說明或組裝需求" />
           </label>
+          <slicer-settings :settings="settings" advanced-only />
           <p v-if="issues.length && layout.models.length" class="validation-note" role="status">{{ issues[0] }}</p>
           <button class="primary-button" type="button" :disabled="!!issues.length" @click="review">確認設定，帶入會員資料 ↗</button>
         </section>
@@ -426,6 +428,7 @@
   import { fetchAddresses } from '@/api/customerPortal'
   import PublicShell from '@/components/public/PublicShell.vue'
   import StationLayout from '@/components/StationLayout.vue'
+  import SlicerSettings from '@/components/SlicerSettings.vue'
   import QuoteAccount from '@/components/QuoteAccount.vue'
   import { applyPaintChanges, appendPaintHistory } from '@/utils/surface-paint.mjs'
   import { getService, inquiryNotes } from '@/content/fdmServices.mjs'
@@ -470,6 +473,9 @@
   const layout = ref({ files: [], models: [], names: [], placements: [], ready: false })
   const slots = reactive([{ id: 'slot-1', ...quotePalette[0] }]),
     assignments = reactive({})
+  // Preserve deleted objects' colors when model undo restores their stable IDs.
+  // Bound this separate cache by object count and face count, not just history length.
+  const removedAssignments = new Map()
   const reviewing = ref(false),
     error = ref(''),
     downloaded = ref(false)
@@ -549,6 +555,7 @@
             name: m.name,
             file: new File([files[i]], m.name),
             transform: m.sourceTransform,
+            hidden: !!m.hidden,
             position: m.placement,
           }))
         )
@@ -658,16 +665,28 @@
     { deep: true }
   )
   function changeLayout(value) {
-    for (const model of value.models)
+    for (const model of value.models) {
       if (!assignments[model.id]) {
-        assignments[model.id] = { slotId: slots[0].id, quantity: 1, bands: [], surfacePaint: {} }
-        paintHistory[model.id] = { undo: [], redo: [] }
+        assignments[model.id] =
+          removedAssignments.get(model.id) ||
+          (model.cloneOf && assignments[model.cloneOf]
+            ? structuredClone(JSON.parse(JSON.stringify(assignments[model.cloneOf])))
+            : { slotId: slots[0].id, quantity: 1, bands: [], surfacePaint: {} })
+        removedAssignments.delete(model.id)
       }
+      paintHistory[model.id] ||= { undo: [], redo: [] }
+    }
     for (const id of Object.keys(assignments))
       if (!value.models.some((m) => m.id === id)) {
+        removedAssignments.set(id, assignments[id])
         delete assignments[id]
         delete paintHistory[id]
       }
+    while (
+      removedAssignments.size > 30 ||
+      [...removedAssignments.values()].reduce((n, a) => n + Object.keys(a.surfacePaint).length, 0) > 200000
+    )
+      removedAssignments.delete(removedAssignments.keys().next().value)
     layout.value = value
   }
   function addSlot() {
@@ -684,7 +703,7 @@
       slots.findIndex((s) => s.id === id),
       1
     )
-    for (const a of Object.values(assignments)) {
+    for (const a of [...Object.values(assignments), ...removedAssignments.values()]) {
       if (a.slotId === id) a.slotId = slots[0].id
       for (const band of a.bands) if (band.slotId === id) band.slotId = slots[0].id
       for (const face of Object.keys(a.surfacePaint)) if (a.surfacePaint[face] === id) a.surfacePaint[face] = slots[0].id
@@ -772,6 +791,93 @@
 </script>
 
 <style scoped>
+  .quote-workbench :deep(.public-utility),
+  .quote-workbench :deep(.public-footer) {
+    display: none;
+  }
+  .quote-workbench :deep(.public-header) {
+    min-height: 66px;
+  }
+  .quote-workbench .workbench-wrap {
+    max-width: none;
+    width: 100%;
+    padding: 20px;
+  }
+  .quote-workbench .workbench-intro {
+    margin-bottom: 14px;
+    align-items: center;
+  }
+  .quote-workbench .workbench-intro h1 {
+    font-size: 25px;
+    margin: 5px 0;
+  }
+  .quote-workbench .workbench-intro p {
+    font-size: 11px;
+    margin: 4px 0;
+  }
+  .quote-workbench .backend-notice {
+    padding: 12px 16px;
+    margin-bottom: 14px;
+    font-size: 11px;
+  }
+  .quote-workbench .backend-notice p {
+    font-size: 10px;
+    margin: 5px 0;
+  }
+  .quote-workbench .workbench-steps {
+    margin: 12px 0 16px;
+  }
+  .quote-workbench .workbench-grid {
+    grid-template-columns: minmax(0, 1fr) 350px;
+    gap: 14px;
+  }
+  .quote-workbench .model-panel {
+    position: sticky;
+    top: 80px;
+    padding: 0;
+    overflow: hidden;
+    background: #edf0ee;
+  }
+  .quote-workbench .model-panel > .panel-heading {
+    padding: 14px 18px;
+    margin: 0;
+    background: #fff;
+  }
+  .quote-workbench .model-panel > .panel-heading h2 {
+    font-size: 13px;
+  }
+  .quote-workbench .model-panel > .panel-heading p {
+    font-size: 10px;
+    margin: 0;
+  }
+  .quote-workbench .model-panel :deep(.slicer-stage) {
+    height: calc(100vh - 170px);
+    min-height: 660px;
+    border-radius: 0;
+  }
+  .quote-workbench #quote-settings {
+    padding: 20px;
+  }
+  @media (max-width: 1000px) {
+    .quote-workbench .workbench-grid {
+      grid-template-columns: 1fr;
+    }
+    .quote-workbench .model-panel {
+      position: static;
+    }
+    .quote-workbench .workbench-wrap {
+      padding: 14px;
+    }
+    .quote-workbench .model-panel :deep(.slicer-stage) {
+      height: 660px;
+    }
+    .quote-workbench .workbench-intro {
+      align-items: start;
+    }
+    .quote-workbench .workbench-intro h1 {
+      font-size: 22px;
+    }
+  }
   .cloud-draft-panel {
     margin: 20px 0;
     padding: 20px;

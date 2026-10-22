@@ -102,6 +102,70 @@ async function run() {
     await page
       .getByRole("heading", { name: "機械系專題", exact: true })
       .waitFor();
+    // The standalone slicer reuses the protected member model library and cloud drafts.
+    await page.goto(base + "/#/cloud-slicer");
+    await page.getByRole("button", { name: "模型庫", exact: true }).click();
+    await page
+      .locator(".library-row")
+      .filter({ hasText: "測試外殼.stl" })
+      .getByRole("button", { name: "加入平台", exact: true })
+      .click();
+    await page.waitForFunction(
+      () =>
+        Number(
+          document.querySelector(".stage-canvas canvas")?.dataset
+            .renderedTriangles
+        ) === 12
+    );
+    await page.getByRole("button", { name: "縮放", exact: true }).click();
+    await page.getByLabel("等比例縮放", { exact: true }).uncheck();
+    await page.getByLabel("模型非等比縮放 X", { exact: true }).fill("125");
+    await page.getByLabel("模型非等比縮放 X", { exact: true }).press("Tab");
+    await page.getByRole("button", { name: "鏡像 X", exact: true }).click();
+    await page.getByRole("button", { name: "雲端保存", exact: true }).click();
+    const cloudDialog = page.getByRole("dialog", {
+      name: "保存到會員雲端草稿",
+      exact: true,
+    });
+    await cloudDialog
+      .getByLabel("草稿名稱", { exact: true })
+      .fill("切片工作區跨裝置測試");
+    await cloudDialog
+      .getByRole("button", { name: "保存雲端草稿", exact: true })
+      .click();
+    await cloudDialog
+      .getByText("已保存到會員雲端草稿，可跨裝置繼續編輯。", { exact: true })
+      .waitFor();
+    const studioDraft = (await api("")).drafts.find(
+      (d) => d.name === "切片工作區跨裝置測試"
+    );
+    assert.ok(studioDraft);
+    const studioSaved = (await api("/drafts/" + studioDraft.id)).draft.manifest;
+    assert.equal(studioSaved.models[0].sourceTransform.scaleX, 125);
+    assert.equal(studioSaved.models[0].sourceTransform.mirrorX, true);
+    await cloudDialog
+      .getByRole("link", { name: "繼續配色或送出代印需求", exact: false })
+      .click();
+    await page.waitForFunction(
+      () =>
+        Number(
+          document.querySelector(".stage-canvas canvas")?.dataset
+            .renderedTriangles
+        ) === 12
+    );
+    await page.getByRole("button", { name: "縮放", exact: true }).click();
+    await page.getByLabel("等比例縮放", { exact: true }).uncheck();
+    assert.equal(
+      await page.getByLabel("模型非等比縮放 X", { exact: true }).inputValue(),
+      "125"
+    );
+    assert.equal(
+      await page
+        .getByRole("button", { name: "鏡像 X", exact: true })
+        .getAttribute("aria-pressed"),
+      "true"
+    );
+    await page.goto(base + "/#/");
     await page.goto(base + "/#/quote");
     await page.getByLabel("選擇 STL 模型").setInputFiles({
       name: "cloud-paint.stl",
@@ -115,14 +179,20 @@ async function run() {
           !document.querySelector(".primary-button").disabled
       );
     await ready();
-    await page.getByLabel("等比例縮放（%）").fill("110");
+    await page.getByRole("button", { name: "縮放", exact: true }).click();
+    await page.getByLabel("模型等比縮放", { exact: true }).fill("110");
+    await page.getByLabel("模型等比縮放", { exact: true }).press("Tab");
     await ready();
     await page.getByRole("radio", { name: "多色列印", exact: true }).check();
     await page.getByLabel("筆刷色槽", { exact: true }).selectOption("slot-2");
     await page.getByRole("button", { name: "筆刷上色", exact: true }).click();
     await page.getByLabel("筆刷半徑（mm）").fill("1");
-    await page.locator(".model-viewer-overlay").waitFor({ state: "hidden" });
-    const canvas = page.locator(".model-viewer canvas");
+    await page
+      .locator(".stage-message")
+      .filter({ hasText: "正在準備" })
+      .waitFor({ state: "hidden" });
+    await page.getByRole("button", { name: "聚焦選取", exact: true }).click();
+    const canvas = page.locator(".stage-canvas canvas");
     await canvas.scrollIntoViewIfNeeded();
     const box = await canvas.boundingBox();
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
@@ -157,7 +227,11 @@ async function run() {
         .querySelector(".surface-tools [role=status]")
         ?.textContent.includes("已塗色 1／")
     );
-    assert.equal(await page.getByLabel("等比例縮放（%）").inputValue(), "110");
+    await page.getByRole("button", { name: "縮放", exact: true }).click();
+    assert.equal(
+      await page.getByLabel("模型等比縮放", { exact: true }).inputValue(),
+      "110"
+    );
     const downloaded = page.waitForEvent("download");
     await page.getByRole("button", { name: "下載設定草稿（JSON）" }).click();
     const after = JSON.parse(
@@ -359,6 +433,7 @@ async function run() {
           checks: [
             "real upload and WebGL preview",
             "cloud save/restore transform and face paint",
+            "slicer model library and cloud save with nonuniform scale/mirror",
             "autosave without duplicated model storage",
             "submit once and case conversation",
             "service request",

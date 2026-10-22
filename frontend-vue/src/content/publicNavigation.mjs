@@ -32,6 +32,7 @@ export const publicNavigation = [
     description: '了解材料與製程限制，讓第一次詢價更有效率。',
     links: [
       { label: '材料指南', to: '/materials', description: '六種 FDM 材料比較與選材方向' },
+      { label: '雲端切片', to: '/cloud-slicer', description: '3D 模型布局與真實逐層路徑預覽' },
       { label: '檔案準備', to: '/guides/file-prep', description: '格式、尺寸單位與附件清單' },
       { label: 'FDM 設計指南', to: '/guides/fdm-design', description: '壁厚、支撐、方向與組裝公差' },
       { label: '常見問題', to: '/faq', description: '價格、交期與製作須知' },

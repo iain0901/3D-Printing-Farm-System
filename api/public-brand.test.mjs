@@ -17,6 +17,7 @@ const routes = new Set([
   "/",
   "/services",
   "/free-print",
+  "/cloud-slicer",
   "/quote",
   "/portal/login",
   "/portal/register",

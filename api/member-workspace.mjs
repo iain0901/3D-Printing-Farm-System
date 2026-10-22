@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { createCaseFromIntake, publicCase } from "./cases-module.mjs";
+import { advancedSlicerSchema } from "./studio-settings.mjs";
 import {
   caseIntakeSchema,
   publicQuoteVersion,
@@ -83,8 +84,15 @@ const transform = z.object({
   y: z.number().min(-360).max(360),
   z: z.number().min(-360).max(360),
   layFlat: z.boolean(),
+  scaleX: z.number().min(1).max(1000).optional(),
+  scaleY: z.number().min(1).max(1000).optional(),
+  scaleZ: z.number().min(1).max(1000).optional(),
+  mirrorX: z.boolean().optional(),
+  mirrorY: z.boolean().optional(),
+  mirrorZ: z.boolean().optional(),
 });
 const settingsSchema = z.object({
+  advanced: advancedSlicerSchema.optional(),
   material: z.enum(["PETG", "PLA", "ABS", "ASA", "TPU", "Nylon"]),
   colorMode: z.enum(["single", "multi"]),
   layerHeight: z.union([
@@ -138,6 +146,7 @@ const draftSchema = z.object({
             .array(z.number().finite().positive().max(260))
             .length(3),
           sourceTransform: transform,
+          hidden: z.boolean().optional(),
           placement: vec,
           quantity: z.number().int().min(1).max(10000),
           baseSlotId: key,

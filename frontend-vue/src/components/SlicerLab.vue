@@ -1,0 +1,960 @@
+<template>
+  <div class="slicer-lab" :class="{ embedded }">
+    <header class="lab-header">
+      <router-link to="/" class="lab-brand">
+        3DRFM
+        <span>●</span>
+      </router-link>
+      <div>
+        <h1>{{ isFree ? '水木書苑・雲端切片' : '雲端切片工作區' }}</h1>
+        <p>{{ isFree ? '清華大學水木書苑／3DSTU_PETG' : '模型準備、真實切片與三維路徑預覽' }}</p>
+      </div>
+      <div class="lab-file-actions">
+        <input ref="projectInput" class="sr-only" type="file" accept=".zip" aria-label="開啟切片專案" @change="onProjectInput" />
+        <button type="button" :disabled="busy" @click="projectInput.click()">開啟專案</button>
+        <button type="button" :disabled="busy" @click="openLibrary">模型庫</button>
+        <button type="button" :disabled="busy || !layout.models.length" @click="saveProject">保存專案</button>
+        <button v-if="!embedded" type="button" :disabled="busy || !layout.ready" @click="cloudOpen = true">雲端保存</button>
+        <router-link to="/portal/workspace?section=drafts">我的草稿 ↗</router-link>
+      </div>
+    </header>
+    <nav class="lab-workflow" aria-label="切片工作流程">
+      <button type="button" :aria-current="mode === 'prepare' ? 'step' : undefined" @click="mode = 'prepare'">01　準備模型</button>
+      <button type="button" :disabled="!preview" :aria-current="mode === 'preview' ? 'step' : undefined" @click="mode = 'preview'">
+        02　預覽路徑
+      </button>
+      <span>{{ job ? statusText : '先匯入模型，開始你的製作。' }}</span>
+    </nav>
+    <main class="lab-body">
+      <div class="lab-model">
+        <station-layout
+          v-show="mode === 'prepare'"
+          ref="station"
+          studio
+          :disabled="busy"
+          :automatic="settings.autoArrange"
+          @change="changeLayout"
+        />
+        <toolpath-viewer v-if="preview && mode === 'preview'" :preview="preview" />
+      </div>
+      <aside class="lab-settings" aria-label="切片設定與工作結果">
+        <section class="lab-machine">
+          <div class="lab-section-title">
+            <h2>機台</h2>
+            <span>FDM</span>
+          </div>
+          <label>
+            列印設定檔
+            <select aria-label="切片機台" disabled>
+              <option>Artillery M1 Pro・0.4 mm（參考）</option>
+            </select>
+          </label>
+          <p>260 × 260 × 260 mm。此為可試切片的參考設定，不代表站點或新機型的實際設備。</p>
+        </section>
+        <section class="lab-material">
+          <div class="lab-section-title">
+            <h2>耗材</h2>
+            <span>{{ isFree ? '站點指定' : '參考耗材設定' }}</span>
+          </div>
+          <label v-if="!isFree">
+            材料
+            <select v-model="settings.material" :disabled="busy" aria-label="切片材料">
+              <option value="PETG">PETG・優先推薦</option>
+              <option value="PLA">PLA</option>
+              <option value="ASA">ASA</option>
+              <option value="TPU">TPU</option>
+            </select>
+          </label>
+          <div v-else class="locked-filament">
+            <span class="filament-dot" />
+            <strong>3DSTU_PETG</strong>
+            <small>免費列印固定材料</small>
+          </div>
+          <p v-if="!isFree">
+            此工作區試切單色。更多材料、多色與上色需求，請使用
+            <router-link to="/quote">代印工作台 ↗</router-link>
+            。
+          </p>
+        </section>
+        <fieldset :disabled="busy" class="lab-parameter-fieldset"><slicer-settings :settings="settings" /></fieldset>
+        <section v-if="job" class="lab-result">
+          <div class="lab-section-title">
+            <h2>切片結果</h2>
+            <span :class="'job-' + job.status">{{ statusText }}</span>
+          </div>
+          <p v-if="job.status === 'queued'">等待實際運算服務接手；不是現場列印排隊。</p>
+          <p v-if="job.status === 'processing'">OrcaSlicer 正在處理模型，完成後自動載入路徑。</p>
+          <p v-if="waitingLong">等待較久，運算服務可能忙碌或尚未啟動；可稍後重新查詢。</p>
+          <p v-if="job.status === 'cancelled'">已取消工作，晚到的結果不會採用。</p>
+          <p v-if="job.status === 'failed'" class="lab-error">切片未完成，請檢查模型及設定後重試。</p>
+          <template v-if="job.status === 'completed'">
+            <div class="result-numbers">
+              <div>
+                <span>列印時間</span>
+                <strong>{{ duration(job.estimatedMinutes) }}</strong>
+              </div>
+              <div>
+                <span>總用料</span>
+                <strong>{{ Number(job.totalGrams).toFixed(2) }} g</strong>
+              </div>
+            </div>
+            <p>
+              模型 {{ Number(job.modelGrams).toFixed(2) }} g ／支撐 {{ Number(job.supportGrams).toFixed(2) }} g ／其他
+              {{ Number(job.otherGrams).toFixed(2) }} g
+            </p>
+            <button v-if="preview" type="button" @click="mode = 'preview'">開啟三維逐層路徑</button>
+            <p v-else-if="!pollError" role="status">正在讀取真實 G-code 路徑…</p>
+            <details>
+              <summary>切片來源</summary>
+              <p>{{ job.engine }} {{ job.engineVersion }}</p>
+              <p>{{ job.profileName }}</p>
+              <p v-for="(warning, index) in job.warnings" :key="index">{{ warning }}</p>
+            </details>
+          </template>
+          <p v-if="pollError" role="alert" class="lab-error">{{ pollError }}</p>
+          <button v-if="pollError" type="button" @click="poll">重新查詢原工作</button>
+          <details v-if="job.error">
+            <summary>技術訊息</summary>
+            <p>{{ job.error }}</p>
+          </details>
+        </section>
+        <p v-if="error" class="lab-error" role="alert">{{ error }}</p>
+        <p v-if="notice" class="lab-notice" role="status">{{ notice }}</p>
+        <div class="lab-primary">
+          <button v-if="busy" type="button" :disabled="cancelling || uploading" @click="cancel">
+            {{ cancelling ? '取消中…' : '取消切片工作' }}
+          </button>
+          <button v-else type="button" class="slice-button" :disabled="!layout.ready" @click="submit">
+            {{ job?.status === 'failed' ? '重新切片' : '開始切片' }} ↗
+          </button>
+          <p>{{ isFree ? '完成切片不等於取得免費名額；請另送會員申請。' : '切片預覽不會建立付費案件、訂單或控制機器。' }}</p>
+          <router-link v-if="isFree" to="/portal/workspace?section=free-print">免費列印申請與取件進度 ↗</router-link>
+          <router-link v-else to="/quote">送出代印需求 ↗</router-link>
+        </div>
+      </aside>
+    </main>
+    <el-dialog v-model="libraryOpen" title="從模型庫加入" width="550px">
+      <p v-if="libraryBusy" role="status">正在載入模型庫…</p>
+      <p v-if="libraryError" role="alert">{{ libraryError }}</p>
+      <div v-for="model in libraryModels" :key="model.id" class="library-row">
+        <span>{{ model.name }}</span>
+        <button type="button" :disabled="libraryBusy" @click="addLibraryModel(model)">加入平台</button>
+      </div>
+      <p v-if="!libraryBusy && !libraryModels.length && !libraryError">目前沒有可加入的 STL 模型。</p>
+      <quote-account v-if="!embedded && !memberToken" />
+    </el-dialog>
+    <el-dialog v-model="cloudOpen" title="保存到會員雲端草稿" width="550px">
+      <quote-account />
+      <template v-if="memberToken">
+        <label class="cloud-project-label">
+          草稿名稱
+          <input v-model="cloudName" maxlength="120" />
+        </label>
+        <p>保存原始模型、方向、非等比縮放、鏡像、位置與製程設定。保存後仍不會建立訂單。</p>
+        <button type="button" :disabled="cloudBusy || !layout.ready" @click="saveCloud">
+          {{ cloudBusy ? '上傳保存中…' : '保存雲端草稿' }}
+        </button>
+        <router-link v-if="cloudId" :to="{ path: '/quote', query: { draft: cloudId } }">繼續配色或送出代印需求 ↗</router-link>
+      </template>
+      <p v-if="cloudMessage" role="status">{{ cloudMessage }}</p>
+    </el-dialog>
+    <footer class="lab-status">
+      <span>
+        {{ layout.models.length }} 個模型 ·
+        {{ layout.ready ? '可開始切片' : layout.models.length ? '請確認平台範圍與間距' : '等待匯入 STL' }}
+      </span>
+      <span>{{ job ? statusText : '模型先在瀏覽器處理，開始切片才會上傳。' }}</span>
+    </footer>
+  </div>
+</template>
+<script setup>
+  import { computed, markRaw, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+  import { useStore } from 'vuex'
+  import JSZip from 'jszip'
+  import StationLayout from '@/components/StationLayout.vue'
+  import SlicerSettings from '@/components/SlicerSettings.vue'
+  import ToolpathViewer from '@/components/ToolpathViewer.vue'
+  import QuoteAccount from '@/components/QuoteAccount.vue'
+  import { workspace, uploadWorkspace, modelFile } from '@/api/memberWorkspace'
+  import staffRequest from '@/utils/request'
+  import { createQuoteDraft, defaultQuoteSettings } from '@/utils/quote-workspace.mjs'
+  import { createStudioSlice, createStationSlice, fetchStationSlice, fetchToolpaths, cancelStationSlice } from '@/api/public'
+  import { slicerSettingFields } from '@/utils/slicer-settings.mjs'
+  const props = defineProps({ stationId: { type: String, default: '' }, embedded: Boolean })
+  const store = useStore(),
+    memberToken = computed(() => store.getters['customerAuth/accessToken'])
+  const libraryOpen = ref(false),
+    libraryBusy = ref(false),
+    libraryError = ref(''),
+    libraryModels = ref([]),
+    cloudOpen = ref(false),
+    cloudBusy = ref(false),
+    cloudName = ref('我的切片專案'),
+    cloudMessage = ref(''),
+    cloudId = ref(''),
+    cloudRevision = ref(0)
+  let cloudOwner = ''
+  async function openLibrary() {
+    libraryOpen.value = true
+    libraryBusy.value = true
+    libraryError.value = ''
+    try {
+      if (props.embedded) libraryModels.value = (store.getters['files/list'] || []).filter((f) => f.type === 'STL')
+      else if (memberToken.value) {
+        const result = await workspace('', 'get', undefined, { skipCustomerAuthRedirect: true })
+        libraryModels.value = result.models.filter((m) => !m.archivedAt)
+      } else libraryModels.value = []
+    } catch {
+      libraryError.value = '無法載入模型庫，請確認登入狀態後重試。'
+    } finally {
+      libraryBusy.value = false
+    }
+  }
+  watch(memberToken, () => {
+    if (libraryOpen.value) openLibrary()
+  })
+  async function addLibraryModel(model) {
+    libraryBusy.value = true
+    libraryError.value = ''
+    try {
+      const bytes = props.embedded
+        ? await staffRequest({ url: `/api/files/${encodeURIComponent(model.id)}/download`, responseType: 'arraybuffer' })
+        : await modelFile(model.id, false, { skipCustomerAuthRedirect: true })
+      if (!libraryOpen.value) return
+      station.value.selectFiles([new File([bytes], model.name, { type: 'application/octet-stream' })])
+      libraryOpen.value = false
+    } catch {
+      libraryError.value = '無法讀取模型，請確認檔案或登入狀態。'
+    } finally {
+      libraryBusy.value = false
+    }
+  }
+  async function saveCloud() {
+    if (!memberToken.value || cloudBusy.value || !layout.value.ready) return
+    cloudBusy.value = true
+    cloudMessage.value = ''
+    try {
+      const slots = [{ id: 'slot-1', label: '顏色待確認', hex: '#b6c2c0' }],
+        assignments = Object.fromEntries(
+          layout.value.models.map((m) => [m.id, { quantity: 1, slotId: 'slot-1', bands: [], surfacePaint: {} }])
+        )
+      const manifest = createQuoteDraft(layout.value, { ...defaultQuoteSettings(), ...settings, colorMode: 'single' }, slots, assignments)
+      const ownerId = store.getters['customerAuth/customer']?.id || ''
+      const update = cloudId.value && cloudOwner === ownerId
+      const result = await uploadWorkspace(
+        update ? `/drafts/${cloudId.value}` : '/drafts',
+        { name: cloudName.value.trim() || '我的切片專案', revision: cloudRevision.value, manifest },
+        layout.value.files,
+        layout.value.sources,
+        update ? 'put' : 'post',
+        { skipCustomerAuthRedirect: true }
+      )
+      cloudId.value = result.draft.id
+      cloudRevision.value = result.draft.revision
+      cloudOwner = ownerId
+      cloudMessage.value = '已保存到會員雲端草稿，可跨裝置繼續編輯。'
+    } catch (err) {
+      cloudMessage.value = err.response?.data?.error || err.message || '雲端保存失敗，請重試。'
+    } finally {
+      cloudBusy.value = false
+    }
+  }
+  const isFree = computed(() => !!props.stationId),
+    station = ref(null),
+    projectInput = ref(null),
+    mode = ref('prepare')
+  const settings = reactive({
+    material: 'PETG',
+    layerHeight: 0.2,
+    infill: 15,
+    walls: 2,
+    autoSupports: true,
+    autoOrient: false,
+    autoArrange: false,
+    advanced: {},
+  })
+  const layout = ref({ files: [], sources: [], names: [], models: [], placements: [], ready: false }),
+    job = ref(null),
+    preview = ref(null),
+    uploading = ref(false),
+    cancelling = ref(false),
+    waitingLong = ref(false),
+    error = ref(''),
+    pollError = ref(''),
+    notice = ref('')
+  const busy = computed(() => uploading.value || ['queued', 'processing'].includes(job.value?.status))
+  const statusText = computed(
+    () =>
+      ({ queued: '等待切片', processing: '正在切片', completed: '切片完成', failed: '切片失敗', cancelled: '已取消切片' }[
+        job.value?.status
+      ] || '')
+  )
+  const sessionKey = props.stationId ? `3drfm-station-slice:${props.stationId}` : '3drfm-studio-slice:reference'
+  let active = true,
+    timer,
+    token = '',
+    revision = 0,
+    polling = '',
+    restoring = false,
+    downloadUrl = ''
+  const duration = (value) => {
+    const n = Math.max(1, Math.ceil(value))
+    return n >= 60 ? `${Math.floor(n / 60)} 小時 ${n % 60} 分` : `${n} 分鐘`
+  }
+  function invalidate() {
+    if (restoring || busy.value) return
+    revision++
+    job.value = null
+    preview.value = null
+    pollError.value = ''
+    token = ''
+    mode.value = 'prepare'
+    waitingLong.value = false
+    clearTimeout(timer)
+    try {
+      sessionStorage.removeItem(sessionKey)
+    } catch {}
+  }
+  function changeLayout(value) {
+    invalidate()
+    layout.value = value
+  }
+  watch(settings, invalidate, { deep: true })
+  watch(
+    () => settings.autoOrient,
+    (value) => {
+      if (value) settings.autoArrange = true
+    }
+  )
+  watch(
+    () => settings.autoArrange,
+    (value) => {
+      if (!value) settings.autoOrient = false
+    }
+  )
+  async function submit() {
+    if (!layout.value.ready || busy.value) return
+    invalidate()
+    uploading.value = true
+    error.value = ''
+    try {
+      const payload = {
+        ...settings,
+        material: isFree.value ? 'PETG' : settings.material,
+        placements: layout.value.placements,
+        stationId: props.stationId || undefined,
+      }
+      const result = await (isFree.value ? createStationSlice : createStudioSlice)(layout.value.files, payload)
+      if (!active) return
+      job.value = result.slicingQuote
+      token = result.accessToken
+      try {
+        sessionStorage.setItem(sessionKey, JSON.stringify({ id: job.value.id, token, name: layout.value.names.join('、') }))
+      } catch {}
+      poll()
+    } catch (err) {
+      error.value = err.response?.data?.detail || err.response?.data?.error || '無法確認工作是否建立，請檢查網路；請勿連續重複送出。'
+    } finally {
+      uploading.value = false
+    }
+  }
+  async function poll() {
+    clearTimeout(timer)
+    if (!active || !job.value) return
+    const id = job.value.id,
+      current = revision
+    const pollKey = `${id}:${current}`
+    if (polling === pollKey) return
+    polling = pollKey
+    pollError.value = ''
+    try {
+      const result = await fetchStationSlice(id, token)
+      if (!active || revision !== current || job.value?.id !== id) return
+      job.value = result.slicingQuote
+      waitingLong.value = ['queued', 'processing'].includes(job.value.status) && Date.now() - Date.parse(job.value.createdAt) > 120000
+      if (job.value.status === 'completed') {
+        const paths = await fetchToolpaths(id, token)
+        if (active && revision === current) {
+          preview.value = markRaw(paths.preview)
+          mode.value = 'preview'
+        }
+      } else if (['queued', 'processing'].includes(job.value.status)) timer = setTimeout(poll, 2500)
+    } catch (err) {
+      if (active && revision === current) {
+        pollError.value = err.response?.data?.error || '暫時無法取得切片進度，請重新查詢，不需重新上傳。'
+        if (err.response?.status === 404) {
+          job.value.status = 'failed'
+          try {
+            sessionStorage.removeItem(sessionKey)
+          } catch {}
+        }
+      }
+    } finally {
+      if (polling === pollKey) polling = ''
+    }
+  }
+  async function cancel() {
+    if (cancelling.value || !job.value) return
+    cancelling.value = true
+    revision++
+    clearTimeout(timer)
+    try {
+      const result = await cancelStationSlice(job.value.id, token)
+      if (active) job.value = result.slicingQuote
+    } catch {
+      pollError.value = '暫時無法確認取消結果，請重新查詢原工作。'
+    } finally {
+      cancelling.value = false
+    }
+  }
+  function download(blob, name) {
+    if (downloadUrl) URL.revokeObjectURL(downloadUrl)
+    downloadUrl = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = downloadUrl
+    a.download = name
+    a.click()
+  }
+  async function saveProject() {
+    error.value = ''
+    try {
+      const zip = new JSZip()
+      const project = {
+        schemaVersion: '3drfm.slicer-project.v1',
+        settings: JSON.parse(JSON.stringify(settings)),
+        models: layout.value.models.map((m, index) => ({
+          id: String(m.id),
+          name: m.name,
+          transform: m.transform,
+          position: m.position,
+          hidden: !!m.hidden,
+          source: `sources/${index}.stl`,
+        })),
+      }
+      zip.file('project.json', JSON.stringify(project, null, 2))
+      for (let i = 0; i < layout.value.sources.length; i++) zip.file(`sources/${i}.stl`, await layout.value.sources[i].arrayBuffer())
+      download(
+        new Blob([await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' })], { type: 'application/zip' }),
+        '3DRFM-切片專案.zip'
+      )
+      notice.value = '模型與製程設定已保存，可用「開啟專案」還原。'
+    } catch (err) {
+      error.value = err.message || '專案保存失敗'
+    }
+  }
+  async function loadProject(file) {
+    if (!file || busy.value) return
+    error.value = ''
+    try {
+      if (file.size > 12 * 1024 * 1024) throw new Error('專案檔案上限 12 MB')
+      const zip = await JSZip.loadAsync(await file.arrayBuffer())
+      const entries = Object.values(zip.files)
+      if (entries.length > 14 || entries.reduce((n, f) => n + (f._data?.uncompressedSize || 0), 0) > 12 * 1024 * 1024)
+        throw new Error('專案內容超過容量限制')
+      const entry = zip.file('project.json')
+      if (!entry) throw new Error('找不到 3DRFM 專案設定')
+      const project = JSON.parse(await entry.async('string'))
+      if (
+        project.schemaVersion !== '3drfm.slicer-project.v1' ||
+        !Array.isArray(project.models) ||
+        !project.models.length ||
+        project.models.length > 5
+      )
+        throw new Error('專案格式或模型數量不正確')
+      if (layout.value.models.length && !window.confirm('開啟專案會取代目前未保存的模型與設定，確定繼續？')) return
+      const s = project.settings
+      if (
+        !['PETG', 'PLA', 'ASA', 'TPU'].includes(s.material) ||
+        ![0.12, 0.16, 0.2, 0.28].includes(s.layerHeight) ||
+        !Number.isInteger(s.infill) ||
+        s.infill < 0 ||
+        s.infill > 100 ||
+        !Number.isInteger(s.walls) ||
+        s.walls < 1 ||
+        s.walls > 12
+      )
+        throw new Error('專案製程設定無效')
+      const models = []
+      for (const [index, m] of project.models.entries()) {
+        const src = zip.file(`sources/${index}.stl`)
+        if (!src) throw new Error('專案缺少原始模型')
+        const bytes = await src.async('uint8array')
+        models.push({
+          id: String(index + 1),
+          name: String(m.name).slice(0, 180),
+          file: new File([bytes], String(m.name)),
+          transform: m.transform,
+          position: m.position,
+          hidden: !!m.hidden,
+        })
+      }
+      if (models.reduce((n, m) => n + m.file.size, 0) > 10 * 1024 * 1024) throw new Error('模型總大小上限 10 MB')
+      invalidate()
+      restoring = true
+      Object.assign(settings, {
+        material: isFree.value ? 'PETG' : s.material,
+        layerHeight: s.layerHeight,
+        infill: s.infill,
+        walls: s.walls,
+        autoSupports: !!s.autoSupports,
+        autoOrient: !!s.autoOrient,
+        autoArrange: !!s.autoArrange,
+        advanced: Object.fromEntries(
+          slicerSettingFields.filter((f) => s.advanced?.[f.id] !== undefined).map((f) => [f.id, s.advanced[f.id]])
+        ),
+      })
+      station.value.restoreModels(models)
+      notice.value = '切片專案已載入；模型處理完成後即可繼續。'
+      mode.value = 'prepare'
+    } catch (err) {
+      error.value = err.message || '專案無法開啟'
+    } finally {
+      restoring = false
+    }
+  }
+  function onProjectInput(event) {
+    loadProject(event.target.files[0])
+    event.target.value = ''
+  }
+  onMounted(() => {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(sessionKey) || 'null')
+      if (saved?.id && saved.token) {
+        job.value = { id: saved.id, status: 'queued' }
+        token = saved.token
+        poll()
+      }
+    } catch {}
+  })
+  onBeforeUnmount(() => {
+    active = false
+    revision++
+    clearTimeout(timer)
+    if (downloadUrl) URL.revokeObjectURL(downloadUrl)
+  })
+</script>
+<style scoped>
+  .slicer-lab {
+    height: 100vh;
+    min-height: 760px;
+    display: flex;
+    flex-direction: column;
+    background: #f6f7f2;
+    color: #233d35;
+    font-family: 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
+    box-sizing: border-box;
+  }
+  .slicer-lab * {
+    box-sizing: border-box;
+  }
+  .slicer-lab a {
+    color: inherit;
+    text-decoration: none;
+  }
+  .lab-header {
+    height: 66px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    border-bottom: 1px solid #d9e2d8;
+    padding: 0 24px;
+    background: #fff;
+  }
+  .lab-brand {
+    font-size: 23px;
+    font-weight: 900;
+    letter-spacing: -1px;
+  }
+  .lab-brand span {
+    font-size: 10px;
+    color: #b58d49;
+    vertical-align: top;
+    margin-left: 4px;
+  }
+  .lab-header h1 {
+    font-size: 13px;
+    margin: 0 0 4px;
+  }
+  .lab-header p {
+    font-size: 9px;
+    color: #879789;
+    margin: 0;
+  }
+  .lab-file-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .slicer-lab button {
+    font: inherit;
+    font-size: 11px;
+    border: 1px solid #d4ded6;
+    background: #fff;
+    border-radius: 5px;
+    padding: 9px 12px;
+    color: inherit;
+    cursor: pointer;
+  }
+  .slicer-lab button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .slicer-lab button:focus-visible,
+  .slicer-lab a:focus-visible {
+    outline: 3px solid #a98b56;
+    outline-offset: 3px;
+  }
+  .lab-file-actions a {
+    font-size: 10px;
+    padding: 8px;
+  }
+  .lab-workflow {
+    height: 45px;
+    flex-shrink: 0;
+    padding: 0 22px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid #dce3dc;
+    background: #fafbf8;
+  }
+  .lab-workflow button {
+    border: 0;
+    background: none;
+    font-size: 11px;
+    padding: 10px 14px;
+  }
+  .lab-workflow button[aria-current='step'] {
+    background: #e6eee5;
+    color: #21533e;
+    font-weight: 700;
+  }
+  .lab-workflow > span {
+    margin-left: auto;
+    color: #8b9b8e;
+    font-size: 10px;
+  }
+  .lab-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 315px;
+    gap: 0;
+    flex: 1;
+    min-height: 0;
+  }
+  .lab-model {
+    min-width: 0;
+    position: relative;
+    overflow: hidden;
+  }
+  .lab-model :deep(.layout-editor) {
+    height: 100%;
+    position: relative;
+  }
+  .lab-model :deep(.slicer-stage),
+  .lab-model :deep(.toolpath-viewer) {
+    height: 100%;
+    min-height: 100%;
+    border-radius: 0;
+  }
+  .lab-model :deep(.layout-error) {
+    position: absolute;
+    left: 85px;
+    right: 15px;
+    bottom: 92px;
+    padding: 10px 14px;
+    background: #fff1e9f2;
+    z-index: 4;
+    color: #91432f;
+    border-radius: 5px;
+    font-size: 11px;
+    margin: 0;
+  }
+  .lab-model :deep(.studio-preparing) {
+    position: absolute;
+    bottom: 98px;
+    left: 85px;
+    font-size: 11px;
+    background: #fff;
+    padding: 8px;
+    z-index: 4;
+  }
+  .lab-settings {
+    overflow: auto;
+    min-width: 0;
+    border-left: 1px solid #d9e2d8;
+    background: #fff;
+    padding: 20px 20px 0;
+  }
+  .lab-settings section {
+    border-bottom: 1px solid #e1e7df;
+    padding-bottom: 18px;
+    margin-bottom: 18px;
+  }
+  .lab-section-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .lab-section-title h2 {
+    font-size: 12px;
+    margin: 0 0 12px;
+  }
+  .lab-section-title span {
+    font-size: 9px;
+    color: #8b9c8b;
+  }
+  .lab-settings label {
+    font-size: 10px;
+    display: grid;
+    gap: 8px;
+  }
+  .lab-settings select {
+    padding: 9px;
+    width: 100%;
+    min-width: 0;
+    border: 1px solid #d4ded6;
+    border-radius: 4px;
+    background: #fbfcf9;
+    color: inherit;
+    font: inherit;
+    font-size: 11px;
+  }
+  .lab-settings p {
+    font-size: 10px;
+    line-height: 1.8;
+    color: #7e8f80;
+  }
+  .lab-settings p a {
+    text-decoration: underline;
+  }
+  .locked-filament {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid #d9e2d8;
+    border-radius: 5px;
+    padding: 12px;
+  }
+  .locked-filament strong {
+    font-size: 12px;
+  }
+  .locked-filament small {
+    margin-left: auto;
+    font-size: 8px;
+    color: #899a8b;
+  }
+  .filament-dot {
+    width: 20px;
+    height: 20px;
+    border: 4px solid #e1e8de;
+    border-radius: 50%;
+    background: #688671;
+  }
+  .lab-parameter-fieldset {
+    border: 0;
+    padding: 0;
+    margin: 0;
+    min-width: 0;
+  }
+  .lab-primary {
+    position: sticky;
+    bottom: 0;
+    padding: 16px 0;
+    background: #fffffff5;
+    border-top: 1px solid #dce3dc;
+    backdrop-filter: blur(10px);
+  }
+  .slicer-lab .slice-button {
+    background: #245847;
+    color: white;
+    border-color: #245847;
+    width: 100%;
+    font-size: 13px;
+    padding: 12px;
+  }
+  .lab-primary > button {
+    width: 100%;
+  }
+  .lab-primary > p {
+    font-size: 9px;
+  }
+  .lab-primary > a {
+    font-size: 10px;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .lab-result {
+    margin-top: 22px;
+  }
+  .result-numbers {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .result-numbers span {
+    display: block;
+    font-size: 9px;
+    color: #839587;
+    margin-bottom: 5px;
+  }
+  .result-numbers strong {
+    font-size: 17px;
+    font-weight: 600;
+  }
+  .lab-settings .lab-error {
+    color: #984830;
+    background: #fff0e9;
+    border: 1px solid #efcec0;
+    padding: 10px;
+    border-radius: 4px;
+  }
+  .lab-notice {
+    color: #285940 !important;
+    background: #ecf4e8;
+    padding: 10px;
+    border-radius: 4px;
+  }
+  .lab-result summary {
+    font-size: 10px;
+    color: #849786;
+    cursor: pointer;
+  }
+  .lab-result details {
+    margin-top: 12px;
+  }
+  .lab-status {
+    height: 28px;
+    flex-shrink: 0;
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: center;
+    padding: 0 20px;
+    font-size: 9px;
+    color: #879888;
+    border-top: 1px solid #dce3dc;
+    background: #f9fbf7;
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
+  .library-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid #dce3dc;
+  }
+  .library-row span {
+    overflow-wrap: anywhere;
+    min-width: 0;
+    font-size: 13px;
+  }
+  .cloud-project-label {
+    display: grid;
+    gap: 8px;
+    margin: 16px 0;
+    font-size: 12px;
+  }
+  .cloud-project-label input {
+    border: 1px solid #d4ded6;
+    border-radius: 5px;
+    padding: 10px;
+    font: inherit;
+    color: inherit;
+  }
+  .embedded {
+    height: calc(100vh - 100px);
+    min-height: 720px;
+  }
+  .embedded .lab-header {
+    padding: 0 16px;
+  }
+  .embedded .lab-brand {
+    display: none;
+  }
+  @media (max-width: 900px) {
+    .slicer-lab,
+    .embedded {
+      height: auto;
+      min-height: 0;
+    }
+    .lab-header {
+      height: auto;
+      min-height: 68px;
+      padding: 14px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .lab-file-actions {
+      gap: 4px;
+    }
+    .lab-file-actions a {
+      display: none;
+    }
+    .lab-header h1 {
+      font-size: 11px;
+    }
+    .lab-header p {
+      display: none;
+    }
+    .lab-file-actions button {
+      font-size: 10px;
+      padding: 7px;
+    }
+    .lab-workflow {
+      padding: 0 10px;
+      gap: 0;
+    }
+    .lab-workflow > span {
+      font-size: 8px;
+      max-width: 100px;
+      text-align: right;
+    }
+    .lab-workflow button {
+      font-size: 10px;
+      padding: 10px;
+    }
+    .lab-body {
+      grid-template-columns: 1fr;
+    }
+    .lab-model {
+      height: 660px;
+    }
+    .lab-model :deep(.slicer-stage),
+    .lab-model :deep(.toolpath-viewer) {
+      min-height: 660px;
+    }
+    .lab-settings {
+      border-left: 0;
+      border-top: 1px solid #d9e2d8;
+      overflow: visible;
+      padding: 20px;
+    }
+    .lab-primary {
+      position: static;
+    }
+    .lab-status {
+      height: auto;
+      min-height: 30px;
+      font-size: 8px;
+      padding: 8px 12px;
+    }
+    .lab-status span:last-child {
+      max-width: 50%;
+      text-align: right;
+    }
+    .lab-brand {
+      font-size: 20px;
+    }
+  }
+</style>

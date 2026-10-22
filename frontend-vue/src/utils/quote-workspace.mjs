@@ -21,6 +21,7 @@ export const quotePalette = [
 export const MAX_COLOR_SLOTS = 8 // Editor limit, NOT a machine capability.
 export const MAX_HEIGHT_BANDS = 8
 export const defaultQuoteSettings = () => ({
+  advanced: {},
   material: 'PETG',
   colorMode: 'single',
   layerHeight: 0.2,
@@ -113,6 +114,7 @@ export function createQuoteDraft(layout, settings, slots, assignments) {
       fileIndex: index,
       dimensions: [...model.dimensions],
       sourceTransform: { ...model.transform },
+      hidden: !!model.hidden,
       placement: { ...model.position },
       quantity: assignments[model.id].quantity,
       baseSlotId: settings.colorMode === 'single' ? slots[0].id : assignments[model.id].slotId,

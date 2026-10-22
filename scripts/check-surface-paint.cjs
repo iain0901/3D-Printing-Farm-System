@@ -61,20 +61,24 @@ async function run() {
         count
       );
     const ready = async () => {
-      await page.waitForFunction(
-        () => !document.querySelector(".primary-button").disabled
-      );
-      await page.locator(".model-viewer-overlay").waitFor({ state: "hidden" });
+      await page.locator(".studio-preparing").waitFor({ state: "hidden" });
+      await page
+        .locator(".stage-message")
+        .filter({ hasText: "正在準備" })
+        .waitFor({ state: "hidden" });
       await page.waitForFunction(
         () =>
           Number(
-            document.querySelector(".model-viewer canvas")?.dataset
+            document.querySelector(".stage-canvas canvas")?.dataset
               .renderedTriangles
           ) > 0
       );
     };
     const clickModel = async () => {
-      const canvas = page.locator(".model-viewer canvas");
+      await page.getByRole("button", { name: "選取", exact: true }).click();
+      await page.getByRole("button", { name: "前視圖", exact: true }).click();
+      await page.getByRole("button", { name: "聚焦選取", exact: true }).click();
+      const canvas = page.locator(".stage-canvas canvas");
       await canvas.scrollIntoViewIfNeeded();
       const box = await canvas.boundingBox();
       await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
@@ -90,6 +94,9 @@ async function run() {
       .getByLabel("選擇 STL 模型")
       .setInputFiles([file("paint-a.stl"), file("paint-b.stl")]);
     await ready();
+    await page
+      .getByRole("button", { name: "選取 paint-a.stl", exact: true })
+      .click();
     assert.equal(await page.locator(".surface-tools").count(), 0);
     await page.getByRole("radio", { name: "多色列印", exact: true }).check();
     await ready();
@@ -119,7 +126,7 @@ async function run() {
     await clickModel();
     await waitCount(2);
     const rendered = await page
-      .locator(".model-viewer canvas")
+      .locator(".stage-canvas canvas")
       .screenshot({ path: join(screenshots, "painted-front.png") });
     const coloredPixels = await page.evaluate(async (data) => {
       const image = new Image();
@@ -151,8 +158,13 @@ async function run() {
     assert.equal(firstPaint.faces.length, 2);
     assert.ok(firstPaint.faces.every((pair) => pair[1] === "slot-2"));
     assert.equal(first.models[1].surfacePaint, null);
-    await page.getByLabel("Z 軸旋轉（°）").fill("90");
-    await page.getByLabel("等比例縮放（%）").fill("110");
+    await page.getByRole("button", { name: "旋轉", exact: true }).click();
+    await page.getByLabel("模型旋轉 Z", { exact: true }).fill("90");
+    await page.getByLabel("模型旋轉 Z", { exact: true }).press("Tab");
+    await ready();
+    await page.getByRole("button", { name: "縮放", exact: true }).click();
+    await page.getByLabel("模型等比縮放", { exact: true }).fill("110");
+    await page.getByLabel("模型等比縮放", { exact: true }).press("Tab");
     await page.getByRole("button", { name: "自動排版", exact: true }).click();
     await ready();
     await waitCount(2);
@@ -163,8 +175,7 @@ async function run() {
       firstPaint.geometrySha256
     );
     await page
-      .locator(".model-tabs button")
-      .filter({ hasText: "paint-b.stl" })
+      .getByRole("button", { name: "選取 paint-b.stl", exact: true })
       .click();
     await ready();
     await waitCount(0);
@@ -174,13 +185,12 @@ async function run() {
     await clickModel();
     await waitCount(2);
     await page
-      .locator(".model-tabs button")
-      .filter({ hasText: "paint-a.stl" })
+      .getByRole("button", { name: "選取 paint-a.stl", exact: true })
       .click();
     await ready();
     await waitCount(2);
     await page.getByRole("button", { name: "旋轉檢視", exact: true }).click();
-    const canvas = page.locator(".model-viewer canvas");
+    const canvas = page.locator(".stage-canvas canvas");
     await canvas.scrollIntoViewIfNeeded();
     const rect = await canvas.boundingBox();
     await page.mouse.move(rect.x + rect.width / 2, rect.y + rect.height / 2);
@@ -196,7 +206,7 @@ async function run() {
       .locator(".surface-tools")
       .screenshot({ path: join(screenshots, "paint-tools.png") });
     await page
-      .locator(".model-viewer")
+      .locator(".slicer-stage")
       .screenshot({ path: join(screenshots, "painted-model.png") });
     page.once("dialog", (d) => d.dismiss());
     await page
@@ -260,6 +270,7 @@ async function run() {
     await page.setViewportSize({ width: 390, height: 950 });
     await page.getByRole("button", { name: "筆刷上色", exact: true }).click();
     await page.getByLabel("筆刷色槽", { exact: true }).selectOption("slot-2");
+    await page.getByRole("button", { name: "聚焦選取", exact: true }).click();
     await canvas.scrollIntoViewIfNeeded();
     const touchRect = await canvas.boundingBox();
     const cdp = await page.context().newCDPSession(page);
@@ -280,7 +291,19 @@ async function run() {
     });
     await waitCount(1);
     await page
-      .getByRole("button", { name: "移除選取模型", exact: true })
+      .getByRole("button", { name: "刪除選取模型", exact: true })
+      .click();
+    await ready();
+    await page
+      .getByRole("button", { name: "復原模型操作", exact: true })
+      .click();
+    await ready();
+    await waitCount(1);
+    const restored = await downloadDraft();
+    assert.equal(restored.models.length, 2);
+    assert.equal(restored.models[0].surfacePaint.faces.length, 1);
+    await page
+      .getByRole("button", { name: "重做模型操作", exact: true })
       .click();
     await ready();
     const remaining = await downloadDraft();
@@ -302,6 +325,21 @@ async function run() {
       )
     );
   } finally {
+    for (const context of browser.contexts())
+      for (const page of context.pages()) {
+        await page
+          .screenshot({
+            path: join(screenshots, "last-state.png"),
+            fullPage: true,
+          })
+          .catch(() => {});
+        console.log(
+          "Last paint state:",
+          await page.locator(".surface-tools [role=status]").allTextContents(),
+          "Screenshots:",
+          screenshots
+        );
+      }
     await browser.close();
   }
 }

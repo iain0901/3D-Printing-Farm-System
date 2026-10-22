@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { createStationPlate } from "./station-plate.mjs";
+import { orcaAdvancedSettings } from "./studio-settings.mjs";
 
 const execFileAsync = promisify(execFile);
 const REFERENCE_MACHINE = "Artillery M1 Pro 0.4 nozzle";
@@ -97,7 +98,8 @@ export function buildJobProcessConfig(job) {
     support_type: "tree(auto)",
     support_style: "default",
     gcode_comments: "1",
-    ...(job.purpose === "free-print" ? { enable_arc_fitting: "0" } : {})
+    ...orcaAdvancedSettings(job.advanced).process,
+    ...(["free-print","studio"].includes(job.purpose) ? { enable_arc_fitting: "0" } : {})
   };
 }
 
@@ -224,8 +226,8 @@ export async function runOrcaSlice(job, sourceInputs, config) {
     }
 
     let effectiveJob = job;
-    if (job.purpose === "free-print") {
-      if (job.material !== "PETG") throw new Error("免費列印固定使用 3DSTU_PETG，請重新建立切片工作");
+    if (["free-print","studio"].includes(job.purpose)) {
+      if (job.purpose === "free-print"&&job.material !== "PETG") throw new Error("免費列印固定使用 3DSTU_PETG，請重新建立切片工作");
       const platePath = path.join(inputDir, "station-plate.3mf");
       await writeFile(platePath, await createStationPlate(sources.map(source => source.bytes), job.placements, job.autoArrange !== false));
       inputPaths.splice(0, inputPaths.length, platePath);
@@ -240,7 +242,7 @@ export async function runOrcaSlice(job, sourceInputs, config) {
       const processProfile = { ...bundledProcess, ...buildJobProcessConfig(job), from: "system" };
       delete processProfile.inherits;
       await writeFile(privateProcessPath, JSON.stringify(processProfile, null, 2));
-      await writeFile(privateMachinePath, JSON.stringify(await resolvePresetInheritance(profiles.machinePath), null, 2));
+      await writeFile(privateMachinePath, JSON.stringify({...await resolvePresetInheritance(profiles.machinePath),...orcaAdvancedSettings(job.advanced).machine}, null, 2));
       await writeFile(privateFilamentPath, JSON.stringify(await resolvePresetInheritance(profiles.filamentPath), null, 2));
       effectiveJob = {
         ...job,

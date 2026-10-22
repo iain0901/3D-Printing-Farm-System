@@ -108,6 +108,7 @@ export const constantRoutes = [
     component: () => import('@/views/portal/Case'),
     hidden: true,
   },
+  {path:'/cloud-slicer',component:()=>import('@/components/SlicerLab.vue'),meta:{publicService:true,title:'雲端切片工作區'},hidden:true},
   {
     path: '/login',
     component: () => import('@/views/login/index'),
