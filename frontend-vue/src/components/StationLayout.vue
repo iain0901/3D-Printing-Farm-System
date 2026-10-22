@@ -59,7 +59,7 @@
             :y="-(item.dimensions?.[1] || 10) / 2"
             :width="item.dimensions?.[0] || 10"
             :height="item.dimensions?.[1] || 10"
-            :fill="selected === index ? '#e4663560' : '#192e5320'"
+            :fill="modelAppearance[item.id]?.color || (selected === index ? '#e4663560' : '#192e5320')"
             :stroke="selected === index ? '#c8491a' : '#192e53'"
             stroke-width="1"
           />
@@ -102,10 +102,18 @@
         調整後尺寸
         <strong>{{ current.dimensions.map((v) => v.toFixed(2)).join(' × ') }} mm</strong>
       </p>
-      <model-viewer v-if="current?.file" :file="current.file" :filename="current.name" :height="260" />
+      <model-viewer
+        v-if="current?.file"
+        :file="current.file"
+        :filename="current.name"
+        :height="260"
+        z-up
+        :part-colors="modelAppearance[current.id]?.color ? [modelAppearance[current.id].color] : []"
+        :height-colors="modelAppearance[current.id]?.bands || []"
+      />
       <p class="hint">上方是選取模型的 3D 方向預覽，環視不會改變模型。手動數值旋轉後才套用「自動平躺」；這不是支撐最少的最佳化判斷。</p>
     </template>
-    <p v-else class="empty">先加入模型，再手動擺放或一鍵自動排版。按下「開始切片」才會上傳。</p>
+    <p v-else class="empty">{{ emptyHint }}</p>
   </section>
 </template>
 
@@ -113,7 +121,12 @@
   import { computed, markRaw, onBeforeUnmount, reactive, ref, watch } from 'vue'
   import ModelViewer from './ModelViewer.vue'
   import { arrangeModels, layoutWarning } from '@/utils/station-layout.mjs'
-  const props = defineProps({ disabled: Boolean, automatic: Boolean })
+  const props = defineProps({
+    disabled: Boolean,
+    automatic: Boolean,
+    modelAppearance: { type: Object, default: () => ({}) },
+    emptyHint: { type: String, default: '先加入模型，再手動擺放或一鍵自動排版。按下「開始切片」才會上傳。' },
+  })
   const emit = defineEmits(['change'])
   const items = reactive([]),
     selected = ref(0),
@@ -135,6 +148,13 @@
       files: items.map((i) => i.file).filter(Boolean),
       names: items.map((i) => i.name),
       placements: items.map((i) => ({ ...i.position })),
+      models: items.map((i) => ({
+        id: String(i.id),
+        name: i.name,
+        dimensions: i.dimensions ? [...i.dimensions] : null,
+        transform: { ...i.transform },
+        position: { ...i.position },
+      })),
       ready: !!items.length && !preparing.value && items.every((i) => i.file) && (!warning.value || props.automatic),
     })
   }

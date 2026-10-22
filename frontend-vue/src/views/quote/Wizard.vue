@@ -1,5 +1,6 @@
 <template>
-  <public-shell>
+  <quote-workbench v-if="form.mode === 'estimate' && form.hasModel" @assistance="openSpecialist" />
+  <public-shell v-else>
     <div class="quote-page">
       <div v-if="inquiryService" class="quote-context" role="note">
         <div>
@@ -311,17 +312,34 @@
                 <strong>NT$ {{ estimate ? Number(estimate.total).toLocaleString() : '—' }}</strong>
                 <template v-if="sliceStatus === 'completed' && sliceQuote">
                   <dl class="slicing-metrics">
-                    <dt>模型克重</dt><dd>{{ grams(sliceQuote.modelGrams) }} g</dd>
-                    <dt>支撐克重</dt><dd>{{ grams(sliceQuote.supportGrams) }} g</dd>
-                    <dt v-if="sliceQuote.otherGrams > 0">底邊／清料等其他耗材</dt><dd v-if="sliceQuote.otherGrams > 0">{{ grams(sliceQuote.otherGrams) }} g</dd>
-                    <dt>耗材總重</dt><dd>{{ grams(sliceQuote.totalGrams) }} g</dd>
-                    <dt>切片列印時間</dt><dd>{{ printDuration(sliceQuote.estimatedMinutes) }}</dd>
+                    <dt>模型克重</dt>
+                    <dd>{{ grams(sliceQuote.modelGrams) }} g</dd>
+                    <dt>支撐克重</dt>
+                    <dd>{{ grams(sliceQuote.supportGrams) }} g</dd>
+                    <dt v-if="sliceQuote.otherGrams > 0">底邊／清料等其他耗材</dt>
+                    <dd v-if="sliceQuote.otherGrams > 0">{{ grams(sliceQuote.otherGrams) }} g</dd>
+                    <dt>耗材總重</dt>
+                    <dd>{{ grams(sliceQuote.totalGrams) }} g</dd>
+                    <dt>切片列印時間</dt>
+                    <dd>{{ printDuration(sliceQuote.estimatedMinutes) }}</dd>
                   </dl>
-                  <small>以上重量與時間取自實際 G-code，價格依目前系統費率計算；不是用體積或參考件猜測。列印時間為切片器預測，並非實體機台已完成列印。</small>
-                  <small>{{ sliceQuote.profileName }} · {{ sliceQuote.engine || 'OrcaSlicer' }}。參考機台設定；正式機台、耗材及多色換料條件仍需製程確認。</small>
+                  <small>
+                    以上重量與時間取自實際
+                    G-code，價格依目前系統費率計算；不是用體積或參考件猜測。列印時間為切片器預測，並非實體機台已完成列印。
+                  </small>
+                  <small>
+                    {{ sliceQuote.profileName }} ·
+                    {{ sliceQuote.engine || 'OrcaSlicer' }}。參考機台設定；正式機台、耗材及多色換料條件仍需製程確認。
+                  </small>
                   <small>自動方向（減少支撐）／自動支撐／自動擺盤；實際啟用項目依此次切片設定。</small>
                 </template>
-                <small v-else-if="form.hasModel && form.mode === 'estimate'">{{ estimating ? '模型已送到真實切片器，等待自動方向、支撐與擺盤；完成後才顯示價格。' : '尚無成功切片結果，不顯示猜測的重量或價格。' }}</small>
+                <small v-else-if="form.hasModel && form.mode === 'estimate'">
+                  {{
+                    estimating
+                      ? '模型已送到真實切片器，等待自動方向、支撐與擺盤；完成後才顯示價格。'
+                      : '尚無成功切片結果，不顯示猜測的重量或價格。'
+                  }}
+                </small>
                 <small v-else>尚無可切片模型時僅提供建模／人工服務初估，由專員確認。</small>
                 <el-button v-if="sliceError" size="small" @click="loadEstimate">重新切片</el-button>
                 <ul v-if="estimate && estimate.lines && estimate.lines.length" class="estimate-lines">
@@ -352,7 +370,15 @@
           <div class="wizard-actions">
             <el-button v-if="step" @click="step -= 1">上一步</el-button>
             <el-button v-if="step < 4" type="primary" @click="next">下一步</el-button>
-            <el-button v-else type="primary" :loading="submitting" :disabled="form.hasModel && form.mode === 'estimate' && sliceStatus !== 'completed'" @click="submit">建立案件</el-button>
+            <el-button
+              v-else
+              type="primary"
+              :loading="submitting"
+              :disabled="form.hasModel && form.mode === 'estimate' && sliceStatus !== 'completed'"
+              @click="submit"
+            >
+              建立案件
+            </el-button>
           </div>
         </el-card>
 
@@ -377,6 +403,7 @@
   import { fetchCustomerMe, loginCustomer, registerCustomer } from '@/api/customerAuth'
   import PublicShell from '@/components/public/PublicShell.vue'
   import ModelViewer from '@/components/ModelViewer'
+  import QuoteWorkbench from './Workbench.vue'
   import { fdmMaterials, getService, inquiryNotes } from '@/content/fdmServices.mjs'
 
   const COLOR_PALETTE = ['#f5f5f0', '#1c1c1c', '#d64545', '#3b6fd6', '#3f9142', '#e0b400', '#e07b28', '#8752c9']
@@ -407,7 +434,7 @@
 
   export default {
     name: 'QuoteWizard',
-    components: { ModelViewer, PublicShell },
+    components: { ModelViewer, PublicShell, QuoteWorkbench },
     data() {
       return {
         step: getService(this.$route.query.service) ? 1 : 0,
@@ -476,6 +503,9 @@
       },
     },
     watch: {
+      customer(value) {
+        if (value) this.applyCustomer(value)
+      },
       previewIndex() {
         this.previewError = ''
       },
@@ -495,6 +525,8 @@
       this.slicePollResolve?.()
     },
     async created() {
+      // The new workbench checks membership in step 3, without leaving the local model editor.
+      if (this.form.mode === 'estimate' && this.form.hasModel) return
       if (this.$store.getters['customerAuth/accessToken'] && !this.customer) {
         try {
           const result = await fetchCustomerMe()
@@ -508,6 +540,10 @@
       }
     },
     methods: {
+      openSpecialist() {
+        this.form.mode = 'agent'
+        this.step = 0
+      },
       applyCustomer(customer) {
         this.form.customer = {
           id: customer.id || '',
@@ -553,7 +589,9 @@
         this.form.customer = { name: '', email: '', phone: '', company: '' }
         this.authForm.password = ''
       },
-      grams(value) { return value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value)) ? Number(value).toFixed(2) : '—' },
+      grams(value) {
+        return value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value)) ? Number(value).toFixed(2) : '—'
+      },
       printDuration(value) {
         const mins = Number(value)
         if (!Number.isFinite(mins)) return '—'
@@ -561,12 +599,14 @@
         return `${Math.floor(seconds / 3600)} 小時 ${Math.floor((seconds % 3600) / 60)} 分 ${seconds % 60} 秒`
       },
       keepUploadFilesRaw(files, validator) {
-        return files.filter((item) => validator(item.raw || item)).map((item) => {
-          // File/Blob methods depend on native internal slots and large buffers must
-          // never be traversed or proxied by Vue's deep reactivity.
-          if (item.raw) markRaw(item.raw)
-          return markRaw(item)
-        })
+        return files
+          .filter((item) => validator(item.raw || item))
+          .map((item) => {
+            // File/Blob methods depend on native internal slots and large buffers must
+            // never be traversed or proxied by Vue's deep reactivity.
+            if (item.raw) markRaw(item.raw)
+            return markRaw(item)
+          })
       },
       materialLabel(value) {
         return { Resin: '樹脂', Nylon: '尼龍' }[value] || value
@@ -638,25 +678,31 @@
           const colorCount = new Set(this.parts.map((part) => (part.colorHex || part.color || '').toLowerCase()).filter(Boolean)).size || 1
           if (this.form.hasModel && this.form.mode === 'estimate') {
             const files = this.fileList.map((item) => item.raw || item)
-            if (files.some((file) => !/\.(stl|3mf)$/i.test(file.name))) throw new Error('自動切片目前接受 STL／3MF；STEP／STP 請先轉檔，或改由專員處理。')
+            if (files.some((file) => !/\.(stl|3mf)$/i.test(file.name)))
+              throw new Error('自動切片目前接受 STL／3MF；STEP／STP 請先轉檔，或改由專員處理。')
             const materials = new Set(this.parts.map((part) => part.material || this.form.defaults.material))
             if (materials.size > 1) throw new Error('不同材料請分開切片估價，或交由專員確認；不會把其他材料默默套用 PLA 費率。')
             this.sliceStatus = 'queued'
-            let response = await createSlicingQuote({
-              material: this.parts[0]?.material || this.form.defaults.material,
-              quantity: this.form.defaults.quantity,
-              quality: this.form.defaults.quality === 'Fine' ? 'appearance' : 'standard',
-              layerHeight: Number(this.form.defaults.layerHeight) || ({ Draft: 0.28, Standard: 0.2, Fine: 0.12 }[this.form.defaults.quality] || 0.2),
-              infill: this.form.defaults.infill,
-              walls: this.form.defaults.walls,
-              autoSupports: this.form.defaults.support !== 'None',
-              support: this.form.defaults.support,
-              postProcessing: this.form.defaults.postProcessing,
-              colors: colorCount,
-              rush: this.rushRequested,
-              parts: this.parts.map((part) => ({ name: part.name, material: part.material, quantity: part.quantity })),
-              autoOrient: true, autoArrange: true,
-            }, files)
+            let response = await createSlicingQuote(
+              {
+                material: this.parts[0]?.material || this.form.defaults.material,
+                quantity: this.form.defaults.quantity,
+                quality: this.form.defaults.quality === 'Fine' ? 'appearance' : 'standard',
+                layerHeight:
+                  Number(this.form.defaults.layerHeight) || { Draft: 0.28, Standard: 0.2, Fine: 0.12 }[this.form.defaults.quality] || 0.2,
+                infill: this.form.defaults.infill,
+                walls: this.form.defaults.walls,
+                autoSupports: this.form.defaults.support !== 'None',
+                support: this.form.defaults.support,
+                postProcessing: this.form.defaults.postProcessing,
+                colors: colorCount,
+                rush: this.rushRequested,
+                parts: this.parts.map((part) => ({ name: part.name, material: part.material, quantity: part.quantity })),
+                autoOrient: true,
+                autoArrange: true,
+              },
+              files
+            )
             if (run !== this.sliceRun || this.quoteDisposed) return
             let job = response.slicingQuote || response.job || response
             const token = response.accessToken || response.token || job.accessToken || job.token
@@ -670,7 +716,10 @@
               if (run !== this.sliceRun || this.quoteDisposed) return
               if (Date.now() > deadline) throw new Error('切片等待逾時，請稍後重試或交由專員確認。')
               this.sliceStatus = job.status || 'queued'
-              await new Promise((resolve) => { this.slicePollResolve = resolve; this.slicePollTimer = setTimeout(resolve, 1500) })
+              await new Promise((resolve) => {
+                this.slicePollResolve = resolve
+                this.slicePollTimer = setTimeout(resolve, 1500)
+              })
               if (run !== this.sliceRun || this.quoteDisposed) return
               try {
                 response = await fetchSlicingQuote(id, token)
@@ -684,13 +733,30 @@
             if (job.status === 'failed') throw new Error(job.error || '真實切片失敗；目前不提供猜測的價格。')
             const measured = job.result?.metrics || job.result || job.metrics || job
             const quote = job.quote || job.result?.quote || job.pricing || response.quote
-            if (measured.modelGrams == null || measured.supportGrams == null || measured.estimatedMinutes == null || !Number.isFinite(Number(measured.modelGrams)) || !Number.isFinite(Number(measured.supportGrams)) || !Number.isFinite(Number(measured.estimatedMinutes)) || !quote || !Number.isFinite(Number(quote.total))) throw new Error('切片結果缺少實際重量、時間或價格，不顯示參考件估值。')
+            if (
+              measured.modelGrams == null ||
+              measured.supportGrams == null ||
+              measured.estimatedMinutes == null ||
+              !Number.isFinite(Number(measured.modelGrams)) ||
+              !Number.isFinite(Number(measured.supportGrams)) ||
+              !Number.isFinite(Number(measured.estimatedMinutes)) ||
+              !quote ||
+              !Number.isFinite(Number(quote.total))
+            )
+              throw new Error('切片結果缺少實際重量、時間或價格，不顯示參考件估值。')
             this.sliceQuote = { ...measured, profileName: measured.profileName || job.profileName, engine: measured.engine || job.engine }
-            this.estimate = { ...quote, lines: quote.lines?.filter(line => line.amount !== 0) }
+            this.estimate = { ...quote, lines: quote.lines?.filter((line) => line.amount !== 0) }
             this.sliceStatus = 'completed'
           } else if (!this.form.hasModel) {
             this.sliceStatus = ''
-            this.estimate = await estimateCase({ material: this.form.defaults.material, quantity: this.form.defaults.quantity, quality: this.form.defaults.quality, hasModel: false, rush: this.rushRequested, colors: colorCount })
+            this.estimate = await estimateCase({
+              material: this.form.defaults.material,
+              quantity: this.form.defaults.quantity,
+              quality: this.form.defaults.quality,
+              hasModel: false,
+              rush: this.rushRequested,
+              colors: colorCount,
+            })
           } else {
             this.sliceStatus = ''
           }

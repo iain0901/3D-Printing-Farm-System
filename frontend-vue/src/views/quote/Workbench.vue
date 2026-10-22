@@ -1,0 +1,837 @@
+<template>
+  <public-shell class="quote-workbench">
+    <div class="studio-wrap workbench-wrap">
+      <header class="workbench-intro">
+        <div>
+          <p class="workbench-kicker">3DRFM ／ 線上切片估價</p>
+          <h1>把想法，放上列印平台。</h1>
+          <p>調整模型、選擇耗材，讓每個顏色都有自己的位置。</p>
+        </div>
+        <button class="text-button" type="button" @click="askSpecialist">需要建模或轉檔？專員協助 ↗</button>
+      </header>
+      <p v-if="service" class="service-note">已帶入「{{ service.title }}」的用途說明，可在製作備註調整。</p>
+      <aside class="backend-notice" role="note">
+        <b>先準備模型與設定，新機型切片估價即將接上。</b>
+        <p>
+          目前可在瀏覽器調整擺放、選材與配色；尚不執行付費切片、不產生價格或送出案件。260 × 260 × 260 mm 僅為編輯參考平台，並非新機型規格。
+        </p>
+      </aside>
+      <nav class="workbench-steps" aria-label="估價流程">
+        <a href="#quote-models" @click.prevent="focusSection('quote-models')">
+          <span>01</span>
+          模型與擺放
+        </a>
+        <a href="#quote-settings" @click.prevent="focusSection('quote-settings')">
+          <span>02</span>
+          耗材與配色
+        </a>
+        <button type="button" @click="review">
+          <span>03</span>
+          登入與確認
+        </button>
+      </nav>
+      <div class="workbench-grid">
+        <section id="quote-models" class="workbench-panel model-panel" tabindex="-1" aria-labelledby="quote-model-title">
+          <div class="panel-heading">
+            <span>01</span>
+            <div>
+              <h2 id="quote-model-title">你的模型，你來安排。</h2>
+              <p>手動擺放，或讓工具先排好一版。</p>
+            </div>
+          </div>
+          <station-layout
+            :automatic="settings.autoArrange"
+            :model-appearance="appearance"
+            empty-hint="模型只在瀏覽器內處理，不會自動上傳。先加入 STL，再調整方向、位置與配色。"
+            @change="changeLayout"
+          />
+          <p class="workbench-note">
+            目前工作台接受 STL。3MF 多物件、筆刷塗色與 STEP 轉檔請先由專員處理；不會把整份多色 3MF 當成單色檔送出。
+          </p>
+        </section>
+        <section id="quote-settings" class="workbench-panel settings-panel" tabindex="-1" aria-labelledby="quote-settings-title">
+          <div class="panel-heading">
+            <span>02</span>
+            <div>
+              <h2 id="quote-settings-title">材質與顏色，都是設計的一部分。</h2>
+              <p>同一平台使用同種材料；不同材質請分開製作。</p>
+            </div>
+          </div>
+          <label class="field">
+            列印材料
+            <select v-model="settings.material" aria-label="列印材料">
+              <option v-for="material in quoteMaterials" :key="material.id" :value="material.id">
+                {{ material.label }}{{ material.recommended ? '・優先推薦' : '' }}
+              </option>
+            </select>
+          </label>
+          <p class="material-note">{{ material.note }}</p>
+          <fieldset class="color-mode">
+            <legend>配色方式</legend>
+            <label>
+              <input v-model="settings.colorMode" type="radio" value="single" />
+              單色列印
+            </label>
+            <label>
+              <input v-model="settings.colorMode" type="radio" value="multi" />
+              多色列印
+            </label>
+          </fieldset>
+          <div class="slots-heading">
+            <h3>{{ settings.colorMode === 'single' ? '成品顏色' : '設定耗材色槽' }}</h3>
+            <button v-if="settings.colorMode === 'multi'" type="button" :disabled="slots.length >= MAX_COLOR_SLOTS" @click="addSlot">
+              ＋ 新增色槽
+            </button>
+          </div>
+          <div v-for="(slot, index) in visibleSlots" :key="slot.id" class="color-slot">
+            <div class="slot-top">
+              <b>{{ settings.colorMode === 'single' ? '主要顏色' : `色槽 ${index + 1}` }}</b>
+              <span>{{ material.label }}</span>
+              <button
+                v-if="settings.colorMode === 'multi'"
+                type="button"
+                :disabled="slots.length <= 2"
+                :aria-label="`移除色槽 ${index + 1}`"
+                @click="removeSlot(slot.id)"
+              >
+                移除
+              </button>
+            </div>
+            <div class="slot-inputs">
+              <label class="swatch-input">
+                <span class="sr-only">{{ `色槽 ${index + 1} 色碼` }}</span>
+                <input v-model="slot.hex" type="color" :aria-label="`色槽 ${index + 1} 色碼`" />
+              </label>
+              <label class="field">
+                <span class="sr-only">{{ `色槽 ${index + 1} 色名` }}</span>
+                <input v-model="slot.label" :aria-label="`色槽 ${index + 1} 色名`" maxlength="60" placeholder="色名或色號說明" />
+              </label>
+            </div>
+            <div class="palette" :aria-label="`色槽 ${index + 1} 常用色`">
+              <button
+                v-for="color in quotePalette"
+                :key="color.hex"
+                type="button"
+                :style="{ background: color.hex }"
+                :aria-label="`色槽 ${index + 1} 選擇${color.label}`"
+                :aria-pressed="slot.hex === color.hex"
+                @click="chooseColor(slot, color)"
+              />
+            </div>
+          </div>
+          <p class="workbench-note">
+            螢幕顏色僅供溝通，非現貨色卡或精準色差保證。{{
+              settings.colorMode === 'multi'
+                ? '最多 8 個色槽為介面編輯上限，不代表新機型支援 8 色；相容耗材、可用色數及換料耗損需由後端確認。移除色槽會將使用該色的設定改到第一個保留色槽。'
+                : '實際供應顏色將依耗材設定確認。'
+            }}
+          </p>
+          <section v-if="layout.models.length" class="model-assignments" aria-label="模型配色與數量">
+            <h3>每個模型的製作設定</h3>
+            <article v-for="model in layout.models" :key="model.id" class="assignment-card">
+              <h4>{{ model.name }}</h4>
+              <div class="field-pair">
+                <label class="field">
+                  {{ model.name }} 數量
+                  <input v-model.number="assignments[model.id].quantity" type="number" min="1" max="10000" step="1" />
+                </label>
+                <label v-if="settings.colorMode === 'multi'" class="field">
+                  {{ model.name }} 基底色
+                  <select v-model="assignments[model.id].slotId" :aria-label="`${model.name} 基底色`">
+                    <option v-for="(slot, index) in slots" :key="slot.id" :value="slot.id">{{ index + 1 }}・{{ slot.label }}</option>
+                  </select>
+                </label>
+              </div>
+              <template v-if="settings.colorMode === 'multi'">
+                <div class="bands-heading">
+                  <span>同一模型按高度換色</span>
+                  <button
+                    type="button"
+                    :disabled="!model.dimensions || assignments[model.id].bands.length >= MAX_HEIGHT_BANDS"
+                    :aria-label="`${model.name} 新增換色區間`"
+                    @click="addBand(model)"
+                  >
+                    ＋ 區間
+                  </button>
+                </div>
+                <div v-for="(band, index) in assignments[model.id].bands" :key="band.id" class="height-band">
+                  <div class="field-pair">
+                    <label class="field">
+                      起始高度（mm）
+                      <input
+                        v-model.number="band.from"
+                        :aria-label="`${model.name} 區間 ${index + 1} 起始高度`"
+                        type="number"
+                        min="0"
+                        :max="model.dimensions?.[2]"
+                        step="0.01"
+                      />
+                    </label>
+                    <label class="field">
+                      結束高度（mm）
+                      <input
+                        v-model.number="band.to"
+                        :aria-label="`${model.name} 區間 ${index + 1} 結束高度`"
+                        type="number"
+                        min="0"
+                        :max="model.dimensions?.[2]"
+                        step="0.01"
+                      />
+                    </label>
+                  </div>
+                  <div class="band-bottom">
+                    <label class="field">
+                      區間色槽
+                      <select v-model="band.slotId" :aria-label="`${model.name} 區間 ${index + 1} 色槽`">
+                        <option v-for="(slot, slotIndex) in slots" :key="slot.id" :value="slot.id">
+                          {{ slotIndex + 1 }}・{{ slot.label }}
+                        </option>
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      :aria-label="`${model.name} 移除區間 ${index + 1}`"
+                      @click="assignments[model.id].bands.splice(index, 1)"
+                    >
+                      移除
+                    </button>
+                  </div>
+                </div>
+                <p class="workbench-note">
+                  高度以調整後模型底部為 0；區間以外保留基底色。3D 僅預覽配色，不是實際切片層；換色層高將由新切片設定確認。
+                </p>
+              </template>
+            </article>
+            <p class="workbench-note">平台目前顯示每個模型一份；訂購多份時，實際排盤與平台數由後端切片決定。</p>
+          </section>
+          <details class="print-settings" open>
+            <summary>列印品質與排列偏好</summary>
+            <label class="field">
+              層高
+              <select v-model.number="settings.layerHeight" aria-label="層高">
+                <option :value="0.12">0.12 mm・細緻</option>
+                <option :value="0.16">0.16 mm・平衡</option>
+                <option :value="0.2">0.20 mm・標準</option>
+                <option :value="0.28">0.28 mm・快速</option>
+              </select>
+            </label>
+            <div class="field-pair">
+              <label class="field">
+                填充率（%）
+                <input v-model.number="settings.infill" type="number" min="0" max="100" step="1" />
+              </label>
+              <label class="field">
+                外壁圈數
+                <input v-model.number="settings.walls" type="number" min="1" max="12" step="1" />
+              </label>
+            </div>
+            <label class="check-field">
+              <input v-model="settings.autoSupports" type="checkbox" />
+              自動產生支撐
+            </label>
+            <label class="check-field">
+              <input v-model="settings.autoOrient" :disabled="hasHeightBands" type="checkbox" />
+              交由切片器自動選擇方向
+            </label>
+            <label class="check-field">
+              <input v-model="settings.autoArrange" type="checkbox" />
+              切片時由切片器自動排版
+            </label>
+            <p class="workbench-note">
+              {{
+                hasHeightBands
+                  ? '已設定高度換色，固定目前模型方向；若再旋轉或縮放，請重新確認換色範圍。'
+                  : '選擇切片器自動定向或排版時，最終方向與位置將由實際切片結果確認。'
+              }}
+            </p>
+          </details>
+          <label class="field">
+            希望完成日期
+            <input v-model="settings.dueDate" type="date" />
+          </label>
+          <label class="check-field">
+            <input v-model="settings.rush" type="checkbox" />
+            需要急件評估（非交期承諾）
+          </label>
+          <label class="field">
+            製作備註
+            <textarea v-model="settings.notes" rows="3" maxlength="4000" placeholder="用途、尺寸公差、配色說明或組裝需求" />
+          </label>
+          <p v-if="issues.length && layout.models.length" class="validation-note" role="status">{{ issues[0] }}</p>
+          <button class="primary-button" type="button" :disabled="!!issues.length" @click="review">確認設定，帶入會員資料 ↗</button>
+        </section>
+      </div>
+      <section id="quote-review" class="workbench-panel review-panel" tabindex="-1" aria-labelledby="quote-review-title">
+        <div class="panel-heading">
+          <span>03</span>
+          <div>
+            <h2 id="quote-review-title">登入與確認製作需求</h2>
+            <p>會員資料與模型設定分開保護，不將密碼寫入草稿。</p>
+          </div>
+        </div>
+        <p v-if="!reviewing">完成模型與配色後，按下「確認設定」即可在此登入或註冊。</p>
+        <template v-else>
+          <quote-account />
+          <div class="draft-summary">
+            <h3>本次設定摘要</h3>
+            <p>
+              {{ material.label }}・{{ layout.models.length }} 個模型・共 {{ totalQuantity }} 份・{{
+                settings.colorMode === 'multi' ? '多色' : '單色'
+              }}／{{ visibleSlots.length }} 個色槽
+            </p>
+            <p>層高 {{ settings.layerHeight }} mm・填充 {{ settings.infill }}%・外壁 {{ settings.walls }} 圈</p>
+            <p>
+              模型重量、支撐與換料耗材、列印時間、價格：
+              <b>待新機型切片</b>
+            </p>
+            <button type="button" :disabled="!!issues.length" @click="downloadDraft">下載設定草稿（JSON）</button>
+            <p class="workbench-note">
+              可免登入下載；只包含模型設定與製作備註，不包含模型檔、會員資料或密碼。重新開啟需保留原始 STL；此草稿不會出現在會員案件清單。
+            </p>
+          </div>
+        </template>
+        <p v-if="error" class="validation-note" role="alert">{{ error }}</p>
+        <p v-if="downloaded" role="status">設定草稿已下載，尚未上傳模型或建立案件。</p>
+        <div class="quote-not-ready">
+          <div>
+            <span>切片結果與價格</span>
+            <strong>尚待新機型設定</strong>
+            <small>不套用免費列印設定，也不以舊機型價格代算。</small>
+          </div>
+          <button type="button" disabled>切片並取得報價（尚未開放）</button>
+        </div>
+      </section>
+    </div>
+  </public-shell>
+</template>
+
+<script setup>
+  import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
+  import { useRoute } from 'vue-router'
+  import PublicShell from '@/components/public/PublicShell.vue'
+  import StationLayout from '@/components/StationLayout.vue'
+  import QuoteAccount from '@/components/QuoteAccount.vue'
+  import { getService, inquiryNotes } from '@/content/fdmServices.mjs'
+  import {
+    quoteMaterials,
+    quotePalette,
+    MAX_COLOR_SLOTS,
+    MAX_HEIGHT_BANDS,
+    defaultQuoteSettings,
+    validateQuoteDraft,
+    createQuoteDraft,
+    modelAppearance,
+  } from '@/utils/quote-workspace.mjs'
+  const emit = defineEmits(['assistance'])
+  const route = useRoute(),
+    service = computed(() => getService(route.query.service))
+  const settings = reactive({
+    ...defaultQuoteSettings(),
+    notes: inquiryNotes(route.query.service),
+    rush: route.query.service === 'rush-print',
+  })
+  const layout = ref({ files: [], models: [], names: [], placements: [], ready: false })
+  const slots = reactive([{ id: 'slot-1', ...quotePalette[0] }]),
+    assignments = reactive({})
+  const reviewing = ref(false),
+    error = ref(''),
+    downloaded = ref(false)
+  let slotSequence = 1,
+    bandSequence = 0,
+    downloadUrl = ''
+  const material = computed(() => quoteMaterials.find((m) => m.id === settings.material) || quoteMaterials[0])
+  const visibleSlots = computed(() => (settings.colorMode === 'single' ? slots.slice(0, 1) : slots))
+  const hasHeightBands = computed(() => settings.colorMode === 'multi' && layout.value.models.some((m) => assignments[m.id]?.bands.length))
+  const totalQuantity = computed(() => layout.value.models.reduce((sum, m) => sum + (Number(assignments[m.id]?.quantity) || 0), 0))
+  const issues = computed(() => validateQuoteDraft(layout.value, settings, slots, assignments))
+  const appearance = computed(() => modelAppearance(layout.value.models, settings, slots, assignments))
+  watch(
+    () => settings.colorMode,
+    (value) => {
+      if (value === 'multi' && slots.length < 2) addSlot()
+    }
+  )
+  watch(hasHeightBands, (value) => {
+    if (value) settings.autoOrient = false
+  })
+  watch(
+    () => settings.autoOrient,
+    (value) => {
+      if (value) settings.autoArrange = true
+    }
+  )
+  watch(
+    () => settings.autoArrange,
+    (value) => {
+      if (!value) settings.autoOrient = false
+    }
+  )
+  watch(
+    [settings, slots, assignments, layout],
+    () => {
+      downloaded.value = false
+      error.value = ''
+    },
+    { deep: true }
+  )
+  function changeLayout(value) {
+    for (const model of value.models) if (!assignments[model.id]) assignments[model.id] = { slotId: slots[0].id, quantity: 1, bands: [] }
+    for (const id of Object.keys(assignments)) if (!value.models.some((m) => m.id === id)) delete assignments[id]
+    layout.value = value
+  }
+  function addSlot() {
+    if (slots.length < MAX_COLOR_SLOTS)
+      slots.push({ id: `slot-${++slotSequence}`, ...quotePalette[(slotSequence - 1) % quotePalette.length] })
+  }
+  function chooseColor(slot, color) {
+    slot.hex = color.hex
+    slot.label = color.label
+  }
+  function removeSlot(id) {
+    if (slots.length <= 2) return
+    slots.splice(
+      slots.findIndex((s) => s.id === id),
+      1
+    )
+    for (const a of Object.values(assignments)) {
+      if (a.slotId === id) a.slotId = slots[0].id
+      for (const band of a.bands) if (band.slotId === id) band.slotId = slots[0].id
+    }
+  }
+  function addBand(model) {
+    const bands = assignments[model.id].bands
+    if (!model.dimensions || bands.length >= MAX_HEIGHT_BANDS) return
+    const from = bands.length ? Math.max(...bands.map((b) => Number(b.to) || 0)) : Math.round((model.dimensions[2] / 2) * 100) / 100
+    if (from >= model.dimensions[2]) {
+      error.value = '現有區間已達模型頂部，請先調整區間，再新增換色。'
+      return
+    }
+    bands.push({ id: ++bandSequence, from, to: Math.round(model.dimensions[2] * 100) / 100, slotId: slots[1]?.id || slots[0].id })
+  }
+  async function focusSection(id) {
+    await nextTick()
+    const element = document.getElementById(id)
+    element?.focus({ preventScroll: true })
+    element?.scrollIntoView({ block: 'start' })
+  }
+  async function review() {
+    if (issues.value.length) {
+      error.value = issues.value[0]
+      await focusSection('quote-review')
+      return
+    }
+    reviewing.value = true
+    error.value = ''
+    await focusSection('quote-review')
+  }
+  function downloadDraft() {
+    try {
+      const draft = createQuoteDraft(layout.value, settings, slots, assignments)
+      if (downloadUrl) URL.revokeObjectURL(downloadUrl)
+      downloadUrl = URL.createObjectURL(new Blob([JSON.stringify(draft, null, 2)], { type: 'application/json' }))
+      const a = document.createElement('a')
+      a.href = downloadUrl
+      a.download = '3DRFM-列印設定草稿.json'
+      a.click()
+      downloaded.value = true
+    } catch (err) {
+      error.value = err.message
+    }
+  }
+  function askSpecialist() {
+    if (layout.value.models.length && !window.confirm('轉為專員協助會離開工作台，未下載的模型擺放與配色設定不會保留。確定繼續？')) return
+    emit('assistance')
+  }
+  onBeforeUnmount(() => {
+    if (downloadUrl) URL.revokeObjectURL(downloadUrl)
+  })
+</script>
+
+<style scoped>
+  .workbench-wrap {
+    padding-block: 46px 70px;
+  }
+  .workbench-intro {
+    display: flex;
+    justify-content: space-between;
+    align-items: end;
+    gap: 24px;
+    margin-bottom: 30px;
+  }
+  .workbench-kicker {
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: #647467;
+  }
+  h1 {
+    font-size: clamp(28px, 3.3vw, 44px);
+    margin: 14px 0;
+    letter-spacing: -1px;
+  }
+  .workbench-intro p:last-child {
+    color: #647467;
+    font-size: 14px;
+  }
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+  button {
+    cursor: pointer;
+    border: 1px solid #b7c4b8;
+    border-radius: 4px;
+    background: #fffefa;
+    color: #244d3f;
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+  button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .text-button {
+    border: 0;
+    border-bottom: 1px solid #b7c4b8;
+    padding: 10px 0;
+    background: none;
+  }
+  .backend-notice {
+    background: #f1eddf;
+    border-left: 3px solid #a9883e;
+    padding: 18px 22px;
+    font-size: 13px;
+    line-height: 1.8;
+  }
+  .backend-notice p {
+    margin: 6px 0 0;
+    color: #65685b;
+  }
+  .service-note {
+    font-size: 13px;
+  }
+  .workbench-steps {
+    display: flex;
+    gap: 30px;
+    margin: 28px 0;
+    font-size: 13px;
+  }
+  .workbench-steps a,
+  .workbench-steps button {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    border: 0;
+    background: none;
+    padding: 0;
+    color: #244d3f;
+    font-size: 13px;
+  }
+  .workbench-steps span {
+    font-size: 10px;
+    color: #92825b;
+  }
+  .workbench-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    gap: 24px;
+    align-items: start;
+  }
+  .workbench-panel {
+    padding: 26px;
+    border: 1px solid #cdd7cc;
+    border-radius: 8px;
+    background: #fffefa;
+    min-width: 0;
+    scroll-margin-top: 110px;
+    overflow-wrap: anywhere;
+  }
+  .panel-heading {
+    display: flex;
+    gap: 14px;
+    align-items: start;
+    margin-bottom: 24px;
+  }
+  .panel-heading > span {
+    font-size: 11px;
+    border: 1px solid #d3daca;
+    border-radius: 50%;
+    padding: 7px 10px;
+  }
+  .panel-heading h2 {
+    font-size: 20px;
+    line-height: 1.5;
+    margin: 0 0 7px;
+  }
+  .panel-heading p,
+  .workbench-note {
+    font-size: 12px;
+    line-height: 1.8;
+    color: #657365;
+    margin: 0;
+  }
+  .workbench-note {
+    margin-block: 14px;
+  }
+  .field {
+    display: grid;
+    gap: 7px;
+    font-size: 12px;
+    margin: 14px 0;
+    min-width: 0;
+  }
+  .field input,
+  .field select,
+  .field textarea {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: 10px;
+    border: 1px solid #b7c4b8;
+    border-radius: 4px;
+    color: #244d3f;
+    background: #fff;
+  }
+  .field textarea {
+    resize: vertical;
+  }
+  .field-pair {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .material-note {
+    font-size: 12px;
+    padding: 10px 12px;
+    background: #eef3eb;
+  }
+  .color-mode {
+    border: 0;
+    padding: 0;
+    margin: 24px 0;
+    display: flex;
+    gap: 24px;
+    font-size: 13px;
+  }
+  .color-mode legend {
+    margin-bottom: 12px;
+    font-weight: 700;
+  }
+  .color-mode label,
+  .check-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  input[type='checkbox'],
+  input[type='radio'] {
+    accent-color: #245c48;
+  }
+  .slots-heading,
+  .slot-top,
+  .bands-heading,
+  .band-bottom {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  h3 {
+    font-size: 15px;
+    margin: 12px 0;
+  }
+  .color-slot {
+    border: 1px solid #d9dfd3;
+    padding: 14px;
+    border-radius: 6px;
+    margin: 12px 0;
+  }
+  .slot-top {
+    font-size: 12px;
+  }
+  .slot-top span {
+    margin-right: auto;
+    color: #6c786c;
+  }
+  .slot-inputs {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .slot-inputs > .field {
+    flex: 1;
+  }
+  .swatch-input input {
+    width: 42px;
+    height: 40px;
+    padding: 3px;
+    border: 1px solid #b7c4b8;
+    background: #fff;
+    cursor: pointer;
+  }
+  .palette {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .palette button {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border-radius: 50%;
+  }
+  .palette button[aria-pressed='true'] {
+    outline: 2px solid #244d3f;
+    outline-offset: 3px;
+  }
+  .model-assignments {
+    margin-top: 26px;
+  }
+  .assignment-card {
+    padding: 16px;
+    border: 1px solid #d9dfd3;
+    margin: 12px 0;
+    background: #f7f8f2;
+    border-radius: 6px;
+  }
+  h4 {
+    font-size: 13px;
+    margin: 0;
+  }
+  .bands-heading {
+    font-size: 12px;
+    margin: 14px 0 8px;
+  }
+  .height-band {
+    padding: 10px;
+    border: 1px solid #d9dfd3;
+    border-radius: 4px;
+    margin: 10px 0;
+    background: #fffefa;
+  }
+  .height-band .field {
+    margin-block: 4px;
+  }
+  .band-bottom {
+    margin-top: 8px;
+  }
+  .band-bottom .field {
+    flex: 1;
+  }
+  .print-settings {
+    border-top: 1px solid #d9dfd3;
+    padding-top: 20px;
+    margin-top: 20px;
+  }
+  summary {
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .check-field {
+    font-size: 12px;
+    margin: 14px 0;
+  }
+  .primary-button {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    color: white;
+    background: #244d3f;
+    font-size: 13px;
+    margin-top: 24px;
+  }
+  .validation-note {
+    padding: 12px;
+    background: #fff0e8;
+    color: #993b27;
+    font-size: 12px;
+    line-height: 1.8;
+  }
+  .review-panel {
+    margin-top: 24px;
+    font-size: 13px;
+    line-height: 1.8;
+  }
+  .draft-summary {
+    margin-block: 24px;
+    padding-top: 20px;
+    border-top: 1px solid #d9dfd3;
+  }
+  .quote-not-ready {
+    display: flex;
+    justify-content: space-between;
+    gap: 24px;
+    align-items: center;
+    border-top: 1px solid #d9dfd3;
+    margin-top: 24px;
+    padding-top: 24px;
+  }
+  .quote-not-ready span,
+  .quote-not-ready small {
+    display: block;
+    color: #657365;
+    font-size: 12px;
+  }
+  .quote-not-ready strong {
+    display: block;
+    font-size: 24px;
+    margin: 8px 0;
+    font-weight: 500;
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    clip-path: inset(50%);
+    overflow: hidden;
+  }
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  a:focus-visible {
+    outline: 2px solid #9a762f;
+    outline-offset: 3px;
+  }
+  @media (max-width: 900px) {
+    .workbench-grid {
+      grid-template-columns: 1fr;
+    }
+    .workbench-intro {
+      align-items: start;
+      flex-direction: column;
+    }
+  }
+  @media (max-width: 600px) {
+    .workbench-wrap {
+      padding-top: 28px;
+    }
+    .workbench-panel {
+      padding: 18px;
+    }
+    .workbench-steps {
+      gap: 15px;
+      justify-content: space-between;
+    }
+    .workbench-steps a,
+    .workbench-steps button {
+      gap: 5px;
+      font-size: 11px;
+    }
+    .panel-heading h2 {
+      font-size: 18px;
+    }
+    .quote-not-ready {
+      align-items: start;
+      flex-direction: column;
+    }
+    .quote-not-ready button {
+      width: 100%;
+    }
+    .field-pair {
+      gap: 8px;
+    }
+  }
+</style>

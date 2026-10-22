@@ -28,6 +28,9 @@
       filename: { type: String, required: true },
       height: { type: Number, default: 320 },
       partColors: { type: Array, default: () => [] },
+      // Presentation only: local model Z ranges, never interpreted as sliced layers.
+      heightColors: { type: Array, default: () => [] },
+      zUp: { type: Boolean, default: false },
     },
     data() {
       return {
@@ -47,6 +50,12 @@
       },
       partColors(colors) {
         this.applyColors(colors)
+      },
+      heightColors: {
+        deep: true,
+        handler() {
+          this.applyHeightColors()
+        },
       },
       height() {
         this.handleResize()
@@ -86,6 +95,7 @@
         this.scene = markRaw(new THREE.Scene())
         this.scene.background = new THREE.Color(0xf4f6f8)
         this.camera = markRaw(new THREE.PerspectiveCamera(45, width / this.height, 0.1, 5000))
+        if (this.zUp) this.camera.up.set(0, 0, 1)
         this.renderer = markRaw(new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' }))
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
         this.renderer.setSize(width, this.height)
@@ -214,6 +224,7 @@
           if (loadId !== this.loadSequence || this.viewerDisposed) return
           this.frameCamera()
           this.applyColors(this.partColors)
+          this.applyHeightColors()
           this.scheduleRender()
         } catch (error) {
           if (loadId !== this.loadSequence || this.viewerDisposed) return
@@ -264,6 +275,45 @@
           const hex = colors[index] || (colors.length === 1 ? colors[0] : '')
           if (hex && mesh.material?.color) mesh.material.color.set(hex)
         })
+        this.scheduleRender()
+      },
+      applyHeightColors() {
+        // Fixed-size uniforms avoid compiling a new shader for every input edit.
+        const bands = this.heightColors
+          .filter((b) => Number.isFinite(b.from) && Number.isFinite(b.to) && b.to > b.from && /^#[0-9a-f]{6}$/i.test(b.color))
+          .slice(0, 8)
+        for (const mesh of this.meshList()) {
+          const material = mesh.material
+          if (!material.userData.heightUniforms && !bands.length) continue
+          if (!material.userData.heightUniforms) {
+            const uniforms = {
+              quoteBandCount: { value: 0 },
+              quoteBandRanges: { value: Array.from({ length: 8 }, () => new THREE.Vector2()) },
+              quoteBandColors: { value: Array.from({ length: 8 }, () => new THREE.Color()) },
+            }
+            material.userData.heightUniforms = uniforms
+            material.onBeforeCompile = (shader) => {
+              Object.assign(shader.uniforms, uniforms)
+              shader.vertexShader =
+                'varying float quoteLocalZ;\n' +
+                shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nquoteLocalZ = position.z;')
+              shader.fragmentShader =
+                'varying float quoteLocalZ;\nuniform int quoteBandCount;\nuniform vec2 quoteBandRanges[8];\nuniform vec3 quoteBandColors[8];\n' +
+                shader.fragmentShader.replace(
+                  '#include <color_fragment>',
+                  '#include <color_fragment>\nfor (int i = 0; i < 8; i++) { if (i < quoteBandCount && quoteLocalZ >= quoteBandRanges[i].x - 0.0001 && quoteLocalZ <= quoteBandRanges[i].y + 0.0001) diffuseColor.rgb = quoteBandColors[i]; }'
+                )
+            }
+            material.customProgramCacheKey = () => '3drfm-height-color-preview-v1'
+            material.needsUpdate = true
+          }
+          const uniforms = material.userData.heightUniforms
+          uniforms.quoteBandCount.value = bands.length
+          bands.forEach((band, i) => {
+            uniforms.quoteBandRanges.value[i].set(band.from, band.to)
+            uniforms.quoteBandColors.value[i].set(band.color)
+          })
+        }
         this.scheduleRender()
       },
       frameCamera() {

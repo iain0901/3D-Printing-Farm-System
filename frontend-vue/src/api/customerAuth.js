@@ -1,7 +1,7 @@
 import customerRequest from '@/utils/customerRequest'
 
-export function registerCustomer(payload) {
-  return customerRequest({ url: '/api/customer-auth/register', method: 'post', data: payload })
+export function registerCustomer(payload, options = {}) {
+  return customerRequest({ url: '/api/customer-auth/register', method: 'post', data: payload, ...options })
 }
 
 export function claimCustomer(payload) {
@@ -20,8 +20,8 @@ export function confirmPasswordReset(payload) {
   return customerRequest({ url: '/api/customer-auth/reset', method: 'post', data: payload })
 }
 
-export function fetchCustomerMe() {
-  return customerRequest({ url: '/api/customer-auth/me', method: 'get' })
+export function fetchCustomerMe(options = {}) {
+  return customerRequest({ url: '/api/customer-auth/me', method: 'get', ...options })
 }
 
 export function logoutCustomer() {
