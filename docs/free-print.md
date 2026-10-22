@@ -4,11 +4,13 @@
 
 首頁、製作服務導覽與頁尾均有免費列印入口。不需登入即可瀏覽與選站；不新增圖片，避免超過全站插圖重複上限。站點資料集中於 `frontend-vue/src/content/freePrintStations.mjs`。
 
-站點頁的「開啟線上切片」進入 `/#/free-print/nthu-shuimu/slicer`，不需登入。可上傳單一 STL（10 MB、最多 20 萬三角面）、等比例縮放、三軸旋轉，並設定材料、層高、填充率、外壁、自動支撐與自動擺放。預設 PETG；層高可選 0.12／0.16／0.20／0.28 mm。模型以 mm 解讀。
+站點頁的「開啟線上切片」進入 `/#/free-print/nthu-shuimu/slicer`，不需登入。可加入最多 5 個 STL（合計 10 MB、每個最多 20 萬三角面）、逐個等比例縮放與三軸旋轉，並設定層高、填充率、外壁、自動支撐與自動擺放。免費列印固定顯示 **3DSTU_PETG**；依使用者確認，此名稱是既有 PETG 切片設定的前端名稱，不另造耗材參數。API 仍使用 `material: PETG` 並拒絕其他材料，worker 也做相同防護。層高可選 0.12／0.16／0.20／0.28 mm。模型以 mm 解讀。
 
-模型在 Web Worker 內處理，變形後的同一份二進位 STL 同時用於 3D 預覽及實際上傳；不是只改變畫面。預設保留手動方向，Orca 僅自動排列與貼床；勾選自動擺放後明確告知方向可能改變。按下「開始切片」才會上傳檔案。
+模型在 Web Worker 內處理，變形後的同一份二進位 STL 同時用於 3D 預覽及實際上傳；不是只改變畫面。工作台提供 260 × 260 mm 參考平台俯視圖、模型包圍框、拖曳／方向鍵移位、中心 X／Y 數值、90° 快速旋轉、置中、移除、自動平躺與自動排版。自動平躺把目前最短軸轉為高度方向，不宣稱是支撐最少的最佳方向；自動排版按包圍框排入單一平台，保留 5 mm 邊界與至少 2 mm 間距。支撐與底邊需以最終切片檢查。
 
-免費切片共用既有 Orca 工作佇列，但使用 `purpose: free-print` 與伺服器驗證的 `stationId`，只接受單一 STL／一份模型，不計算價格、不建立案件或列印佇列，也不能拿免費切片憑證轉成付費報價。API 站點白名單位於 `api/cases-module.mjs`，測試確保與公開站點目錄一致。
+預設保留手動方向與布局：API 以真實 STL 座標再次驗證位置、範圍及包圍框間距，再由 worker 組成核心 3MF 的獨立物件與 build transform，搭配 `--arrange 0 --orient 0`，避免載入多個 STL 時被 CLI 自動置中。UI 操作「自動排版」只更新工作台座標，送出後仍保留這份布局。另可勾選切片時由 Orca 自動排版／自動定向；定向會一併開啟排版，避免旋轉後重疊，並告知最終位置可能不同。按下「開始切片」才會上傳檔案。
+
+免費切片共用既有 Orca 工作佇列，但使用 `purpose: free-print` 與伺服器驗證的 `stationId`，每個 STL 限一份模型，不計算價格、不建立案件或列印佇列，也不能拿免費切片憑證轉成付費報價。API 站點白名單位於 `api/cases-module.mjs`，測試確保與公開站點目錄一致。免費材料對應僅影響免費站點，不更動付費報價的材料選項。
 
 完成後顯示真實切片的預估分鐘、模型／支撐／其他用料，並由實際 G-code 產出逐層擠出路徑俯視圖。支援 M82／M83、G90／G91、G92；站點切片停用圓弧擬合。預覽上限為 3,000 層、每層 1,500 段、總計 100,000 段，超過時明確標示省略；多盤結果不冒充單盤預覽。這不是可直接送印的 G-code 下載。
 
@@ -26,6 +28,8 @@ API 契約沿用 `/api/public/slicing-quotes` 的建立與狀態查詢；新增 
 
 執行 `npm test -- api/public-slicing-quotes.test.mjs api/orca-worker.test.mjs api/layer-preview.test.mjs api/station-model.test.mjs` 及 `npm run build`。`scripts/check-station-slicer.cjs` 預設以攔截 API 的方式驗證瀏覽器狀態、錯誤、取消與重新整理；`REAL_SLICE=1` 則不攔截 API，必須有真實 worker，驗證模型到實際切片結果。兩者都只允許指向本機隔離測試伺服器；不可對正式客戶資料庫執行。瀏覽器腳本沿用下列 Playwright 環境變數。
 
-待站點確認使用資格、免費額度、開放時段、可用材料／設備後，再設定伺服器端規則與完整送印流程。目前不捏造地址、開放時段、學生身分限制、設備在線狀態或可用名額。
+布局測試另執行 `api/station-plate.test.mjs`。瀏覽器真實切片測試現在使用兩個模型，驗證手動中心 `(40, 50)` 與 `(90, 100)` 對應的擠出路徑沒有被重新置中；加上 `AUTO_LAYOUT=1` 可驗證 Orca 自動定向／排版。其他檢查包含固定耗材、包圍框重疊／超界阻擋、滑鼠與鍵盤位置修改、自動平躺、移除與取消／重試。
+
+免費列印材料已固定為 3DSTU_PETG。待站點確認使用資格、免費額度、開放時段與設備後，再設定伺服器端規則與完整送印流程。目前不捏造地址、開放時段、學生身分限制、設備在線狀態或可用名額。
 
 驗證：`npm run build`、`npm test -- api/public-brand.test.mjs api/public-pages.test.mjs api/public-service-content.test.mjs`，以及 Playwright 的 `scripts/check-free-print.cjs` 和 `scripts/check-brand-site.cjs`。瀏覽器腳本使用既有 `PLAYWRIGHT_MODULE`、`CHROMIUM_PATH`、`BASE_URL` 設定；見 `docs/public-ui-redesign.md`。

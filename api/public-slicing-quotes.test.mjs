@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { buildServer, openDatabase } from "./server.mjs";
 import { FREE_PRINT_STATION_IDS } from "./cases-module.mjs";
 import { freePrintStations } from "../frontend-vue/src/content/freePrintStations.mjs";
+import { testStl } from "./test-helpers/stl.mjs";
 
 const cleanups = [];
 afterEach(async () => {
@@ -12,15 +13,7 @@ afterEach(async () => {
   while (cleanups.length) await rm(cleanups.pop(), { recursive: true, force: true });
 });
 
-const cubeStl = `solid cube
-facet normal 0 0 1
-outer loop
-vertex 0 0 0
-vertex 20 0 0
-vertex 0 20 0
-endloop
-endfacet
-endsolid cube`;
+const cubeStl = testStl();
 
 function multipart({ boundary, files = [], payload, fields = {} }) {
   const chunks = [];
@@ -85,16 +78,32 @@ describe("public real Orca slicing quote jobs", () => {
     expect(FREE_PRINT_STATION_IDS).toEqual(freePrintStations.map(station => station.id));
   });
 
-  it("validates free station jobs before storing files, and restricts them to one STL", async () => {
+  it("validates station materials, model counts and settings before storing files", async () => {
     const { app, db } = await createApp();
     const before = db.data.files.length;
     const free = { purpose: "free-print", stationId: "nthu-shuimu", quantity: 1 };
-    for (const invalid of [{ stationId: "unknown" }, { stationId: undefined }, { quantity: 2 }, { quantities: [2] }, { layerHeight: 0.4 }]) {
+    for (const invalid of [{ material: "PLA" }, { stationId: "unknown" }, { stationId: undefined }, { quantity: 2 }, { quantities: [2] }, { layerHeight: 0.4 }, { autoArrange: false }, { autoOrient: true, autoArrange: false, placements: [{ x: 130, y: 130 }] }]) {
       expect((await postQuote(app, { ...free, ...invalid })).statusCode).toBe(400);
     }
     expect((await postQuote(app, free, [{ name: "project.3mf", content: "bad" }])).statusCode).toBe(400);
-    expect((await postQuote(app, free, [{ name: "a.stl", content: cubeStl }, { name: "b.stl", content: cubeStl }])).statusCode).toBe(400);
+    expect((await postQuote(app, free, Array.from({ length: 6 }, (_, i) => ({ name: `${i}.stl`, content: cubeStl })))).statusCode).toBe(400);
     expect(db.data.files.length).toBe(before);
+    await app.close();
+  });
+
+  it("preserves validated multi-model placements and locks the display material without changing PETG parameters", async () => {
+    process.env.LAYERPILOT_WORKER_TOKEN = "test-worker-token";
+    const { app } = await createApp();
+    const payload = { purpose: "free-print", stationId: "nthu-shuimu", quantity: 1, autoOrient: false, autoArrange: false, placements: [{ x: 40, y: 50 }, { x: 90, y: 100 }] };
+    const files = [{ name: "a.stl", content: cubeStl }, { name: "b.stl", content: cubeStl }];
+    expect((await postQuote(app, { ...payload, placements: [{ x: 1, y: 50 }, { x: 90, y: 100 }] }, files)).statusCode).toBe(400);
+    expect((await postQuote(app, { ...payload, placements: [{ x: 40, y: 50 }, { x: 40, y: 50 }] }, files)).statusCode).toBe(400);
+    const created = await postQuote(app, payload, files);
+    expect(created.statusCode).toBe(202);
+    expect(created.json().slicingQuote).toMatchObject({ material: "PETG", materialLabel: "3DSTU_PETG", autoArrange: false, fileCount: 2, placements: payload.placements });
+    const claim = await app.inject({ method: "POST", url: "/api/internal/orca/jobs/claim", headers: workerHeaders(), payload: {} });
+    expect(claim.json().job).toMatchObject({ material: "PETG", autoOrient: false, autoArrange: false, placements: payload.placements });
+    expect(claim.json().job.sourceFiles).toHaveLength(2);
     await app.close();
   });
 

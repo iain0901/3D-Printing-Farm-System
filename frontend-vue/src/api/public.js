@@ -15,7 +15,7 @@ const publicRequest = axios.create({
 export function createStationSlice(file, settings) {
   const data = new FormData()
   data.append('payload', JSON.stringify({ ...settings, purpose: 'free-print', quantity: 1 }))
-  data.append('file', file)
+  for (const model of Array.isArray(file) ? file : [file]) data.append('file', model)
   return publicRequest
     .post('/api/public/slicing-quotes', data, { headers: { 'Content-Type': undefined }, timeout: 120000 })
     .then((r) => r.data)

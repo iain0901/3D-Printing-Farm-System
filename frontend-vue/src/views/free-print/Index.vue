@@ -95,7 +95,7 @@
             現在可以免登入上傳
             STL、調整模型並進行切片。切片使用參考機型，不代表現場設備；完成切片不等於取得免費名額，也不會加入列印佇列或操作機器。
           </p>
-          <p>開放資格、免費額度、服務時段、可用材料與設備，請依站點公告及現場指引確認。</p>
+          <p>免費列印固定使用 3DSTU_PETG。開放資格、免費額度、服務時段與設備，請依站點公告及現場指引確認。</p>
           <router-link :to="`${station.path}/slicer`" class="studio-button">開啟線上切片 ↗</router-link>
           <router-link to="/guides/file-prep" class="free-text-link">先看模型檔案準備指南 ↗</router-link>
         </div>
@@ -129,7 +129,7 @@
         </details>
         <details>
           <summary>免費列印有材料、尺寸或時間限制嗎？</summary>
-          <p>免費不代表不限量或不限規格。可用材料、列印尺寸、單次額度與服務時段，需依站點規範確認；本站不顯示尚未確認的額度或機台資訊。</p>
+          <p>免費列印固定使用 3DSTU_PETG，不提供其他材料選項。列印尺寸、單次額度與服務時段仍依站點規範確認；本站不顯示尚未確認的額度或機台資訊。</p>
         </details>
         <details>
           <summary>選擇站點後，就已經排到列印了嗎？</summary>

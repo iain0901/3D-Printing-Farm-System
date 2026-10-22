@@ -36,58 +36,8 @@
             <span>01</span>
             <h2 id="model-title">放上你的模型</h2>
           </div>
-          <label
-            class="model-upload"
-            :class="{ dragging }"
-            @dragover.prevent="dragging = !busy"
-            @dragleave.prevent="dragging = false"
-            @drop.prevent="onDrop"
-          >
-            <strong>{{ originalName || '拖曳 STL 到這裡，或選擇檔案' }}</strong>
-            <span>單一 STL・上限 10 MB・尺寸單位 mm</span>
-            <span class="model-upload-button" aria-hidden="true">選擇 STL 檔案 ↗</span>
-            <input
-              ref="fileInput"
-              class="visually-hidden"
-              type="file"
-              accept=".stl"
-              aria-label="選擇 STL 模型"
-              :disabled="busy"
-              @change="selectFile($event.target.files)"
-            />
-          </label>
-          <p v-if="job && !originalFile" class="slicer-small">已恢復上次切片工作。基於隱私，瀏覽器不保留模型；如要修改，請重新選擇檔案。</p>
-          <p v-if="preparing" role="status">正在整理模型與尺寸…</p>
-          <model-viewer
-            v-if="preparedFile"
-            :file="preparedFile"
-            :filename="preparedFile.name"
-            :height="360"
-            @error="viewerError = '此裝置無法顯示 3D 預覽，仍可依下方尺寸進行切片。'"
-          />
-          <div v-else class="model-empty">
-            <span aria-hidden="true">＋</span>
-            <p>你的想法，從這裡開始。</p>
-            <small>檔案選入後先在瀏覽器處理；按下「開始切片」才會上傳。</small>
-          </div>
-          <p v-if="viewerError" role="note">{{ viewerError }}</p>
-          <p v-if="dimensions" class="model-dimensions">
-            調整後尺寸
-            <strong>{{ dimensions.map((v) => v.toFixed(2)).join(' × ') }} mm</strong>
-          </p>
-          <fieldset :disabled="busy || !originalFile" class="transform-controls">
-            <legend>尺寸與方向</legend>
-            <label>
-              等比例縮放（%）
-              <input v-model.number="transform.scale" type="number" min="1" max="1000" step="1" />
-            </label>
-            <label v-for="axis in ['x', 'y', 'z']" :key="axis">
-              {{ axis.toUpperCase() }} 軸旋轉（°）
-              <input v-model.number="transform[axis]" type="number" min="-360" max="360" step="1" />
-            </label>
-            <button type="button" class="slicer-text-button" @click="resetTransform">重設尺寸與方向</button>
-          </fieldset>
-          <p class="slicer-small">拖曳模型可環視，滾輪可縮放視角。上方數值才會改變實際模型；模型會自動落到平台。</p>
+          <station-layout :disabled="busy" :automatic="settings.autoArrange" @change="changeLayout" />
+          <p v-if="job && !layout.files.length" class="slicer-small">已恢復先前工作。基於隱私不保留模型檔案；如要修改，請重新加入模型。</p>
         </section>
         <section class="slicer-panel" aria-labelledby="settings-title">
           <div class="panel-title">
@@ -97,16 +47,11 @@
           <form @submit.prevent="submit">
             <fieldset :disabled="busy" class="slice-settings">
               <legend class="visually-hidden">列印設定</legend>
-              <label>
-                材料
-                <select v-model="settings.material">
-                  <option value="PETG">PETG・推薦</option>
-                  <option value="PLA">PLA</option>
-                  <option value="ASA">ASA</option>
-                  <option value="TPU">TPU</option>
-                </select>
-              </label>
-              <p class="slicer-small">這是試切片材料，不代表站點備有此耗材。</p>
+              <div class="fixed-material">
+                <span>免費列印指定材料</span>
+                <strong>3DSTU_PETG</strong>
+                <p class="slicer-small">固定使用既有 PETG 切片設定，無須選擇材料。</p>
+              </div>
               <label>
                 層高
                 <select v-model.number="settings.layerHeight">
@@ -134,15 +79,21 @@
                 <input v-model="settings.autoOrient" type="checkbox" />
                 交由切片器自動選擇擺放方向
               </label>
+              <label class="check-label">
+                <input v-model="settings.autoArrange" type="checkbox" />
+                切片時由 Orca 自動排版
+              </label>
               <p class="slicer-small">
                 {{
                   settings.autoOrient
                     ? '切片器會重新選擇方向，結果可能與模型預覽不同；請以逐層路徑為準。'
-                    : '保留你調整的旋轉方向，切片器只負責排列與貼合平台。'
+                    : settings.autoArrange
+                    ? '保留模型方向，由切片器重新安排位置；最終布局以逐層結果為準。'
+                    : '保留工作台上的方向與位置，不會在切片時重新排列。'
                 }}
               </p>
             </fieldset>
-            <button class="studio-button slice-submit" type="submit" :disabled="!preparedFile || preparing || busy">
+            <button class="studio-button slice-submit" type="submit" :disabled="!layout.ready || busy">
               {{ uploading ? '上傳模型中…' : busy ? '切片工作進行中…' : '開始切片 ↗' }}
             </button>
             <p class="slicer-small">真實 OrcaSlicer 運算，較複雜的模型可能需要數分鐘。結果不會自動送到印表機。</p>
@@ -162,9 +113,12 @@
             <span>{{ jobName }}</span>
           </div>
           <p class="slicer-small">
-            本次設定：{{ job.material }}・層高 {{ job.layerHeight }} mm・填充 {{ job.infill }}%・{{ job.walls }} 圈外壁・{{
-              job.autoOrient ? '自動擺放' : '保留方向'
-            }}・{{ job.autoSupports ? '自動支撐' : '無支撐' }}
+            本次設定：{{ job.materialLabel || '3DSTU_PETG' }}・層高 {{ job.layerHeight }} mm・填充 {{ job.infill }}%・{{
+              job.walls
+            }}
+            圈外壁・{{ job.autoOrient ? '自動定向' : '保留方向' }}・{{ job.autoArrange ? '切片器自動排版' : '保留平台布局' }}・{{
+              job.autoSupports ? '自動支撐' : '無支撐'
+            }}
           </p>
           <p v-if="job.status === 'queued'">已送到切片佇列，等待運算服務接手；這不是現場的列印排隊。</p>
           <p v-if="job.status === 'processing'">OrcaSlicer 正在處理模型。可以保留此頁，完成後會自動顯示結果。</p>
@@ -223,27 +177,27 @@
 </template>
 
 <script setup>
-  import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+  import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
   import PublicShell from '@/components/public/PublicShell.vue'
-  import ModelViewer from '@/components/ModelViewer.vue'
+  import StationLayout from '@/components/StationLayout.vue'
   import LayerPreview from '@/components/LayerPreview.vue'
   import { getFreePrintStation } from '@/content/freePrintStations.mjs'
   import { createStationSlice, fetchStationSlice, cancelStationSlice } from '@/api/public'
 
   const props = defineProps({ stationId: { type: String, required: true } })
   const station = computed(() => getFreePrintStation(props.stationId))
-  const settings = reactive({ material: 'PETG', layerHeight: 0.2, infill: 15, walls: 2, autoSupports: true, autoOrient: false })
-  const transform = reactive({ scale: 100, x: 0, y: 0, z: 0 })
-  const originalFile = ref(null),
-    preparedFile = ref(null),
-    dimensions = ref(null),
-    fileInput = ref(null)
-  const originalName = ref(''),
-    preparing = ref(false),
-    uploading = ref(false),
-    dragging = ref(false)
-  const error = ref(''),
-    viewerError = ref(''),
+  const settings = reactive({
+    material: 'PETG',
+    layerHeight: 0.2,
+    infill: 15,
+    walls: 2,
+    autoSupports: true,
+    autoOrient: false,
+    autoArrange: false,
+  })
+  const layout = ref({ files: [], names: [], placements: [], ready: false })
+  const uploading = ref(false),
+    error = ref(''),
     pollError = ref(''),
     job = ref(null),
     jobName = ref(''),
@@ -252,8 +206,6 @@
   const cancelling = ref(false)
   let pollRevision = 0
   let active = true,
-    worker,
-    prepareTimer,
     pollTimer,
     token = '',
     pollJobId = '',
@@ -286,98 +238,39 @@
     }
   }
   watch(settings, invalidate)
-  watch(transform, () => {
+  watch(
+    () => settings.autoOrient,
+    (value) => {
+      if (value) settings.autoArrange = true
+    }
+  )
+  watch(
+    () => settings.autoArrange,
+    (value) => {
+      if (!value) settings.autoOrient = false
+    }
+  )
+  function changeLayout(value) {
     invalidate()
-    schedulePrepare()
-  })
-  function resetTransform() {
-    Object.assign(transform, { scale: 100, x: 0, y: 0, z: 0 })
-  }
-  function onDrop(event) {
-    dragging.value = false
-    if (!busy.value) selectFile(event.dataTransfer.files)
-  }
-  function selectFile(files) {
-    if (busy.value || !files?.length) return
-    invalidate()
-    worker?.terminate()
-    clearTimeout(prepareTimer)
-    preparedFile.value = null
-    dimensions.value = null
-    originalFile.value = null
-    originalName.value = ''
-    error.value = ''
-    viewerError.value = ''
-    preparing.value = false
-    const file = files[0]
-    const fileCount = files.length
-    if (fileInput.value) fileInput.value.value = ''
-    if (fileCount !== 1 || !/\.stl$/i.test(file.name) || !file.size || file.size > 10 * 1024 * 1024) {
-      error.value = '請選擇單一非空白 STL 檔案，上限 10 MB。'
-      return
-    }
-    originalFile.value = markRaw(file)
-    originalName.value = file.name
-    resetTransform()
-    schedulePrepare()
-  }
-  function schedulePrepare() {
-    clearTimeout(prepareTimer)
-    worker?.terminate()
-    worker = null
-    preparedFile.value = null
-    dimensions.value = null
-    if (!originalFile.value) return
-    preparing.value = true
-    prepareTimer = setTimeout(prepare, 200)
-  }
-  async function prepare() {
-    const source = originalFile.value
-    const current = new Worker(new URL('../../workers/station-model.worker.js', import.meta.url), { type: 'module' })
-    worker = current
-    error.value = ''
-    current.onmessage = ({ data }) => {
-      if (!active || worker !== current) return
-      preparing.value = false
-      if (data.error) error.value = data.error
-      else {
-        preparedFile.value = markRaw(new File([data.buffer], source.name, { type: 'application/octet-stream' }))
-        dimensions.value = data.dimensions
-      }
-      current.terminate()
-      worker = null
-    }
-    current.onerror = () => {
-      if (!active || worker !== current) return
-      error.value = '模型處理失敗，請重新選擇檔案。'
-      preparing.value = false
-      current.terminate()
-      worker = null
-    }
-    try {
-      const buffer = await source.arrayBuffer()
-      if (active && worker === current) current.postMessage({ buffer, transform: { ...transform } }, [buffer])
-    } catch {
-      if (active && worker === current) {
-        preparing.value = false
-        error.value = '無法讀取模型檔案。'
-        current.terminate()
-        worker = null
-      }
-    }
+    layout.value = value
   }
   async function submit() {
-    if (!preparedFile.value || preparing.value || busy.value) return
+    if (!layout.value.ready || busy.value) return
     invalidate()
     uploading.value = true
     error.value = ''
     pollError.value = ''
     try {
-      const result = await createStationSlice(preparedFile.value, { ...settings, stationId: props.stationId })
+      const result = await createStationSlice(layout.value.files, {
+        ...settings,
+        material: 'PETG',
+        stationId: props.stationId,
+        placements: layout.value.placements,
+      })
       if (!active) return
       token = result.accessToken
       job.value = result.slicingQuote
-      jobName.value = originalName.value
+      jobName.value = layout.value.names.join('、')
       try {
         sessionStorage.setItem(sessionKey, JSON.stringify({ id: job.value.id, token, name: jobName.value }))
       } catch {
@@ -463,13 +356,20 @@
   })
   onBeforeUnmount(() => {
     active = false
-    worker?.terminate()
-    clearTimeout(prepareTimer)
     clearTimeout(pollTimer)
   })
 </script>
 
 <style scoped>
+  .fixed-material {
+    display: grid;
+    gap: 8px;
+    padding: 16px;
+    background: #f7f3e9;
+  }
+  .fixed-material strong {
+    font-size: 22px;
+  }
   .station-slicer {
     color: #192e53;
   }
@@ -554,81 +454,16 @@
     font-size: 22px;
     margin: 0;
   }
-  .model-upload {
-    display: grid;
-    gap: 8px;
-    padding: 20px;
-    border: 1px dashed #192e5370;
-    cursor: pointer;
-    background: #f7f3e9;
-    overflow-wrap: anywhere;
-  }
-  .model-upload.dragging {
-    border-color: #c8491a;
-    background: #f9dfc9;
-  }
-  .model-upload:focus-within {
-    outline: 2px solid #203ec3;
-    outline-offset: 3px;
-  }
-  .model-upload-button {
-    text-decoration: underline;
-    font-weight: 700;
-    padding-top: 8px;
-  }
-  .model-upload span {
-    font-size: 12px;
-  }
-  .model-upload input {
-    max-width: 100%;
-    min-width: 0;
-    font-size: 13px;
-  }
-  .model-empty {
-    min-height: 300px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    text-align: center;
-    padding: 24px;
-  }
-  .model-empty > span {
-    font-size: 60px;
-    font-weight: 200;
-    color: #b9afa1;
-  }
-  .model-empty small {
-    line-height: 1.8;
-    color: #566176;
-  }
-  .model-dimensions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    font-size: 13px;
-    padding: 14px 0;
-  }
   fieldset {
     border: 0;
     padding: 0;
     margin: 0;
     min-width: 0;
   }
-  .transform-controls {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px;
-  }
-  .transform-controls legend {
-    font-weight: 700;
-    margin-bottom: 14px;
-  }
   label {
     font-size: 14px;
     line-height: 1.6;
   }
-  .transform-controls label,
   .slice-settings > label,
   .settings-pair label {
     display: grid;

@@ -6,6 +6,7 @@ import {
 } from "node:crypto";
 import { z } from "zod";
 import { buildLayerPreview } from "./layer-preview.mjs";
+import { validateStationPlate } from "./station-plate.mjs";
 import {
   CASE_STATUSES,
   canTransitionCase,
@@ -64,6 +65,8 @@ const publicSlicingQuoteSchema = z.object({
   purpose: z.enum(["quote", "free-print"]).default("quote"),
   stationId: z.string().optional(),
   autoOrient: z.boolean().default(true),
+  autoArrange: z.boolean().default(true),
+  placements: z.array(z.object({ x: z.number().finite().min(0).max(260), y: z.number().finite().min(0).max(260) })).min(1).max(5).optional(),
   material: z.enum(PUBLIC_SLICE_MATERIALS),
   quantity: z.coerce.number().int().min(1).max(20).default(1),
   quantities: z.array(z.coerce.number().int().min(1).max(20)).max(5).optional(),
@@ -85,6 +88,7 @@ function publicSlicingQuote(record) {
     stationId: record.stationId,
     status: record.status,
     material: record.material,
+    materialLabel: record.purpose === "free-print" && record.material === "PETG" ? "3DSTU_PETG" : record.material,
     quantity: record.quantity,
     fileCount: record.sourceFileIds.length,
     layerHeight: record.layerHeight,
@@ -96,7 +100,8 @@ function publicSlicingQuote(record) {
     profileDisclosure: record.profileDisclosure,
     pricingPolicy: record.pricingPolicyVersion || "Legacy configured rates",
     autoOrient: record.autoOrient !== false,
-    autoArrange: true,
+    autoArrange: record.autoArrange !== false,
+    placements: record.purpose === "free-print" ? record.placements : undefined,
     autoSupports: record.autoSupports,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt
@@ -146,9 +151,12 @@ async function parsePublicSlicingQuote(request, storeCaseFile, workspaceId) {
   if (!parsed.success) return { validationError: parsed.error };
   if (parsed.data.purpose === "free-print") {
     if (!FREE_PRINT_STATION_IDS.includes(parsed.data.stationId)) throw new Error("請選擇有效的免費列印站點");
-    if (uploads.length !== 1 || !/\.stl$/i.test(uploads[0].filename) || totalBytes > 10 * 1024 * 1024) throw new Error("站點切片限單一 STL，最大 10 MB");
+    if (parsed.data.material !== "PETG") throw new Error("免費列印固定使用 3DSTU_PETG");
+    if (uploads.some(upload => !/\.stl$/i.test(upload.filename)) || totalBytes > 10 * 1024 * 1024) throw new Error("站點切片限最多 5 個 STL，合計最大 10 MB");
     if (parsed.data.quantity !== 1 || parsed.data.quantities?.some(value => value !== 1)) throw new Error("站點切片一次限一個模型");
     if (parsed.data.layerHeight > 0.28) throw new Error("參考噴嘴層高上限為 0.28 mm");
+    if (parsed.data.autoOrient && !parsed.data.autoArrange) throw new Error("自動定向必須搭配自動排版，避免改變方向後互相重疊");
+    validateStationPlate(uploads.map(upload => upload.buffer), parsed.data.placements, parsed.data.autoArrange);
   }
   if (parsed.data.quantities && parsed.data.quantities.length !== uploads.length) throw new Error("Each model requires one matching quantity");
   const quantities = parsed.data.quantities || uploads.map(() => parsed.data.quantity);
@@ -727,6 +735,8 @@ export async function registerCaseRoutes(app, options) {
       purpose: incoming.input.purpose,
       stationId: incoming.input.purpose === "free-print" ? incoming.input.stationId : undefined,
       autoOrient: incoming.input.autoOrient,
+      autoArrange: incoming.input.autoArrange,
+      placements: incoming.input.purpose === "free-print" ? incoming.input.placements : undefined,
       publicAccessTokenHash: tokenDigest(accessToken),
       status: "queued",
       sourceFileIds: incoming.stored.map((item) => item.file.id),

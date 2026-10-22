@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { createStationPlate } from "./station-plate.mjs";
 
 const execFileAsync = promisify(execFile);
 const REFERENCE_MACHINE = "Artillery M1 Pro 0.4 nozzle";
@@ -182,7 +183,7 @@ export function parseGcodeMetrics(text) {
 }
 
 export function buildOrcaArgs(job, inputPaths, outputDir, config) {
-  const args = ["--arrange", "1", "--orient", job.autoOrient === false ? "0" : "1", "--ensure-on-bed", "--slice", "0", "--outputdir", outputDir];
+  const args = ["--arrange", job.autoArrange === false ? "0" : "1", "--orient", job.autoOrient === false ? "0" : "1", "--ensure-on-bed", "--slice", "0", "--outputdir", outputDir];
   const settingsPath = job.settingsPath || config.settingsPath;
   const filamentPath = job.filamentPath || config.filamentPath;
   if (settingsPath) args.push("--load-settings", settingsPath);
@@ -223,6 +224,12 @@ export async function runOrcaSlice(job, sourceInputs, config) {
     }
 
     let effectiveJob = job;
+    if (job.purpose === "free-print") {
+      if (job.material !== "PETG") throw new Error("免費列印固定使用 3DSTU_PETG，請重新建立切片工作");
+      const platePath = path.join(inputDir, "station-plate.3mf");
+      await writeFile(platePath, await createStationPlate(sources.map(source => source.bytes), job.placements, job.autoArrange !== false));
+      inputPaths.splice(0, inputPaths.length, platePath);
+    }
     let profileName = String(job.profileName || job.profileId || "");
     if (job.scope === "public-slicing-quote") {
       const profiles = resolveReferenceProfiles(job.material, config.resourcesRoot);

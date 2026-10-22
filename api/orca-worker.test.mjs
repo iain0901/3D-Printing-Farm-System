@@ -12,8 +12,9 @@ afterEach(() => vi.useRealTimers());
 
 describe("OrcaSlicer worker", () => {
   it("preserves manual station orientation and disables arcs for the layer viewer", () => {
-    const args = buildOrcaArgs({ autoOrient: false }, ["input.stl"], "/tmp/output", {});
+    const args = buildOrcaArgs({ autoOrient: false, autoArrange: false }, ["input.3mf"], "/tmp/output", {});
     expect(args[args.indexOf("--orient") + 1]).toBe("0");
+    expect(args[args.indexOf("--arrange") + 1]).toBe("0");
     expect(buildJobProcessConfig({ purpose: "free-print" }).enable_arc_fitting).toBe("0");
   });
   it("pins auto orientation, arrangement, ensure-on-bed and explicit private process settings", () => {
