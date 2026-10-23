@@ -9,8 +9,9 @@ function publicStatus(status = {}) {
 
 function normalizeStatus(value) {
   const state = String(value || "").toLowerCase();
-  if (state.includes("print")) return "printing";
   if (state.includes("pause")) return "paused";
+  if (state.includes("print")) return "printing";
+  if (["complete", "completed", "cancelled"].includes(state)) return "idle";
   if (state.includes("operational") || state.includes("ready") || state.includes("standby") || state.includes("idle")) return "idle";
   if (state.includes("error") || state.includes("shutdown")) return "error";
   if (state.includes("maintenance")) return "maintenance";
@@ -64,6 +65,8 @@ export async function fetchOctoPrintStatus({ baseUrl, apiKey, fetchImpl = fetch 
     targetNozzle: Math.round(Number(tool.target || 0)),
     targetBed: Math.round(Number(bed.target || 0)),
     job: job?.job?.file?.display || job?.job?.file?.name,
+    jobState: job?.state || (job?.progress?.completion >= 99 && normalizeStatus(stateText)==='idle' ? 'complete' : undefined),
+    position: printer.position,
     raw: { printer, job }
   };
 }
@@ -114,7 +117,7 @@ export async function fetchMoonrakerStatus({ baseUrl, apiKey, fetchImpl = fetch 
   const base = cleanBaseUrl(baseUrl);
   const [info, objects] = await Promise.all([
     fetchImpl(`${base}/printer/info`, { headers: moonrakerHeaders(apiKey) }).then(readJson),
-    fetchImpl(`${base}/printer/objects/query?print_stats&extruder&heater_bed`, { headers: moonrakerHeaders(apiKey) }).then(readJson).catch(() => ({}))
+    fetchImpl(`${base}/printer/objects/query?print_stats&extruder&heater_bed&virtual_sdcard&toolhead`, { headers: moonrakerHeaders(apiKey) }).then(readJson).catch(() => ({}))
   ]);
   const status = objects?.result?.status || {};
   const printStats = status.print_stats || {};
@@ -123,12 +126,15 @@ export async function fetchMoonrakerStatus({ baseUrl, apiKey, fetchImpl = fetch 
   const rawState = printStats.state || info?.result?.state || info?.state;
   return {
     status: normalizeStatus(rawState),
-    progress: rawState === "printing" ? 50 : 0,
+    progress: rawState === 'complete' ? 100 : Math.round((status.virtual_sdcard?.progress || 0)*100),
     nozzle: Math.round(Number(extruder.temperature || 0)),
     bed: Math.round(Number(bed.temperature || 0)),
     targetNozzle: Math.round(Number(extruder.target || 0)),
     targetBed: Math.round(Number(bed.target || 0)),
     job: printStats.filename,
+    jobState: rawState,
+    position: Array.isArray(status.toolhead?.position) ? Object.fromEntries(['x','y','z'].map((axis,i)=>[axis,status.toolhead.position[i]])) : undefined,
+    homedAxes: status.toolhead?.homed_axes,
     raw: { info, objects }
   };
 }

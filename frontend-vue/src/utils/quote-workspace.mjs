@@ -35,9 +35,9 @@ export const defaultQuoteSettings = () => ({
   notes: '',
 })
 
-export function validateQuoteDraft(layout, settings, slots, assignments) {
+export function validateQuoteDraft(layout, settings, slots, assignments, { forStorage = false } = {}) {
   const issues = []
-  if (!layout.models?.length || !layout.ready || layout.files.length !== layout.models.length)
+  if (!layout.models?.length || (!forStorage && !layout.ready) || layout.preparing || layout.files.length !== layout.models.length)
     issues.push('請先加入有效模型，完成方向與平台布局。')
   if (!quoteMaterials.some((m) => m.id === settings.material)) issues.push('請選擇支援的 FDM 材料。')
   if (!['single', 'multi'].includes(settings.colorMode)) issues.push('請選擇單色或多色。')
@@ -83,8 +83,8 @@ export function validateQuoteDraft(layout, settings, slots, assignments) {
   return [...new Set(issues)]
 }
 
-export function createQuoteDraft(layout, settings, slots, assignments) {
-  const issues = validateQuoteDraft(layout, settings, slots, assignments)
+export function createQuoteDraft(layout, settings, slots, assignments, options) {
+  const issues = validateQuoteDraft(layout, settings, slots, assignments, options)
   if (issues.length) throw new Error(issues.join('；'))
   const activeSlots = settings.colorMode === 'single' ? slots.slice(0, 1) : slots
   return {

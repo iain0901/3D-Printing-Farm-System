@@ -32,5 +32,16 @@ export function orcaAdvancedSettings(advanced = {}) {
   }
   if (parsed.brimWidth !== undefined)
     process.brim_type = parsed.brimWidth > 0 ? "outer_only" : "no_brim";
+  if (parsed.lineWidth !== undefined)
+    for (const key of [
+      "outer_wall_line_width",
+      "inner_wall_line_width",
+      "sparse_infill_line_width",
+      "internal_solid_infill_line_width",
+      "top_surface_line_width",
+      "initial_layer_line_width",
+      "support_line_width",
+    ])
+      process[key] = String(parsed.lineWidth);
   return { process, machine };
 }

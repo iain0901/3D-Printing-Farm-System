@@ -167,7 +167,7 @@ async function run() {
     );
     await page.goto(base + "/#/");
     await page.locator(".brand-home h1").waitFor(); // Let the SPA actually unmount the previous draft before opening a fresh workspace.
-    await page.goto(base + "/#/quote");
+    await page.goto(base + "/#/quote?new=1");
     await page.getByLabel("選擇 STL 模型").setInputFiles({
       name: "cloud-paint.stl",
       mimeType: "application/octet-stream",

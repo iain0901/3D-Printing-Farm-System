@@ -27,6 +27,7 @@ import { solveScheduleAssignments } from "./schedule-solver.mjs";
 import { seedData } from "./seed.mjs";
 import { registerCaseRoutes } from "./cases-module.mjs";
 import { registerMemberWorkspace, MEMBER_COLLECTIONS } from "./member-workspace.mjs";
+import { registerFreePrintStation, FREE_PRINT_COLLECTIONS, freePrintOwnsPrinter } from "./free-print-station.mjs";
 import { createAiEngine } from "./ai-engine.mjs";
 import { findRelevantAiKnowledge } from "./ai-knowledge.mjs";
 import { createChatwootClient } from "./chatwoot.mjs";
@@ -40,6 +41,7 @@ const execFileAsync = promisify(execFile);
 const COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "slicingQuotes", "cases", "caseStatusHistory", "chatwootCaseLinks", "afterSalesCases", "orders", "customers", "profiles", "addons", "aiKnowledge", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns", "coupons"];
 const RESTORABLE_EXTRA_KEYS = ["users", "workspaces", "workspaceSettings", "costCatalog", "costCatalogs", "profileDefaults", "profileMatchingPolicy", "billingSessions", "invoices", "dataMeta"];
 COLLECTIONS.push(...MEMBER_COLLECTIONS);
+COLLECTIONS.push(...FREE_PRINT_COLLECTIONS);
 const RESTORABLE_KEYS = [...COLLECTIONS, ...RESTORABLE_EXTRA_KEYS];
 const defaultCostCatalog = {
   currency: "USD",
@@ -107,6 +109,7 @@ const apiKeyGrantableScopeSet = new Set(API_KEY_GRANTABLE_SCOPES);
 const TENANT_COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions", "spools", "purchaseRequests", "maintenance", "maintenanceTemplates", "maintenanceReports", "parts", "skus", "productionTemplates", "quoteRequests", "cases", "caseStatusHistory", "chatwootCaseLinks", "afterSalesCases", "orders", "customers", "profiles", "addons", "aiKnowledge", "webhooks", "events", "webhookDeliveries", "mqttDeliveries", "bridges", "notificationChannels", "notificationDeliveries", "commerceConnectors", "commerceImports", "apiKeys", "slicerJobs", "materialMappings", "materialMapRuns", "billingSessions", "invoices", "coupons"];
 const printerStatusSchema = z.enum(["idle", "printing", "paused", "offline", "error", "maintenance"]);
 TENANT_COLLECTIONS.push(...MEMBER_COLLECTIONS);
+TENANT_COLLECTIONS.push(...FREE_PRINT_COLLECTIONS);
 const jobStatusSchema = z.enum(["queued", "printing", "paused", "complete", "failed", "cancelled"]);
 const prioritySchema = z.enum(["Rush", "High", "Normal", "Low"]);
 const taskStageSchema = z.enum(["needs slicing", "needs scheduling", "scheduled", "printing", "post processing", "done", "blocked"]);
@@ -4698,6 +4701,9 @@ function createEmailClient(env = process.env) {
     host: config.host,
     port: config.port,
     secure: config.secure,
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 20000,
     auth: config.user ? { user: config.user, pass: config.pass } : undefined
   });
   return {
@@ -5983,6 +5989,7 @@ function consumeJobMaterialReservation(data, job) {
 export function getScheduleWarnings(data, job, printer, scheduledStart = job.scheduledStart) {
   const warnings = [];
   if (!printer) return ["Printer missing"];
+  if (freePrintOwnsPrinter(data,printer.id)) warnings.push('Reserved for free print');
   if (printer.status === "offline") warnings.push("Printer offline");
   if (printer.status === "error") warnings.push("Printer error");
   if (printer.status === "maintenance") warnings.push("In maintenance");
@@ -6091,7 +6098,7 @@ export function optimizeScheduleQueue(data, options = {}) {
   const scheduled = [];
   const skipped = [];
   for (const job of candidates) {
-    const ranked = data.printers
+    const ranked = data.printers.filter(printer=>!freePrintOwnsPrinter(data,printer.id))
       .map((printer) => {
         const base = scorePrinterForJob(data, job, printer, laneAvailability, normalized);
         return { ...base, score: optimizeScoreForStrategy(normalized.strategy, base.score, job, printer, laneAvailability, normalized) };
@@ -6137,6 +6144,7 @@ export function optimizeScheduleQueue(data, options = {}) {
 }
 
 function isSolverHardBlocked(options, warnings) {
+  if(warnings.includes('Reserved for free print')) return true;
   if (warnings.includes("Printer offline") || warnings.includes("Printer error") || warnings.includes("In maintenance")) return true;
   if (!options.includeBusyPrinters && warnings.includes("Printer busy")) return true;
   if (options.respectMaterial && warnings.includes("Material conflict")) return true;
@@ -6154,7 +6162,7 @@ export function constraintScheduleQueue(data, options = {}) {
   const laneAvailability = seedLaneAvailability(data, normalized.startMinute, new Set(candidates.map((job) => job.id)));
   const solved = solveScheduleAssignments({
     jobs: candidates,
-    printers: data.printers,
+    printers: data.printers.filter(printer=>!freePrintOwnsPrinter(data,printer.id)),
     options: normalized,
     durationOf: (job) => parseDurationMinutes(job.time),
     dueRankOf: parseDueRank,
@@ -6227,7 +6235,7 @@ export function matchQueueNow(data, options = {}) {
   const normalized = queueMatchSchema.parse(options);
   const activeJobs = data.queue.filter((job) => job.status === "printing" || job.status === "paused");
   const openSlots = Math.max(0, normalized.maxActiveSlots - activeJobs.length);
-  const availablePrinters = data.printers.filter((printer) => !["offline", "error", "maintenance", "printing", "paused"].includes(printer.status));
+  const availablePrinters = data.printers.filter((printer) => !["offline", "error", "maintenance", "printing", "paused"].includes(printer.status) && !freePrintOwnsPrinter(data,printer.id));
   const usedPrinters = new Set();
   const matches = [];
   const skipped = [];
@@ -6317,7 +6325,7 @@ export function autoScheduleQueue(data, options = {}) {
   const scheduled = [];
   const skipped = [];
   for (const job of candidates) {
-    const ranked = data.printers
+    const ranked = data.printers.filter(printer=>!freePrintOwnsPrinter(data,printer.id))
       .map((printer) => scorePrinterForJob(data, job, printer, laneAvailability, normalized))
       .sort((a, b) => a.score - b.score);
     const selected = ranked[0];
@@ -6798,6 +6806,8 @@ export async function runTelemetryTick(database, options = {}) {
   const completedJobs = [];
   const now = new Date().toISOString();
   for (const printer of database.data.printers.filter((item) => !scopeWorkspaceId || itemInWorkspace(item, scopeWorkspaceId))) {
+    if (freePrintOwnsPrinter(database.data,printer.id)) continue;
+    if ((database.data.bridges || []).some(b=>b.printerId===printer.id && b.enabled && b.kind!=='manual')) continue;
     if (printer.status !== "printing") continue;
     const workspaceId = printer.workspaceId || DEFAULT_WORKSPACE_ID;
     const previous = Number(printer.progress || 0);
@@ -6910,6 +6920,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   app.addHook("preHandler", async (request, reply) => {
     const routePath = request.url.split("?")[0];
     // The endpoint still validates customer ownership; this is not an anonymous bypass.
+    if (routePath === '/api/internal/worker-cycle' && hasValidWorkerToken(request)) return;
     if (request.method === "GET" && /^\/api\/quote-messages\/[^/]+\/[^/]+\/attachments\/\d+$/.test(routePath) && customerFromRequest(database, request).customer) return;
     const publicRoute = routePath === "/api/health" || routePath === "/api/readiness" || routePath === "/api/metrics" && hasValidMetricsToken(request) || routePath === "/api/internal/worker-broadcast" && hasValidWorkerToken(request) || routePath.startsWith("/api/internal/orca/") || routePath === "/api/integrations/chatwoot/webhook" || routePath === "/api/integrations/chatwoot/context" || routePath === "/api/billing/webhook/stripe" || routePath === "/api/public/quoteRequests" || routePath.startsWith("/api/public/quoteRequests/") || routePath === "/api/public/slicing-quotes" || routePath.startsWith("/api/public/slicing-quotes/") || routePath === "/api/public/cases" || routePath.startsWith("/api/public/cases/") || routePath === "/api/public/pricing-estimate" || routePath === "/api/public/model-preview" || routePath.startsWith("/api/auth/") || routePath.startsWith("/api/customer-auth/") || routePath.startsWith("/api/customer/") || routePath === "/api/events/stream" || routePath === "/api/events/ws" || serveStatic && !routePath.startsWith("/api/");
     if (publicRoute) return;
@@ -6986,6 +6997,9 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     customerFromRequest,
     costCatalogForWorkspace: (data) => costCatalogForWorkspace(data || database.data)
   });
+  const freePrintStation = await registerFreePrintStation(app, {
+    database, customerFromRequest, readFile:(file)=>objectStorage().get(file), emailClient,
+  });
   await registerMemberWorkspace(app, {
     database, customerFromRequest, createPasswordHash, verifyPassword, sanitizeCustomer,
     storeFile: (payload) => createStoredCaseFile(database, payload, { workspaceId: payload.workspaceId }),
@@ -7011,12 +7025,27 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   });
   app.post("/api/internal/worker-broadcast", async (request, reply) => {
     if (!hasValidWorkerToken(request)) return reply.code(403).send({ error: "Invalid worker token" });
-    await database.read();
+    await freePrintStation.tick();
     database.realtimeClients ||= new Set();
     const reason = typeof request.body === "object" && request.body?.reason ? String(request.body.reason) : "worker.cycle";
     const payload = { reason, state: realtimeState(database.data), worker: database.data.dataMeta?.worker || null };
     broadcastRealtime(database, "state", payload);
     return { ok: true, clients: database.realtimeClients.size, worker: payload.worker };
+  });
+  app.post('/api/internal/worker-cycle',async(request,reply)=>{
+    if(!hasValidWorkerToken(request)) return reply.code(403).send({error:'Invalid worker token'});
+    const config=z.object({id:z.string().max(100),telemetryEnabled:z.boolean(),bridgePollingEnabled:z.boolean(),telemetryIncrement:z.number().min(0).max(100)}).strict().parse(request.body);
+    const result=await freePrintStation.runExclusive(async()=>{
+      const telemetry=config.telemetryEnabled?await runTelemetryTick(database,{increment:config.telemetryIncrement}):{skipped:true};
+      const bridgePolling=config.bridgePollingEnabled?await runBridgePollingTick(database):{skipped:true};
+      database.data.dataMeta ||= {};
+      database.data.dataMeta.worker={id:config.id,lastRunAt:new Date().toISOString(),telemetryEnabled:config.telemetryEnabled,bridgePollingEnabled:config.bridgePollingEnabled,lastTelemetryChanged:!!telemetry.changed,lastBridgeChanged:!!bridgePolling.changed};
+      await database.write();
+      return {id:config.id,telemetry,bridgePolling,apiNotify:{skipped:false,ok:true,status:200}};
+    });
+    await freePrintStation.tick();
+    broadcastRealtime(database,'state',{reason:'worker.cycle',state:realtimeState(database.data),worker:database.data.dataMeta.worker});
+    return result;
   });
   app.get("/api/metrics", async (request, reply) => {
     if (!hasValidMetricsToken(request) && !hasPermission(request.user, "metrics:read")) return reply.code(403).send({ error: "Missing permission: metrics:read" });
@@ -10152,6 +10181,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const printer = database.data.printers.find((item) => item.id === parsed.data.printerId && itemInWorkspace(item, request.user.workspaceId));
     if (!printer) return reply.code(404).send({ error: "Printer not found" });
     const scoped = workspaceScopeForUser(database.data, request.user);
+    if (freePrintOwnsPrinter(database.data,printer.id)) return reply.code(409).send({error:'此機台目前保留給免費列印站點，無法安排一般生產工作。'});
     job.printerId = printer.id;
     job.printer = printer.name;
     job.scheduledStart = parsed.data.scheduledStart;
@@ -10277,6 +10307,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     if (!parsedAction.success) return reply.code(400).send({ error: "Invalid printer action payload", issues: parsedAction.error.issues });
     const printer = database.data.printers.find((item) => item.id === parsedAction.data.printerId && itemInWorkspace(item, request.user.workspaceId));
     if (!printer) return reply.code(404).send({ error: "Printer not found" });
+    if (freePrintOwnsPrinter(database.data,printer.id) && !(parsedAction.data.action==='cancel' && ['Owner','Admin'].includes(request.user.role))) return reply.code(409).send({error:'此機台由免費列印站點管理，請使用站點控制頁；管理員可停止異常列印。'});
     const bridge = database.data.bridges.find((item) => item.printerId === parsedAction.data.printerId && item.enabled && itemInWorkspace(item, request.user.workspaceId));
     if (bridge) {
       try {

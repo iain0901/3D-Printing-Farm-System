@@ -121,7 +121,10 @@ describe("desktop-style cloud slicer", () => {
     });
     expect(
       Object.keys(result.process).length + Object.keys(result.machine).length
-    ).toBe(Object.keys(options).length + 1);
+    ).toBe(Object.keys(options).length + 8);
+    expect(result.process.outer_wall_line_width).toBe("0.42");
+    expect(result.process.inner_wall_line_width).toBe("0.42");
+    expect(result.process.sparse_infill_line_width).toBe("0.42");
     expect(
       advancedSlicerSchema.safeParse({ somePretendSetting: true }).success
     ).toBe(false);

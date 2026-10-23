@@ -5,6 +5,7 @@
     <p v-if="error" role="alert">{{ error }}</p>
     <p v-if="notice" role="status">{{ notice }}</p>
     <button :disabled="busy" @click="load">重新整理</button>
+    <free-print-station-admin />
     <section>
       <h2>服務申請</h2>
       <label>
@@ -124,6 +125,7 @@
   </div>
 </template>
 <script setup>
+  import FreePrintStationAdmin from '@/components/FreePrintStationAdmin.vue'
   import { computed, onMounted, reactive, ref } from 'vue'
   import request from '@/utils/request'
   import { portalStatus } from '@/utils/portal-presentation.mjs'

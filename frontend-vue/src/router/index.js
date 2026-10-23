@@ -12,6 +12,13 @@ import { audiences, services } from '@/content/fdmServices.mjs'
 import { publicPages } from '@/content/publicPages.mjs'
 import { freePrintStations } from '@/content/freePrintStations.mjs'
 export const constantRoutes = [
+  {
+    path: '/portal/free-print',
+    name: 'FreePrintSession',
+    component: () => import('@/views/portal/FreePrint.vue'),
+    meta: { title: '免費列印・我的使用時段', publicService: true },
+    hidden: true,
+  },
   ...freePrintStations.map((station) => ({
     path: `${station.path}/slicer`,
     name: `StationSlicer-${station.id}`,
@@ -108,7 +115,12 @@ export const constantRoutes = [
     component: () => import('@/views/portal/Case'),
     hidden: true,
   },
-  {path:'/cloud-slicer',component:()=>import('@/components/SlicerLab.vue'),meta:{publicService:true,title:'雲端切片工作區'},hidden:true},
+  {
+    path: '/cloud-slicer',
+    component: () => import('@/components/SlicerLab.vue'),
+    meta: { publicService: true, title: '雲端切片工作區' },
+    hidden: true,
+  },
   {
     path: '/login',
     component: () => import('@/views/login/index'),

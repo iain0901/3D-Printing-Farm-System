@@ -1,11 +1,56 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { openDatabase } from "./server.mjs";
 import { parseWorkerConfig, runWorkerCycle } from "./worker.mjs";
 
 describe("3DSTU FarmFlow background worker", () => {
+  it("delegates production writes to the API so station leases cannot be overwritten by a stale worker snapshot", async () => {
+    const original = globalThis.fetch;
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        id: "remote-worker",
+        apiNotify: { ok: true },
+        telemetry: { skipped: true },
+        bridgePolling: { skipped: true },
+      }),
+    }));
+    globalThis.fetch = fetchMock;
+    const db = {
+      data: { freePrintReservations: [{ id: "stale" }] },
+      read: vi.fn(),
+      write: vi.fn(),
+    };
+    try {
+      const result = await runWorkerCycle(db, {
+        id: "remote-worker",
+        apiInternalUrl: "http://api.test",
+        workerToken: "worker-test-secret",
+        telemetryEnabled: false,
+        bridgePollingEnabled: false,
+      });
+      expect(result.apiNotify.ok).toBe(true);
+      expect(fetchMock.mock.calls[0][0]).toBe(
+        "http://api.test/api/internal/worker-cycle"
+      );
+      expect(db.read).not.toHaveBeenCalled();
+      expect(db.write).not.toHaveBeenCalled();
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+  it("refuses direct standalone writes when a live free-print station owns the machine", async () => {
+    const db = {
+      data: { freePrintStations: [{ enabled: true }] },
+      write: vi.fn(),
+    };
+    await expect(
+      runWorkerCycle(db, { reloadBeforeCycle: false })
+    ).rejects.toThrow("must not write shared station state");
+    expect(db.write).not.toHaveBeenCalled();
+  });
   it("parses production worker environment settings", () => {
     const config = parseWorkerConfig({
       LAYERPILOT_WORKER_ID: "qc-worker",
@@ -16,7 +61,7 @@ describe("3DSTU FarmFlow background worker", () => {
       LAYERPILOT_WORKER_TELEMETRY_INCREMENT: "7",
       LAYERPILOT_API_INTERNAL_URL: "http://layerpilot:8797/",
       LAYERPILOT_WORKER_TOKEN: "worker-secret",
-      LAYERPILOT_WORKER_RUN_ONCE: "true"
+      LAYERPILOT_WORKER_RUN_ONCE: "true",
     });
     expect(config).toMatchObject({
       id: "qc-worker",
@@ -27,7 +72,7 @@ describe("3DSTU FarmFlow background worker", () => {
       telemetryIncrement: 7,
       apiInternalUrl: "http://layerpilot:8797",
       workerToken: "worker-secret",
-      runOnce: true
+      runOnce: true,
     });
   });
 
@@ -67,7 +112,7 @@ describe("3DSTU FarmFlow background worker", () => {
         assignee: "Worker",
         time: "0h 10m",
         cost: 3,
-        added: "Worker test"
+        added: "Worker test",
       });
       await db.write();
 
@@ -77,9 +122,12 @@ describe("3DSTU FarmFlow background worker", () => {
         bridgePollingEnabled: false,
         telemetryIncrement: 10,
         telemetryIntervalMs: 5000,
-        bridgePollingIntervalMs: 10000
+        bridgePollingIntervalMs: 10000,
       });
-      expect(result.telemetry).toMatchObject({ changed: true, completedJobs: [expect.objectContaining({ id: "worker-qc-job" })] });
+      expect(result.telemetry).toMatchObject({
+        changed: true,
+        completedJobs: [expect.objectContaining({ id: "worker-qc-job" })],
+      });
       expect(result.bridgePolling).toMatchObject({ skipped: true });
       expect(db.data.dataMeta.worker).toMatchObject({
         id: "qc-worker",
@@ -87,12 +135,16 @@ describe("3DSTU FarmFlow background worker", () => {
         bridgePollingEnabled: false,
         telemetryIntervalMs: 5000,
         bridgePollingIntervalMs: 10000,
-        lastTelemetryChanged: true
+        lastTelemetryChanged: true,
       });
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
-      expect(persisted.queue.find((job) => job.id === "worker-qc-job")).toMatchObject({ status: "complete", stage: "post processing" });
+      expect(
+        persisted.queue.find((job) => job.id === "worker-qc-job")
+      ).toMatchObject({ status: "complete", stage: "post processing" });
       expect(persisted.dataMeta.worker.id).toBe("qc-worker");
-      expect(persisted.events.some((event) => event.type === "print.completed")).toBe(true);
+      expect(
+        persisted.events.some((event) => event.type === "print.completed")
+      ).toBe(true);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -115,14 +167,20 @@ describe("3DSTU FarmFlow background worker", () => {
         budget: 0,
         source: "Website",
         status: "new",
-        priority: "Normal"
+        priority: "Normal",
       });
       await apiDb.write();
 
-      await runWorkerCycle(workerDb, { id: "race-worker", telemetryEnabled: true, bridgePollingEnabled: false });
+      await runWorkerCycle(workerDb, {
+        id: "race-worker",
+        telemetryEnabled: true,
+        bridgePollingEnabled: false,
+      });
 
       const persisted = JSON.parse(await readFile(dbPath, "utf8"));
-      expect(persisted.quoteRequests.some((quote) => quote.id === "qr-concurrent")).toBe(true);
+      expect(
+        persisted.quoteRequests.some((quote) => quote.id === "qr-concurrent")
+      ).toBe(true);
       expect(persisted.dataMeta.worker.id).toBe("race-worker");
     } finally {
       await rm(dir, { recursive: true, force: true });

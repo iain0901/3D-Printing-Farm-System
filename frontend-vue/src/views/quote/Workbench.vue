@@ -9,6 +9,13 @@
         </div>
         <button class="text-button" type="button" @click="askSpecialist">需要建模或轉檔？專員協助 ↗</button>
       </header>
+      <div class="workbench-file-actions">
+        <input ref="archiveInput" class="sr-only" type="file" accept=".zip" aria-label="開啟完整代印專案" @change="openArchive" />
+        <button type="button" @click="archiveInput.click()">開啟完整專案</button>
+        <button type="button" :disabled="!!storageIssues.length" @click="downloadArchive">下載完整專案 ZIP</button>
+        <button type="button" :disabled="!layout.models.length" @click="clearLocal">清除此裝置的工作</button>
+        <span>此瀏覽器會保留工作。共用裝置使用完畢請清除。</span>
+      </div>
       <p v-if="service" class="service-note">已帶入「{{ service.title }}」的用途說明，可在製作備註調整。</p>
       <aside class="backend-notice" role="note">
         <b>先準備模型與設定，新機型切片估價即將接上。</b>
@@ -351,7 +358,7 @@
                 <option v-for="project in cloudProjects" :key="project.id" :value="project.id">{{ project.name }}</option>
               </select>
             </label>
-            <button type="button" :disabled="cloudBusy || !!issues.length" @click="saveCloud(false)">
+            <button type="button" :disabled="cloudBusy || !!storageIssues.length" @click="saveCloud(false)">
               {{ cloudBusy ? '保存中…' : submittedCaseId ? '另存新草稿' : '保存雲端草稿' }}
             </button>
             <label class="check-field">
@@ -410,7 +417,7 @@
             </p>
             <button type="button" :disabled="!!issues.length" @click="downloadDraft">下載設定草稿（JSON）</button>
             <p class="workbench-note">
-              可免登入下載；只包含模型設定與製作備註，不包含模型檔、會員資料或密碼。重新開啟需保留原始 STL；此草稿不會出現在會員案件清單。
+              JSON 僅供查看設定，不含模型。需要繼續編輯、還原配色時，請使用上方「下載完整專案 ZIP」。本機會自動保存此頁工作。
             </p>
           </div>
         </template>
@@ -431,7 +438,9 @@
 
 <script setup>
   import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-  import { useRoute } from 'vue-router'
+  import { useRoute, useRouter } from 'vue-router'
+  import { onBeforeRouteLeave } from 'vue-router'
+  import { captureWorkspace, localWorkspace, exportWorkspace, importWorkspace, checkpointWorkspace } from '@/utils/workspace-recovery.js'
   import { useStore } from 'vuex'
   import { workspace, uploadWorkspace, modelFile } from '@/api/memberWorkspace'
   import { fetchAddresses } from '@/api/customerPortal'
@@ -473,7 +482,8 @@
   let autosaveTimer,
     cloudGeneration = 0,
     restoringCloud = false
-  const route = useRoute(),
+  const router = useRouter(),
+    route = useRoute(),
     service = computed(() => getService(route.query.service))
   const settings = reactive({
     ...defaultQuoteSettings(),
@@ -510,6 +520,97 @@
   const hasHeightBands = computed(() => settings.colorMode === 'multi' && layout.value.models.some((m) => assignments[m.id]?.bands.length))
   const totalQuantity = computed(() => layout.value.models.reduce((sum, m) => sum + (Number(assignments[m.id]?.quantity) || 0), 0))
   const issues = computed(() => validateQuoteDraft(layout.value, settings, slots, assignments))
+  const storageIssues = computed(() => validateQuoteDraft(layout.value, settings, slots, assignments, { forStorage: true }))
+  const archiveInput = ref(null)
+  let recoveryTimer,
+    recoveryReady = false,
+    recoveryFailed = false
+  const snapshot = () =>
+    captureWorkspace(layout.value, settings, {
+      slots: [...slots],
+      assignments: { ...assignments },
+      cloudId: cloudId.value,
+      cloudRevision: cloudRevision.value,
+      cloudName: cloudName.value,
+    })
+  async function restoreLocal(saved) {
+    if (!saved?.models?.length) return
+    Object.assign(settings, saved.settings, { autoOrient: false, autoArrange: false })
+    if (saved.slots) slots.splice(0, slots.length, ...saved.slots)
+    else slots.splice(0, slots.length, { id: 'slot-1', ...quotePalette[0] })
+    for (const key of Object.keys(assignments)) delete assignments[key]
+    Object.assign(assignments, saved.assignments || {})
+    cloudId.value = saved.cloudId || ''
+    cloudRevision.value = saved.cloudRevision || 0
+    cloudName.value = saved.cloudName || '我的列印草稿'
+    slotSequence = Math.max(1, ...slots.map((s) => Number(s.id.replace('slot-', '')) || 0))
+    paintSlot.value = slots[0].id
+    stationLayout.value.restoreModels(saved.models)
+    cloudMessage.value = '已還原模型、擺放與配色，請確認後繼續。'
+  }
+  async function persistRecovery() {
+    clearTimeout(recoveryTimer)
+    recoveryTimer = null
+    if (!recoveryReady || (layout.value.models.length && !layout.value.sources?.length)) return
+    try {
+      await localWorkspace('quote:recovery', layout.value.models.length ? snapshot() : null)
+      recoveryFailed = false
+    } catch {
+      recoveryFailed = true
+    }
+  }
+  watch(
+    [settings, slots, assignments, layout],
+    () => {
+      clearTimeout(recoveryTimer)
+      if (recoveryReady) {
+        checkpointWorkspace('quote:recovery', layout.value.models.length ? snapshot() : null)
+        recoveryTimer = setTimeout(persistRecovery, 400)
+      }
+    },
+    { deep: true }
+  )
+  async function downloadArchive() {
+    try {
+      const blob = await exportWorkspace({ ...snapshot(), cloudId: '', cloudRevision: 0 })
+      if (downloadUrl) URL.revokeObjectURL(downloadUrl)
+      downloadUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = downloadUrl
+      a.download = '3DRFM-完整代印專案.zip'
+      a.click()
+    } catch (err) {
+      error.value = err.message
+    }
+  }
+  async function openArchive(event) {
+    try {
+      await restoreLocal(await importWorkspace(event.target.files[0]))
+      await persistRecovery()
+    } catch (err) {
+      error.value = err.message
+    }
+    event.target.value = ''
+  }
+  async function clearLocal() {
+    if (!window.confirm('清除此裝置的模型與設定？雲端草稿與已送出的案件不會刪除。')) return
+    await localWorkspace('quote:recovery', null)
+    stationLayout.value.restoreModels([])
+    cloudId.value = ''
+    cloudRevision.value = 0
+    submittedCaseId.value = ''
+    cloudMessage.value = '本機工作已清除。'
+  }
+  function beforeUnload(event) {
+    if (layout.value.models.length && (recoveryTimer || recoveryFailed)) {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+  }
+  onBeforeRouteLeave(async () => {
+    await persistRecovery()
+    return !recoveryFailed || window.confirm('本機保存失敗，離開前請下載完整專案。仍要離開嗎？')
+  })
   const appearance = computed(() => modelAppearance(layout.value.models, settings, slots, assignments))
   async function memberResources() {
     if (!memberToken.value) return
@@ -535,7 +636,26 @@
     { immediate: true }
   )
   onMounted(async () => {
-    if (!route.query.draft && !route.query.model) return
+    window.addEventListener('beforeunload', beforeUnload)
+    if (route.query.new === '1') {
+      await localWorkspace('quote:recovery', null)
+      recoveryReady = true
+      await router.replace({ path: route.path, query: { ...route.query, new: undefined } })
+      return
+    }
+    if (!route.query.draft && !route.query.model) {
+      try {
+        const handoff = route.query.handoff && (await localWorkspace('quote:handoff'))
+        await restoreLocal(handoff || (await localWorkspace('quote:recovery')))
+        recoveryReady = true
+        await persistRecovery()
+        if (route.query.handoff && !recoveryFailed) await localWorkspace('quote:handoff', null)
+      } catch (err) {
+        error.value = err.message
+      }
+      recoveryReady = true
+      return
+    }
     try {
       if (!memberToken.value) throw new Error('請先登入會員，再從模型庫或草稿重新開啟工作台。')
       restoringCloud = true
@@ -581,6 +701,7 @@
       error.value = err.response?.data?.error || err.message
     } finally {
       restoringCloud = false
+      recoveryReady = true
     }
   })
   watch(
@@ -588,17 +709,17 @@
     () => {
       cloudGeneration++
       clearTimeout(autosaveTimer)
-      if (autosaveEnabled.value && cloudId.value && !restoringCloud && !submittedCaseId.value && !issues.value.length)
+      if (autosaveEnabled.value && cloudId.value && !restoringCloud && !submittedCaseId.value && !storageIssues.value.length)
         autosaveTimer = setTimeout(() => saveCloud(true), 2500)
     },
     { deep: true }
   )
   async function saveCloud(automatic = false) {
-    if (cloudBusy.value || issues.value.length || !memberToken.value) return null
+    if (cloudBusy.value || storageIssues.value.length || !memberToken.value) return null
     cloudBusy.value = true
     const generation = cloudGeneration
     try {
-      const manifest = createQuoteDraft(layout.value, settings, slots, assignments)
+      const manifest = createQuoteDraft(layout.value, settings, slots, assignments, { forStorage: true })
       const update = !!cloudId.value && !submittedCaseId.value
       const result = await uploadWorkspace(
         update ? `/drafts/${cloudId.value}` : '/drafts',
@@ -621,7 +742,7 @@
       return null
     } finally {
       cloudBusy.value = false
-      if (autosaveEnabled.value && generation !== cloudGeneration && !issues.value.length) {
+      if (autosaveEnabled.value && generation !== cloudGeneration && !storageIssues.value.length) {
         clearTimeout(autosaveTimer)
         autosaveTimer = setTimeout(() => saveCloud(true), 2500)
       }
@@ -754,8 +875,8 @@
     element?.scrollIntoView({ block: 'start' })
   }
   async function review() {
-    if (issues.value.length) {
-      error.value = issues.value[0]
+    if (storageIssues.value.length) {
+      error.value = storageIssues.value[0]
       await focusSection('quote-review')
       return
     }
@@ -782,12 +903,26 @@
     emit('assistance')
   }
   onBeforeUnmount(() => {
+    window.removeEventListener('beforeunload', beforeUnload)
+    clearTimeout(recoveryTimer)
+    persistRecovery()
     clearTimeout(autosaveTimer)
     if (downloadUrl) URL.revokeObjectURL(downloadUrl)
   })
 </script>
 
 <style scoped>
+  .workbench-file-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 0 0 24px;
+  }
+  .workbench-file-actions span {
+    font-size: 12px;
+    color: var(--rfm-muted);
+  }
   .color-illustrated-tip {
     display: flex;
     align-items: center;

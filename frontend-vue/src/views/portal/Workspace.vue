@@ -8,7 +8,7 @@
       </div>
       <div class="card-actions">
         <button :disabled="busy || loading" @click="load">重新整理</button>
-        <router-link class="solid" to="/quote">新增列印需求 ↗</router-link>
+        <router-link class="solid" to="/quote?new=1">新增列印需求 ↗</router-link>
       </div>
     </header>
     <nav class="hub-nav" aria-label="會員服務">
@@ -548,6 +548,11 @@
         </section>
       </template>
       <template v-if="section === 'free-print'">
+        <section class="hub-panel">
+          <h2>自助列印排隊與操作</h2>
+          <p>完成切片後加入排隊。輪到你時會寄 Email，依步驟準備機台並開始列印。</p>
+          <router-link class="solid" to="/portal/free-print">查看排隊與引導操作 ↗</router-link>
+        </section>
         <section class="hub-panel station-panel">
           <p class="eyebrow">免費列印站點 01</p>
           <h2>清華大學水木書苑</h2>
@@ -562,7 +567,11 @@
               選擇模型草稿
               <select v-model="freePrint.draftId" required>
                 <option value="">請選擇</option>
-                <option v-for="draft in data.drafts.filter((d) => d.material === 'PETG')" :key="draft.id" :value="draft.id">
+                <option
+                  v-for="draft in data.drafts.filter((d) => d.material === 'PETG' && d.colorMode === 'single')"
+                  :key="draft.id"
+                  :value="draft.id"
+                >
                   {{ draft.name }}
                 </option>
               </select>

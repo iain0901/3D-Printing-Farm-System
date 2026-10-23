@@ -32,6 +32,39 @@ const owner = (customer) => ({
   customerId: customer.id,
   workspaceId: customer.workspaceId || "ws-default",
 });
+export function draftLayoutIssues(manifest) {
+  const models = manifest.models;
+  const boxes = models.map((m) => ({
+    x1: m.placement.x - m.dimensions[0] / 2,
+    x2: m.placement.x + m.dimensions[0] / 2,
+    y1: m.placement.y - m.dimensions[1] / 2,
+    y2: m.placement.y + m.dimensions[1] / 2,
+  }));
+  if (
+    boxes.some(
+      (b, i) =>
+        b.x1 < 4.99 ||
+        b.y1 < 4.99 ||
+        b.x2 > 255.01 ||
+        b.y2 > 255.01 ||
+        models[i].dimensions[2] > 260
+    )
+  )
+    return ["草稿已保存；送出前請將模型移回平台範圍。"];
+  for (let i = 0; i < boxes.length; i++)
+    for (let j = i + 1; j < boxes.length; j++) {
+      const a = boxes[i],
+        b = boxes[j];
+      if (
+        a.x1 < b.x2 + 1.99 &&
+        a.x2 + 1.99 > b.x1 &&
+        a.y1 < b.y2 + 1.99 &&
+        a.y2 + 1.99 > b.y1
+      )
+        return ["送出前請移開重疊模型，至少保留 2 mm 間距。"];
+    }
+  return [];
+}
 function fail(statusCode, message) {
   throw Object.assign(new Error(message), { statusCode });
 }
@@ -143,7 +176,7 @@ const draftSchema = z.object({
           name: text(180).min(1),
           fileIndex: z.number().int().min(0).max(4),
           dimensions: z
-            .array(z.number().finite().positive().max(260))
+            .array(z.number().finite().positive().max(1000))
             .length(3),
           sourceTransform: transform,
           hidden: z.boolean().optional(),
@@ -433,6 +466,7 @@ export async function registerMemberWorkspace(
           ...draft,
           modelCount: manifest.models.length,
           material: manifest.settings.material,
+          colorMode: manifest.settings.colorMode,
         })
       ),
       projects: data.memberProjects
@@ -581,14 +615,7 @@ export async function registerMemberWorkspace(
       inspectMemberStl(sources[i].buffer);
       if (model.fileIndex !== i || !slots.has(model.baseSlotId))
         fail(400, "模型或基底色設定不一致");
-      if (
-        model.placement.x < info.dimensions[0] / 2 + 5 ||
-        model.placement.x > 255 - info.dimensions[0] / 2 ||
-        model.placement.y < info.dimensions[1] / 2 + 5 ||
-        model.placement.y > 255 - info.dimensions[1] / 2 ||
-        info.dimensions[2] > 260
-      )
-        fail(400, "模型超出參考平台範圍");
+      // A draft may be unfinished. Validate placement when submitting, not saving.
       const sorted = [...model.heightBands].sort((a, b) => a.from - b.from);
       if (
         sorted.some(
@@ -727,6 +754,8 @@ export async function registerMemberWorkspace(
       modelRecords = draft.modelIds.map((id) =>
         find(data, "memberModels", customer, id)
       );
+    if (draftLayoutIssues(manifest).length)
+      fail(400, draftLayoutIssues(manifest)[0]);
     const intake = caseIntakeSchema.parse({
       mode: "agent",
       source: "website",
@@ -1294,6 +1323,8 @@ export async function registerMemberWorkspace(
       })
       .parse(request.body);
     const draft = find(data, "memberDrafts", customer, input.draftId);
+    if (draftLayoutIssues(draft.manifest).length)
+      fail(400, draftLayoutIssues(draft.manifest)[0]);
     if (
       draft.manifest.settings.material !== "PETG" ||
       draft.manifest.settings.colorMode !== "single"
@@ -1719,7 +1750,11 @@ export async function registerMemberWorkspace(
         ];
         for (const channel of channels) {
           // Legacy quote-ready/message notifications already have their own transactional delivery.
-          if (notification.sourceKey?.startsWith("quote:")) continue;
+          if (
+            notification.sourceKey?.startsWith("quote:") ||
+            notification.sourceKey?.startsWith("free-print:")
+          )
+            continue;
           if (!channel.enabled || notification.delivery[channel.id]) continue;
           // Claim before asynchronous delivery: concurrent requests must not send the same notification twice.
           notification.delivery[channel.id] = {

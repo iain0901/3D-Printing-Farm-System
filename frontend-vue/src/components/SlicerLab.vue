@@ -15,9 +15,13 @@
         <button type="button" :disabled="busy || !layout.models.length" @click="saveProject">保存專案</button>
         <button v-if="!embedded" type="button" :disabled="busy || !layout.ready" @click="cloudOpen = true">雲端保存</button>
         <router-link to="/portal/workspace?section=drafts">我的草稿 ↗</router-link>
+        <button type="button" :disabled="busy || !layout.models.length" @click="clearLocal">清除此裝置的工作</button>
       </div>
     </header>
     <nav class="lab-workflow" aria-label="切片工作流程">
+      <button v-if="mode === 'preview'" type="button" :disabled="busy || !layout.models.length" @click="mode = 'prepare'">
+        ← 返回編輯模型與參數
+      </button>
       <button type="button" :aria-current="mode === 'prepare' ? 'step' : undefined" @click="mode = 'prepare'">01　準備模型</button>
       <button type="button" :disabled="!preview" :aria-current="mode === 'preview' ? 'step' : undefined" @click="mode = 'preview'">
         02　切片預覽
@@ -133,12 +137,18 @@
           <button v-if="busy" type="button" :disabled="cancelling || uploading || previewLoading" @click="cancel">
             {{ previewLoading ? '正在載入路徑…' : cancelling ? '取消中…' : '取消切片工作' }}
           </button>
-          <button v-else type="button" class="slice-button" :disabled="!layout.ready" @click="submit">
+          <button v-else type="button" class="slice-button" :disabled="!layout.ready || !!parameterError" @click="submit">
             {{ job?.status === 'failed' ? '重新切片' : '開始切片' }} ↗
           </button>
-          <p>{{ isFree ? '完成切片不等於取得免費名額；請另送會員申請。' : '切片預覽不會建立付費案件、訂單或控制機器。' }}</p>
-          <router-link v-if="isFree" to="/portal/workspace?section=free-print">免費列印申請與取件進度 ↗</router-link>
-          <router-link v-else to="/quote">送出代印需求 ↗</router-link>
+          <button v-if="isFree && job?.status === 'completed'" type="button" :disabled="busy" @click="queueOpen = true">
+            加入免費列印排隊
+          </button>
+          <p>
+            {{ isFree ? '加入排隊後，輪到你時寄 Email 通知。到場依引導準備並開始列印。' : '切片預覽不會建立付費案件、訂單或控制機器。' }}
+          </p>
+          <router-link v-if="isFree" to="/portal/free-print">我的排隊與列印操作 ↗</router-link>
+          <button v-else type="button" :disabled="busy || !layout.models.length" @click="continueQuote">送出代印需求 ↗</button>
+          <p v-if="parameterError" role="alert">{{ parameterError }}</p>
         </div>
       </aside>
     </main>
@@ -151,6 +161,14 @@
       </div>
       <p v-if="!libraryBusy && !libraryModels.length && !libraryError">目前沒有可加入的 STL 模型。</p>
       <quote-account v-if="!embedded && !memberToken" />
+    </el-dialog>
+    <el-dialog v-model="queueOpen" class="brand-dialog" title="加入水木書苑免費列印排隊" width="550px">
+      <p>使用這次已切好的模型，固定 3DSTU_PETG。輪到你與列印完成時，都會寄 Email 通知。</p>
+      <quote-account />
+      <button v-if="memberToken" type="button" :disabled="queueBusy" @click="joinQueue">
+        {{ queueBusy ? '正在加入…' : '確認加入排隊' }}
+      </button>
+      <p v-if="queueError" role="alert">{{ queueError }}</p>
     </el-dialog>
     <el-dialog v-model="cloudOpen" class="brand-dialog" title="保存到會員雲端草稿" width="550px">
       <quote-account />
@@ -179,6 +197,8 @@
 <script setup>
   import { computed, markRaw, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
   import { useStore } from 'vuex'
+  import { useRouter } from 'vue-router'
+  import { captureWorkspace, localWorkspace, checkpointWorkspace } from '@/utils/workspace-recovery.js'
   import JSZip from 'jszip'
   import StationLayout from '@/components/StationLayout.vue'
   import SlicerSettings from '@/components/SlicerSettings.vue'
@@ -193,6 +213,29 @@
   import { createStudioSlice, createStationSlice, fetchStationSlice, fetchToolpaths, cancelStationSlice } from '@/api/public'
   import { slicerSettingFields } from '@/utils/slicer-settings.mjs'
   const props = defineProps({ stationId: { type: String, default: '' }, embedded: Boolean })
+  const router = useRouter()
+  const queueOpen = ref(false),
+    queueBusy = ref(false),
+    queueError = ref('')
+  async function joinQueue() {
+    if (!job.value || !memberToken.value || queueBusy.value) return
+    queueBusy.value = true
+    queueError.value = ''
+    try {
+      await workspace(
+        '/free-print/reservations',
+        'post',
+        { stationId: props.stationId, slicingQuoteId: job.value.id, sliceToken: token },
+        { skipCustomerAuthRedirect: true }
+      )
+      queueOpen.value = false
+      await router.push('/portal/free-print')
+    } catch (err) {
+      queueError.value = err.response?.data?.error || '加入排隊失敗，請稍後重試。'
+    } finally {
+      queueBusy.value = false
+    }
+  }
   const store = useStore(),
     memberToken = computed(() => store.getters['customerAuth/accessToken'])
   const libraryOpen = ref(false),
@@ -298,6 +341,15 @@
     pollError = ref(''),
     notice = ref('')
   const busy = computed(() => uploading.value || previewLoading.value || ['queued', 'processing'].includes(job.value?.status))
+  const parameterError = computed(() =>
+    ![0.12, 0.16, 0.2, 0.28].includes(settings.layerHeight)
+      ? '請選擇有效層高。'
+      : !Number.isInteger(settings.infill) || settings.infill < 0 || settings.infill > 100
+      ? '填充率須為 0–100 的整數。'
+      : !Number.isInteger(settings.walls) || settings.walls < 1 || settings.walls > 12
+      ? '外壁圈數須為 1–12 的整數。'
+      : ''
+  )
   const sliceProgress = computed(() =>
     attempted.value || job.value
       ? slicingProgress({
@@ -324,6 +376,7 @@
     revision = 0,
     polling = '',
     restoring = false,
+    restoringResult = false,
     downloadUrl = ''
   const duration = (value) => {
     const n = Math.max(1, Math.ceil(value))
@@ -345,12 +398,23 @@
     } catch {}
   }
   function changeLayout(value) {
-    invalidate()
+    if (restoringResult) {
+      layout.value = value
+      if (!value.preparing) {
+        restoringResult = false
+        poll()
+      }
+      return
+    }
+    const signature = (l) =>
+      JSON.stringify(l.models.map((m) => ({ id: m.id, geometryHash: m.geometryHash, transform: m.transform, position: m.position })))
+    if (signature(value) !== signature(layout.value)) invalidate()
     layout.value = value
+    persistLocal()
   }
   watch(settings, invalidate, { deep: true })
   async function submit() {
-    if (!layout.value.ready || busy.value) return
+    if (!layout.value.ready || busy.value || parameterError.value) return
     invalidate()
     uploading.value = true
     attempted.value = true
@@ -549,20 +613,69 @@
     loadProject(event.target.files[0])
     event.target.value = ''
   }
-  onMounted(() => {
+  const recoveryKey = `slicer:${props.stationId || 'studio'}`
+  let recoveryTimer,
+    recovering = false,
+    recoveryReady = false
+  function persistLocal() {
+    clearTimeout(recoveryTimer)
+    if (recovering || !recoveryReady || props.embedded || layout.value.sources.some((f) => !f)) return
+    checkpointWorkspace(recoveryKey, layout.value.models.length ? captureWorkspace(layout.value, settings) : null)
+    recoveryTimer = setTimeout(
+      () =>
+        localWorkspace(recoveryKey, layout.value.models.length ? captureWorkspace(layout.value, settings) : null).catch((err) => {
+          notice.value = err.message
+        }),
+      400
+    )
+  }
+  watch(settings, persistLocal, { deep: true })
+  async function continueQuote() {
     try {
-      const saved = JSON.parse(sessionStorage.getItem(sessionKey) || 'null')
-      if (saved?.id && saved.token) {
-        job.value = { id: saved.id, status: 'queued' }
-        token = saved.token
-        poll()
+      await localWorkspace('quote:handoff', captureWorkspace(layout.value, { ...defaultQuoteSettings(), ...settings }))
+      await router.push('/quote?handoff=1')
+    } catch (err) {
+      error.value = err.message
+    }
+  }
+  async function clearLocal() {
+    if (!window.confirm('清除此裝置的模型與設定？雲端草稿和原始 STL 不會刪除。')) return
+    await localWorkspace(recoveryKey, null)
+    invalidate()
+    station.value.restoreModels([])
+    notice.value = '本機工作已清除。'
+  }
+  onMounted(async () => {
+    let savedJob
+    try {
+      savedJob = JSON.parse(sessionStorage.getItem(sessionKey) || 'null')
+      if (savedJob?.id && savedJob.token) {
+        job.value = { id: savedJob.id, status: 'queued' }
+        token = savedJob.token
       }
     } catch {}
+    try {
+      const saved = !props.embedded && (await localWorkspace(recoveryKey))
+      if (saved?.models?.length) {
+        recovering = true
+        restoringResult = !!savedJob?.id
+        Object.assign(settings, saved.settings, { material: isFree.value ? 'PETG' : saved.settings.material })
+        station.value.restoreModels(saved.models)
+        notice.value = '已還原此瀏覽器上次的模型與設定。'
+      }
+    } catch {
+    } finally {
+      recovering = false
+      recoveryReady = true
+    }
+    if (savedJob?.id && !restoringResult) poll()
   })
   onBeforeUnmount(() => {
     active = false
     revision++
     clearTimeout(timer)
+    clearTimeout(recoveryTimer)
+    if (!props.embedded && layout.value.models.length) localWorkspace(recoveryKey, captureWorkspace(layout.value, settings)).catch(() => {})
     if (downloadUrl) URL.revokeObjectURL(downloadUrl)
   })
 </script>

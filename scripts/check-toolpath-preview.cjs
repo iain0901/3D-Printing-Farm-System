@@ -257,8 +257,8 @@ async function main() {
       await page
         .getByRole("button", { name: "模型外觀", exact: true })
         .isDisabled(),
-      true,
-      "do not pretend to restore absent source STL"
+      false,
+      "same-browser recovery restores the original source STL"
     );
     assert.deepEqual(errors, []);
     passed = true;

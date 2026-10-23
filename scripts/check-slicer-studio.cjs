@@ -515,7 +515,11 @@ async function main() {
       await page
         .getByRole("button", { name: "刪除選取模型", exact: true })
         .click();
-      assert.equal(await page.locator(".object-row").count(), 0);
+      assert.equal(
+        await page.locator(".object-row").count(),
+        1,
+        "the original model restored after reload remains when the retry model is deleted"
+      );
     }
     assert.deepEqual(errors, []);
     assert.deepEqual(forbidden, []);
