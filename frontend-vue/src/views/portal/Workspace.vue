@@ -99,6 +99,7 @@
           </article>
         </div>
         <div v-else class="hub-empty">
+          <instruction-art kind="library" />
           <h3>{{ modelFilter === 'archived' ? '目前沒有封存模型' : '把下一件作品放進模型庫。' }}</h3>
           <p>上傳 STL 後，就能保存版本、分組收藏，再帶入線上工作台。</p>
         </div>
@@ -126,6 +127,7 @@
           </div>
         </article>
         <div v-if="!data.drafts.length" class="hub-empty">
+          <instruction-art kind="save" />
           <h3>尚未保存草稿</h3>
           <router-link to="/quote">開啟線上工作台 ↗</router-link>
         </div>
@@ -601,6 +603,7 @@
   import { useStore } from 'vuex'
   import customerRequest from '@/utils/customerRequest'
   import ModelViewer from '@/components/ModelViewer.vue'
+  import InstructionArt from '@/components/public/InstructionArt.vue'
   import { workspace, uploadWorkspace, modelFile } from '@/api/memberWorkspace'
   import { fetchMyCases, decideCase } from '@/api/customerPortal'
   import { portalMoney as money, portalStatus, trackingPortal } from '@/utils/portal-presentation.mjs'
@@ -1250,6 +1253,11 @@
   .hub-empty {
     text-align: center;
     padding: 50px 20px;
+  }
+  .hub-empty .instruction-art {
+    --instruction-width: 180px;
+    --instruction-height: 128px;
+    margin: 0 auto 12px;
   }
   .hub-empty a {
     text-decoration: underline;

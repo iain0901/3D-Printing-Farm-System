@@ -43,6 +43,7 @@
           <station-layout
             ref="stationLayout"
             studio
+            empty-artwork="upload"
             :automatic="settings.autoArrange"
             :model-appearance="appearance"
             :painting="painting"
@@ -121,6 +122,10 @@
             </select>
           </label>
           <p class="material-note">{{ material.note }}</p>
+          <div class="color-illustrated-tip">
+            <instruction-art kind="color" />
+            <p>先整理基底色與色槽。螢幕配色用來溝通，不代表已完成多色切片。</p>
+          </div>
           <fieldset class="color-mode">
             <legend>配色方式</legend>
             <label>
@@ -427,6 +432,7 @@
   import { workspace, uploadWorkspace, modelFile } from '@/api/memberWorkspace'
   import { fetchAddresses } from '@/api/customerPortal'
   import PublicShell from '@/components/public/PublicShell.vue'
+  import InstructionArt from '@/components/public/InstructionArt.vue'
   import StationLayout from '@/components/StationLayout.vue'
   import SlicerSettings from '@/components/SlicerSettings.vue'
   import QuoteAccount from '@/components/QuoteAccount.vue'
@@ -791,6 +797,21 @@
 </script>
 
 <style scoped>
+  .color-illustrated-tip {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 12px 0;
+  }
+  .color-illustrated-tip .instruction-art {
+    --instruction-width: 96px;
+    --instruction-height: 76px;
+  }
+  .color-illustrated-tip p {
+    font-size: 11px;
+    line-height: 1.8;
+    color: var(--rfm-muted);
+  }
   .quote-workbench :deep(.public-utility),
   .quote-workbench :deep(.public-footer) {
     display: none;

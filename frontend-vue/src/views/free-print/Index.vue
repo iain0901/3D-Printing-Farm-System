@@ -34,8 +34,7 @@
           <aside class="free-edition" :aria-label="station ? '已選站點' : '目前站點數'">
             <span>{{ station ? '你的列印目的地' : '從一個站點，開始連結' }}</span>
             <strong aria-hidden="true">
-              01
-              <span>／</span>
+              <instruction-art kind="station" />
             </strong>
             <p v-if="station">已選擇：{{ station.institution }}・{{ station.name }}</p>
             <p v-else>
@@ -83,6 +82,14 @@
       </section>
 
       <section v-else class="free-station-details" aria-labelledby="station-heading">
+        <div class="station-material-note">
+          <instruction-art kind="filament" />
+          <p>
+            <b>免費列印固定使用 3DSTU_PETG。</b>
+            <br />
+            先保存單色 PETG 模型草稿，再依站點指引申請。
+          </p>
+        </div>
         <div class="free-section-heading">
           <p class="free-eyebrow">01 ／ 站點說明</p>
           <h2 id="station-heading">出發前，先確認。</h2>
@@ -157,11 +164,12 @@
 
 <script>
   import PublicShell from '@/components/public/PublicShell.vue'
+  import InstructionArt from '@/components/public/InstructionArt.vue'
   import { freePrintStations, getFreePrintStation, freePrintSteps } from '@/content/freePrintStations.mjs'
 
   export default {
     name: 'FreePrint',
-    components: { PublicShell },
+    components: { PublicShell, InstructionArt },
     props: { stationId: { type: String, default: '' } },
     data: () => ({ stations: freePrintStations, steps: freePrintSteps }),
     computed: {
@@ -181,6 +189,33 @@
   .free-hero {
     padding: 30px 0 65px;
     border-bottom: 1px solid #192e5326;
+  }
+  .free-edition .instruction-art {
+    --instruction-width: 220px;
+    --instruction-height: 160px;
+  }
+  .station-material-note {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 32px;
+  }
+  .station-material-note p {
+    font-size: 14px;
+    line-height: 1.9;
+  }
+  @media (max-width: 560px) {
+    .free-edition .instruction-art {
+      --instruction-width: 116px;
+      --instruction-height: 100px;
+    }
+    .station-material-note {
+      gap: 12px;
+    }
+    .station-material-note .instruction-art {
+      --instruction-width: 100px;
+      --instruction-height: 88px;
+    }
   }
   .free-breadcrumb {
     display: flex;

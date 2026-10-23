@@ -26,6 +26,7 @@
           </div>
         </div>
       </header>
+      <instruction-notes :placement="$route.path" class="studio-wrap" />
       <div class="studio-wrap info-content">
         <section
           v-for="block in page.blocks"
@@ -133,13 +134,14 @@
 <script>
   import PublicShell from '@/components/public/PublicShell.vue'
   import ObjectCollage from '@/components/public/ObjectCollage.vue'
+  import InstructionNotes from '@/components/public/InstructionNotes.vue'
   import { routeArtwork } from '@/content/publicArtwork.mjs'
   import { getPublicPage } from '@/content/publicPages.mjs'
   import '@/styles/public-info.scss'
 
   export default {
     name: 'InfoPage',
-    components: { PublicShell, ObjectCollage },
+    components: { PublicShell, ObjectCollage, InstructionNotes },
     props: { pageId: { type: String, required: true } },
     computed: {
       hasArtwork() {

@@ -42,6 +42,7 @@
         </ul>
       </div>
       <section class="studio-wrap service-detail-section">
+        <instruction-notes :placement="$route.path" />
         <div class="service-section-heading">
           <div>
             <p class="studio-kicker">這類作品，我們先討論這些</p>
@@ -186,11 +187,12 @@
 <script>
   import PublicShell from '@/components/public/PublicShell.vue'
   import ObjectCollage from '@/components/public/ObjectCollage.vue'
+  import InstructionNotes from '@/components/public/InstructionNotes.vue'
   import { getService, getAudience, servicesForAudience, inquiryRoute } from '@/content/fdmServices.mjs'
   import '@/styles/public-services.scss'
   export default {
     name: 'ServiceDetail',
-    components: { PublicShell, ObjectCollage },
+    components: { PublicShell, ObjectCollage, InstructionNotes },
     props: { serviceId: { type: String, required: true } },
     data: () => ({ prepared: [], copyStatus: '', showCopyFallback: false }),
     computed: {

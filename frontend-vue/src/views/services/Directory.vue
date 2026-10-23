@@ -40,6 +40,7 @@
           {{ item.title }}
         </router-link>
       </nav>
+      <instruction-notes :placement="$route.path" class="studio-wrap" />
       <section v-if="audience" class="studio-wrap audience-priorities">
         <p class="studio-kicker">這次製作，先釐清三件事</p>
         <ol>
@@ -112,11 +113,12 @@
 <script>
   import PublicShell from '@/components/public/PublicShell.vue'
   import ObjectCollage from '@/components/public/ObjectCollage.vue'
+  import InstructionNotes from '@/components/public/InstructionNotes.vue'
   import { audiences, getAudience, servicesForAudience } from '@/content/fdmServices.mjs'
   import '@/styles/public-services.scss'
   export default {
     name: 'ServiceDirectory',
-    components: { PublicShell, ObjectCollage },
+    components: { PublicShell, ObjectCollage, InstructionNotes },
     props: { audienceId: { type: String, default: '' } },
     data: () => ({ audiences }),
     computed: {

@@ -30,6 +30,7 @@
           v-show="mode === 'prepare'"
           ref="station"
           studio
+          :empty-artwork="embedded ? '' : 'layout'"
           :disabled="busy"
           :automatic="settings.autoArrange"
           @change="changeLayout"

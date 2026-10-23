@@ -220,6 +220,7 @@
           <span>01</span>
           <div>
             <h3>上傳模型</h3>
+            <instruction-art :kind="homeInstructionArtwork[0]" />
             <p>提供檔案、實際尺寸與用途；沒有模型可選建模協助。</p>
           </div>
         </li>
@@ -227,6 +228,7 @@
           <span>02</span>
           <div>
             <h3>登入，帶入資料</h3>
+            <instruction-art :kind="homeInstructionArtwork[1]" />
             <p>流程第三步登入或註冊，讓需求與個人案件連結。</p>
           </div>
         </li>
@@ -234,6 +236,7 @@
           <span>03</span>
           <div>
             <h3>設定條件，取得初估</h3>
+            <instruction-art :kind="homeInstructionArtwork[2]" />
             <p>選擇材料、品質與數量。正式報價及交期仍需個別確認。</p>
           </div>
         </li>
@@ -241,6 +244,7 @@
           <span>04</span>
           <div>
             <h3>確認製作，追蹤交付</h3>
+            <instruction-art :kind="homeInstructionArtwork[3]" />
             <p>確認報價與付款安排後，透過案件查看製作進度。</p>
           </div>
         </li>
@@ -299,12 +303,15 @@
   import PublicShell from '@/components/public/PublicShell.vue'
   import StudioImage from '@/components/public/StudioImage.vue'
   import HeroLayerField from '@/components/public/HeroLayerField.vue'
+  import InstructionArt from '@/components/public/InstructionArt.vue'
+  import { homeInstructionArtwork } from '@/content/instructionArtwork.mjs'
   export default {
     name: 'Landing',
-    components: { PublicShell, StudioImage, HeroLayerField },
+    components: { PublicShell, StudioImage, HeroLayerField, InstructionArt },
     data() {
       return {
         materialIndex: 1,
+        homeInstructionArtwork,
         materials: [
           {
             name: 'PLA',
@@ -903,6 +910,12 @@
   .commission-steps h3 {
     font-size: 20px;
     margin: 0 0 8px;
+  }
+  .commission-steps .instruction-art {
+    --instruction-width: 124px;
+    --instruction-height: 88px;
+    float: right;
+    margin: 0 0 4px 14px;
   }
   .commission-steps p {
     font-size: 13px;

@@ -58,7 +58,8 @@
       </button>
     </div>
     <div v-if="!models.length" class="stage-empty">
-      <span class="empty-coordinate" aria-hidden="true">
+      <instruction-art v-if="emptyArtwork" :kind="emptyArtwork" />
+      <span v-else class="empty-coordinate" aria-hidden="true">
         X ─── Y
         <br />
         │
@@ -230,10 +231,12 @@
   import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js'
   import { selectPaintFaces } from '@/utils/surface-paint.mjs'
   import { studioTools, modelFits, quaternionTransform, alignFaceTransform } from '@/utils/slicer-studio.mjs'
+  import InstructionArt from '@/components/public/InstructionArt.vue'
   const props = defineProps({
     models: { type: Array, default: () => [] },
     selectedIds: { type: Array, default: () => [] },
     disabled: Boolean,
+    emptyArtwork: { type: String, default: '' },
     appearance: { type: Object, default: () => ({}) },
     painting: { type: Object, default: null },
   })
@@ -950,6 +953,11 @@
     letter-spacing: 8px;
     color: var(--rfm-muted);
     opacity: 0.8;
+  }
+  .stage-empty .instruction-art {
+    --instruction-width: 176px;
+    --instruction-height: 116px;
+    margin: 0 auto 12px;
   }
   .stage-message {
     position: absolute;

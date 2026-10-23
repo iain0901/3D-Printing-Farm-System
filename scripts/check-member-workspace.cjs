@@ -166,6 +166,7 @@ async function run() {
       "true"
     );
     await page.goto(base + "/#/");
+    await page.locator(".brand-home h1").waitFor(); // Let the SPA actually unmount the previous draft before opening a fresh workspace.
     await page.goto(base + "/#/quote");
     await page.getByLabel("選擇 STL 模型").setInputFiles({
       name: "cloud-paint.stl",
@@ -179,6 +180,11 @@ async function run() {
           !document.querySelector(".primary-button").disabled
       );
     await ready();
+    assert.equal(
+      await page.locator(".object-row").count(),
+      1,
+      "a fresh workbench must not reuse the previous cloud draft"
+    );
     await page.getByRole("button", { name: "縮放", exact: true }).click();
     await page.getByLabel("模型等比縮放", { exact: true }).fill("110");
     await page.getByLabel("模型等比縮放", { exact: true }).press("Tab");

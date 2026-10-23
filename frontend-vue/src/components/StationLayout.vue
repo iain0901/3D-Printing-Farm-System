@@ -17,6 +17,7 @@
         :disabled="disabled || preparing"
         :appearance="modelAppearance"
         :painting="painting"
+        :empty-artwork="emptyArtwork"
         @import="importFiles"
         @select="selectModels"
         @transform="applyTransform"
@@ -165,6 +166,7 @@
   const props = defineProps({
     disabled: Boolean,
     studio: Boolean,
+    emptyArtwork: { type: String, default: '' },
     automatic: Boolean,
     modelAppearance: { type: Object, default: () => ({}) },
     painting: { type: Object, default: null },
