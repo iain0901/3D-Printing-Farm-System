@@ -76,7 +76,15 @@
             。
           </p>
         </section>
-        <fieldset :disabled="busy" class="lab-parameter-fieldset"><slicer-settings :settings="settings" /></fieldset>
+        <fieldset :disabled="busy" class="lab-parameter-fieldset">
+          <slicer-settings
+            :settings="settings"
+            :disabled="busy || layout.preparing"
+            :has-models="!!layout.models.length"
+            @orient="station.command('orientAll')"
+            @arrange="station.command('pack')"
+          />
+        </fieldset>
         <section v-if="job" class="lab-result">
           <div class="lab-section-title">
             <h2>切片結果</h2>
@@ -121,8 +129,9 @@
         <p v-if="error" class="lab-error" role="alert">{{ error }}</p>
         <p v-if="notice" class="lab-notice" role="status">{{ notice }}</p>
         <div class="lab-primary">
-          <button v-if="busy" type="button" :disabled="cancelling || uploading" @click="cancel">
-            {{ cancelling ? '取消中…' : '取消切片工作' }}
+          <slicing-progress v-if="sliceProgress" :state="sliceProgress" />
+          <button v-if="busy" type="button" :disabled="cancelling || uploading || previewLoading" @click="cancel">
+            {{ previewLoading ? '正在載入路徑…' : cancelling ? '取消中…' : '取消切片工作' }}
           </button>
           <button v-else type="button" class="slice-button" :disabled="!layout.ready" @click="submit">
             {{ job?.status === 'failed' ? '重新切片' : '開始切片' }} ↗
@@ -176,6 +185,8 @@
   import ToolpathViewer from '@/components/ToolpathViewer.vue'
   import QuoteAccount from '@/components/QuoteAccount.vue'
   import BrandMark from '@/components/public/BrandMark.vue'
+  import SlicingProgress from './SlicingProgress.vue'
+  import { slicingProgress } from '@/utils/slicing-progress.mjs'
   import { workspace, uploadWorkspace, modelFile } from '@/api/memberWorkspace'
   import staffRequest from '@/utils/request'
   import { createQuoteDraft, defaultQuoteSettings } from '@/utils/quote-workspace.mjs'
@@ -278,12 +289,28 @@
     job = ref(null),
     preview = ref(null),
     uploading = ref(false),
+    uploadPercent = ref(null),
+    previewLoading = ref(false),
+    attempted = ref(false),
     cancelling = ref(false),
     waitingLong = ref(false),
     error = ref(''),
     pollError = ref(''),
     notice = ref('')
-  const busy = computed(() => uploading.value || ['queued', 'processing'].includes(job.value?.status))
+  const busy = computed(() => uploading.value || previewLoading.value || ['queued', 'processing'].includes(job.value?.status))
+  const sliceProgress = computed(() =>
+    attempted.value || job.value
+      ? slicingProgress({
+          uploading: uploading.value,
+          uploadPercent: uploadPercent.value,
+          job: job.value,
+          preview: preview.value,
+          previewLoading: previewLoading.value,
+          error: error.value,
+          pollError: pollError.value,
+        })
+      : null
+  )
   const statusText = computed(
     () =>
       ({ queued: '等待切片', processing: '正在切片', completed: '切片完成', failed: '切片失敗', cancelled: '已取消切片' }[
@@ -305,6 +332,7 @@
   function invalidate() {
     if (restoring || busy.value) return
     revision++
+    attempted.value = false
     job.value = null
     preview.value = null
     pollError.value = ''
@@ -321,31 +349,25 @@
     layout.value = value
   }
   watch(settings, invalidate, { deep: true })
-  watch(
-    () => settings.autoOrient,
-    (value) => {
-      if (value) settings.autoArrange = true
-    }
-  )
-  watch(
-    () => settings.autoArrange,
-    (value) => {
-      if (!value) settings.autoOrient = false
-    }
-  )
   async function submit() {
     if (!layout.value.ready || busy.value) return
     invalidate()
     uploading.value = true
+    attempted.value = true
+    uploadPercent.value = null
     error.value = ''
     try {
       const payload = {
         ...settings,
+        autoOrient: false,
+        autoArrange: false,
         material: isFree.value ? 'PETG' : settings.material,
         placements: layout.value.placements,
         stationId: props.stationId || undefined,
       }
-      const result = await (isFree.value ? createStationSlice : createStudioSlice)(layout.value.files, payload)
+      const result = await (isFree.value ? createStationSlice : createStudioSlice)(layout.value.files, payload, (event) => {
+        if (active) uploadPercent.value = event.total > 0 ? Math.min(100, Math.floor((event.loaded / event.total) * 100)) : null
+      })
       if (!active) return
       job.value = result.slicingQuote
       token = result.accessToken
@@ -374,6 +396,7 @@
       job.value = result.slicingQuote
       waitingLong.value = ['queued', 'processing'].includes(job.value.status) && Date.now() - Date.parse(job.value.createdAt) > 120000
       if (job.value.status === 'completed') {
+        previewLoading.value = true
         const paths = await fetchToolpaths(id, token)
         if (active && revision === current) {
           preview.value = markRaw(paths.preview)
@@ -391,7 +414,10 @@
         }
       }
     } finally {
-      if (polling === pollKey) polling = ''
+      if (polling === pollKey) {
+        polling = ''
+        previewLoading.value = false
+      }
     }
   }
   async function cancel() {
@@ -406,6 +432,10 @@
       pollError.value = '暫時無法確認取消結果，請重新查詢原工作。'
     } finally {
       cancelling.value = false
+      if (active && job.value?.status === 'completed') {
+        notice.value = '取消前引擎已完成，正在讀取這次切片結果。'
+        poll()
+      }
     }
   }
   function download(blob, name) {
@@ -498,14 +528,16 @@
         infill: s.infill,
         walls: s.walls,
         autoSupports: !!s.autoSupports,
-        autoOrient: !!s.autoOrient,
-        autoArrange: !!s.autoArrange,
+        autoOrient: false,
+        autoArrange: false,
         advanced: Object.fromEntries(
           slicerSettingFields.filter((f) => s.advanced?.[f.id] !== undefined).map((f) => [f.id, s.advanced[f.id]])
         ),
       })
       station.value.restoreModels(models)
-      notice.value = '切片專案已載入；模型處理完成後即可繼續。'
+      notice.value =
+        '切片專案已載入；模型處理完成後即可繼續。' +
+        (s.autoOrient || s.autoArrange ? ' 舊版延後定向／排版已停用，請按「立即自動朝向」或「立即自動排版」確認。' : '')
       mode.value = 'prepare'
     } catch (err) {
       error.value = err.message || '專案無法開啟'

@@ -289,19 +289,23 @@
               <input v-model="settings.autoSupports" type="checkbox" />
               自動產生支撐
             </label>
-            <label class="check-field">
-              <input v-model="settings.autoOrient" :disabled="hasHeightBands" type="checkbox" />
-              交由切片器自動選擇方向
-            </label>
-            <label class="check-field">
-              <input v-model="settings.autoArrange" type="checkbox" />
-              切片時由切片器自動排版
-            </label>
+            <div class="field-pair">
+              <button
+                type="button"
+                :disabled="hasHeightBands || !layout.models.length || layout.preparing"
+                @click="stationLayout.command('orientAll')"
+              >
+                立即自動朝向
+              </button>
+              <button type="button" :disabled="!layout.models.length || layout.preparing" @click="stationLayout.command('pack')">
+                立即自動排版
+              </button>
+            </div>
             <p class="workbench-note">
               {{
                 hasHeightBands
                   ? '已設定高度換色，固定目前模型方向；若再旋轉或縮放，請重新確認換色範圍。'
-                  : '選擇切片器自動定向或排版時，最終方向與位置將由實際切片結果確認。'
+                  : '按下即調整工作台；自動朝向以最短包圍軸作為高度並重新排版，不保證支撐最少。保留畫面中的方向與位置。'
               }}
             </p>
           </details>
@@ -540,6 +544,8 @@
         const { draft } = await workspace(`/drafts/${encodeURIComponent(route.query.draft)}`)
         const files = await Promise.all(draft.modelIds.map((id) => modelFile(id, true)))
         Object.assign(settings, draft.manifest.settings)
+        settings.autoOrient = false
+        settings.autoArrange = false
         slots.splice(0, slots.length, ...draft.manifest.colorSlots)
         slotSequence = Math.max(1, ...slots.map((s) => Number(s.id.replace('slot-', '')) || 0))
         paintSlot.value = slots[0].id
@@ -645,21 +651,6 @@
     () => settings.colorMode,
     (value) => {
       if (value === 'multi' && slots.length < 2) addSlot()
-    }
-  )
-  watch(hasHeightBands, (value) => {
-    if (value) settings.autoOrient = false
-  })
-  watch(
-    () => settings.autoOrient,
-    (value) => {
-      if (value) settings.autoArrange = true
-    }
-  )
-  watch(
-    () => settings.autoArrange,
-    (value) => {
-      if (!value) settings.autoOrient = false
     }
   )
   watch(

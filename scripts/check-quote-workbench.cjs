@@ -145,7 +145,9 @@ async function run() {
       .getByRole("button", { name: "body.stl 新增換色區間", exact: true })
       .click();
     assert.equal(
-      await page.getByLabel("交由切片器自動選擇方向").isDisabled(),
+      await page
+        .getByRole("button", { name: "立即自動朝向", exact: true })
+        .isDisabled(),
       true
     );
     await page

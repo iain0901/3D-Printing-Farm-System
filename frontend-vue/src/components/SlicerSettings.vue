@@ -28,15 +28,11 @@
         <input v-model="settings.autoSupports" type="checkbox" />
         自動產生支撐
       </label>
-      <label class="parameter-check">
-        <input v-model="settings.autoOrient" type="checkbox" />
-        切片器自動定向
-      </label>
-      <label class="parameter-check">
-        <input v-model="settings.autoArrange" type="checkbox" />
-        切片器自動排版
-      </label>
-      <p>未開啟自動定向與排版時，保留工作台的方向與位置。</p>
+      <div class="parameter-pair immediate-actions">
+        <button type="button" :disabled="disabled || !hasModels" @click="$emit('orient')">立即自動朝向</button>
+        <button type="button" :disabled="disabled || !hasModels" @click="$emit('arrange')">立即自動排版</button>
+      </div>
+      <p>按下即在工作台調整全部模型；朝向以最短包圍軸作為高度並重新排版，不是支撐最少的最佳解。切片保留畫面中的方向與位置。</p>
     </template>
     <details>
       <summary>
@@ -94,7 +90,8 @@
 <script setup>
   import { computed, ref } from 'vue'
   import { slicerSettingFields, slicerSettingGroups } from '@/utils/slicer-settings.mjs'
-  const props = defineProps({ settings: { type: Object, required: true }, advancedOnly: Boolean })
+  const props = defineProps({ settings: { type: Object, required: true }, advancedOnly: Boolean, disabled: Boolean, hasModels: Boolean })
+  defineEmits(['orient', 'arrange'])
   const search = ref(''),
     activeGroup = ref('品質'),
     fieldError = ref('')

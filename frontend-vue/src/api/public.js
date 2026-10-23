@@ -12,12 +12,12 @@ const publicRequest = axios.create({
   headers: { 'Content-Type': contentType },
 })
 
-export function createStationSlice(file, settings) {
+export function createStationSlice(file, settings, onUploadProgress) {
   const data = new FormData()
   data.append('payload', JSON.stringify({ ...settings, purpose: 'free-print', quantity: 1 }))
   for (const model of Array.isArray(file) ? file : [file]) data.append('file', model)
   return publicRequest
-    .post('/api/public/slicing-quotes', data, { headers: { 'Content-Type': undefined }, timeout: 120000 })
+    .post('/api/public/slicing-quotes', data, { headers: { 'Content-Type': undefined }, timeout: 120000, onUploadProgress })
     .then((r) => r.data)
 }
 
@@ -28,12 +28,12 @@ export function fetchStationSlice(id, token, layers = false) {
     })
     .then((r) => r.data)
 }
-export function createStudioSlice(files, settings) {
+export function createStudioSlice(files, settings, onUploadProgress) {
   const data = new FormData()
   data.append('payload', JSON.stringify({ ...settings, purpose: 'studio', quantity: 1 }))
   for (const file of files) data.append('file', file)
   return publicRequest
-    .post('/api/public/slicing-quotes', data, { headers: { 'Content-Type': undefined }, timeout: 120000 })
+    .post('/api/public/slicing-quotes', data, { headers: { 'Content-Type': undefined }, timeout: 120000, onUploadProgress })
     .then((r) => r.data)
 }
 export function fetchToolpaths(id, token) {

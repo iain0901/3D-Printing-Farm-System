@@ -337,7 +337,7 @@ async function main() {
       path: join(shots, "models-desktop.png"),
       fullPage: true,
     });
-    await page.getByRole("button", { name: "開始切片", exact: false }).click();
+    await page.getByRole("button", { name: /^開始切片/ }).click();
     await page
       .getByRole("region", { name: "三維切片路徑預覽", exact: true })
       .waitFor({ timeout: real ? 180000 : 30000 });
@@ -463,9 +463,7 @@ async function main() {
       assert.equal(await page.getByLabel("切片材料").count(), 0);
       await page.getByLabel("選擇 STL 模型").setInputFiles(file("free.stl"));
       await ready();
-      await page
-        .getByRole("button", { name: "開始切片", exact: false })
-        .click();
+      await page.getByRole("button", { name: /^開始切片/ }).click();
       await page
         .getByRole("region", { name: "三維切片路徑預覽", exact: true })
         .waitFor();
@@ -488,24 +486,18 @@ async function main() {
       await page.getByLabel("選擇 STL 模型").setInputFiles(file("retry.stl"));
       await ready();
       scenario = "failed";
-      await page
-        .getByRole("button", { name: "開始切片", exact: false })
-        .click();
+      await page.getByRole("button", { name: /^開始切片/ }).click();
       await page
         .getByText("切片未完成，請檢查模型及設定後重試。", { exact: true })
         .waitFor();
       scenario = "upload-error";
-      await page
-        .getByRole("button", { name: "重新切片", exact: false })
-        .click();
+      await page.getByRole("button", { name: /^重新切片/ }).click();
       await page
         .getByRole("alert")
         .filter({ hasText: "切片服務暫時無法接收工作" })
         .waitFor();
       scenario = "waiting";
-      await page
-        .getByRole("button", { name: "開始切片", exact: false })
-        .click();
+      await page.getByRole("button", { name: /^開始切片/ }).click();
       await page
         .getByRole("button", { name: "取消切片工作", exact: true })
         .click();
@@ -516,9 +508,7 @@ async function main() {
       await page.getByLabel("模型位置 X", { exact: true }).fill("1");
       await page.getByLabel("模型位置 X", { exact: true }).press("Tab");
       assert.equal(
-        await page
-          .getByRole("button", { name: "開始切片", exact: false })
-          .isDisabled(),
+        await page.getByRole("button", { name: /^開始切片/ }).isDisabled(),
         true
       );
       await page

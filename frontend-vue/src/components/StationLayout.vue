@@ -253,6 +253,17 @@
       pack()
       return
     }
+    if (name === 'orientAll') {
+      checkpoint()
+      // Use the same worker-baked geometry for the live preview, project and uploaded STL.
+      // This is an immediate bounding-axis heuristic, not a deferred Orca CLI flag.
+      const changed = items.some((model) => !model.transform.layFlat)
+      if (changed) {
+        pendingPack = true
+        items.forEach((model) => (model.transform.layFlat = true))
+      } else pack()
+      return
+    }
     const selectedItems = items.filter((m) => selectedIds.value.includes(String(m.id)))
     if (name === 'clone') {
       if (
@@ -324,6 +335,7 @@
   function publish() {
     emit('change', {
       files: items.map((i) => i.file).filter(Boolean),
+      preparing: preparing.value,
       sources: items.map((i) => i.source),
       names: items.map((i) => i.name),
       placements: items.map((i) => ({ ...i.position })),
