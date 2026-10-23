@@ -728,7 +728,7 @@
     await nextTick()
     try {
       scene = new THREE.Scene()
-      scene.background = new THREE.Color('#edf0ee')
+      scene.background = new THREE.Color(getComputedStyle(host.value).getPropertyValue('--rfm-canvas').trim() || '#eef0f3')
       camera = new THREE.PerspectiveCamera(40, 1, 0.1, 5000)
       camera.up.set(0, 0, 1)
       renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
@@ -818,12 +818,12 @@
     min-width: 0;
     height: 100%;
     min-height: 620px;
-    background: #edf0ee;
+    background: var(--rfm-canvas);
     overflow: hidden;
-    border-radius: 8px;
+    border-radius: var(--rfm-radius-panel);
     isolation: isolate;
-    font-family: 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
-    color: #233d35;
+    font-family: var(--rfm-font);
+    color: var(--rfm-ink);
   }
   .stage-canvas {
     position: absolute;
@@ -852,7 +852,7 @@
     font-size: 10px;
     font-weight: 500;
     letter-spacing: 2px;
-    border-left: 1px solid #acbcb0;
+    border-left: 1px solid var(--rfm-line);
     margin-left: 12px;
     padding-left: 12px;
   }
@@ -862,10 +862,10 @@
     pointer-events: auto;
   }
   .slicer-stage button {
-    border: 1px solid #d4ded6;
-    background: #fffffff0;
+    border: 1px solid var(--rfm-line);
+    background: var(--rfm-surface);
     color: inherit;
-    border-radius: 5px;
+    border-radius: var(--rfm-radius-control);
     font: inherit;
     font-size: 11px;
     padding: 8px 10px;
@@ -876,8 +876,8 @@
     cursor: not-allowed;
   }
   .slicer-stage button:focus-visible {
-    outline: 3px solid #ae8b4b;
-    outline-offset: 2px;
+    outline: 2px solid var(--rfm-focus);
+    outline-offset: 3px;
   }
   .stage-tools {
     position: absolute;
@@ -886,9 +886,9 @@
     display: grid;
     gap: 4px;
     padding: 5px;
-    background: #ffffffec;
-    border: 1px solid #dce4dc;
-    border-radius: 8px;
+    background: var(--rfm-surface);
+    border: 1px solid var(--rfm-line);
+    border-radius: var(--rfm-radius-panel);
     box-shadow: 0 3px 20px #1d40300b;
   }
   .stage-tools button {
@@ -902,8 +902,8 @@
     padding: 5px;
   }
   .stage-tools button[aria-pressed='true'] {
-    background: #245847;
-    color: #fff;
+    background: var(--rfm-ink);
+    color: var(--rfm-surface);
   }
   .stage-tools span {
     font-size: 21px;
@@ -915,7 +915,7 @@
   .stage-tools hr {
     width: 34px;
     border: 0;
-    border-top: 1px solid #dce4dc;
+    border-top: 1px solid var(--rfm-line);
     margin: 4px auto;
   }
   .stage-empty {
@@ -933,12 +933,12 @@
   }
   .stage-empty p {
     font-size: 12px;
-    color: #687b70;
+    color: var(--rfm-muted);
     line-height: 1.8;
   }
   .stage-empty button {
     pointer-events: auto;
-    background: #245847;
+    background: var(--rfm-ink);
     color: white;
     border: 0;
     padding: 12px 22px;
@@ -948,7 +948,7 @@
     font-size: 16px;
     line-height: 1.2;
     letter-spacing: 8px;
-    color: #94a99b;
+    color: var(--rfm-muted);
     opacity: 0.8;
   }
   .stage-message {
@@ -958,13 +958,13 @@
     transform: translateX(-50%);
     max-width: 65%;
     padding: 10px 16px;
-    border: 1px solid #d4ded6;
-    background: #fffffff2;
+    border: 1px solid var(--rfm-line);
+    background: var(--rfm-surface);
     font-size: 12px;
-    border-radius: 5px;
+    border-radius: var(--rfm-radius-control);
   }
   .stage-message.error {
-    color: #933d2b;
+    color: var(--rfm-danger);
   }
   .stage-inspector {
     position: absolute;
@@ -973,8 +973,8 @@
     width: 250px;
     max-height: calc(100% - 170px);
     overflow: auto;
-    background: #ffffffed;
-    border: 1px solid #d4ded6;
+    background: var(--rfm-surface);
+    border: 1px solid var(--rfm-line);
     border-radius: 7px;
     padding: 12px;
     font-size: 11px;
@@ -991,7 +991,7 @@
     padding: 4px;
   }
   .inspector-title span {
-    color: #899a8e;
+    color: var(--rfm-muted);
     padding-left: 6px;
   }
   .object-list {
@@ -1002,11 +1002,11 @@
   .object-row {
     display: flex;
     align-items: center;
-    border-radius: 4px;
+    border-radius: var(--rfm-radius-control);
     overflow: hidden;
   }
   .object-row.selected {
-    background: #e4ede6;
+    background: var(--rfm-selected);
   }
   .object-row.outside {
     box-shadow: inset 3px 0 #b65035;
@@ -1024,23 +1024,23 @@
   }
   .object-row span {
     font-size: 9px;
-    color: #8d9f90;
+    color: var(--rfm-muted);
     margin-right: 8px;
   }
   .inspector-note {
     font-size: 10px;
-    color: #7b8a7f;
+    color: var(--rfm-muted);
     line-height: 1.7;
   }
   .transform-heading {
     display: grid;
     gap: 4px;
-    border-top: 1px solid #dce4dc;
+    border-top: 1px solid var(--rfm-line);
     padding-top: 12px;
     margin-top: 12px;
   }
   .transform-heading span {
-    color: #849286;
+    color: var(--rfm-muted);
     font-size: 10px;
   }
   .axis-fields {
@@ -1052,20 +1052,20 @@
     min-width: 0;
     flex: 1;
     font-size: 9px;
-    color: #7b8a7f;
+    color: var(--rfm-muted);
   }
   .axis-fields input {
     display: block;
     width: 100%;
     min-width: 0;
     box-sizing: border-box;
-    border: 1px solid #d4ded6;
-    background: #fafcf9;
+    border: 1px solid var(--rfm-line);
+    background: var(--rfm-surface);
     border-radius: 3px;
     padding: 7px 3px;
     font: inherit;
     font-size: 11px;
-    color: #253e34;
+    color: var(--rfm-ink);
   }
   .scale-lock {
     display: flex;
@@ -1085,7 +1085,7 @@
     padding: 6px;
   }
   .mirror-buttons button[aria-pressed='true'] {
-    background: #245847;
+    background: var(--rfm-ink);
     color: white;
   }
   .stage-views {
@@ -1110,7 +1110,7 @@
     justify-content: space-between;
     gap: 12px;
     font-size: 9px;
-    color: #7a8e80;
+    color: var(--rfm-muted);
     pointer-events: none;
   }
   @media (max-width: 760px) {

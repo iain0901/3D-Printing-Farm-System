@@ -1,8 +1,8 @@
 .info-page {
   .info-hero {
-    background: #edf2ee;
+    background: var(--rfm-subtle);
     padding: 26px 0 58px;
-    border-top: 1px solid #dce5df;
+    border-top: 1px solid var(--rfm-line);
   }
   .info-breadcrumb {
     display: flex;
@@ -29,7 +29,7 @@
     max-width: 760px;
   }
   h1 {
-    font-size: clamp(31px, 3.5vw, 53px);
+    font-size: var(--rfm-title-page);
     line-height: 1.45;
     letter-spacing: -0.045em;
     margin: 19px 0;
@@ -38,7 +38,7 @@
     display: block;
   }
   h2 {
-    font-size: clamp(26px, 2.6vw, 38px);
+    font-size: var(--rfm-title-section);
     letter-spacing: -0.04em;
     line-height: 1.45;
     margin: 15px 0;
@@ -74,14 +74,14 @@
   }
   .info-block {
     padding-block: 52px;
-    border-bottom: 1px solid #bdcbbd;
+    border-bottom: 1px solid var(--rfm-line);
   }
   .info-heading {
     max-width: 760px;
     margin-bottom: 30px;
   }
   .info-heading > p:not(.studio-kicker) {
-    color: #5a6e67;
+    color: var(--rfm-muted);
     font-size: 14px;
     line-height: 1.85;
   }
@@ -94,14 +94,14 @@
     display: block;
     min-width: 0;
     padding: 23px;
-    border: 1px solid #aebfb2;
-    background: #fff;
-    border-radius: 3px;
+    border: 1px solid var(--rfm-line);
+    background: var(--rfm-surface);
+    border-radius: var(--rfm-radius-panel);
     transition: transform 0.2s, border-color 0.2s;
   }
   a.info-card:hover {
     transform: translateY(-4px);
-    border-color: #247f93;
+    border-color: var(--rfm-interactive);
   }
   .info-card h3 {
     display: flex;
@@ -110,7 +110,7 @@
   }
   .info-card p {
     font-size: 14px;
-    color: #576c66;
+    color: var(--rfm-muted);
     line-height: 1.8;
     margin: 0;
   }
@@ -120,9 +120,9 @@
     min-width: 0;
     box-sizing: border-box;
     overflow-x: auto;
-    border: 1px solid #aebfb2;
-    border-radius: 7px;
-    background: #fffefa;
+    border: 1px solid var(--rfm-line);
+    border-radius: var(--rfm-radius-panel);
+    background: var(--rfm-surface);
   }
   table.info-comparison {
     width: 100%;
@@ -133,13 +133,13 @@
   table.info-comparison th,
   table.info-comparison td {
     padding: 17px 18px;
-    border-bottom: 1px solid #d8e0d4;
+    border-bottom: 1px solid var(--rfm-line);
     vertical-align: top;
     font-size: 13px;
     line-height: 1.75;
   }
   table.info-comparison thead th {
-    background: #edf1e2;
+    background: var(--rfm-subtle);
     font-size: 12px;
     letter-spacing: 0.04em;
   }
@@ -159,7 +159,7 @@
     padding: 2px 7px;
     border-radius: 999px;
     background: #1d694f;
-    color: #fff;
+    color: var(--rfm-surface);
     font-size: 10px;
     font-weight: 700;
     vertical-align: 2px;
@@ -183,7 +183,7 @@
   }
   .info-list li > span {
     font: 26px Arial, sans-serif;
-    color: #247f93;
+    color: var(--rfm-interactive);
   }
   .info-list h3 {
     font-size: 18px;
@@ -192,17 +192,17 @@
     margin: 0;
     font-size: 14px;
     line-height: 1.8;
-    color: #576c66;
+    color: var(--rfm-muted);
   }
   .info-notice {
-    background: #173c43;
-    color: #f6f5ed;
+    background: var(--rfm-ink);
+    color: var(--rfm-workspace);
     padding: clamp(25px, 5vw, 55px);
-    border-radius: 5px;
+    border-radius: var(--rfm-radius-control);
     max-width: 980px;
   }
   .info-notice h2 {
-    color: #f6f5ed;
+    color: var(--rfm-workspace);
   }
   .info-notice p:not(.studio-kicker) {
     max-width: 780px;
@@ -212,10 +212,10 @@
     font-size: 14px;
   }
   .info-faq {
-    border-top: 1px solid #bdcbbd;
+    border-top: 1px solid var(--rfm-line);
   }
   .info-faq details {
-    border-bottom: 1px solid #bdcbbd;
+    border-bottom: 1px solid var(--rfm-line);
   }
   .info-faq summary {
     display: flex;
@@ -232,7 +232,7 @@
   }
   .info-faq details p {
     max-width: 850px;
-    color: #576c66;
+    color: var(--rfm-muted);
     margin: 0;
     padding: 0 15px 19px 0;
     font-size: 14px;
@@ -280,7 +280,7 @@
       grid-template-columns: 1fr;
     }
     h1 {
-      font-size: clamp(28px, 7vw, 40px);
+      font-size: var(--rfm-title-page);
     }
     .info-hero p:not(.studio-kicker) {
       font-size: 14px;

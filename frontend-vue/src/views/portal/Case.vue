@@ -138,18 +138,18 @@
   .case-page {
     min-height: 65vh;
     padding: 52px 20px;
-    background: #f6f5ed;
+    background: var(--rfm-workspace);
   }
   .case-card {
     max-width: 760px;
     margin: auto;
-    background: #fffefa;
+    background: var(--rfm-surface);
     border-radius: 7px;
     padding: 34px;
-    border: 1px solid #c6d3ca;
+    border: 1px solid var(--rfm-line);
   }
   .brand {
-    color: #247f93;
+    color: var(--rfm-interactive);
     text-decoration: none;
     font-weight: 800;
   }
@@ -160,7 +160,7 @@
     gap: 18px;
   }
   .case-top p {
-    color: #667085;
+    color: var(--rfm-muted);
     margin: 0;
   }
   h1 {
@@ -182,12 +182,12 @@
     display: block;
   }
   .summary-grid span {
-    color: #667085;
+    color: var(--rfm-muted);
     font-size: 13px;
     margin-bottom: 6px;
   }
   .summary-grid strong {
-    color: #247f93;
+    color: var(--rfm-interactive);
     font-size: 22px;
   }
   .decision-actions {
@@ -198,8 +198,8 @@
   .help {
     margin-top: 28px;
     padding-top: 18px;
-    border-top: 1px solid #edf0f5;
-    color: #667085;
+    border-top: 1px solid var(--rfm-selected);
+    color: var(--rfm-muted);
     line-height: 1.7;
     font-size: 13px;
   }

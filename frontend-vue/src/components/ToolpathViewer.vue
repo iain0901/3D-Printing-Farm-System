@@ -210,7 +210,7 @@
   onMounted(() => {
     try {
       scene = new THREE.Scene()
-      scene.background = new THREE.Color('#edf0ee')
+      scene.background = new THREE.Color(getComputedStyle(host.value).getPropertyValue('--rfm-canvas').trim() || '#eef0f3')
       camera = new THREE.PerspectiveCamera(40, 1, 0.1, 5000)
       camera.up.set(0, 0, 1)
       renderer = new THREE.WebGLRenderer({ antialias: true })
@@ -255,10 +255,10 @@
     position: relative;
     height: 100%;
     min-height: 620px;
-    border-radius: 8px;
+    border-radius: var(--rfm-radius-panel);
     overflow: hidden;
-    background: #edf0ee;
-    color: #233d35;
+    background: var(--rfm-canvas);
+    color: var(--rfm-ink);
     font-size: 11px;
   }
   .toolpath-canvas {
@@ -285,24 +285,24 @@
   }
   .toolpath-viewer button,
   .toolpath-viewer select {
-    background: #ffffffed;
+    background: var(--rfm-surface);
     color: inherit;
-    border: 1px solid #d4ded6;
-    border-radius: 5px;
+    border: 1px solid var(--rfm-line);
+    border-radius: var(--rfm-radius-control);
     padding: 8px 12px;
     font: inherit;
     cursor: pointer;
   }
   .path-heading span {
-    color: #6c8172;
+    color: var(--rfm-muted);
   }
   .path-legend {
     position: absolute;
     left: 16px;
     top: 65px;
-    background: #ffffffed;
+    background: var(--rfm-surface);
     padding: 14px;
-    border: 1px solid #d4ded6;
+    border: 1px solid var(--rfm-line);
     border-radius: 7px;
     display: grid;
     gap: 10px;
@@ -319,15 +319,15 @@
     border-radius: 2px;
   }
   .path-legend input {
-    accent-color: #245847;
+    accent-color: var(--rfm-ink);
   }
   .single-layer {
-    border-top: 1px solid #d4ded6;
+    border-top: 1px solid var(--rfm-line);
     padding-top: 10px;
   }
   .path-legend p {
     font-size: 9px;
-    color: #819287;
+    color: var(--rfm-muted);
     margin: 0;
   }
   .layer-interval {
@@ -338,9 +338,9 @@
     display: flex;
     gap: 15px;
     padding: 14px;
-    background: #ffffffde;
-    border-radius: 6px;
-    border: 1px solid #d4ded6;
+    background: var(--rfm-surface);
+    border-radius: var(--rfm-radius-control);
+    border: 1px solid var(--rfm-line);
   }
   .layer-interval label {
     display: flex;
@@ -354,7 +354,7 @@
     direction: rtl;
     flex: 1;
     min-height: 100px;
-    accent-color: #245847;
+    accent-color: var(--rfm-ink);
   }
   .path-playback {
     position: absolute;
@@ -364,9 +364,9 @@
     display: flex;
     gap: 12px;
     align-items: center;
-    background: #fffffff0;
-    border: 1px solid #d4ded6;
-    border-radius: 6px;
+    background: var(--rfm-surface);
+    border: 1px solid var(--rfm-line);
+    border-radius: var(--rfm-radius-control);
     padding: 12px;
   }
   .path-progress {
@@ -377,12 +377,12 @@
   }
   .path-progress input {
     width: 100%;
-    accent-color: #245847;
+    accent-color: var(--rfm-ink);
   }
   .path-playback > span {
     font-size: 9px;
     max-width: 160px;
-    color: #68816e;
+    color: var(--rfm-muted);
   }
   .path-playback > label:not(.path-progress) {
     display: flex;
@@ -393,7 +393,7 @@
     position: absolute;
     bottom: 12px;
     left: 18px;
-    color: #7a8e80;
+    color: var(--rfm-muted);
     font-size: 9px;
   }
   .path-warning {
@@ -404,7 +404,7 @@
     padding: 10px;
     background: #fff8e8;
     border: 1px solid #e5d4b0;
-    border-radius: 5px;
+    border-radius: var(--rfm-radius-control);
     font-size: 10px;
     line-height: 1.7;
   }

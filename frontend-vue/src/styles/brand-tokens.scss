@@ -1,0 +1,96 @@
+// Shared brand contract. Material colors and semantic statuses are separate.
+:root {
+  --rfm-ink: #192e53;
+  --rfm-primary: #192e53;
+  --rfm-primary-hover: #294872;
+  --rfm-interactive: #173cc5;
+  --rfm-accent: #c44324;
+  --rfm-accent-light: #ffaf91;
+  --rfm-paper: #f7f3e9;
+  --rfm-surface: #fffdfa;
+  --rfm-workspace: #f3f2ee;
+  --rfm-canvas: #eef0f3;
+  --rfm-subtle: #eeeade;
+  --rfm-selected: #edf0fc;
+  --rfm-line: #d8d5cc;
+  --rfm-muted: #586579;
+  --rfm-on-dark-muted: #c0c9d9;
+  --rfm-success: #28734c;
+  --rfm-success-bg: #eaf3ed;
+  --rfm-danger: #a33729;
+  --rfm-danger-bg: #fbece7;
+  --rfm-focus: #173cc5;
+  --rfm-font: 'Noto Sans TC', 'Noto Sans CJK TC', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  --rfm-radius-control: 4px;
+  --rfm-radius-panel: 8px;
+  --rfm-control-height: 42px;
+  --rfm-title-page: clamp(30px, 3.5vw, 48px);
+  --rfm-title-section: clamp(24px, 2.5vw, 34px);
+  --rfm-title-workspace: clamp(28px, 3vw, 36px);
+  --rfm-space-section: clamp(40px, 6vw, 72px);
+}
+
+@media (max-width: 600px) {
+  :root {
+    --rfm-title-page: clamp(28px, 7vw, 36px);
+  }
+}
+
+:where(.brand-surface, .brand-dialog) {
+  --ink: var(--rfm-ink);
+  --paper: var(--rfm-paper);
+  --blue: var(--rfm-interactive);
+  --lime: var(--rfm-subtle);
+  --accent: var(--rfm-accent);
+  --member-ink: var(--rfm-ink);
+  --member-muted: var(--rfm-muted);
+  --member-line: var(--rfm-line);
+  --el-color-primary: var(--rfm-primary);
+  --el-color-primary-light-3: #526581;
+  --el-color-primary-light-5: #8c97a9;
+  --el-color-primary-light-7: #bac0ca;
+  --el-color-primary-light-8: #d1d5dd;
+  --el-color-primary-light-9: #edf0f5;
+  --el-color-primary-dark-2: #10213f;
+  --el-text-color-primary: var(--rfm-ink);
+  --el-text-color-regular: var(--rfm-muted);
+  --el-border-color: var(--rfm-line);
+  --el-border-radius-base: var(--rfm-radius-control);
+  --el-font-family: var(--rfm-font);
+  --el-bg-color: var(--rfm-surface);
+  color: var(--rfm-ink);
+  font-family: var(--rfm-font);
+  color-scheme: light;
+}
+
+.brand-surface :where(button, input, textarea, select),
+.brand-dialog :where(button, input, textarea, select) {
+  font-family: var(--rfm-font);
+}
+
+.brand-surface :where(a, button, input, textarea, select, summary):focus-visible,
+.brand-dialog :where(a, button, input, textarea, select, summary):focus-visible {
+  outline: 2px solid var(--rfm-focus);
+  outline-offset: 3px;
+}
+
+.brand-dialog {
+  border: 1px solid var(--rfm-line);
+  border-radius: var(--rfm-radius-panel);
+  max-width: calc(100vw - 32px);
+  background: var(--rfm-surface);
+}
+
+.brand-surface .el-button,
+.brand-dialog .el-button {
+  min-height: var(--rfm-control-height);
+  border-radius: var(--rfm-radius-control);
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-surface :where(button, a, input, select),
+  .brand-dialog :where(button, a, input, select) {
+    transition-duration: 0s;
+  }
+}

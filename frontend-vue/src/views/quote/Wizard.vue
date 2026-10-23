@@ -382,7 +382,7 @@
           </div>
         </el-card>
 
-        <el-dialog title="案件已建立" v-model="successVisible" width="460px" :close-on-click-modal="false">
+        <el-dialog class="brand-dialog" title="案件已建立" v-model="successVisible" width="460px" :close-on-click-modal="false">
           <div v-if="createdCase" class="success-dialog">
             <el-result icon="success" title="已收到你的案件" :sub-title="`${createdCase.caseNo}｜${createdCase.project}`" />
             <p>案件連結已建立。後續客服與 LINE 對話會統一在 Chatwoot 進行。</p>
@@ -814,17 +814,17 @@
 
 <style lang="scss" scoped>
   .quote-page {
-    background: #f6f5ed;
-    color: #173c43;
+    background: var(--rfm-workspace);
+    color: var(--rfm-ink);
     padding-top: 12px;
   }
   .quote-context {
     max-width: 980px;
     margin: 0 auto 20px;
     padding: 18px 24px;
-    border: 1px solid #9ab6a7;
-    background: #eef0dd;
-    border-radius: 6px;
+    border: 1px solid var(--rfm-line);
+    background: var(--rfm-subtle);
+    border-radius: var(--rfm-radius-control);
     display: flex;
     align-items: center;
     gap: 20px;
@@ -866,8 +866,8 @@
     max-width: 980px;
     margin: 0 auto 35px;
     padding: 25px 38px;
-    border-radius: 7px;
-    background: #d5e6df;
+    border-radius: var(--rfm-radius-panel);
+    background: var(--rfm-subtle);
     display: grid;
     grid-template-columns: 1fr 240px;
     align-items: center;
@@ -891,7 +891,7 @@
     min-height: 220px;
   }
   .subtle {
-    color: #66756f;
+    color: var(--rfm-muted);
     line-height: 1.7;
     font-size: 13px;
   }
@@ -899,9 +899,9 @@
   .account-choice,
   .generated-project {
     max-width: 680px;
-    border: 1px solid #b8cec1;
-    border-radius: 8px;
-    background: #fffefa;
+    border: 1px solid var(--rfm-line);
+    border-radius: var(--rfm-radius-panel);
+    background: var(--rfm-surface);
     padding: 22px;
   }
   .member-summary {
@@ -915,7 +915,7 @@
   }
   .member-summary p:not(.studio-kicker) {
     margin: 0;
-    color: #66756f;
+    color: var(--rfm-muted);
     font-size: 14px;
   }
   .account-tabs {
@@ -924,17 +924,17 @@
     margin-bottom: 22px;
   }
   .account-tabs button {
-    border: 1px solid #b8cec1;
+    border: 1px solid var(--rfm-line);
     background: transparent;
     border-radius: 999px;
     padding: 8px 15px;
-    color: #173c43;
+    color: var(--rfm-ink);
     cursor: pointer;
   }
   .account-tabs button.active {
-    background: #173c43;
-    border-color: #173c43;
-    color: #fff;
+    background: var(--rfm-ink);
+    border-color: var(--rfm-ink);
+    color: var(--rfm-surface);
   }
   .account-form {
     max-width: 560px;
@@ -953,7 +953,7 @@
     letter-spacing: 0.02em;
   }
   .generated-project small {
-    color: #66756f;
+    color: var(--rfm-muted);
     line-height: 1.6;
   }
   .quote-shell {
@@ -963,9 +963,9 @@
   }
   .wizard-card {
     margin-top: 30px;
-    border: 1px solid #d2d9ce;
-    border-radius: 7px;
-    background: #fffefa;
+    border: 1px solid var(--rfm-line);
+    border-radius: var(--rfm-radius-panel);
+    background: var(--rfm-surface);
   }
   .step-content {
     min-height: 390px;
@@ -986,9 +986,9 @@
   }
   .mode-card {
     min-height: 150px;
-    border: 1px solid #c6d3ca;
-    border-radius: 6px;
-    background: #fffefa;
+    border: 1px solid var(--rfm-line);
+    border-radius: var(--rfm-radius-control);
+    background: var(--rfm-surface);
     padding: 24px;
     text-align: left;
     cursor: pointer;
@@ -996,12 +996,12 @@
   }
   .mode-card:hover,
   .mode-card.selected {
-    border-color: #247f93;
-    background: #eaf3f4;
-    box-shadow: 0 0 0 1px #247f93;
+    border-color: var(--rfm-interactive);
+    background: var(--rfm-selected);
+    box-shadow: 0 0 0 1px var(--rfm-interactive);
   }
   .mode-card i {
-    color: #247f93;
+    color: var(--rfm-interactive);
     font-size: 25px;
     display: block;
     margin-bottom: 16px;
@@ -1012,7 +1012,7 @@
   }
   .mode-card span {
     margin-top: 7px;
-    color: #667085;
+    color: var(--rfm-muted);
     font-size: 14px;
   }
   .choice-form {
@@ -1040,7 +1040,7 @@
     margin: 0;
   }
   dt {
-    color: #667085;
+    color: var(--rfm-muted);
     margin-top: 14px;
   }
   dd {
@@ -1048,8 +1048,8 @@
     font-weight: 600;
   }
   .estimate-card {
-    background: #173c43;
-    color: #fff;
+    background: var(--rfm-ink);
+    color: var(--rfm-surface);
     border-radius: 14px;
     padding: 24px;
   }
@@ -1089,10 +1089,10 @@
   }
   .model-preview-block {
     margin-top: 18px;
-    border: 1px solid #c6d3ca;
-    border-radius: 12px;
+    border: 1px solid var(--rfm-line);
+    border-radius: var(--rfm-radius-panel);
     padding: 14px;
-    background: #fff;
+    background: var(--rfm-surface);
   }
   .preview-switch {
     display: flex;
@@ -1101,9 +1101,9 @@
     margin-top: 10px;
   }
   .preview-tab {
-    border: 1px solid #c6d3ca;
+    border: 1px solid var(--rfm-line);
     background: #f8fafc;
-    border-radius: 8px;
+    border-radius: var(--rfm-radius-panel);
     padding: 5px 10px;
     font-size: 12px;
     cursor: pointer;
@@ -1113,9 +1113,9 @@
     white-space: nowrap;
   }
   .preview-tab.active {
-    border-color: #247f93;
-    color: #247f93;
-    background: #eaf3f4;
+    border-color: var(--rfm-interactive);
+    color: var(--rfm-interactive);
+    background: var(--rfm-selected);
   }
   .color-cell {
     display: flex;
@@ -1127,13 +1127,13 @@
     justify-content: flex-end;
     gap: 10px;
     padding-top: 20px;
-    border-top: 1px solid #edf0f5;
+    border-top: 1px solid var(--rfm-selected);
   }
   .success-dialog {
     text-align: center;
   }
   .success-dialog p {
-    color: #667085;
+    color: var(--rfm-muted);
     line-height: 1.7;
   }
   :deep(.el-card__body) {

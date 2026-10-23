@@ -3,17 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#17343d" />
+    <meta name="theme-color" content="#192e53" />
     <title>3DRFM｜目前無法連線</title>
     <style>
       :root {
-        color: #0f172a;
-        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: #192e53;
+        font-family: 'Noto Sans TC', 'Noto Sans CJK TC', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
       }
 
       body {
         align-items: center;
-        background: #f8fafc;
+        background: #f7f3e9;
         display: flex;
         min-height: 100vh;
         margin: 0;
@@ -24,32 +24,37 @@
         max-width: 520px;
       }
 
-      svg {
-        height: 56px;
-        width: 56px;
+      .brand {
+        font: 900 34px/1.1 Arial, sans-serif;
+        letter-spacing: -1.8px;
+      }
+      .brand span {
+        color: #c44324;
+        font-size: 10px;
+        vertical-align: top;
       }
 
       h1 {
         font-size: clamp(2rem, 8vw, 3.4rem);
-        line-height: 1;
+        line-height: 1.35;
         margin: 24px 0 16px;
       }
 
       p {
-        color: #475569;
+        color: #586579;
         font-size: 1rem;
         line-height: 1.6;
       }
 
       a {
-        color: #2563eb;
+        color: #173cc5;
         font-weight: 700;
       }
     </style>
   </head>
   <body>
     <main>
-      <img src="/layerpilot-icon.svg" alt="3DRFM" width="56" height="56" />
+      <div class="brand">3DRFM <span aria-hidden="true">●</span></div>
       <h1>目前無法連線</h1>
       <p>3DRFM 的估價、案件進度與模型檔案需要連線至伺服器才能使用。請確認網路連線後重新載入；離線時無法送出需求或更新案件。</p>
       <p><a href="/">重新連線</a></p>

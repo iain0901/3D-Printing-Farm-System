@@ -14,14 +14,14 @@ describe("3DRFM PWA assets", () => {
       start_url: "/",
       scope: "/",
       display: "standalone",
-      theme_color: "#17343d"
+      theme_color: "#192e53"
     });
     expect(manifest.icons.some((icon) => icon.src === "/layerpilot-icon.svg" && icon.purpose.includes("maskable"))).toBe(true);
     expect(manifest.shortcuts.map((shortcut) => shortcut.url)).toEqual(expect.arrayContaining(["/#/portal/dashboard", "/#/quote"]));
 
     const index = await readFile(path.join(root, "frontend-vue", "dist", "index.html"), "utf8");
     expect(index).toContain('rel="manifest" href="/manifest.webmanifest"');
-    expect(index).toContain('name="theme-color" content="#17343d"');
+    expect(index).toContain('name="theme-color" content="#192e53"');
 
     const serviceWorker = await readFile(path.join(root, "frontend-vue", "dist", "sw.js"), "utf8");
     expect(serviceWorker).toContain("layerpilot-shell-v1");

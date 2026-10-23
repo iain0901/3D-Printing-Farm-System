@@ -61,8 +61,8 @@
     align-items: stretch;
   }
   .auth-poster {
-    background: #17343d;
-    color: #e6f0eb;
+    background: var(--rfm-ink);
+    color: var(--rfm-on-dark-muted);
     padding: 38px 38px 26px;
     border-radius: 8px 0 0 8px;
     display: flex;
@@ -90,7 +90,7 @@
     gap: 18px;
   }
   .auth-capabilities li > span {
-    color: #dff08f;
+    color: var(--rfm-subtle);
     font-size: 11px;
     padding-top: 3px;
   }
@@ -103,9 +103,9 @@
     gap: 10px;
   }
   .auth-form-panel {
-    background: #fffefa;
+    background: var(--rfm-surface);
     padding: 38px clamp(25px, 5vw, 74px) 48px;
-    border: 1px solid #dedfd4;
+    border: 1px solid var(--rfm-line);
     border-left: none;
     border-radius: 0 8px 8px 0;
   }
@@ -115,13 +115,13 @@
     margin-bottom: 32px;
   }
   .auth-form-panel h1 {
-    font-size: 34px;
+    font-size: var(--rfm-title-workspace);
     margin: 10px 0;
     line-height: 1.35;
     letter-spacing: -0.03em;
   }
   .auth-description {
-    color: #64736b;
+    color: var(--rfm-muted);
     font-size: 14px;
     margin-bottom: 25px;
   }
@@ -130,20 +130,20 @@
   }
   .auth-form-panel .el-input__wrapper {
     padding: 6px 13px;
-    box-shadow: 0 0 0 1px #c7cfc8 inset;
+    box-shadow: 0 0 0 1px var(--rfm-line) inset;
   }
   .auth-form-panel .el-input__wrapper.is-focus {
-    box-shadow: 0 0 0 2px #247f93 inset;
+    box-shadow: 0 0 0 2px var(--rfm-interactive) inset;
   }
   .auth-form-panel .auth-submit {
     width: 100%;
     height: 47px;
-    background: #173c43;
-    border-color: #173c43;
+    background: var(--rfm-ink);
+    border-color: var(--rfm-ink);
     margin-top: 5px;
   }
   .auth-form-panel .auth-submit:hover {
-    background: #28575c;
+    background: var(--rfm-primary-hover);
   }
   .auth-links {
     display: flex;
@@ -158,10 +158,10 @@
   }
   .auth-note {
     font-size: 12px;
-    color: #64736b;
+    color: var(--rfm-muted);
     margin-top: 25px;
     padding-top: 20px;
-    border-top: 1px solid #dfe3d8;
+    border-top: 1px solid var(--rfm-line);
   }
   @media (max-width: 760px) {
     .auth-workspace {
@@ -191,7 +191,7 @@
     }
     .auth-form-panel {
       padding: 27px 24px 36px;
-      border: 1px solid #dedfd4;
+      border: 1px solid var(--rfm-line);
       border-top: none;
       border-radius: 0 0 8px 8px;
     }

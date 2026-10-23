@@ -1,9 +1,8 @@
 <template>
-  <div class="slicer-lab" :class="{ embedded }">
+  <div class="slicer-lab brand-surface" :class="{ embedded }">
     <header class="lab-header">
       <router-link to="/" class="lab-brand">
-        3DRFM
-        <span>●</span>
+        <brand-mark compact />
       </router-link>
       <div>
         <h1>{{ isFree ? '水木書苑・雲端切片' : '雲端切片工作區' }}</h1>
@@ -133,7 +132,7 @@
         </div>
       </aside>
     </main>
-    <el-dialog v-model="libraryOpen" title="從模型庫加入" width="550px">
+    <el-dialog v-model="libraryOpen" class="brand-dialog" title="從模型庫加入" width="550px">
       <p v-if="libraryBusy" role="status">正在載入模型庫…</p>
       <p v-if="libraryError" role="alert">{{ libraryError }}</p>
       <div v-for="model in libraryModels" :key="model.id" class="library-row">
@@ -143,7 +142,7 @@
       <p v-if="!libraryBusy && !libraryModels.length && !libraryError">目前沒有可加入的 STL 模型。</p>
       <quote-account v-if="!embedded && !memberToken" />
     </el-dialog>
-    <el-dialog v-model="cloudOpen" title="保存到會員雲端草稿" width="550px">
+    <el-dialog v-model="cloudOpen" class="brand-dialog" title="保存到會員雲端草稿" width="550px">
       <quote-account />
       <template v-if="memberToken">
         <label class="cloud-project-label">
@@ -175,6 +174,7 @@
   import SlicerSettings from '@/components/SlicerSettings.vue'
   import ToolpathViewer from '@/components/ToolpathViewer.vue'
   import QuoteAccount from '@/components/QuoteAccount.vue'
+  import BrandMark from '@/components/public/BrandMark.vue'
   import { workspace, uploadWorkspace, modelFile } from '@/api/memberWorkspace'
   import staffRequest from '@/utils/request'
   import { createQuoteDraft, defaultQuoteSettings } from '@/utils/quote-workspace.mjs'
@@ -539,9 +539,9 @@
     min-height: 760px;
     display: flex;
     flex-direction: column;
-    background: #f6f7f2;
-    color: #233d35;
-    font-family: 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
+    background: var(--rfm-workspace);
+    color: var(--rfm-ink);
+    font-family: var(--rfm-font);
     box-sizing: border-box;
   }
   .slicer-lab * {
@@ -557,20 +557,14 @@
     display: flex;
     align-items: center;
     gap: 22px;
-    border-bottom: 1px solid #d9e2d8;
+    border-bottom: 1px solid var(--rfm-line);
     padding: 0 24px;
-    background: #fff;
+    background: var(--rfm-surface);
   }
   .lab-brand {
     font-size: 23px;
     font-weight: 900;
     letter-spacing: -1px;
-  }
-  .lab-brand span {
-    font-size: 10px;
-    color: #b58d49;
-    vertical-align: top;
-    margin-left: 4px;
   }
   .lab-header h1 {
     font-size: 13px;
@@ -578,7 +572,7 @@
   }
   .lab-header p {
     font-size: 9px;
-    color: #879789;
+    color: var(--rfm-muted);
     margin: 0;
   }
   .lab-file-actions {
@@ -591,9 +585,9 @@
   .slicer-lab button {
     font: inherit;
     font-size: 11px;
-    border: 1px solid #d4ded6;
-    background: #fff;
-    border-radius: 5px;
+    border: 1px solid var(--rfm-line);
+    background: var(--rfm-surface);
+    border-radius: var(--rfm-radius-control);
     padding: 9px 12px;
     color: inherit;
     cursor: pointer;
@@ -604,7 +598,7 @@
   }
   .slicer-lab button:focus-visible,
   .slicer-lab a:focus-visible {
-    outline: 3px solid #a98b56;
+    outline: 2px solid var(--rfm-focus);
     outline-offset: 3px;
   }
   .lab-file-actions a {
@@ -618,8 +612,8 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    border-bottom: 1px solid #dce3dc;
-    background: #fafbf8;
+    border-bottom: 1px solid var(--rfm-line);
+    background: var(--rfm-paper);
   }
   .lab-workflow button {
     border: 0;
@@ -628,13 +622,13 @@
     padding: 10px 14px;
   }
   .lab-workflow button[aria-current='step'] {
-    background: #e6eee5;
-    color: #21533e;
+    background: var(--rfm-selected);
+    color: var(--rfm-ink);
     font-weight: 700;
   }
   .lab-workflow > span {
     margin-left: auto;
-    color: #8b9b8e;
+    color: var(--rfm-muted);
     font-size: 10px;
   }
   .lab-body {
@@ -668,7 +662,7 @@
     background: #fff1e9f2;
     z-index: 4;
     color: #91432f;
-    border-radius: 5px;
+    border-radius: var(--rfm-radius-control);
     font-size: 11px;
     margin: 0;
   }
@@ -677,19 +671,19 @@
     bottom: 98px;
     left: 85px;
     font-size: 11px;
-    background: #fff;
+    background: var(--rfm-surface);
     padding: 8px;
     z-index: 4;
   }
   .lab-settings {
     overflow: auto;
     min-width: 0;
-    border-left: 1px solid #d9e2d8;
-    background: #fff;
+    border-left: 1px solid var(--rfm-line);
+    background: var(--rfm-surface);
     padding: 20px 20px 0;
   }
   .lab-settings section {
-    border-bottom: 1px solid #e1e7df;
+    border-bottom: 1px solid var(--rfm-line);
     padding-bottom: 18px;
     margin-bottom: 18px;
   }
@@ -705,7 +699,7 @@
   }
   .lab-section-title span {
     font-size: 9px;
-    color: #8b9c8b;
+    color: var(--rfm-muted);
   }
   .lab-settings label {
     font-size: 10px;
@@ -716,9 +710,9 @@
     padding: 9px;
     width: 100%;
     min-width: 0;
-    border: 1px solid #d4ded6;
-    border-radius: 4px;
-    background: #fbfcf9;
+    border: 1px solid var(--rfm-line);
+    border-radius: var(--rfm-radius-control);
+    background: var(--rfm-surface);
     color: inherit;
     font: inherit;
     font-size: 11px;
@@ -726,7 +720,7 @@
   .lab-settings p {
     font-size: 10px;
     line-height: 1.8;
-    color: #7e8f80;
+    color: var(--rfm-muted);
   }
   .lab-settings p a {
     text-decoration: underline;
@@ -735,8 +729,8 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    border: 1px solid #d9e2d8;
-    border-radius: 5px;
+    border: 1px solid var(--rfm-line);
+    border-radius: var(--rfm-radius-control);
     padding: 12px;
   }
   .locked-filament strong {
@@ -745,12 +739,12 @@
   .locked-filament small {
     margin-left: auto;
     font-size: 8px;
-    color: #899a8b;
+    color: var(--rfm-muted);
   }
   .filament-dot {
     width: 20px;
     height: 20px;
-    border: 4px solid #e1e8de;
+    border: 4px solid var(--rfm-line);
     border-radius: 50%;
     background: #688671;
   }
@@ -764,14 +758,14 @@
     position: sticky;
     bottom: 0;
     padding: 16px 0;
-    background: #fffffff5;
-    border-top: 1px solid #dce3dc;
+    background: var(--rfm-surface);
+    border-top: 1px solid var(--rfm-line);
     backdrop-filter: blur(10px);
   }
   .slicer-lab .slice-button {
-    background: #245847;
+    background: var(--rfm-ink);
     color: white;
-    border-color: #245847;
+    border-color: var(--rfm-ink);
     width: 100%;
     font-size: 13px;
     padding: 12px;
@@ -798,7 +792,7 @@
   .result-numbers span {
     display: block;
     font-size: 9px;
-    color: #839587;
+    color: var(--rfm-muted);
     margin-bottom: 5px;
   }
   .result-numbers strong {
@@ -806,21 +800,21 @@
     font-weight: 600;
   }
   .lab-settings .lab-error {
-    color: #984830;
-    background: #fff0e9;
+    color: var(--rfm-danger);
+    background: var(--rfm-danger-bg);
     border: 1px solid #efcec0;
     padding: 10px;
-    border-radius: 4px;
+    border-radius: var(--rfm-radius-control);
   }
   .lab-notice {
-    color: #285940 !important;
-    background: #ecf4e8;
+    color: var(--rfm-success) !important;
+    background: var(--rfm-success-bg);
     padding: 10px;
-    border-radius: 4px;
+    border-radius: var(--rfm-radius-control);
   }
   .lab-result summary {
     font-size: 10px;
-    color: #849786;
+    color: var(--rfm-muted);
     cursor: pointer;
   }
   .lab-result details {
@@ -835,9 +829,9 @@
     align-items: center;
     padding: 0 20px;
     font-size: 9px;
-    color: #879888;
-    border-top: 1px solid #dce3dc;
-    background: #f9fbf7;
+    color: var(--rfm-muted);
+    border-top: 1px solid var(--rfm-line);
+    background: var(--rfm-surface);
   }
   .sr-only {
     position: absolute;
@@ -852,7 +846,7 @@
     gap: 16px;
     align-items: center;
     padding: 12px 0;
-    border-bottom: 1px solid #dce3dc;
+    border-bottom: 1px solid var(--rfm-line);
   }
   .library-row span {
     overflow-wrap: anywhere;
@@ -866,8 +860,8 @@
     font-size: 12px;
   }
   .cloud-project-label input {
-    border: 1px solid #d4ded6;
-    border-radius: 5px;
+    border: 1px solid var(--rfm-line);
+    border-radius: var(--rfm-radius-control);
     padding: 10px;
     font: inherit;
     color: inherit;
@@ -936,7 +930,7 @@
     }
     .lab-settings {
       border-left: 0;
-      border-top: 1px solid #d9e2d8;
+      border-top: 1px solid var(--rfm-line);
       overflow: visible;
       padding: 20px;
     }

@@ -1,11 +1,9 @@
 <template>
-  <div class="portal-layout">
+  <div class="portal-layout brand-surface">
     <a class="portal-skip" href="#member-content" @click.prevent="$refs.content.focus()">跳至主要內容</a>
     <aside class="portal-sidebar">
       <router-link to="/" class="portal-brand" aria-label="3DRFM，回到官網">
-        3DRFM
-        <span>●</span>
-        <small>會員工作台</small>
+        <brand-mark subtitle="會員工作台" />
       </router-link>
       <p class="nav-caption">我的製作計畫</p>
       <nav aria-label="會員導覽">
@@ -61,9 +59,11 @@
   import { mapGetters } from 'vuex'
   import { logoutCustomer } from '@/api/customerAuth'
   import { portalSections, portalSection } from '@/utils/portal-presentation.mjs'
+  import BrandMark from '@/components/public/BrandMark.vue'
 
   export default {
     name: 'PortalLayout',
+    components: { BrandMark },
     data: () => ({
       sections: [
         ...portalSections.slice(0, 1),
@@ -111,22 +111,14 @@
 
 <style lang="scss">
   .portal-layout {
-    --member-ink: #183d34;
-    --member-muted: #65716c;
-    --member-line: #dce2db;
-    --el-color-primary: #245c48;
-    --el-color-primary-light-3: #527d6d;
-    --el-color-primary-light-5: #88a597;
-    --el-color-primary-light-7: #becfc5;
-    --el-color-primary-light-8: #d8e3dc;
-    --el-color-primary-light-9: #edf3ee;
-    --el-color-primary-dark-2: #173d30;
-    --el-border-radius-base: 6px;
+    --member-ink: var(--rfm-ink);
+    --member-muted: var(--rfm-muted);
+    --member-line: var(--rfm-line);
     display: flex;
     min-height: 100vh;
     color: var(--member-ink);
-    background: #f5f5ef;
-    font-family: 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
+    background: var(--rfm-workspace);
+    font-family: var(--rfm-font);
     line-height: 1.6;
     * {
       box-sizing: border-box;
@@ -137,26 +129,26 @@
     }
     a:focus-visible,
     button:focus-visible {
-      outline: 3px solid #a57629;
-      outline-offset: 4px;
+      outline: 2px solid var(--rfm-focus);
+      outline-offset: 3px;
     }
     .el-button {
       font-family: inherit;
-      min-height: 36px;
+      min-height: var(--rfm-control-height);
     }
     .el-button + .el-button {
       margin-left: 0;
     }
     .el-dialog {
       max-width: calc(100vw - 32px);
-      border-radius: 10px;
+      border-radius: var(--rfm-radius-panel);
       color: var(--member-ink);
     }
     .el-dialog__body {
       overflow-wrap: anywhere;
     }
     .el-tag {
-      border-radius: 4px;
+      border-radius: var(--rfm-radius-control);
       flex-shrink: 0;
     }
     @media (prefers-reduced-motion: reduce) {
@@ -184,7 +176,7 @@
     flex-shrink: 0;
     padding: 36px 22px 24px;
     border-right: 1px solid var(--member-line);
-    background: #eef0e8;
+    background: var(--rfm-subtle);
     display: flex;
     flex-direction: column;
     position: sticky;
@@ -197,19 +189,6 @@
     font-weight: 900;
     letter-spacing: -1.5px;
     padding: 0 12px;
-  }
-  .portal-brand > span {
-    font-size: 14px;
-    color: #b48c43;
-    vertical-align: top;
-    margin-left: 4px;
-  }
-  .portal-brand small {
-    display: block;
-    font-size: 11px;
-    letter-spacing: 3px;
-    font-weight: 500;
-    margin-top: 3px;
   }
   .nav-caption {
     color: var(--member-muted);
@@ -226,16 +205,16 @@
     align-items: center;
     gap: 14px;
     padding: 13px 12px;
-    border-radius: 6px;
+    border-radius: var(--rfm-radius-control);
     font-size: 14px;
     font-weight: 600;
   }
   .portal-sidebar nav a:hover {
-    background: #e1e6dc;
+    background: var(--rfm-selected);
   }
   .portal-sidebar nav a.selected {
-    background: #214b3d;
-    color: #fff;
+    background: var(--rfm-ink);
+    color: var(--rfm-surface);
   }
   .nav-number {
     font-size: 10px;
@@ -284,7 +263,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    background: #fafbf7;
+    background: var(--rfm-surface);
   }
   .portal-breadcrumb {
     color: var(--member-muted);
@@ -311,7 +290,7 @@
     width: 30px;
     height: 30px;
     border-radius: 50%;
-    background: #e2e8da;
+    background: var(--rfm-subtle);
     flex-shrink: 0;
   }
   .account-name {

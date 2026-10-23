@@ -841,7 +841,7 @@
   .quote-workbench .model-panel > .panel-heading {
     padding: 14px 18px;
     margin: 0;
-    background: #fff;
+    background: var(--rfm-surface);
   }
   .quote-workbench .model-panel > .panel-heading h2 {
     font-size: 13px;
@@ -881,18 +881,18 @@
   .cloud-draft-panel {
     margin: 20px 0;
     padding: 20px;
-    border: 1px solid #cdd7cc;
-    border-radius: 6px;
-    background: #f1f5ed;
+    border: 1px solid var(--rfm-line);
+    border-radius: var(--rfm-radius-control);
+    background: var(--rfm-subtle);
     display: grid;
     gap: 14px;
   }
   .surface-tools {
     padding: 16px;
     margin: 18px 0 0;
-    border: 1px solid #cdd7cc;
+    border: 1px solid var(--rfm-line);
     border-bottom: 0;
-    background: #f1f5ed;
+    background: var(--rfm-subtle);
     border-radius: 6px 6px 0 0;
   }
   .paint-tool-buttons {
@@ -901,7 +901,7 @@
     gap: 8px;
   }
   .paint-tool-buttons button[aria-pressed='true'] {
-    background: #244d3f;
+    background: var(--rfm-ink);
     color: white;
   }
   .workbench-wrap {
@@ -917,7 +917,7 @@
   .workbench-kicker {
     font-size: 11px;
     letter-spacing: 2px;
-    color: #647467;
+    color: var(--rfm-muted);
   }
   h1 {
     font-size: clamp(28px, 3.3vw, 44px);
@@ -925,7 +925,7 @@
     letter-spacing: -1px;
   }
   .workbench-intro p:last-child {
-    color: #647467;
+    color: var(--rfm-muted);
     font-size: 14px;
   }
   button,
@@ -936,10 +936,10 @@
   }
   button {
     cursor: pointer;
-    border: 1px solid #b7c4b8;
-    border-radius: 4px;
-    background: #fffefa;
-    color: #244d3f;
+    border: 1px solid var(--rfm-line);
+    border-radius: var(--rfm-radius-control);
+    background: var(--rfm-surface);
+    color: var(--rfm-ink);
     padding: 8px 12px;
     font-size: 12px;
   }
@@ -949,12 +949,12 @@
   }
   .text-button {
     border: 0;
-    border-bottom: 1px solid #b7c4b8;
+    border-bottom: 1px solid var(--rfm-line);
     padding: 10px 0;
     background: none;
   }
   .backend-notice {
-    background: #f1eddf;
+    background: var(--rfm-subtle);
     border-left: 3px solid #a9883e;
     padding: 18px 22px;
     font-size: 13px;
@@ -981,7 +981,7 @@
     border: 0;
     background: none;
     padding: 0;
-    color: #244d3f;
+    color: var(--rfm-ink);
     font-size: 13px;
   }
   .workbench-steps span {
@@ -996,9 +996,9 @@
   }
   .workbench-panel {
     padding: 26px;
-    border: 1px solid #cdd7cc;
-    border-radius: 8px;
-    background: #fffefa;
+    border: 1px solid var(--rfm-line);
+    border-radius: var(--rfm-radius-panel);
+    background: var(--rfm-surface);
     min-width: 0;
     scroll-margin-top: 110px;
     overflow-wrap: anywhere;
@@ -1024,7 +1024,7 @@
   .workbench-note {
     font-size: 12px;
     line-height: 1.8;
-    color: #657365;
+    color: var(--rfm-muted);
     margin: 0;
   }
   .workbench-note {
@@ -1044,10 +1044,10 @@
     min-width: 0;
     box-sizing: border-box;
     padding: 10px;
-    border: 1px solid #b7c4b8;
-    border-radius: 4px;
-    color: #244d3f;
-    background: #fff;
+    border: 1px solid var(--rfm-line);
+    border-radius: var(--rfm-radius-control);
+    color: var(--rfm-ink);
+    background: var(--rfm-surface);
   }
   .field textarea {
     resize: vertical;
@@ -1060,7 +1060,7 @@
   .material-note {
     font-size: 12px;
     padding: 10px 12px;
-    background: #eef3eb;
+    background: var(--rfm-subtle);
   }
   .color-mode {
     border: 0;
@@ -1082,7 +1082,7 @@
   }
   input[type='checkbox'],
   input[type='radio'] {
-    accent-color: #245c48;
+    accent-color: var(--rfm-ink);
   }
   .slots-heading,
   .slot-top,
@@ -1098,9 +1098,9 @@
     margin: 12px 0;
   }
   .color-slot {
-    border: 1px solid #d9dfd3;
+    border: 1px solid var(--rfm-line);
     padding: 14px;
-    border-radius: 6px;
+    border-radius: var(--rfm-radius-control);
     margin: 12px 0;
   }
   .slot-top {
@@ -1122,8 +1122,8 @@
     width: 42px;
     height: 40px;
     padding: 3px;
-    border: 1px solid #b7c4b8;
-    background: #fff;
+    border: 1px solid var(--rfm-line);
+    background: var(--rfm-surface);
     cursor: pointer;
   }
   .palette {
@@ -1138,7 +1138,7 @@
     border-radius: 50%;
   }
   .palette button[aria-pressed='true'] {
-    outline: 2px solid #244d3f;
+    outline: 2px solid var(--rfm-ink);
     outline-offset: 3px;
   }
   .model-assignments {
@@ -1146,10 +1146,10 @@
   }
   .assignment-card {
     padding: 16px;
-    border: 1px solid #d9dfd3;
+    border: 1px solid var(--rfm-line);
     margin: 12px 0;
-    background: #f7f8f2;
-    border-radius: 6px;
+    background: var(--rfm-workspace);
+    border-radius: var(--rfm-radius-control);
   }
   h4 {
     font-size: 13px;
@@ -1161,10 +1161,10 @@
   }
   .height-band {
     padding: 10px;
-    border: 1px solid #d9dfd3;
-    border-radius: 4px;
+    border: 1px solid var(--rfm-line);
+    border-radius: var(--rfm-radius-control);
     margin: 10px 0;
-    background: #fffefa;
+    background: var(--rfm-surface);
   }
   .height-band .field {
     margin-block: 4px;
@@ -1176,7 +1176,7 @@
     flex: 1;
   }
   .print-settings {
-    border-top: 1px solid #d9dfd3;
+    border-top: 1px solid var(--rfm-line);
     padding-top: 20px;
     margin-top: 20px;
   }
@@ -1194,14 +1194,14 @@
     width: 100%;
     padding: 14px;
     color: white;
-    background: #244d3f;
+    background: var(--rfm-ink);
     font-size: 13px;
     margin-top: 24px;
   }
   .validation-note {
     padding: 12px;
-    background: #fff0e8;
-    color: #993b27;
+    background: var(--rfm-danger-bg);
+    color: var(--rfm-danger);
     font-size: 12px;
     line-height: 1.8;
   }
@@ -1213,21 +1213,21 @@
   .draft-summary {
     margin-block: 24px;
     padding-top: 20px;
-    border-top: 1px solid #d9dfd3;
+    border-top: 1px solid var(--rfm-line);
   }
   .quote-not-ready {
     display: flex;
     justify-content: space-between;
     gap: 24px;
     align-items: center;
-    border-top: 1px solid #d9dfd3;
+    border-top: 1px solid var(--rfm-line);
     margin-top: 24px;
     padding-top: 24px;
   }
   .quote-not-ready span,
   .quote-not-ready small {
     display: block;
-    color: #657365;
+    color: var(--rfm-muted);
     font-size: 12px;
   }
   .quote-not-ready strong {

@@ -129,7 +129,7 @@
 <style scoped>
   .slicer-parameters {
     font-size: 12px;
-    color: #294238;
+    color: var(--rfm-ink);
   }
   .parameter-head {
     display: flex;
@@ -142,7 +142,7 @@
   }
   .parameter-head span {
     font-size: 10px;
-    color: #8a9b8c;
+    color: var(--rfm-muted);
   }
   .slicer-parameters label {
     display: grid;
@@ -157,9 +157,9 @@
     box-sizing: border-box;
     padding: 9px 10px;
     font: inherit;
-    border: 1px solid #d4ded6;
-    background: #fbfcf9;
-    border-radius: 4px;
+    border: 1px solid var(--rfm-line);
+    background: var(--rfm-surface);
+    border-radius: var(--rfm-radius-control);
     color: inherit;
   }
   .slicer-parameters .parameter-check {
@@ -168,7 +168,7 @@
     align-items: center;
   }
   .parameter-check input {
-    accent-color: #245847;
+    accent-color: var(--rfm-ink);
   }
   .parameter-pair {
     display: grid;
@@ -177,11 +177,11 @@
   }
   .slicer-parameters p {
     font-size: 10px;
-    color: #7d8e80;
+    color: var(--rfm-muted);
     line-height: 1.8;
   }
   .slicer-parameters details {
-    border-top: 1px solid #dce3dc;
+    border-top: 1px solid var(--rfm-line);
     margin-top: 20px;
     padding-top: 16px;
   }
@@ -192,7 +192,7 @@
   }
   .slicer-parameters summary span {
     font-size: 9px;
-    color: #8c9a8d;
+    color: var(--rfm-muted);
     margin-left: 10px;
     font-weight: 400;
   }
@@ -200,23 +200,23 @@
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
-    border-bottom: 1px solid #dce3dc;
+    border-bottom: 1px solid var(--rfm-line);
     padding-bottom: 10px;
   }
   .slicer-parameters button {
     font: inherit;
     font-size: 10px;
-    border: 1px solid #d4ded6;
-    background: #fff;
+    border: 1px solid var(--rfm-line);
+    background: var(--rfm-surface);
     color: inherit;
-    border-radius: 4px;
+    border-radius: var(--rfm-radius-control);
     padding: 7px 9px;
     cursor: pointer;
   }
   .parameter-tabs button[aria-pressed='true'] {
-    background: #245847;
+    background: var(--rfm-ink);
     color: white;
-    border-color: #245847;
+    border-color: var(--rfm-ink);
   }
   .advanced-field > span {
     display: flex;
@@ -224,7 +224,7 @@
     gap: 8px;
   }
   .advanced-field small {
-    color: #8a9b8c;
+    color: var(--rfm-muted);
     font-size: 10px;
   }
   .reset-parameters {
@@ -233,7 +233,7 @@
   .slicer-parameters input:focus-visible,
   .slicer-parameters select:focus-visible,
   .slicer-parameters button:focus-visible {
-    outline: 2px solid #a9874d;
+    outline: 2px solid var(--rfm-accent);
     outline-offset: 3px;
   }
 </style>

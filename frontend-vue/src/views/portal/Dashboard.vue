@@ -277,7 +277,7 @@
       </el-tab-pane>
     </el-tabs>
 
-    <el-dialog title="檔案預覽 / DFM 檢查" v-model="previewVisible" width="480px">
+    <el-dialog class="brand-dialog" title="檔案預覽 / DFM 檢查" v-model="previewVisible" width="480px">
       <div v-if="previewData">
         <model-viewer v-if="previewArrayBuffer" :array-buffer="previewArrayBuffer" :filename="previewData.name" :height="260" />
         <p>
@@ -298,7 +298,7 @@
       </div>
     </el-dialog>
 
-    <el-dialog title="結帳" v-model="checkoutVisible" width="380px">
+    <el-dialog class="brand-dialog" title="結帳" v-model="checkoutVisible" width="380px">
       <p class="hint">選擇付款方式（尚未接上正式商店憑證的供應商會顯示「即將推出」）</p>
       <el-radio-group v-model="checkoutMethod" style="display: flex; flex-direction: column; gap: 8px">
         <el-radio v-for="method in paymentMethods" :key="method.id" :label="method.id" :disabled="!method.configured">
@@ -314,7 +314,7 @@
       </template>
     </el-dialog>
 
-    <el-dialog title="套用優惠券" v-model="couponVisible" width="360px">
+    <el-dialog class="brand-dialog" title="套用優惠券" v-model="couponVisible" width="360px">
       <el-input v-model="couponCode" aria-label="優惠碼" placeholder="輸入優惠碼" />
       <template #footer>
         <div>
@@ -324,7 +324,7 @@
       </template>
     </el-dialog>
 
-    <el-dialog title="折抵點數" v-model="redeemVisible" width="360px">
+    <el-dialog class="brand-dialog" title="折抵點數" v-model="redeemVisible" width="360px">
       <p class="hint">目前可用點數：{{ (customer && customer.loyaltyPoints) || 0 }}（100 點折抵 $10）</p>
       <el-input-number
         v-model="redeemPointsValue"
@@ -342,7 +342,7 @@
       </template>
     </el-dialog>
 
-    <el-dialog :title="addressForm.id ? '編輯地址' : '新增地址'" v-model="addressDialogVisible" width="420px">
+    <el-dialog class="brand-dialog" :title="addressForm.id ? '編輯地址' : '新增地址'" v-model="addressDialogVisible" width="420px">
       <el-form label-width="80px" size="small">
         <el-form-item label="標籤"><el-input v-model="addressForm.label" aria-label="地址標籤" /></el-form-item>
         <el-form-item label="收件人"><el-input v-model="addressForm.recipient" aria-label="收件人" autocomplete="name" /></el-form-item>
@@ -706,13 +706,13 @@
   }
   h1 {
     margin: 0;
-    font-size: clamp(26px, 3vw, 38px);
+    font-size: var(--rfm-title-workspace);
     font-weight: 600;
     letter-spacing: -1px;
     line-height: 1.35;
   }
   h1 span {
-    color: #ae8a42;
+    color: var(--rfm-accent);
   }
   .welcome-description {
     margin: 12px 0 0;
@@ -725,23 +725,23 @@
     align-items: center;
     gap: 36px;
     padding: 14px 20px;
-    color: #fff;
-    background: #214b3d;
-    border-radius: 5px;
+    color: var(--rfm-surface);
+    background: var(--rfm-ink);
+    border-radius: var(--rfm-radius-control);
     font-size: 13px;
     white-space: nowrap;
   }
   .new-project:hover {
-    background: #153b2e;
+    background: var(--rfm-ink);
   }
   .member-summary {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     margin: 32px 0 38px;
     border: 1px solid var(--member-line);
-    border-radius: 8px;
+    border-radius: var(--rfm-radius-panel);
     overflow: hidden;
-    background: #fffefa;
+    background: var(--rfm-surface);
   }
   .member-summary > div {
     padding: 22px 24px;
@@ -815,8 +815,8 @@
   .loading-panel {
     padding: 32px;
     border: 1px solid var(--member-line);
-    border-radius: 8px;
-    background: #fffefa;
+    border-radius: var(--rfm-radius-panel);
+    background: var(--rfm-surface);
   }
   .load-error p,
   .loading-panel p {
@@ -831,9 +831,9 @@
   }
   .member-panels :deep(.el-card) {
     border: 1px solid var(--member-line);
-    border-radius: 8px;
+    border-radius: var(--rfm-radius-panel);
     color: var(--member-ink);
-    background: #fffefa;
+    background: var(--rfm-surface);
   }
   .member-panels :deep(.order-card .el-card__body),
   .member-panels :deep(.address-card .el-card__body) {
@@ -901,9 +901,9 @@
   .confirmations {
     margin: 10px 0;
     border: 1px solid var(--member-line);
-    border-radius: 6px;
+    border-radius: var(--rfm-radius-control);
     padding: 16px;
-    background: #f5f6f0;
+    background: var(--rfm-workspace);
 
     .confirmations-title {
       font-size: 13px;
@@ -912,7 +912,7 @@
 
     .confirmation-item {
       padding: 8px 0;
-      border-bottom: 1px dashed #edf0f5;
+      border-bottom: 1px dashed var(--rfm-selected);
 
       &:last-child {
         border-bottom: 0;
@@ -934,7 +934,7 @@
       .confirmation-note {
         margin: 4px 0 0;
         font-size: 12px;
-        color: #667085;
+        color: var(--rfm-muted);
         white-space: pre-wrap;
       }
       .confirmation-actions {
@@ -961,10 +961,10 @@
       width: 72px;
       height: 72px;
       object-fit: cover;
-      border-radius: 8px;
+      border-radius: var(--rfm-radius-panel);
       border: 1px solid #e3e9f4;
       cursor: zoom-in;
-      background: #fff;
+      background: var(--rfm-surface);
     }
   }
 
@@ -977,11 +977,11 @@
       margin-bottom: 10px;
       padding: 10px 14px;
       background: #f0f2ec;
-      border-radius: 6px;
+      border-radius: var(--rfm-radius-control);
 
       &.customer {
-        color: #245c48;
-        background: #eaf1e9;
+        color: var(--rfm-ink);
+        background: var(--rfm-selected);
       }
     }
 
@@ -1006,8 +1006,8 @@
     padding: 56px 28px;
     text-align: center;
     border: 1px solid var(--member-line);
-    border-radius: 8px;
-    background: #fffefa;
+    border-radius: var(--rfm-radius-panel);
+    background: var(--rfm-surface);
     .empty-index {
       font-size: 10px;
       letter-spacing: 2px;

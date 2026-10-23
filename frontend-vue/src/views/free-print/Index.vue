@@ -174,9 +174,9 @@
 
 <style scoped>
   .free-print-site {
-    --paper: #f7f3e9;
-    --ink: #192e53;
-    --blue: #203ec3;
+    --paper: var(--rfm-paper);
+    --ink: var(--rfm-ink);
+    --blue: var(--rfm-interactive);
   }
   .free-hero {
     padding: 30px 0 65px;
@@ -191,7 +191,7 @@
   }
   .free-breadcrumb a:hover,
   .free-text-link:hover {
-    color: #be391b;
+    color: var(--rfm-accent);
   }
   .free-hero-grid {
     display: grid;
@@ -206,14 +206,14 @@
     margin: 0 0 24px;
   }
   h1 {
-    font-size: clamp(48px, 6.5vw, 88px);
+    font-size: var(--rfm-title-page);
     line-height: 1.18;
     letter-spacing: -0.06em;
     margin: 0 0 28px;
     font-weight: 900;
   }
   h1 > span {
-    color: #c44324;
+    color: var(--rfm-accent);
   }
   .free-lead {
     max-width: 480px;
@@ -224,7 +224,7 @@
   .free-subtitle {
     font-size: 13px;
     margin: 0;
-    color: #4c586d;
+    color: var(--rfm-muted);
   }
   .free-campus {
     font-size: 20px;
@@ -244,11 +244,11 @@
     display: block;
     font: 150px/1.2 Arial, sans-serif;
     letter-spacing: -0.08em;
-    color: #203ec3;
+    color: var(--rfm-interactive);
   }
   .free-edition > strong > span {
     font-size: 80px;
-    color: #c44324;
+    color: var(--rfm-accent);
     margin-left: 14px;
   }
   .free-edition p {
@@ -260,14 +260,14 @@
     padding-bottom: 70px;
   }
   .free-section-heading h2 {
-    font-size: clamp(27px, 3.3vw, 42px);
+    font-size: var(--rfm-title-section);
     line-height: 1.4;
     letter-spacing: -0.04em;
     margin: 0 0 16px;
   }
   .free-section-heading > p:last-child {
     font-size: 14px;
-    color: #4c586d;
+    color: var(--rfm-muted);
     margin: 0 0 30px;
   }
   .free-station-card {
@@ -275,8 +275,8 @@
     grid-template-columns: 1.35fr 1fr;
     gap: 45px;
     padding: 40px;
-    background: #e9eddf;
-    border-top: 3px solid #192e53;
+    background: var(--rfm-subtle);
+    border-top: 3px solid var(--rfm-ink);
   }
   .free-tag {
     display: inline-block;
@@ -342,7 +342,7 @@
   }
   .free-step-number {
     font: 46px/1 Arial, sans-serif;
-    color: #c44324;
+    color: var(--rfm-accent);
   }
   .free-steps h3 {
     font-size: 18px;
@@ -352,11 +352,11 @@
     font-size: 13px;
     line-height: 1.8;
     margin: 0;
-    color: #4c586d;
+    color: var(--rfm-muted);
   }
   .free-notice {
-    border-left: 4px solid #203ec3;
-    background: #e9edf5;
+    border-left: 4px solid var(--rfm-interactive);
+    background: var(--rfm-selected);
     padding: 32px;
   }
   .free-notice h3 {
@@ -446,7 +446,7 @@
       gap: 35px;
     }
     h1 {
-      font-size: clamp(42px, 11vw, 58px);
+      font-size: var(--rfm-title-page);
     }
     .free-lead {
       font-size: 15px;

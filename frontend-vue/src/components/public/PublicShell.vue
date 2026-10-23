@@ -1,5 +1,5 @@
 <template>
-  <div class="public-site">
+  <div class="public-site brand-surface">
     <a href="#public-content" class="skip-content" @click.prevent="focusContent">跳至主要內容</a>
     <div class="public-utility">
       <div class="studio-wrap">
@@ -12,11 +12,7 @@
     </div>
     <header ref="header" class="public-header" @keydown.esc="closeNavigation(true)">
       <router-link to="/" class="studio-brand" aria-label="3DRFM，回到首頁" @click="closeNavigation()">
-        <strong>
-          3DRFM
-          <span aria-hidden="true">●</span>
-        </strong>
-        <small>3D 列印製造服務</small>
+        <brand-mark subtitle="3D 列印製造服務" />
       </router-link>
       <button class="menu-toggle" :aria-expanded="menuOpen" aria-controls="public-nav" @click="toggleMobileMenu">
         {{ menuOpen ? '關閉 ×' : '選單 ＋' }}
@@ -64,7 +60,7 @@
     <footer class="public-footer">
       <div class="studio-wrap footer-top">
         <div class="footer-identity">
-          <router-link to="/" class="footer-brand">3DRFM</router-link>
+          <router-link to="/" class="footer-brand" aria-label="3DRFM，回到首頁"><brand-mark /></router-link>
           <p>讓設計，進入製造。</p>
           <small>FDM 3D 列印・模型代印・小量製作</small>
           <router-link to="/quote" class="footer-inquiry">開始你的製作計畫 ↗</router-link>
@@ -87,8 +83,10 @@
 </template>
 <script>
   import { publicNavigation, footerGroups } from '@/content/publicNavigation.mjs'
+  import BrandMark from './BrandMark.vue'
   export default {
     name: 'PublicShell',
+    components: { BrandMark },
     data: () => ({ menuOpen: false, activeMenu: '', year: new Date().getFullYear(), navigation: publicNavigation, footerGroups }),
     watch: {
       '$route.fullPath'() {
@@ -132,23 +130,14 @@
 </script>
 <style lang="scss">
   .public-site {
-    --ink: #17343d;
-    --paper: #fafbf8;
-    --blue: #167c91;
-    --lime: #dff08f;
-    --el-color-primary: #167c91;
-    --el-color-primary-light-3: #529eac;
-    --el-color-primary-light-5: #89bbc5;
-    --el-color-primary-light-7: #c0dce1;
-    --el-color-primary-light-8: #d6e8eb;
-    --el-color-primary-light-9: #eaf3f4;
-    --el-color-primary-dark-2: #17343d;
-    --el-text-color-primary: #17343d;
-    --el-border-radius-base: 4px;
+    --ink: var(--rfm-ink);
+    --paper: var(--rfm-paper);
+    --blue: var(--rfm-interactive);
+    --lime: var(--rfm-subtle);
     min-height: 100vh;
     color: var(--ink);
     background: var(--paper);
-    font: 16px/1.65 'Noto Sans TC', 'Noto Sans CJK TC', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+    font: 16px/1.65 var(--rfm-font);
     *,
     *::before,
     *::after {
@@ -168,8 +157,8 @@
       -webkit-tap-highlight-color: transparent;
     }
     :focus-visible {
-      outline: 3px solid #ba552c;
-      outline-offset: 5px;
+      outline: 2px solid var(--rfm-focus);
+      outline-offset: 3px;
     }
     h1,
     h2,
@@ -195,13 +184,13 @@
       background: var(--ink);
       color: white;
       border: 1px solid var(--ink);
-      border-radius: 3px;
+      border-radius: var(--rfm-radius-control);
       font-weight: 700;
       cursor: pointer;
       transition: background 0.2s;
     }
     .studio-button:hover {
-      background: #28575c;
+      background: var(--rfm-primary-hover);
     }
     .studio-button.light {
       background: var(--lime);
@@ -224,7 +213,7 @@
       content: '';
       width: 7px;
       height: 7px;
-      background: #188eaa;
+      background: var(--rfm-interactive);
       flex-shrink: 0;
     }
     .el-input__wrapper,
@@ -251,7 +240,8 @@
     }
   }
   .public-utility {
-    background: #edf1ef;
+    background: var(--rfm-ink);
+    color: var(--rfm-paper);
     font-size: 11px;
     letter-spacing: 0.04em;
   }
@@ -281,20 +271,6 @@
     display: grid;
     gap: 2px;
   }
-  .studio-brand strong {
-    font: 900 35px/1.1 Arial, sans-serif;
-    letter-spacing: -1.8px;
-  }
-  .studio-brand strong span {
-    font-size: 10px;
-    vertical-align: top;
-    margin-left: 4px;
-    color: #1196b1;
-  }
-  .studio-brand small {
-    font-size: 10px;
-    letter-spacing: 0.24em;
-  }
   .public-nav {
     display: flex;
     align-items: center;
@@ -314,7 +290,7 @@
   }
   .nav-trigger[aria-expanded='true'],
   .nav-trigger.is-current {
-    color: #087c97;
+    color: var(--rfm-interactive);
   }
   .nav-trigger > span {
     font-size: 12px;
@@ -323,7 +299,7 @@
     display: flex;
     align-items: center;
     gap: 22px;
-    border-left: 1px solid #d4ddda;
+    border-left: 1px solid var(--rfm-line);
     padding-left: 24px;
   }
   .nav-panel {
@@ -334,16 +310,16 @@
     display: grid;
     grid-template-columns: 1fr 2.2fr;
     gap: 48px;
-    background: #fff;
-    border-top: 1px solid #e1e6e3;
-    border-bottom: 3px solid #177c91;
+    background: var(--rfm-surface);
+    border-top: 1px solid var(--rfm-line);
+    border-bottom: 3px solid var(--rfm-interactive);
     box-shadow: 0 24px 30px #17343d18;
   }
   .nav-panel-intro p {
     font-size: 11px;
     letter-spacing: 0.1em;
     margin: 0;
-    color: #46717b;
+    color: var(--rfm-muted);
   }
   .nav-panel-intro h2 {
     font-size: 25px;
@@ -351,7 +327,7 @@
   }
   .nav-panel-intro > span {
     font-size: 13px;
-    color: #64747a;
+    color: var(--rfm-muted);
   }
   .nav-panel-links {
     display: grid;
@@ -363,7 +339,7 @@
     border-bottom: 1px solid #e3e8e4;
   }
   .nav-panel-links a:hover {
-    background: #f1f6f3;
+    background: var(--rfm-subtle);
   }
   .nav-panel-links strong {
     display: flex;
@@ -372,13 +348,13 @@
   }
   .nav-panel-links small {
     display: block;
-    color: #65757a;
+    color: var(--rfm-muted);
     font-size: 12px;
     margin-top: 5px;
   }
   .menu-toggle {
     display: none;
-    border: 1px solid #bdceca;
+    border: 1px solid var(--rfm-line);
     background: transparent;
     color: var(--ink);
     padding: 8px 12px;
@@ -395,7 +371,7 @@
     top: 10px;
   }
   .public-footer {
-    background: #142f38;
+    background: var(--rfm-ink);
     color: #f4f8f5;
   }
   .footer-top {
@@ -414,16 +390,16 @@
   }
   .footer-identity small {
     font-size: 11px;
-    color: #a9bfc1;
+    color: var(--rfm-on-dark-muted);
   }
   .footer-inquiry {
     display: block;
     font-size: 13px;
-    color: #dff08f !important;
+    color: var(--rfm-accent-light) !important;
     margin-top: 24px;
   }
   .footer-column h2 {
-    color: #a9bfc1;
+    color: var(--rfm-on-dark-muted);
     font-size: 12px;
     margin: 0 0 22px;
     letter-spacing: 0.1em;
@@ -443,7 +419,7 @@
     justify-content: space-between;
     gap: 24px;
     padding-block: 24px;
-    color: #a9bfc1;
+    color: var(--rfm-on-dark-muted);
     font-size: 11px;
   }
   .footer-bottom > div {
@@ -480,7 +456,7 @@
       top: 100%;
       inset-inline: 0;
       background: white;
-      border-bottom: 2px solid #177c91;
+      border-bottom: 2px solid var(--rfm-interactive);
       padding: 12px 28px 24px;
       max-height: 75vh;
       overflow-y: auto;
