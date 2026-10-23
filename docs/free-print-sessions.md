@@ -4,6 +4,8 @@
 
 入口：`/#/free-print/nthu-shuimu/slicer` 完成真實切片，登入後按「加入免費列印排隊」；`/#/portal/free-print` 查看自己的時段並操作。舊版會員草稿申請保留作為人工服務管道，不會憑草稿自動送印。
 
+後續 UI 優先版本已加入即時影像、操作等待、流程指示及停止確認；影像後端留待連接，詳見 [前端與後端串接契約](free-print-frontend-integration.md)。下方啟用設定是正式連接硬體時的要求，不是現在完成前端的前提。
+
 ## 流程
 
 ```text
@@ -50,13 +52,13 @@ SMTP 通知使用持久化 outbox，成功後不重複寄送；失敗採退避�
 
 ## API
 
-| 路徑 | 用途 |
-| --- | --- |
-| `GET /api/customer/workspace/free-print/station` | 自己的排隊、時段與可操作時的機台狀態 |
-| `POST /api/customer/workspace/free-print/reservations` | 用已完成站點切片加入排隊 |
+| 路徑                                                              | 用途                                                                 |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `GET /api/customer/workspace/free-print/station`                  | 自己的排隊、時段與可操作時的機台狀態                                 |
+| `POST /api/customer/workspace/free-print/reservations`            | 用已完成站點切片加入排隊                                             |
 | `POST /api/customer/workspace/free-print/reservations/:id/action` | 報到、檢查、歸零、軸移動、預熱、進退料、開始／暫停／繼續／停止、取件 |
-| `GET/PUT /api/member-service/free-print-station` | Owner／Admin 查看與設定站點 |
-| `POST /api/member-service/free-print-station/resolve` | 管理員記錄現場處理並結束時段 |
+| `GET/PUT /api/member-service/free-print-station`                  | Owner／Admin 查看與設定站點                                          |
+| `POST /api/member-service/free-print-station/resolve`             | 管理員記錄現場處理並結束時段                                         |
 
 ## 同步修正的切片／草稿問題
 
@@ -74,6 +76,6 @@ SMTP 通知使用持久化 outbox，成功後不重複寄送；失敗採退避�
 
 `scripts/check-free-print-session.cjs` 使用本機隔離 API、真實會員草稿與瀏覽器，檢查編輯返回、結果保留、參數驗證、模型交接、重新整理、ZIP 還原、未完成草稿，以及模擬機台的手機引導操作。不向現場機器送命令，不將測試寄送器宣稱為真實 SMTP 投遞。
 
-本次驗證結果：42 個測試檔、348 項測試與正式建置通過；508 個介面控制情境、95 種問號說明實際開啟通過。會員工作台、表面上色、多模型切片與完整「切片→加入排隊→報到→歸零→預熱→進退料→開始→取件交棒」瀏覽器檢查皆通過，包含 320 / 390 px。
+本次驗證結果：42 個測試檔、348 項測試與正式建置通過；508 個介面控制情境、95 種問號說明實際開啟通過。會員工作台、表面上色、多模型切片與完整「切片 → 加入排隊 → 報到 → 歸零 → 預熱 → 進退料 → 開始 → 取件交棒」瀏覽器檢查皆通過，包含 320 / 390 px。
 
 另以真實 OrcaSlicer 2.4.2 對同一 20 × 20 × 10 mm 模型驗證統一線寬：0.42 mm 得 2.1173 g／11.4 分鐘，0.8 mm 得 2.6699 g／11.0333 分鐘；輸出設定與走線註解均確認實際線寬已改變。這是隔離環境切片驗證，沒有向現場機台送印。

@@ -223,6 +223,11 @@ async function main() {
     await page.route(
       "**/api/customer/workspace/free-print/**",
       async (route) => {
+        if (route.request().url().endsWith("/camera-session"))
+          return route.fulfill({
+            contentType: "application/json",
+            body: JSON.stringify({ camera: { state: "unconfigured" } }),
+          });
         if (route.request().method() === "POST") {
           const body = route.request().postDataJSON();
           if (route.request().url().endsWith("/reservations")) {

@@ -8,6 +8,21 @@
     <ul>
       <li v-for="reason in state.readiness" :key="reason">{{ reason }}</li>
     </ul>
+    <section class="integration-note" aria-label="後端連接狀態">
+      <h3>即時影像與後端串接</h3>
+      <p>
+        會員操作與影像介面已準備。攝影機：{{
+          state.station?.camera?.configured ? '已提供連接介面，實際影像依使用時段確認' : '尚未連接後端'
+        }}。
+      </p>
+      <p>後端連接後，只有當前時段的會員可申請短效影像連線。請由伺服器代理影像，不要把機台 IP、攝影機密碼或永久觀看連結放到會員頁。</p>
+      <details>
+        <summary>？後端需要接哪些功能？</summary>
+        <p>
+          排隊與時段狀態、溫度與座標回報、歸零與各軸移動、預熱與進退料、送印與暫停／繼續／停止、列印完成與通知，以及授權即時影像。現有通知設定不會因為這個介面被修改。
+        </p>
+      </details>
+    </section>
     <form v-if="state.config" class="station-form" @submit.prevent="save">
       <label>
         站點機台
@@ -148,6 +163,13 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 16px;
+  }
+  .integration-note {
+    padding: 16px;
+    margin: 20px 0;
+    background: var(--rfm-paper);
+    border-radius: 10px;
+    line-height: 1.8;
   }
   .station-form p {
     grid-column: 1/-1;

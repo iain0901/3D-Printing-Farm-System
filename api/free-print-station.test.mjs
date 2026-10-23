@@ -7,7 +7,7 @@ const apps = [];
 afterEach(async () => {
   while (apps.length) await apps.pop().close();
 });
-async function fixture({ mail = true } = {}) {
+async function fixture({ mail = true, createCameraSession = null } = {}) {
   const app = Fastify();
   apps.push(app);
   let time = Date.parse("2026-10-24T01:00:00Z");
@@ -66,6 +66,7 @@ async function fixture({ mail = true } = {}) {
     clock: () => time,
     fetchStatus: async () => ({ ...status }),
     hardwareCommand: hardware,
+    createCameraSession,
     intervalMs: 3600000,
   });
   const api = (user, method, path, payload) =>
@@ -134,6 +135,138 @@ async function fixture({ mail = true } = {}) {
   };
 }
 describe("free print FIFO sessions and exclusive hardware control", () => {
+  it("keeps camera sessions private, rejects queued/expired/ended slots, and reports unconfigured honestly", async () => {
+    const f = await fixture();
+    const first = await f.api(
+      "a",
+      "POST",
+      "/reservations",
+      f.job("camera-one")
+    );
+    const id = first.json().reservationId;
+    const second = await f.api(
+      "b",
+      "POST",
+      "/reservations",
+      f.job("camera-two")
+    );
+    const camera = (user, reservationId = id) =>
+      f.api(user, "POST", `/reservations/${reservationId}/camera-session`, {});
+    expect((await camera("missing")).statusCode).toBe(401);
+    expect((await camera("b")).statusCode).toBe(404);
+    expect((await camera("other")).statusCode).toBe(404);
+    expect((await camera("b", second.json().reservationId)).statusCode).toBe(
+      403
+    );
+    const response = await camera("a");
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(response.json()).toEqual({
+      reservationId: id,
+      camera: { state: "unconfigured" },
+    });
+    expect(first.json().station.camera.configured).toBe(false);
+    f.advance(21 * 60000);
+    expect((await camera("a")).statusCode).toBe(403);
+    f.advance(-21 * 60000);
+    await f.action("a", id, "cancel");
+    expect((await camera("a")).statusCode).toBe(403);
+    expect(f.hardware).not.toHaveBeenCalled();
+  });
+  it("validates provider scope and lifetime without exposing printer URLs or credentials", async () => {
+    let override;
+    const provider = vi.fn(
+      async ({ reservationId, expiresAt }) =>
+        override || {
+          state: "ready",
+          kind: "mjpeg",
+          expiresAt,
+          mediaUrl: `/api/customer/workspace/free-print/reservations/${reservationId}/camera/stream?ticket=short-lived`,
+        }
+    );
+    const f = await fixture({ createCameraSession: provider });
+    const response = await f.api(
+      "a",
+      "POST",
+      "/reservations",
+      f.job("camera-provider")
+    );
+    const id = response.json().reservationId;
+    const camera = () =>
+      f.api("a", "POST", `/reservations/${id}/camera-session`, {});
+    expect(response.json().station.camera.configured).toBe(true);
+    const result = await camera();
+    expect(result.statusCode).toBe(200);
+    expect(result.json().camera.kind).toBe("mjpeg");
+    const context = provider.mock.calls[0][0];
+    expect(context).toEqual({
+      reservationId: id,
+      stationId: "nthu-shuimu",
+      workspaceId: "ws-default",
+      customerId: "a",
+      expiresAt: "2026-10-24T01:01:00.000Z",
+      signal: expect.any(AbortSignal),
+    });
+    const base = result.json().camera;
+    for (const patch of [
+      { mediaUrl: "http://user:password@printer.local/stream" },
+      {
+        mediaUrl: `/api/customer/workspace/free-print/reservations/${id}/camera/../../other/camera/stream`,
+      },
+      {
+        mediaUrl:
+          "/api/customer/workspace/free-print/reservations/another/camera/stream",
+      },
+      { expiresAt: "2026-10-24T01:03:00.000Z" },
+      { expiresAt: "2026-10-24T00:59:00.000Z" },
+      { password: "must-not-expose" },
+    ]) {
+      override = { ...base, ...patch };
+      const denied = await camera();
+      expect(denied.statusCode, JSON.stringify(patch)).toBe(502);
+      expect(denied.body).not.toMatch(
+        /password|printer\.local|must-not-expose/
+      );
+    }
+    provider.mockRejectedValueOnce(new Error("secret printer credentials"));
+    const denied = await camera();
+    expect(denied.statusCode).toBe(502);
+    expect(denied.body).not.toContain("secret");
+  });
+  it("does not block station control on a slow camera and rechecks access after camera setup", async () => {
+    let finish, entered;
+    const started = new Promise((resolve) => {
+      entered = resolve;
+    });
+    const provider = ({ reservationId, expiresAt }) =>
+      new Promise((resolve) => {
+        finish = () =>
+          resolve({
+            state: "ready",
+            kind: "mjpeg",
+            expiresAt,
+            mediaUrl: `/api/customer/workspace/free-print/reservations/${reservationId}/camera/stream`,
+          });
+        entered();
+      });
+    const f = await fixture({ createCameraSession: provider });
+    const first = await f.api(
+      "a",
+      "POST",
+      "/reservations",
+      f.job("slow-camera")
+    );
+    const id = first.json().reservationId;
+    const pending = f
+      .api("a", "POST", `/reservations/${id}/camera-session`, {})
+      .then((r) => r);
+    await started;
+    // If camera setup held the station lock, this request would never finish.
+    const cancel = await f.action("a", id, "cancel");
+    expect(cancel.statusCode).toBe(200);
+    finish();
+    expect((await pending).statusCode).toBe(403);
+  });
   it("runs two people through turn email, preparation, real file dispatch, completion, removal and next turn", async () => {
     const f = await fixture();
     const first = await f.api("a", "POST", "/reservations", f.job("one"));

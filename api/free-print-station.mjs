@@ -87,6 +87,7 @@ export async function registerFreePrintStation(
     emailClient,
     fetchStatus = fetchBridgeStatus,
     hardwareCommand = stationHardwareCommand,
+    createCameraSession = null,
     clock = () => Date.now(),
     intervalMs = 5000,
   }
@@ -466,6 +467,7 @@ export async function registerFreePrintStation(
           ? "有人使用中，依序通知。"
           : "可排隊使用",
         queueLength: list.filter((r) => r.status === "queued").length,
+        camera: { configured: typeof createCameraSession === "function" },
       },
       reservations: own,
       telemetry:
@@ -512,13 +514,13 @@ export async function registerFreePrintStation(
         : {}),
     };
   }
-  function route(method, path, handler, staff = false) {
+  function route(method, path, handler, staff = false, exclusive = true) {
     app.route({
       method,
       url: path,
       config: { rateLimit: { max: 60, timeWindow: "1 minute" } },
-      handler: async (request, reply) =>
-        serial(async () => {
+      handler: async (request, reply) => {
+        const run = async () => {
           const customer = staff
             ? request.user
             : customerFromRequest(database, request).customer;
@@ -535,7 +537,9 @@ export async function registerFreePrintStation(
                 error: e instanceof z.ZodError ? "請檢查操作欄位" : e.message,
               });
           }
-        }),
+        };
+        return exclusive ? serial(run) : run();
+      },
     });
   }
   const root = "/api/customer/workspace/free-print";
@@ -543,6 +547,97 @@ export async function registerFreePrintStation(
     await tickInternal();
     return publicState(c);
   });
+  // The provider is an integration boundary, not a public camera URL setting.
+  // Its media gateway MUST independently recheck ownership on every media request
+  // and close active streams when the reservation ends. No media proxy is enabled
+  // until that backend is supplied by the installation.
+  route(
+    "POST",
+    `${root}/reservations/:id/camera-session`,
+    async (req, reply, c) => {
+      function authorized() {
+        const r = records().find((r) => r.id === req.params.id && owns(r, c));
+        if (!r) fail(404, "找不到你的使用時段");
+        if (active()?.id !== r.id || terminalStates.includes(r.status))
+          fail(403, "只有目前使用時段的會員可以觀看影像。");
+        if (
+          ["notified", "preparing"].includes(r.status) &&
+          Date.parse(r.leaseExpiresAt) <= clock()
+        )
+          fail(403, "使用時段已過，影像觀看已停止。");
+        if (!station().enabled) fail(403, "站點目前暫停開放影像。");
+        return r;
+      }
+      const r = authorized();
+      if (typeof createCameraSession !== "function")
+        return { reservationId: r.id, camera: { state: "unconfigured" } };
+      let value;
+      const expiresAt = new Date(
+        Math.min(
+          clock() + 60000,
+          ["notified", "preparing"].includes(r.status)
+            ? Date.parse(r.leaseExpiresAt)
+            : Infinity
+        )
+      ).toISOString();
+      const controller = new AbortController();
+      let timeout;
+      try {
+        value = await Promise.race([
+          createCameraSession({
+            reservationId: r.id,
+            stationId: r.stationId,
+            workspaceId: r.workspaceId,
+            customerId: c.id,
+            expiresAt,
+            signal: controller.signal,
+          }),
+          new Promise((_, reject) => {
+            timeout = setTimeout(() => {
+              controller.abort();
+              reject(new Error("camera timeout"));
+            }, 10000);
+            timeout.unref();
+          }),
+        ]);
+      } catch {
+        fail(502, "攝影機目前無法連接，請稍後重試。");
+      } finally {
+        clearTimeout(timeout);
+      }
+      authorized();
+      if (!value || value.state === "unconfigured")
+        return { reservationId: r.id, camera: { state: "unconfigured" } };
+      const parsed = z
+        .object({
+          state: z.literal("ready"),
+          kind: z.enum(["mjpeg", "snapshot", "video"]),
+          mediaUrl: z.string().max(2000),
+          expiresAt: z.string().datetime(),
+          mimeType: z
+            .enum(["video/mp4", "application/vnd.apple.mpegurl"])
+            .optional(),
+        })
+        .strict()
+        .safeParse(value);
+      if (!parsed.success) fail(502, "攝影機連線資料無效。");
+      const camera = parsed.data;
+      const prefix = `${root}/reservations/${encodeURIComponent(r.id)}/camera/`;
+      const url = new URL(camera.mediaUrl, "https://camera.invalid");
+      if (
+        !camera.mediaUrl.startsWith(prefix) ||
+        !url.pathname.startsWith(prefix) ||
+        url.origin !== "https://camera.invalid" ||
+        url.hash ||
+        Date.parse(camera.expiresAt) <= clock() ||
+        Date.parse(camera.expiresAt) > Date.parse(expiresAt)
+      )
+        fail(502, "攝影機連線資料無效。");
+      return { reservationId: r.id, camera };
+    },
+    false,
+    false
+  );
   route("POST", `${root}/reservations`, async (req, reply, c) => {
     const input = z
       .object({
