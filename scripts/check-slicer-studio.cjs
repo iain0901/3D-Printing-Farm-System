@@ -352,6 +352,7 @@ async function main() {
       path: join(shots, "toolpaths-all-layers.png"),
       fullPage: true,
     });
+    await page.getByRole("button", { name: "列印路徑", exact: true }).click();
     if (real) {
       assert.ok(actualPreview?.segmentCount > 0);
       assert.equal(actualResult?.engine, "OrcaSlicer");

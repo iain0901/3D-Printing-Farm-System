@@ -20,7 +20,7 @@
     <nav class="lab-workflow" aria-label="切片工作流程">
       <button type="button" :aria-current="mode === 'prepare' ? 'step' : undefined" @click="mode = 'prepare'">01　準備模型</button>
       <button type="button" :disabled="!preview" :aria-current="mode === 'preview' ? 'step' : undefined" @click="mode = 'preview'">
-        02　預覽路徑
+        02　切片預覽
       </button>
       <span>{{ job ? statusText : '先匯入模型，開始你的製作。' }}</span>
     </nav>
@@ -35,7 +35,7 @@
           :automatic="settings.autoArrange"
           @change="changeLayout"
         />
-        <toolpath-viewer v-if="preview && mode === 'preview'" :preview="preview" />
+        <toolpath-viewer v-if="preview && mode === 'preview'" :preview="preview" :files="layout.files" :placements="layout.placements" />
       </div>
       <aside class="lab-settings" aria-label="切片設定與工作結果">
         <section class="lab-machine">
@@ -110,7 +110,7 @@
               模型 {{ Number(job.modelGrams).toFixed(2) }} g ／支撐 {{ Number(job.supportGrams).toFixed(2) }} g ／其他
               {{ Number(job.otherGrams).toFixed(2) }} g
             </p>
-            <button v-if="preview" type="button" @click="mode = 'preview'">開啟三維逐層路徑</button>
+            <button v-if="preview" type="button" @click="mode = 'preview'">開啟切片預覽</button>
             <p v-else-if="!pollError" role="status">正在讀取真實 G-code 路徑…</p>
             <details>
               <summary>切片來源</summary>
@@ -956,6 +956,12 @@
     }
     .lab-model {
       height: 660px;
+    }
+    .lab-model:has(.toolpath-viewer) {
+      height: auto;
+    }
+    .lab-model :deep(.toolpath-viewer) {
+      height: auto;
     }
     .lab-model :deep(.slicer-stage),
     .lab-model :deep(.toolpath-viewer) {

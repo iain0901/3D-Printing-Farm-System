@@ -449,6 +449,8 @@ async function main() {
       "100"
     );
     audited += await auditHelp(".toolpath-viewer");
+    await page.getByRole("button", { name: "列印路徑", exact: true }).click();
+    audited += await auditHelp(".toolpath-viewer");
     await page.reload();
     await page.locator('.slicing-progress[data-phase="completed"]').waitFor();
     assert.equal(submissions.length, 1, "reload resumes original job");
