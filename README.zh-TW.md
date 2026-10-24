@@ -13,6 +13,8 @@
 
 ## 多人與 AI 共編
 
+網站助理、MCP、模型 skills 與 OpenAI `.env` 設定請見 [網站 Agent 串接與驗收](docs/site-agent.md)。
+
 修改前請先讀 [AI 共編規則](AGENTS.md) 與 [共編紀錄](collaboration/README.md)，確認設計決策、目前分工與交接事項。完成後新增修改紀錄，保留其他協作者已完成的 UI/UX，不從舊版本整份覆蓋。
 
 ## 平台重點

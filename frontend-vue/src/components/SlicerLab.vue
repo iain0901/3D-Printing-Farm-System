@@ -39,10 +39,24 @@
           :automatic="settings.autoArrange"
           @change="changeLayout"
         />
-        <toolpath-viewer v-if="preview && mode === 'preview'" :preview="preview" :files="layout.files" :placements="layout.placements" />
+        <toolpath-viewer
+          v-if="preview && mode === 'preview'"
+          ref="agentPreview"
+          :preview="preview"
+          :files="layout.files"
+          :placements="layout.placements"
+        />
       </div>
       <aside class="lab-settings" aria-label="切片設定與工作結果">
         <section class="lab-machine">
+          <label v-if="agentAccess">
+            <input v-model="autoIllustration" type="checkbox" />
+            切片完成後自動生成 AI 成品示意（每日最多 3 次）
+          </label>
+          <label>
+            模型用途（選填）
+            <textarea v-model="agentPurpose" maxlength="1000" placeholder="例如：室內花盆支架。切片前可依用途取得參數建議。" />
+          </label>
           <div class="lab-section-title">
             <h2>機台</h2>
             <span>FDM</span>
@@ -100,6 +114,15 @@
           <p v-if="job.status === 'cancelled'">已取消工作，晚到的結果不會採用。</p>
           <p v-if="job.status === 'failed'" class="lab-error">切片未完成，請檢查模型及設定後重試。</p>
           <template v-if="job.status === 'completed'">
+            <button v-if="agentAccess" :disabled="illustrationBusy" @click="makeIllustration">
+              {{ illustrationBusy ? '正在生成成品示意…' : '生成 AI 成品示意圖' }}
+            </button>
+            <p v-if="illustrationError" role="alert">{{ illustrationError }}</p>
+            <template v-if="illustration">
+              <img :src="illustration" alt="AI 生成的 FDM 成品示意" style="width: 100%" />
+              <p>AI 成品示意，實際尺寸、顏色、表面及強度以製作結果為準。</p>
+              <a :href="illustration" download="3drfm-print-illustration.png">下載示意圖</a>
+            </template>
             <div class="result-numbers">
               <div>
                 <span>列印時間</span>
@@ -195,7 +218,7 @@
   </div>
 </template>
 <script setup>
-  import { computed, markRaw, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+  import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
   import { useStore } from 'vuex'
   import { useRouter } from 'vue-router'
   import { captureWorkspace, localWorkspace, checkpointWorkspace } from '@/utils/workspace-recovery.js'
@@ -328,6 +351,46 @@
     autoArrange: false,
     advanced: {},
   })
+  const agentPurpose = ref(''),
+    agentReviewing = ref(false)
+  const agentAccess = computed(() => (props.embedded ? store.getters['user/accessToken'] : memberToken.value))
+  const agentPreview = ref(null),
+    autoIllustration = ref(false),
+    illustration = ref(''),
+    illustrationBusy = ref(false),
+    illustrationError = ref('')
+  async function makeIllustration() {
+    if (illustrationBusy.value) return
+    if (mode.value !== 'preview') {
+      mode.value = 'preview'
+      illustrationError.value = '請等待模型預覽載入後，再按生成。'
+      return
+    }
+    illustrationBusy.value = true
+    illustrationError.value = ''
+    const id = job.value?.id
+    const identity = agentAccess.value
+    try {
+      const image = await agentPreview.value.capture()
+      const result = await (props.embedded
+        ? staffRequest({
+            url: '/api/staff-agent/illustration',
+            method: 'post',
+            data: { image, material: settings.material },
+            timeout: 70000,
+          })
+        : workspace('/../agent/illustration', 'post', { image, material: settings.material }, { timeout: 70000 }))
+      if (active && id === job.value?.id && identity === agentAccess.value) illustration.value = result.image
+    } catch (e) {
+      illustrationError.value = e.response?.data?.error || e.message || '無法生成示意圖，請稍後重試。'
+    } finally {
+      illustrationBusy.value = false
+    }
+  }
+  watch(agentAccess, () => {
+    illustration.value = ''
+    illustrationError.value = ''
+  })
   const layout = ref({ files: [], sources: [], names: [], models: [], placements: [], ready: false }),
     job = ref(null),
     preview = ref(null),
@@ -388,6 +451,8 @@
     attempted.value = false
     job.value = null
     preview.value = null
+    illustration.value = ''
+    illustrationError.value = ''
     pollError.value = ''
     token = ''
     mode.value = 'prepare'
@@ -414,7 +479,27 @@
   }
   watch(settings, invalidate, { deep: true })
   async function submit() {
-    if (!layout.value.ready || busy.value || parameterError.value) return
+    if (!layout.value.ready || busy.value || agentReviewing.value || parameterError.value) return
+    if (agentPurpose.value.trim() && agentAccess.value) {
+      agentReviewing.value = true
+      const before = JSON.stringify(settings)
+      const decision = await new Promise((resolve) =>
+        window.dispatchEvent(
+          new CustomEvent('3drfm:before-slice', {
+            detail: {
+              purpose: agentPurpose.value,
+              models: layout.value.models.map((m) => ({ name: m.name || '模型', dimensions: m.dimensions || null })),
+              settings: { material: settings.material, infill: settings.infill, walls: settings.walls },
+              resolve,
+            },
+          })
+        )
+      )
+      agentReviewing.value = false
+      if (!active) return
+      if (decision.infill !== undefined) settings.infill = decision.infill
+      if (!decision.proceed || before !== JSON.stringify(settings)) return
+    }
     invalidate()
     uploading.value = true
     attempted.value = true
@@ -465,6 +550,10 @@
         if (active && revision === current) {
           preview.value = markRaw(paths.preview)
           mode.value = 'preview'
+          if (autoIllustration.value && agentAccess.value) {
+            await nextTick()
+            makeIllustration()
+          }
         }
       } else if (['queued', 'processing'].includes(job.value.status)) timer = setTimeout(poll, 2500)
     } catch (err) {
@@ -646,6 +735,7 @@
     notice.value = '本機工作已清除。'
   }
   onMounted(async () => {
+    window.dispatchEvent(new Event('3drfm:slicer-enter'))
     let savedJob
     try {
       savedJob = JSON.parse(sessionStorage.getItem(sessionKey) || 'null')

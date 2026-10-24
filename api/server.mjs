@@ -27,6 +27,7 @@ import { solveScheduleAssignments } from "./schedule-solver.mjs";
 import { seedData } from "./seed.mjs";
 import { registerCaseRoutes } from "./cases-module.mjs";
 import { registerMemberWorkspace, MEMBER_COLLECTIONS } from "./member-workspace.mjs";
+import { registerSiteAgent, AGENT_COLLECTIONS } from "./site-agent.mjs";
 import { registerFreePrintStation, FREE_PRINT_COLLECTIONS, freePrintOwnsPrinter } from "./free-print-station.mjs";
 import { createAiEngine } from "./ai-engine.mjs";
 import { findRelevantAiKnowledge } from "./ai-knowledge.mjs";
@@ -42,6 +43,7 @@ const COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoActions",
 const RESTORABLE_EXTRA_KEYS = ["users", "workspaces", "workspaceSettings", "costCatalog", "costCatalogs", "profileDefaults", "profileMatchingPolicy", "billingSessions", "invoices", "dataMeta"];
 COLLECTIONS.push(...MEMBER_COLLECTIONS);
 COLLECTIONS.push(...FREE_PRINT_COLLECTIONS);
+COLLECTIONS.push(...AGENT_COLLECTIONS);
 const RESTORABLE_KEYS = [...COLLECTIONS, ...RESTORABLE_EXTRA_KEYS];
 const defaultCostCatalog = {
   currency: "USD",
@@ -110,6 +112,7 @@ const TENANT_COLLECTIONS = ["printers", "files", "fileFolders", "queue", "todoAc
 const printerStatusSchema = z.enum(["idle", "printing", "paused", "offline", "error", "maintenance"]);
 TENANT_COLLECTIONS.push(...MEMBER_COLLECTIONS);
 TENANT_COLLECTIONS.push(...FREE_PRINT_COLLECTIONS);
+TENANT_COLLECTIONS.push(...AGENT_COLLECTIONS);
 const jobStatusSchema = z.enum(["queued", "printing", "paused", "complete", "failed", "cancelled"]);
 const prioritySchema = z.enum(["Rush", "High", "Normal", "Low"]);
 const taskStageSchema = z.enum(["needs slicing", "needs scheduling", "scheduled", "printing", "post processing", "done", "blocked"]);
@@ -2397,7 +2400,7 @@ function realtimeUserFromRequest(database, request) {
 }
 
 function publicState(data) {
-  const { sessions, customerSessions, ...safeState } = data;
+  const { sessions, customerSessions, agentTokens, agentCommands, agentUsage, agentContexts, ...safeState } = data;
   return {
     ...safeState,
     dataMeta: sanitizeDataMeta(data.dataMeta),
@@ -6868,7 +6871,8 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       directives: {
         defaultSrc: ["'self'"],
         baseUri: ["'self'"],
-        connectSrc: ["'self'"],
+        connectSrc: ["'self'", "https://api.openai.com"],
+        mediaSrc: ["'self'", "blob:"],
         fontSrc: ["'self'", "data:"],
         formAction: ["'self'"],
         frameAncestors: ["'none'"],
@@ -7006,6 +7010,8 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     readFile: (file) => objectStorage().get(file),
     sensitiveRateLimit, emailClient, lineClient,
   });
+  await registerSiteAgent(app, { database, customerFromRequest });
+  await registerSiteAgent(app, { database, root: '/api/staff-agent', customerFromRequest: (_, req) => ({ customer: req.user && !req.apiKey ? { ...req.user, id: `staff:${req.user.id}` } : null }) });
   await registerChatwootRoutes(app, {
     database,
     aiEngine,
@@ -7919,6 +7925,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   app.get("/api/costCatalog", async (request) => costCatalogForWorkspace(database.data, request.user.workspaceId));
 
   for (const collection of COLLECTIONS) {
+    if (AGENT_COLLECTIONS.includes(collection)) continue;
     if (collection === "bridges" || collection === "webhooks" || collection === "webhookDeliveries" || collection === "notificationChannels" || collection === "notificationDeliveries" || collection === "commerceConnectors" || collection === "apiKeys" || collection === "addons" || collection === "quoteRequests" || collection === "cases" || collection === "caseStatusHistory" || collection === "chatwootCaseLinks" || collection === "afterSalesCases" || collection === "customers") continue;
     app.get(`/api/${collection}`, async (request) => scopedWorkspaceData(database.data, request.user.workspaceId)[collection] || []);
   }

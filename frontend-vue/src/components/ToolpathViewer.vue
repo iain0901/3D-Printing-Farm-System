@@ -327,6 +327,20 @@
     renderer?.forceContextLoss()
     renderer?.domElement.remove()
   })
+  defineExpose({
+    capture: async () => {
+      for (let attempt = 0; attempt < 100 && !disposed && !modelReady.value; attempt++)
+        await new Promise((resolve) => setTimeout(resolve, 50))
+      if (!renderer || !modelReady.value) throw new Error('模型尚未準備完成，請稍後重試。')
+      renderer.render(scene, camera)
+      const source = renderer.domElement
+      const canvas = document.createElement('canvas')
+      canvas.width = 512
+      canvas.height = Math.max(1, Math.round((source.height / source.width) * 512))
+      canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height)
+      return canvas.toDataURL('image/png')
+    },
+  })
 </script>
 <style scoped>
   .toolpath-viewer {

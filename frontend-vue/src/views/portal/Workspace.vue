@@ -31,6 +31,7 @@
       <button @click="load">重新載入</button>
     </div>
     <template v-else>
+      <agent-connections v-if="section === 'agent'" />
       <section v-if="section === 'models'" class="hub-panel">
         <div class="panel-top">
           <div>
@@ -612,6 +613,7 @@
   import { useStore } from 'vuex'
   import customerRequest from '@/utils/customerRequest'
   import ModelViewer from '@/components/ModelViewer.vue'
+  import AgentConnections from '@/components/AgentConnections.vue'
   import InstructionArt from '@/components/public/InstructionArt.vue'
   import { workspace, uploadWorkspace, modelFile } from '@/api/memberWorkspace'
   import { fetchMyCases, decideCase } from '@/api/customerPortal'
@@ -620,6 +622,7 @@
     router = useRouter(),
     store = useStore()
   const titles = {
+    agent: 'MCP 與 skills',
     models: '我的模型',
     drafts: '雲端草稿',
     projects: '專案協作',

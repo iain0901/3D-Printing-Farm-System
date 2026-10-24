@@ -15,6 +15,8 @@ For professional technical support or installation services, contact `support@3d
 
 ## Contributor and AI coordination
 
+See [website agent setup and acceptance](docs/site-agent.md) for OpenAI environment variables, MCP, model skills, voice, and supported UI operations.
+
 Before making changes, read [AGENTS.md](AGENTS.md) and the [shared collaboration records](collaboration/README.md) (Traditional Chinese). Check design decisions, active work, handoffs, and current Git changes; preserve other contributors' UI/UX and add a change record with your work.
 
 Project links:
