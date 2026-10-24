@@ -11,6 +11,10 @@
 
 如果需要專業技術支援或安裝設定服務，請聯絡 `support@3dstu.com`。
 
+## 多人與 AI 共編
+
+修改前請先讀 [AI 共編規則](AGENTS.md) 與 [共編紀錄](collaboration/README.md)，確認設計決策、目前分工與交接事項。完成後新增修改紀錄，保留其他協作者已完成的 UI/UX，不從舊版本整份覆蓋。
+
 ## 平台重點
 
 3DSTU FarmFlow 是給真實列印農場使用的生產控制層，不只是打印機清單。目前 release-candidate 版本已涵蓋：

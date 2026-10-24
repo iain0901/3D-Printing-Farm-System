@@ -13,6 +13,10 @@ Localized documentation:
 
 For professional technical support or installation services, contact `support@3dstu.com`.
 
+## Contributor and AI coordination
+
+Before making changes, read [AGENTS.md](AGENTS.md) and the [shared collaboration records](collaboration/README.md) (Traditional Chinese). Check design decisions, active work, handoffs, and current Git changes; preserve other contributors' UI/UX and add a change record with your work.
+
 Project links:
 
 - Website: https://farm-saas.3dstu.com
