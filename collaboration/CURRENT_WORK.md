@@ -4,6 +4,8 @@
 
 ## 目前作業
 
+UI-20261025-03｜MichanLiang／Devin｜待整合（未部署）｜基準 90848b6：只改首頁 `frontend-vue/src/views/landing/Index.vue`，修正開啟即下滑、頂欄蓋住首屏（scroll-padding、實測頂欄高度、矮螢幕首屏字級）。不改後端、API、路由、共用 token、`PublicShell.vue`。詳見 [修改紀錄](changes/2026-10-25-michan-devin-home-snap-top.md)。
+
 UI-20261025-02｜芯寧／Cursor｜待整合｜基準 504a774：只改首頁 `frontend-vue/src/views/landing/Index.vue` 呈現。刪多餘小字與產量說明、單屏區塊＋scroll-snap、3D 物件改放材料／FAQ／收尾。不改後端、API、script 業務邏輯、共用 token、路由。詳見 [修改紀錄](changes/2026-10-25-xinning-home-panels.md)。
 
 UI-20261025-01｜OpenCode｜待整合（視覺審閱與正式部署）｜基準 cd65d378：依「網站改善.docx」完成前端呈現調整與本機驗證，詳見 [修改紀錄](changes/2026-10-25-opencode-public-ui.md)。不改後端、API、權限、切片運算或預設設定；正式產量、交期／尺寸資料與實機展示待 H-004。保留 AI-20261024-02 的 Agent／系統成果；未代替原作者宣告部署完成。

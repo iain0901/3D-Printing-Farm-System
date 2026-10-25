@@ -300,12 +300,52 @@
         return this.guideMaterials[this.materialIndex]
       },
     },
+    mounted() {
+      const utility = this.$el.querySelector('.public-utility')
+      const header = this.$el.querySelector('.public-header')
+      if (!utility || !header) return
+      const keepTop = () => {
+        if (this.userScrolled || this.$route.hash) return
+        if (window.scrollY > 0 && window.scrollY <= utility.offsetHeight + header.offsetHeight) {
+          window.scrollTo({ top: 0, behavior: 'auto' })
+        }
+      }
+      const sync = () => {
+        const root = document.documentElement.style
+        root.setProperty('--home-utility', `${utility.offsetHeight}px`)
+        root.setProperty('--home-chrome', `${utility.offsetHeight + header.offsetHeight}px`)
+        keepTop()
+      }
+      this.markUserScrolled = () => {
+        this.userScrolled = true
+      }
+      ;['wheel', 'touchstart', 'keydown', 'pointerdown'].forEach((type) =>
+        window.addEventListener(type, this.markUserScrolled, { once: true, passive: true })
+      )
+      this.keepTop = keepTop
+      window.addEventListener('scroll', keepTop, { passive: true })
+      this.releaseTop = setTimeout(() => window.removeEventListener('scroll', keepTop), 2500)
+      sync()
+      if (typeof ResizeObserver === 'function') {
+        this.chromeObserver = new ResizeObserver(sync)
+        this.chromeObserver.observe(utility)
+        this.chromeObserver.observe(header)
+      }
+    },
+    beforeUnmount() {
+      if (this.chromeObserver) this.chromeObserver.disconnect()
+      clearTimeout(this.releaseTop)
+      window.removeEventListener('scroll', this.keepTop)
+      ;['wheel', 'touchstart', 'keydown', 'pointerdown'].forEach((type) => window.removeEventListener(type, this.markUserScrolled))
+      document.documentElement.style.removeProperty('--home-utility')
+      document.documentElement.style.removeProperty('--home-chrome')
+    },
   }
 </script>
 <style lang="scss" scoped>
   .home-panel {
     box-sizing: border-box;
-    min-height: calc(100svh - var(--home-chrome, 108px));
+    min-height: calc(100svh - var(--home-chrome, 141px));
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -958,14 +998,18 @@
     .closing-wordmark { font-size: 18vw; margin-block: 8px; }
     .closing-arrow { font-size: 48px; }
   }
+  @media (min-width: 761px) and (max-height: 760px) {
+    .hero-category { margin-bottom: 16px; }
+    h1 { font-size: clamp(56px, 13svh, 100px); margin-bottom: 18px; }
+  }
 </style>
 <style lang="scss">
   html:has(.brand-home) {
+    --home-utility: 39px;
+    --home-chrome: 141px;
     scroll-snap-type: y mandatory;
     scroll-behavior: smooth;
-  }
-  .brand-home {
-    --home-chrome: 108px;
+    scroll-padding-top: var(--home-chrome);
   }
   .brand-home .public-utility {
     position: sticky;
@@ -974,7 +1018,7 @@
   }
   .brand-home .public-header {
     position: sticky;
-    top: 32px;
+    top: var(--home-utility);
     z-index: 49;
     background: var(--paper);
   }

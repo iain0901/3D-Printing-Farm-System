@@ -68,6 +68,7 @@
 - 原因：降低雜訊，讓下滑對應完整畫面。
 - 保護事項：不把 snap 套到其他公開頁；不恢復產量說明；不改材料資料或估價流程。
 - 依據：[修改紀錄](changes/2026-10-25-xinning-home-panels.md)
+- 補充（2026-10-25，UI-20261025-03）：snap 吸附點以 `scroll-padding-top` 對齊 sticky 頂欄下緣，頂欄高度由首頁實測寫入 `--home-chrome`／`--home-utility`；開啟首頁須停在最上方、不得被頂欄蓋住。見 [修改紀錄](changes/2026-10-25-michan-devin-home-snap-top.md)。
 
 ## 新決策填寫格式
 
