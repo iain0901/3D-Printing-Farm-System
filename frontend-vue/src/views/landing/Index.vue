@@ -1,10 +1,6 @@
 <template>
   <public-shell class="brand-home">
-    <section class="landing-poster">
-      <div class="studio-wrap hero-edition">
-        <span>3DRFM・FDM 製造服務</span>
-        <span>一件開始，也可以。</span>
-      </div>
+    <section class="landing-poster home-panel">
       <div class="studio-wrap poster-grid">
         <div class="poster-copy">
           <p class="hero-category">模型代印 ／ 原型開發 ／ 小量製作</p>
@@ -15,11 +11,7 @@
               <span class="headline-stop">。</span>
             </span>
           </h1>
-          <p class="poster-description">
-            你的模型，值得離開螢幕。
-            <br />
-            從單件原型到小量製作，讓設計有個實體。
-          </p>
+          <p class="poster-description">從單件原型到小量製作，讓設計有個實體。</p>
           <div class="poster-actions">
             <router-link to="/quote" class="studio-button">
               上傳模型・自動估價
@@ -32,37 +24,25 @@
           </div>
         </div>
         <hero-layer-field class="poster-art">
-          <span class="hero-object-caption">逐層堆疊，立體成型。</span>
           <studio-image kind="signature" priority class="signature-object" />
-          <span class="hero-sample-label">
-            <span>FDM 成型概念</span>
-            <small>品牌示意物件</small>
-          </span>
         </hero-layer-field>
       </div>
-      <div class="studio-wrap poster-footnote">
-        <span>塑膠線材 FDM 列印</span>
-        <span>STL ／ 3MF ／ STEP</span>
-        <router-link to="/guides/file-prep">上傳前，先確認檔案 →</router-link>
+      <div class="studio-wrap service-facts" aria-label="服務規模與製作資訊">
+        <div><strong>1 件</strong><span>即可提出需求</span></div>
+        <div><strong>{{ guideMaterials.length }} 種</strong><span>材料討論方向</span></div>
+        <div><strong>依案件確認</strong><span>交期與尺寸</span></div>
+        <router-link to="/guides/file-prep">上傳前確認檔案 →</router-link>
       </div>
     </section>
 
-    <section class="studio-wrap service-facts" aria-label="服務規模與製作資訊">
-      <div><strong>1 件</strong><span>即可提出製作需求</span></div>
-      <div><strong>{{ guideMaterials.length }} 種</strong><span>材料討論方向・供料需確認</span></div>
-      <div><strong>依案件確認</strong><span>交期與最大尺寸，不作統一保證</span></div>
-      <p>累計製作數量尚未提供可核實資料，因此不顯示推估產量。</p>
-    </section>
-
-    <aside class="studio-wrap free-print-entry" aria-label="免費列印站點入口">
-      <div>
-        <span>校園免費列印</span>
-        <p>第一站，清華大學・水木書苑。</p>
-      </div>
-      <router-link to="/free-print" class="text-link">選擇免費列印站點 →</router-link>
-    </aside>
-
-    <section id="services" class="studio-wrap applications-section">
+    <section id="services" class="studio-wrap applications-section home-panel">
+      <aside class="free-print-entry" aria-label="免費列印站點入口">
+        <div>
+          <span>校園免費列印</span>
+          <p>清華大學・水木書苑</p>
+        </div>
+        <router-link to="/free-print" class="text-link">免費列印站點 →</router-link>
+      </aside>
       <header class="editorial-heading">
         <p class="section-index">01 ／ 製作的可能</p>
         <h2>
@@ -77,7 +57,6 @@
           <router-link to="/for/education" class="application-visual" aria-label="探索學校與實驗室製作">
             <span class="specimen-number" aria-hidden="true">01</span>
             <studio-image kind="parts" />
-            <span class="specimen-label">結構探索 ／ 格構示意</span>
             <span class="visual-arrow" aria-hidden="true">→</span>
           </router-link>
           <div class="story-copy">
@@ -113,7 +92,6 @@
           <router-link to="/for/business" class="application-visual" aria-label="探索企業製作">
             <span class="specimen-number" aria-hidden="true">02</span>
             <studio-image kind="sketch" />
-            <span class="specimen-label">從外觀，確認到組裝</span>
             <span class="visual-arrow" aria-hidden="true">→</span>
           </router-link>
         </article>
@@ -136,34 +114,21 @@
       </article>
     </section>
 
-    <section class="material-section" id="materials">
+    <section class="material-section home-panel" id="materials">
       <div class="studio-wrap material-heading">
-        <p class="section-index">02 ／ 材料研究室</p>
-        <h2>
-          個性不同。
-          <br />
-          用途也是。
-        </h2>
-        <p>
-          材料不是配色選單。
-          <br />
-          受力、溫度、組裝方式，才是選擇的起點。
-        </p>
+        <p class="section-index">02 ／ 材料</p>
+        <h2>依用途選材</h2>
+        <router-link to="/materials" class="text-link">比較六種材料 →</router-link>
       </div>
       <div class="studio-wrap material-layout">
         <div class="material-display">
-          <span class="material-big-type" aria-hidden="true">PETG</span>
+          <span class="material-big-type" aria-hidden="true">{{ selectedMaterial.name }}</span>
           <studio-image kind="printer" decorative />
-          <span class="material-recommendation">
-            一般功能件
-            <br />
-            <strong>選材討論起點</strong>
-          </span>
-          <span class="material-caption">線材示意 ／ 一般功能件優先討論 PETG</span>
+          <studio-image kind="batch" class="material-object" decorative />
         </div>
         <div class="material-copy">
           <label class="material-question">
-            不知道選什麼？先選最接近的用途
+            先選最接近的用途
             <select v-model="materialIndex">
               <option v-for="(item, index) in guideMaterials" :key="item.name" :value="index">{{ item.uses }}（{{ item.name }}）</option>
             </select>
@@ -177,7 +142,6 @@
               @click="materialIndex = index"
             >
               {{ material.name }}
-              <span v-if="material.name === 'PETG'" aria-hidden="true">推薦</span>
             </button>
           </div>
           <div class="material-details" aria-live="polite" aria-atomic="true">
@@ -185,35 +149,16 @@
             <h3>{{ selectedMaterial.title }}</h3>
             <p>{{ selectedMaterial.description }}</p>
             <dl>
-              <div>
-                <dt>適合製作</dt>
-                <dd>{{ selectedMaterial.uses }}</dd>
-              </div>
-              <div>
-                <dt>先確認</dt>
-                <dd>{{ selectedMaterial.caution }}</dd>
-              </div>
               <div><dt>耐熱</dt><dd>{{ selectedMaterial.heat }}</dd></div>
               <div><dt>強度</dt><dd>{{ selectedMaterial.strength }}</dd></div>
-              <div><dt>價格等級</dt><dd>{{ selectedMaterial.price }}・非正式報價</dd></div>
+              <div><dt>價格</dt><dd>{{ selectedMaterial.price }}</dd></div>
             </dl>
-            <p>以上為一般選材方向，非承重、耐熱或安全認證；實際牌號與製程需另行確認。</p>
-          </div>
-          <router-link to="/materials" class="text-link">比較六種 FDM 材料 →</router-link>
-          <div class="material-sample">
-            <studio-image kind="batch" decorative />
-            <p>
-              形狀與列印方向，
-              <br />
-              也是材料選擇的一部分。
-              <small>功能原型示意・實際規格依案件確認</small>
-            </p>
           </div>
         </div>
       </div>
     </section>
 
-    <section class="studio-wrap commission-section">
+    <section class="studio-wrap commission-section home-panel">
       <div class="commission-title">
         <p class="section-index">03 ／ 開始製作</p>
         <h2>
@@ -221,11 +166,7 @@
           <br />
           <span>就差這一步。</span>
         </h2>
-        <p>
-          不用另外填一張詢價表。
-          <br />
-          直接使用 3DRFM 自動估價，接續你的製作需求。
-        </p>
+        <p>直接上傳模型，取得初估。</p>
         <router-link to="/quote" class="studio-button">
           開始自動估價
           <span aria-hidden="true">→</span>
@@ -238,7 +179,7 @@
           <div>
             <h3>上傳模型</h3>
             <studio-image kind="sketch" class="process-image" decorative />
-            <p>已有 STL／3MF 模型就直接上傳。不會建模？拍下物件、用尺量長寬高，或畫一張草圖，也能先提出建模需求。</p>
+            <p>STL／3MF 直接上傳；沒有模型可先帶尺寸與草圖。</p>
           </div>
         </li>
         <li>
@@ -246,7 +187,7 @@
           <div>
             <h3>設定條件，取得初估</h3>
             <studio-image kind="spool" class="process-image" decorative />
-            <p>先說明物件用途，再比較材料、品質與數量；不確定的地方可留給專員確認。</p>
+            <p>用途、材料、品質與數量，不確定可留給專員。</p>
           </div>
         </li>
         <li>
@@ -254,7 +195,7 @@
           <div>
             <h3>登入，帶入資料</h3>
             <studio-image kind="everyday" class="process-image" decorative />
-            <p>需要送出需求時再登入或註冊，讓案件與個人資料連結；正式報價及交期仍需確認。</p>
+            <p>送出前再登入，正式報價與交期另確認。</p>
           </div>
         </li>
         <li>
@@ -262,7 +203,7 @@
           <div>
             <h3>確認製作，追蹤交付</h3>
             <studio-image kind="batch" class="process-image" decorative />
-            <p>確認報價與付款安排後，透過案件查看製作進度。</p>
+            <p>確認後即可追蹤製作進度。</p>
           </div>
         </li>
       </ol>
@@ -276,7 +217,7 @@
       </aside>
     </section>
 
-    <section id="faq" class="faq-section studio-wrap">
+    <section id="faq" class="faq-section studio-wrap home-panel">
       <div>
         <p class="section-index">04 ／ 製作前須知</p>
         <h2>
@@ -284,6 +225,7 @@
           <br />
           再開始。
         </h2>
+        <studio-image kind="vase" class="faq-object" decorative />
         <router-link to="/faq" class="text-link">查看所有問題 →</router-link>
       </div>
       <div class="faq-list">
@@ -297,7 +239,7 @@
         </details>
       </div>
     </section>
-    <section class="closing-poster">
+    <section class="closing-poster home-panel">
       <div class="studio-wrap">
         <div class="closing-top">
           <p>
@@ -305,6 +247,7 @@
             <br />
             我們手上見。
           </p>
+          <studio-image kind="signature" class="closing-object" decorative />
           <router-link to="/quote" aria-label="開始自動估價" class="closing-arrow">→</router-link>
         </div>
         <span class="closing-wordmark" aria-hidden="true">3DRFM</span>
@@ -360,19 +303,27 @@
   }
 </script>
 <style lang="scss" scoped>
+  .home-panel {
+    box-sizing: border-box;
+    min-height: calc(100svh - var(--home-chrome, 108px));
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
   .service-facts {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 24px;
-    padding-block: 32px;
-    border-block: 1px solid var(--rfm-line);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+    align-items: end;
+    padding-block: 18px;
+    border-block: 1px solid var(--rfm-ink);
   }
   .service-facts strong, .service-facts span { display: block; }
-  .service-facts strong { font-size: 26px; }
-  .service-facts p { grid-column: 1 / -1; margin: 0; font-size: 14px; color: var(--rfm-muted); }
-  .material-question { display: grid; gap: 10px; margin-bottom: 24px; font-weight: 700; }
+  .service-facts strong { font-size: 22px; }
+  .service-facts a { justify-self: end; align-self: center; font-size: 13px; font-weight: 700; }
+  .material-question { display: grid; gap: 10px; margin-bottom: 16px; font-weight: 700; }
   .material-question select { width: 100%; min-width: 0; padding: 12px; font: inherit; color: var(--rfm-ink); background: var(--rfm-surface); border: 1px solid var(--rfm-line); }
-  @media (max-width: 600px) { .service-facts { grid-template-columns: 1fr; } }
+  @media (max-width: 600px) { .service-facts { grid-template-columns: 1fr 1fr; } .service-facts a { grid-column: 1 / -1; justify-self: start; } }
   .brand-home {
     --ink: var(--rfm-ink);
     --paper: var(--rfm-paper);
@@ -382,26 +333,20 @@
   }
   .landing-poster {
     overflow: hidden;
-  }
-  .hero-edition {
-    border-top: 1px solid var(--rfm-ink);
-    display: flex;
-    justify-content: space-between;
-    padding-top: 17px;
-    font-size: 11px;
-    letter-spacing: 0.1em;
+    padding-bottom: 12px;
   }
   .poster-grid {
     display: grid;
     grid-template-columns: 1.05fr 1fr;
     align-items: center;
     position: relative;
-    min-height: 660px;
+    min-height: 0;
+    flex: 1;
   }
   .poster-copy {
     position: relative;
     z-index: 2;
-    padding-block: 42px;
+    padding-block: 24px;
   }
   .hero-category {
     font-size: 12px;
@@ -464,7 +409,7 @@
   }
   .poster-art {
     position: relative;
-    height: 650px;
+    height: min(58svh, 520px);
     margin-left: -45px;
   }
   .free-print-entry {
@@ -502,48 +447,16 @@
     pointer-events: none;
     width: 118%;
     max-width: none;
-    height: 650px;
+    height: 100%;
     object-fit: contain;
     top: -6px;
     left: -5%;
     transform: translate3d(var(--object-x, 0px), var(--object-y, 0px), 0) rotate(calc(-10deg + var(--object-turn, 0deg)));
     transition: transform 0.3s ease-out;
   }
-  .hero-object-caption {
-    position: absolute;
-    z-index: 1;
-    right: -12px;
-    top: 62px;
-    writing-mode: vertical-rl;
-    font-size: 11px;
-    letter-spacing: 0.22em;
-  }
-  .hero-sample-label {
-    position: absolute;
-    bottom: 48px;
-    right: 20px;
-    border-left: 1px solid;
-    padding-left: 12px;
-    font-size: 11px;
-    display: grid;
-    gap: 4px;
-  }
-  .hero-sample-label small {
-    font-size: 9px;
-    color: var(--rfm-muted);
-  }
-  .poster-footnote {
-    display: flex;
-    justify-content: space-between;
-    gap: 20px;
-    border-top: 1px solid var(--rfm-ink);
-    border-bottom: 1px solid var(--rfm-ink);
-    padding-block: 18px;
-    font-size: 11px;
-    letter-spacing: 0.06em;
-  }
   .applications-section {
-    padding-block: 90px 100px;
+    padding-block: 24px;
+    justify-content: flex-start;
   }
   .editorial-heading {
     position: relative;
@@ -551,7 +464,7 @@
     grid-template-columns: 1fr 2fr;
     align-items: start;
     column-gap: 40px;
-    padding-bottom: 55px;
+    padding-bottom: 20px;
   }
   .section-index {
     font-size: 11px;
@@ -584,7 +497,7 @@
     position: relative;
     display: block;
     overflow: hidden;
-    height: 400px;
+    height: 220px;
     background: var(--rfm-subtle);
   }
   .application-visual .studio-image {
@@ -603,13 +516,6 @@
     font: 80px/1 Arial, sans-serif;
     letter-spacing: -0.06em;
     color: #192e5325;
-  }
-  .specimen-label {
-    position: absolute;
-    bottom: 17px;
-    left: 22px;
-    font-size: 10px;
-    letter-spacing: 0.12em;
   }
   .visual-arrow {
     position: absolute;
@@ -633,9 +539,13 @@
   }
   .story-copy p {
     font-size: 14px;
-    line-height: 1.95;
+    line-height: 1.6;
     max-width: 390px;
-    margin: 0 0 22px;
+    margin: 0 0 12px;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
   .story-links {
     display: flex;
@@ -650,7 +560,7 @@
     color: var(--rfm-accent);
   }
   .story-business {
-    padding-top: 100px;
+    padding-top: 28px;
   }
   .story-business .story-copy {
     padding-top: 0;
@@ -658,7 +568,7 @@
   }
   .story-business .application-visual {
     background: #bfcbe2;
-    height: 360px;
+    height: 200px;
   }
   .story-business .application-visual .studio-image {
     transform: rotate(-12deg);
@@ -668,7 +578,7 @@
     transform: rotate(-7deg);
   }
   .personal-story {
-    margin-top: 95px;
+    margin-top: auto;
     display: grid;
     grid-template-columns: 1fr 1.1fr 1fr;
     align-items: center;
@@ -685,7 +595,7 @@
     margin: 0;
   }
   .personal-story > .studio-image {
-    height: 295px;
+    height: 160px;
     object-fit: contain;
     transform: rotate(7deg);
   }
@@ -702,24 +612,20 @@
   .material-section {
     background: var(--rfm-interactive);
     color: var(--rfm-paper);
-    padding-block: 65px 70px;
+    padding-block: 28px;
     overflow: hidden;
   }
   .material-heading {
     display: grid;
-    grid-template-columns: 1fr 1.4fr 1fr;
-    gap: 40px;
-    align-items: start;
-    margin-bottom: 45px;
+    grid-template-columns: auto 1fr auto;
+    gap: 24px;
+    align-items: end;
+    margin-bottom: 20px;
   }
   .material-heading h2 {
     color: var(--rfm-paper);
   }
-  .material-heading > p:last-child {
-    font-size: 13px;
-    line-height: 1.9;
-    margin-top: 20px;
-  }
+  .material-heading .section-index { margin: 0; }
   .material-layout {
     display: grid;
     grid-template-columns: 1.1fr 1fr;
@@ -728,7 +634,7 @@
   }
   .material-display {
     position: relative;
-    min-height: 535px;
+    min-height: min(52svh, 420px);
   }
   .material-big-type {
     position: absolute;
@@ -738,35 +644,23 @@
     letter-spacing: -0.06em;
     color: var(--rfm-paper);
   }
-  .material-display > .studio-image {
+  .material-display > .studio-image:not(.material-object) {
     position: absolute;
     top: 32px;
     left: -15px;
-    height: 465px;
+    height: min(42svh, 340px);
     width: 105%;
     object-fit: contain;
     transform: rotate(-15deg);
   }
-  .material-recommendation {
+  .material-object {
     position: absolute;
-    right: -15px;
-    top: 270px;
-    padding: 14px 18px;
-    background: #f4edb5;
-    color: var(--rfm-ink);
-    font-size: 13px;
-    line-height: 1.6;
-    transform: rotate(8deg);
-  }
-  .material-caption {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    font-size: 10px;
-    letter-spacing: 0.04em;
-    border-bottom: 1px solid #8b9ae4;
-    padding-bottom: 10px;
-    width: 100%;
+    right: -8px;
+    bottom: 12px;
+    width: 160px;
+    height: 150px;
+    object-fit: contain;
+    transform: rotate(12deg);
   }
   .material-tabs {
     display: flex;
@@ -796,8 +690,8 @@
     font-weight: 800;
   }
   .material-details {
-    padding-block: 20px 15px;
-    min-height: 295px;
+    padding-block: 16px 0;
+    min-height: 0;
   }
   .material-selected {
     font: 900 35px/1 Arial, sans-serif;
@@ -829,33 +723,11 @@
   .material-details dd {
     margin: 0;
   }
-  .material-copy > .text-link:hover {
+  .material-heading .text-link:hover {
     color: #f4edb5;
   }
-  .material-sample {
-    display: flex;
-    gap: 15px;
-    align-items: center;
-    margin-top: 22px;
-  }
-  .material-sample .studio-image {
-    width: 115px;
-    height: 125px;
-    object-fit: contain;
-    transform: rotate(12deg);
-  }
-  .material-sample p {
-    font-size: 12px;
-    line-height: 1.8;
-  }
-  .material-sample small {
-    display: block;
-    font-size: 9px;
-    margin-top: 7px;
-    color: #d1dafb;
-  }
   .commission-section {
-    padding-block: 100px 55px;
+    padding-block: 28px;
     display: grid;
     grid-template-columns: 1fr 1.2fr;
     column-gap: 10%;
@@ -880,14 +752,23 @@
     list-style: none;
     padding: 0;
     margin: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     border-top: 1px solid var(--rfm-ink);
   }
   .commission-steps li {
     display: grid;
-    grid-template-columns: 55px 1fr;
-    gap: 18px;
-    padding-block: 23px;
+    grid-template-columns: 40px 1fr;
+    gap: 12px;
+    padding: 16px 12px 16px 0;
     border-bottom: 1px solid #aeb5b6;
+  }
+  .commission-steps .process-image {
+    float: right;
+    width: 72px;
+    height: 64px;
+    object-fit: contain;
+    margin: 0 0 4px 8px;
   }
   .commission-steps li > span {
     font: 32px/1.4 Arial, sans-serif;
@@ -912,7 +793,7 @@
   }
   .model-note {
     grid-column: 1 / -1;
-    margin-top: 65px;
+    margin-top: 20px;
     display: flex;
     align-items: center;
     gap: 35px;
@@ -941,7 +822,14 @@
     display: grid;
     grid-template-columns: 1fr 1.5fr;
     gap: 8%;
-    padding-block: 50px 95px;
+    padding-block: 28px;
+  }
+  .faq-object {
+    width: 160px;
+    height: 150px;
+    object-fit: contain;
+    margin: 16px 0;
+    transform: rotate(-8deg);
   }
   .faq-section h2 {
     font-size: 40px;
@@ -957,7 +845,7 @@
     display: flex;
     gap: 18px;
     align-items: baseline;
-    padding-block: 22px;
+    padding-block: 14px;
     font-size: 14px;
     font-weight: 700;
     list-style: none;
@@ -982,13 +870,19 @@
     line-height: 1.9;
     color: var(--rfm-muted);
     margin: 0;
-    padding: 0 28px 24px;
+    padding: 0 28px 12px;
   }
   .closing-poster {
     background: #f2663f;
     color: #142344;
-    padding-block: 42px 20px;
+    padding-block: 28px 16px;
     overflow: hidden;
+  }
+  .closing-object {
+    width: 180px;
+    height: 160px;
+    object-fit: contain;
+    transform: rotate(-12deg);
   }
   .closing-top {
     display: flex;
@@ -1026,331 +920,70 @@
     font-size: 11px;
   }
   @media (max-width: 1100px) {
-    .poster-grid {
-      min-height: 565px;
-    }
-    .poster-art {
-      height: 550px;
-    }
-    .signature-object {
-      height: 550px;
-    }
-    .application-visual {
-      height: 330px;
-    }
-    .story-business .application-visual {
-      height: 300px;
-    }
-    .material-heading {
-      grid-template-columns: 0.8fr 1.2fr 1fr;
-      gap: 20px;
-    }
-    .material-layout {
-      gap: 5%;
-    }
-    .material-display {
-      min-height: 485px;
-    }
-    .material-display > .studio-image {
-      height: 425px;
-    }
-    .commission-section {
-      column-gap: 6%;
-    }
-    .closing-wordmark {
-      font-size: 21.5vw;
-    }
+    .poster-art { height: min(46svh, 420px); }
+    .application-visual, .story-business .application-visual { height: 160px; }
+    .material-heading { gap: 12px; }
+    .material-display { min-height: min(40svh, 320px); }
+    .closing-wordmark { font-size: 21.5vw; }
   }
   @media (max-width: 760px) {
-    .hero-edition {
-      font-size: 9px;
-      padding-top: 13px;
-      letter-spacing: 0.04em;
-    }
-    .poster-grid {
-      display: flex;
-      flex-direction: column;
-      align-items: stretch;
-      min-height: 0;
-    }
-    .poster-copy {
-      padding-block: 25px 0;
-    }
-    .hero-category {
-      font-size: 10px;
-      margin-bottom: 17px;
-    }
-    h1 {
-      font-size: clamp(60px, 14.8vw, 104px);
-      margin-bottom: 17px;
-      line-height: 1.12;
-    }
-    .headline-last {
-      padding-left: 0.33em;
-    }
-    .poster-description {
-      font-size: 13px;
-      margin-left: 0;
-    }
-    .poster-actions {
-      gap: 18px;
-      margin-left: 0;
-    }
-    .poster-actions .studio-button {
-      font-size: 12px;
-      padding: 14px 17px;
-      gap: 20px;
-    }
-    .poster-actions .text-link {
-      font-size: 11px;
-      gap: 8px;
-    }
-    .poster-art {
-      height: 330px;
-      width: min(100%, 480px);
-      align-self: center;
-      margin: 5px 0 0;
-    }
-    .signature-object {
-      height: 350px;
-      width: 112%;
-      left: -6%;
-      top: -15px;
-    }
-    .hero-object-caption {
-      right: 0;
-      top: 60px;
-      font-size: 9px;
-    }
-    .hero-sample-label {
-      bottom: 20px;
-      right: 0;
-      font-size: 9px;
-    }
-    .hero-sample-label small {
-      font-size: 8px;
-    }
-    .poster-footnote {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      font-size: 9px;
-      padding-block: 14px;
-    }
-    .poster-footnote a {
-      grid-column: 1 / -1;
-    }
-    .applications-section {
-      padding-block: 50px;
-    }
-    .editorial-heading {
-      display: block;
-      padding-bottom: 35px;
-    }
-    .section-index {
-      font-size: 10px;
-      margin-bottom: 22px;
-    }
-    h2 {
-      font-size: clamp(34px, 8vw, 48px);
-    }
-    .editorial-heading > a {
-      margin-top: 23px;
-    }
-    .application-layout {
-      grid-template-columns: 1fr;
-      gap: 45px;
-    }
-    .application-visual {
-      height: 310px;
-    }
-    .story-copy h3 {
-      font-size: 32px;
-    }
-    .story-copy p {
-      font-size: 13px;
-    }
-    .story-links {
-      font-size: 11px;
-      gap: 16px;
-    }
-    .story-business {
-      padding-top: 0;
-      display: flex;
-      flex-direction: column;
-    }
-    .story-business .application-visual {
-      order: -1;
-      height: 290px;
-    }
-    .story-business .story-copy {
-      padding-top: 25px;
-      padding-bottom: 0;
-    }
-    .personal-story {
-      margin-top: 45px;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      padding-block: 25px;
-    }
-    .personal-title h3 {
-      font-size: 28px;
-    }
-    .personal-title .section-index {
-      font-size: 9px;
-    }
-    .personal-story > .studio-image {
-      height: 200px;
-    }
-    .personal-copy {
-      grid-column: 1 / -1;
-    }
-    .personal-copy p {
-      font-size: 13px;
-      margin-top: 0;
-    }
-    .personal-rush {
-      font-size: 10px;
-    }
-    .material-section {
-      padding-block: 45px;
-    }
-    .material-heading {
-      display: block;
-      margin-bottom: 20px;
-    }
-    .material-heading > p:last-child {
-      margin-top: 22px;
-      font-size: 12px;
-    }
-    .material-layout {
-      grid-template-columns: 1fr;
-      gap: 35px;
-    }
-    .material-display {
-      min-height: 390px;
-      max-width: 420px;
-      width: 100%;
-      margin: auto;
-    }
-    .material-big-type {
-      font-size: clamp(105px, 28vw, 140px);
-      top: 7px;
-    }
-    .material-display > .studio-image {
-      height: 335px;
-      top: 28px;
-      left: -10px;
-    }
-    .material-recommendation {
-      top: 195px;
-      right: 3px;
-      font-size: 11px;
-      padding: 10px 13px;
-    }
-    .material-caption {
-      font-size: 8px;
-    }
-    .material-tabs button {
-      font-size: 12px;
-      padding: 13px 14px;
-    }
-    .material-details {
-      min-height: 0;
-    }
-    .material-details h3 {
-      font-size: 19px;
-    }
-    .material-sample {
-      margin-top: 20px;
-    }
-    .material-sample .studio-image {
-      width: 100px;
-      height: 110px;
-    }
-    .material-sample p {
-      font-size: 11px;
-    }
-    .material-sample small {
-      font-size: 8px;
-    }
-    .commission-section {
-      padding-block: 50px 25px;
-      grid-template-columns: 1fr;
-      gap: 40px;
-    }
-    .commission-title h2 {
-      margin-top: 20px;
-    }
-    .commission-title > p:not(.section-index) {
-      font-size: 13px;
-    }
-    .commission-steps li {
-      grid-template-columns: 40px 1fr;
-      gap: 12px;
-      padding-block: 20px;
-    }
-    .commission-steps li > span {
-      font-size: 26px;
-    }
-    .commission-steps h3 {
-      font-size: 18px;
-    }
-    .commission-steps p {
-      font-size: 12px;
-    }
-    .model-note {
-      margin-top: 0;
-      display: grid;
-      grid-template-columns: 95px 1fr;
-      gap: 5px 14px;
-      padding: 18px;
-    }
-    .model-note .studio-image {
-      width: 95px;
-      height: 110px;
-    }
-    .model-note h3 {
-      font-size: 21px;
-    }
-    .model-note p {
-      font-size: 11px;
-      line-height: 1.8;
-    }
-    .model-note .text-link {
-      grid-column: 1 / -1;
-      margin: 5px 0;
-      justify-self: start;
-      font-size: 12px;
-    }
-    .faq-section {
-      grid-template-columns: 1fr;
-      gap: 28px;
-      padding-block: 30px 50px;
-    }
-    .faq-section h2 {
-      font-size: 34px;
-    }
-    .faq-list summary {
-      font-size: 13px;
-      gap: 12px;
-    }
-    .closing-poster {
-      padding-block: 30px 18px;
-    }
-    .closing-top p {
-      font-size: 25px;
-    }
-    .closing-arrow {
-      font-size: 65px;
-      padding-right: 0;
-    }
-    .closing-wordmark {
-      font-size: 21vw;
-      margin-block: 20px 10px;
-    }
-    .closing-baseline {
-      font-size: 9px;
-    }
+    .poster-grid { display: flex; flex-direction: column; }
+    .poster-copy { padding-block: 12px 0; }
+    h1 { font-size: clamp(48px, 12vw, 80px); margin-bottom: 12px; }
+    .poster-art { height: 28svh; width: min(100%, 420px); align-self: center; margin: 0; }
+    .signature-object { height: 100%; width: 112%; left: -6%; top: 0; }
+    .applications-section, .material-section, .commission-section, .faq-section { padding-block: 12px; }
+    .editorial-heading { display: block; padding-bottom: 12px; }
+    h2 { font-size: clamp(28px, 7vw, 40px); }
+    .application-layout { grid-template-columns: 1fr 1fr; gap: 12px; }
+    .application-visual { height: 110px; }
+    .story-copy h3 { font-size: 18px; }
+    .story-copy p { -webkit-line-clamp: 2; font-size: 12px; }
+    .story-business { padding-top: 0; }
+    .story-business .application-visual { height: 110px; }
+    .personal-story { margin-top: 12px; grid-template-columns: 72px 1fr; padding-block: 12px; }
+    .personal-story > .studio-image { height: 72px; }
+    .personal-copy { grid-column: 1 / -1; }
+    .material-heading { display: flex; flex-wrap: wrap; }
+    .material-layout { grid-template-columns: 1fr; gap: 12px; }
+    .material-display { min-height: 28svh; }
+    .material-display > .studio-image:not(.material-object) { height: 28svh; }
+    .material-tabs button { font-size: 12px; padding: 8px 10px; }
+    .commission-section { grid-template-columns: 1fr; gap: 12px; }
+    .commission-steps { grid-template-columns: 1fr; }
+    .model-note { margin-top: 8px; padding: 10px; gap: 12px; }
+    .model-note .studio-image { width: 72px; height: 72px; }
+    .faq-section { grid-template-columns: 1fr; gap: 12px; }
+    .faq-object, .closing-object { width: 96px; height: 88px; }
+    .closing-wordmark { font-size: 18vw; margin-block: 8px; }
+    .closing-arrow { font-size: 48px; }
+  }
+</style>
+<style lang="scss">
+  html:has(.brand-home) {
+    scroll-snap-type: y mandatory;
+    scroll-behavior: smooth;
+  }
+  .brand-home {
+    --home-chrome: 108px;
+  }
+  .brand-home .public-utility {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+  .brand-home .public-header {
+    position: sticky;
+    top: 32px;
+    z-index: 49;
+    background: var(--paper);
+  }
+  .brand-home #public-content > .home-panel,
+  .brand-home .public-footer {
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html:has(.brand-home) { scroll-behavior: auto; }
   }
 </style>

@@ -4,6 +4,8 @@
 
 ## 目前作業
 
+UI-20261025-02｜芯寧／Cursor｜待整合｜基準 504a774：只改首頁 `frontend-vue/src/views/landing/Index.vue` 呈現。刪多餘小字與產量說明、單屏區塊＋scroll-snap、3D 物件改放材料／FAQ／收尾。不改後端、API、script 業務邏輯、共用 token、路由。詳見 [修改紀錄](changes/2026-10-25-xinning-home-panels.md)。
+
 UI-20261025-01｜OpenCode｜待整合（視覺審閱與正式部署）｜基準 cd65d378：依「網站改善.docx」完成前端呈現調整與本機驗證，詳見 [修改紀錄](changes/2026-10-25-opencode-public-ui.md)。不改後端、API、權限、切片運算或預設設定；正式產量、交期／尺寸資料與實機展示待 H-004。保留 AI-20261024-02 的 Agent／系統成果；未代替原作者宣告部署完成。
 
 AI-20261024-02｜本對話 Codex｜待整合（正式服務驗收）｜基準 b52d109：已實作會員／員工 MCP、模型 skill、OpenAI 網站 Agent、事件觸發建議、語音及圖片串接，並完成隔離測試。使用者後續自行填入 `.env` 金鑰，正式 OpenAI 與部署驗收待完成；詳見 H-003。沒有宣告所有自訂控制已覆蓋。UI/UX 協作者範圍仍待認領。
