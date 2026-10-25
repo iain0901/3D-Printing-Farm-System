@@ -495,16 +495,20 @@
     transition: transform 0.3s ease-out;
   }
   .applications-section {
-    padding-block: 24px;
+    padding-block: 24px 48px;
     justify-content: flex-start;
   }
   .editorial-heading {
     position: relative;
     display: grid;
-    grid-template-columns: 1fr 2fr;
-    align-items: start;
+    grid-template-columns: 1fr auto;
+    align-items: end;
     column-gap: 40px;
-    padding-bottom: 20px;
+    padding-block: 32px 40px;
+  }
+  .editorial-heading .section-index {
+    grid-column: 1 / -1;
+    margin-top: 0;
   }
   .section-index {
     font-size: 11px;
@@ -524,14 +528,18 @@
   }
   .editorial-heading > a {
     grid-column: 2;
-    justify-self: start;
-    margin-top: 25px;
+    justify-self: end;
+    margin-bottom: 12px;
   }
   .application-layout {
     display: grid;
-    grid-template-columns: 1.2fr 1fr;
-    gap: 8%;
+    grid-template-columns: 1fr 1fr;
+    gap: 48px;
     align-items: start;
+  }
+  .application-story {
+    display: flex;
+    flex-direction: column;
   }
   .application-visual {
     position: relative;
@@ -599,16 +607,9 @@
   .story-links a:hover {
     color: var(--rfm-accent);
   }
-  .story-business {
-    padding-top: 28px;
-  }
-  .story-business .story-copy {
-    padding-top: 0;
-    padding-bottom: 30px;
-  }
   .story-business .application-visual {
+    order: -1;
     background: #bfcbe2;
-    height: 200px;
   }
   .story-business .application-visual .studio-image {
     transform: rotate(-12deg);
@@ -618,7 +619,7 @@
     transform: rotate(-7deg);
   }
   .personal-story {
-    margin-top: auto;
+    margin-top: 56px;
     display: grid;
     grid-template-columns: 1fr 1.1fr 1fr;
     align-items: center;
@@ -973,17 +974,18 @@
     .poster-art { height: 28svh; width: min(100%, 420px); align-self: center; margin: 0; }
     .signature-object { height: 100%; width: 112%; left: -6%; top: 0; }
     .applications-section, .material-section, .commission-section, .faq-section { padding-block: 12px; }
-    .editorial-heading { display: block; padding-bottom: 12px; }
+    .editorial-heading { display: block; padding-block: 16px 20px; }
     h2 { font-size: clamp(28px, 7vw, 40px); }
-    .application-layout { grid-template-columns: 1fr 1fr; gap: 12px; }
-    .application-visual { height: 110px; }
-    .story-copy h3 { font-size: 18px; }
-    .story-copy p { -webkit-line-clamp: 2; font-size: 12px; }
-    .story-business { padding-top: 0; }
-    .story-business .application-visual { height: 110px; }
-    .personal-story { margin-top: 12px; grid-template-columns: 72px 1fr; padding-block: 12px; }
-    .personal-story > .studio-image { height: 72px; }
+    .application-layout { grid-template-columns: 1fr; gap: 36px; }
+    .application-visual, .story-business .application-visual { height: 180px; }
+    .story-copy { padding-top: 18px; }
+    .story-copy h3 { font-size: 26px; margin: 10px 0 12px; }
+    .story-copy p { -webkit-line-clamp: unset; max-width: none; }
+    .personal-story { margin-top: 36px; grid-template-columns: 1fr 112px; gap: 16px 12px; padding-block: 24px; }
+    .personal-title h3 { font-size: 26px; }
+    .personal-story > .studio-image { height: 112px; }
     .personal-copy { grid-column: 1 / -1; }
+    .personal-copy p { margin-bottom: 16px; }
     .material-heading { display: flex; flex-wrap: wrap; }
     .material-layout { grid-template-columns: 1fr; gap: 12px; }
     .material-display { min-height: 28svh; }

@@ -4,6 +4,8 @@
 
 ## 目前作業
 
+UI-20261025-05｜MichanLiang／Devin｜待整合（未部署）｜基準 1e1cb3e：只改首頁 `frontend-vue/src/views/landing/Index.vue`「01 製作的可能」（`#services`）版面：標題靠左、兩案例等寬同結構、手機單欄；設計師同意本區可高於一屏。不改文案、圖片、後端、API、共用 token。詳見 [修改紀錄](changes/2026-10-25-michan-devin-home-services-layout.md)。
+
 UI-20261025-04｜MichanLiang／Devin｜待整合（未部署）｜基準 8390f36：只改首頁 `frontend-vue/src/views/landing/Index.vue`「03 開始製作」區塊版面，01～04 步驟欄加寬；761～1100px 步驟圖改放文字下方。不改文案、後端、API、共用 token、`public-readability.scss`。詳見 [修改紀錄](changes/2026-10-25-michan-devin-home-commission-width.md)。
 
 UI-20261025-03｜MichanLiang／Devin｜待整合（未部署）｜基準 90848b6：只改首頁 `frontend-vue/src/views/landing/Index.vue`，修正開啟即下滑、頂欄蓋住首屏（scroll-padding、實測頂欄高度、矮螢幕首屏字級）。不改後端、API、路由、共用 token、`PublicShell.vue`。詳見 [修改紀錄](changes/2026-10-25-michan-devin-home-snap-top.md)。
