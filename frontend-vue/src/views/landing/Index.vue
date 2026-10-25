@@ -769,8 +769,8 @@
   .commission-section {
     padding-block: 28px;
     display: grid;
-    grid-template-columns: 1fr 1.2fr;
-    column-gap: 10%;
+    grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.6fr);
+    column-gap: 5%;
   }
   .commission-title h2 {
     margin-top: 30px;
@@ -1026,6 +1026,22 @@
   .brand-home .public-footer {
     scroll-snap-align: start;
     scroll-snap-stop: always;
+  }
+  @media (min-width: 761px) and (max-width: 1100px) {
+    .brand-home #public-content .commission-section .commission-steps li .process-image {
+      float: none;
+      display: block;
+      width: 88px;
+      height: 64px;
+      margin: 8px 0 0 auto;
+    }
+    .brand-home #public-content .commission-steps li > div {
+      display: flex;
+      flex-direction: column;
+    }
+    .brand-home #public-content .commission-section .commission-steps li .process-image {
+      order: 1;
+    }
   }
   @media (prefers-reduced-motion: reduce) {
     html:has(.brand-home) { scroll-behavior: auto; }
