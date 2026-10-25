@@ -6,7 +6,7 @@
   >
     <router-link to="/" class="studio-button">
       返回首頁
-      <span aria-hidden="true">↗</span>
+      <span aria-hidden="true">→</span>
     </router-link>
     <div class="auth-links"><router-link to="/quote">或是，直接開始製作 →</router-link></div>
   </auth-shell>

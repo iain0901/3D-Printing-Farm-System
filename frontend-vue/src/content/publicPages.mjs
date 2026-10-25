@@ -1,3 +1,5 @@
+import { materialComparisonRows } from './materialGuide.mjs'
+
 export const publicPages = [
   {
     id: 'materials',
@@ -14,40 +16,7 @@ export const publicPages = [
         heading: '六種常見的 FDM 討論方向',
         intro: '不確定時，先以 PETG 作為一般 FDM 功能件的討論起點；實際選擇仍要依模型、受力與環境確認。',
         columns: ['材料', '優先討論的用途', '製作特性', '先確認什麼'],
-        rows: [
-          {
-            material: 'PETG',
-            use: '一般功能件、外殼、收納與反覆使用配件',
-            feature: '韌性與實用性較均衡，作為預設討論起點',
-            check: '受力、組裝方式與使用溫度',
-            recommended: true,
-          },
-          {
-            material: 'PLA',
-            use: '室內展示、教具、概念模型與桌面小物',
-            feature: '適合作為造型與視覺驗證的起點',
-            check: '高溫環境與長期負載是否可接受',
-          },
-          {
-            material: 'ABS',
-            use: '特定功能需求與既有 ABS 零件配合',
-            feature: '需要先評估收縮、氣味與變形風險',
-            check: '模型尺寸、環境與製程安排',
-          },
-          { material: 'ASA', use: '可能有戶外暴露的零件', feature: '可納入耐候需求的討論', check: '日照、安裝方式與實際環境' },
-          {
-            material: 'TPU',
-            use: '緩衝、保護與可彎折設計',
-            feature: '彈性與回彈會受幾何、厚度與設定影響',
-            check: '期待的軟硬度、拉伸與固定方式',
-          },
-          {
-            material: '尼龍',
-            use: '摩擦、受力或特殊功能條件的零件',
-            feature: '需依供料與製程條件個別評估',
-            check: '吸濕、摩擦、負載與使用環境',
-          },
-        ],
+        rows: materialComparisonRows,
       },
       {
         type: 'split',

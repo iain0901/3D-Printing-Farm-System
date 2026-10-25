@@ -20,9 +20,9 @@
         <p v-if="error" role="alert" class="station-error">{{ error }}</p>
         <p v-if="notice" role="status">{{ notice }}</p>
         <div class="station-toolbar">
-          <router-link to="/free-print/nthu-shuimu/slicer">準備模型與切片 ↗</router-link>
+          <router-link to="/free-print/nthu-shuimu/slicer">準備模型與切片 →</router-link>
           <button type="button" :disabled="busy" @click="load">更新狀態</button>
-          <router-link to="/portal/workspace">會員工作台 ↗</router-link>
+          <router-link to="/portal/workspace">會員工作台 →</router-link>
           <button type="button" :disabled="busy" @click="store.dispatch('customerAuth/resetAccessToken')">登出會員</button>
         </div>
         <div class="station-overview">

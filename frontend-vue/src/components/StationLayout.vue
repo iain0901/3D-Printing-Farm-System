@@ -34,7 +34,7 @@
       <label class="model-upload" @dragover.prevent @drop.prevent="selectFiles($event.dataTransfer.files)">
         <strong>加入模型，安排你的列印平台</strong>
         <span>最多 5 個 STL・合計 10 MB・尺寸單位 mm</span>
-        <span class="upload-link" aria-hidden="true">選擇 STL 檔案 ↗</span>
+        <span class="upload-link" aria-hidden="true">選擇 STL 檔案</span>
         <input
           ref="input"
           class="visually-hidden"

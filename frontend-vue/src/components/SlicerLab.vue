@@ -1,7 +1,7 @@
 <template>
   <div class="slicer-lab brand-surface" :class="{ embedded }">
     <header class="lab-header">
-      <router-link to="/" class="lab-brand">
+      <router-link v-if="!embedded" to="/" class="lab-brand">
         <brand-mark compact />
       </router-link>
       <div>
@@ -9,13 +9,18 @@
         <p>{{ isFree ? '清華大學水木書苑／3DSTU_PETG' : '模型準備、真實切片與三維路徑預覽' }}</p>
       </div>
       <div class="lab-file-actions">
-        <input ref="projectInput" class="sr-only" type="file" accept=".zip" aria-label="開啟切片專案" @change="onProjectInput" />
-        <button type="button" :disabled="busy" @click="projectInput.click()">開啟專案</button>
-        <button type="button" :disabled="busy" @click="openLibrary">模型庫</button>
-        <button type="button" :disabled="busy || !layout.models.length" @click="saveProject">保存專案</button>
-        <button v-if="!embedded" type="button" :disabled="busy || !layout.ready" @click="cloudOpen = true">雲端保存</button>
-        <router-link to="/portal/workspace?section=drafts">我的草稿 ↗</router-link>
-        <button type="button" :disabled="busy || !layout.models.length" @click="clearLocal">清除此裝置的工作</button>
+        <details class="file-menu">
+          <summary>檔案</summary>
+          <div class="file-menu-items">
+            <input ref="projectInput" class="sr-only" type="file" accept=".zip" aria-label="開啟切片專案" @change="onProjectInput" />
+            <button type="button" :disabled="busy" @click="projectInput.click()">開啟專案</button>
+            <button type="button" :disabled="busy" @click="openLibrary">模型庫</button>
+            <button type="button" :disabled="busy || !layout.models.length" @click="saveProject">保存專案</button>
+            <button v-if="!embedded" type="button" :disabled="busy || !layout.ready" @click="cloudOpen = true">雲端保存</button>
+            <router-link to="/portal/workspace?section=drafts">我的草稿 →</router-link>
+            <button type="button" :disabled="busy || !layout.models.length" @click="clearLocal">清除此裝置的工作</button>
+          </div>
+        </details>
       </div>
     </header>
     <nav class="lab-workflow" aria-label="切片工作流程">
@@ -34,7 +39,7 @@
           v-show="mode === 'prepare'"
           ref="station"
           studio
-          :empty-artwork="embedded ? '' : 'layout'"
+          :empty-artwork="''"
           :disabled="busy"
           :automatic="settings.autoArrange"
           @change="changeLayout"
@@ -57,17 +62,20 @@
             模型用途（選填）
             <textarea v-model="agentPurpose" maxlength="1000" placeholder="例如：室內花盆支架。切片前可依用途取得參數建議。" />
           </label>
-          <div class="lab-section-title">
-            <h2>機台</h2>
-            <span>FDM</span>
-          </div>
-          <label>
-            列印設定檔
-            <select aria-label="切片機台" disabled>
-              <option>Artillery M1 Pro・0.4 mm（參考）</option>
-            </select>
-          </label>
-          <p>260 × 260 × 260 mm。此為可試切片的參考設定，不代表站點或新機型的實際設備。</p>
+          <details>
+            <summary>進階：參考機台與尺寸限制</summary>
+            <div class="lab-section-title">
+              <h2>機台</h2>
+              <span>FDM</span>
+            </div>
+            <label>
+              列印設定檔
+              <select aria-label="切片機台" disabled>
+                <option>Artillery M1 Pro・0.4 mm（參考）</option>
+              </select>
+            </label>
+            <p>260 × 260 × 260 mm。此為可試切片的參考設定，不代表站點或新機型的實際設備。</p>
+          </details>
         </section>
         <section class="lab-material">
           <div class="lab-section-title">
@@ -90,7 +98,7 @@
           </div>
           <p v-if="!isFree">
             此工作區試切單色。更多材料、多色與上色需求，請使用
-            <router-link to="/quote">代印工作台 ↗</router-link>
+            <router-link to="/quote">代印工作台 →</router-link>
             。
           </p>
         </section>
@@ -161,7 +169,7 @@
             {{ previewLoading ? '正在載入路徑…' : cancelling ? '取消中…' : '取消切片工作' }}
           </button>
           <button v-else type="button" class="slice-button" :disabled="!layout.ready || !!parameterError" @click="submit">
-            {{ job?.status === 'failed' ? '重新切片' : '開始切片' }} ↗
+            {{ job?.status === 'failed' ? '重新切片' : '開始切片' }}
           </button>
           <button v-if="isFree && job?.status === 'completed'" type="button" :disabled="busy" @click="queueOpen = true">
             加入免費列印排隊
@@ -169,8 +177,8 @@
           <p>
             {{ isFree ? '加入排隊後，輪到你時寄 Email 通知。到場依引導準備並開始列印。' : '切片預覽不會建立付費案件、訂單或控制機器。' }}
           </p>
-          <router-link v-if="isFree" to="/portal/free-print">我的排隊與列印操作 ↗</router-link>
-          <button v-else type="button" :disabled="busy || !layout.models.length" @click="continueQuote">送出代印需求 ↗</button>
+          <router-link v-if="isFree" to="/portal/free-print">我的排隊與列印操作 →</router-link>
+          <button v-else type="button" :disabled="busy || !layout.models.length" @click="continueQuote">送出代印需求</button>
           <p v-if="parameterError" role="alert">{{ parameterError }}</p>
         </div>
       </aside>
@@ -204,7 +212,7 @@
         <button type="button" :disabled="cloudBusy || !layout.ready" @click="saveCloud">
           {{ cloudBusy ? '上傳保存中…' : '保存雲端草稿' }}
         </button>
-        <router-link v-if="cloudId" :to="{ path: '/quote', query: { draft: cloudId } }">繼續配色或送出代印需求 ↗</router-link>
+        <router-link v-if="cloudId" :to="{ path: '/quote', query: { draft: cloudId } }">繼續配色或送出代印需求 →</router-link>
       </template>
       <p v-if="cloudMessage" role="status">{{ cloudMessage }}</p>
     </el-dialog>
@@ -217,6 +225,16 @@
     </footer>
   </div>
 </template>
+<style scoped>
+  .file-menu { position: relative; }
+  .file-menu summary { cursor: pointer; padding: 10px 16px; border: 1px solid var(--rfm-line); border-radius: var(--rfm-radius-control); font-size: 16px; }
+  .file-menu-items { position: absolute; z-index: 30; right: 0; top: 100%; width: 240px; max-width: calc(100vw - 32px); max-height: 70vh; overflow-y: auto; padding: 12px; background: var(--rfm-surface); border: 1px solid var(--rfm-line); box-shadow: 0 8px 20px #192e5320; }
+  .file-menu .file-menu-items > button, .file-menu .file-menu-items > a { display: block; width: 100%; margin-top: 8px; text-align: left; font-size: 14px; }
+  .slicer-lab .lab-settings p, .slicer-lab .lab-settings small, .slicer-lab .lab-status, .slicer-lab .lab-settings label { font-size: 14px; line-height: 1.8; }
+  .slicer-lab .lab-header p { font-size: 14px; }
+  .slicer-lab .lab-header h1 { font-size: 16px; }
+  .lab-machine summary { cursor: pointer; font-size: 14px; margin-top: 14px; }
+</style>
 <script setup>
   import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
   import { useStore } from 'vuex'

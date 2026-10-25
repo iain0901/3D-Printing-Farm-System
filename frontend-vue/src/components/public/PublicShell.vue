@@ -6,7 +6,7 @@
         <span>專注 FDM 3D 列印・原型開發與小量製造</span>
         <div>
           <router-link to="/process">訂製流程</router-link>
-          <router-link to="/contact">聯絡我們 ↗</router-link>
+          <router-link to="/contact">聯絡我們 →</router-link>
         </div>
       </div>
     </div>
@@ -40,7 +40,7 @@
               <router-link v-for="link in group.links" :key="link.to" :to="link.to" @click="closeNavigation()">
                 <strong>
                   {{ link.label }}
-                  <span aria-hidden="true">↗</span>
+                  <span aria-hidden="true">→</span>
                 </strong>
                 <small>{{ link.description }}</small>
               </router-link>
@@ -51,7 +51,7 @@
           <router-link to="/portal/login" class="member-entry" @click="closeNavigation()">會員登入</router-link>
           <router-link to="/quote" class="studio-button small" @click="closeNavigation()">
             自動估價
-            <span aria-hidden="true">↗</span>
+            <span aria-hidden="true">→</span>
           </router-link>
         </div>
       </nav>
@@ -63,7 +63,7 @@
           <router-link to="/" class="footer-brand" aria-label="3DRFM，回到首頁"><brand-mark /></router-link>
           <p>讓設計，進入製造。</p>
           <small>FDM 3D 列印・模型代印・小量製作</small>
-          <router-link to="/quote" class="footer-inquiry">開始你的製作計畫 ↗</router-link>
+          <router-link to="/quote" class="footer-inquiry">開始你的製作計畫 →</router-link>
         </div>
         <div v-for="group in footerGroups" :key="group.title" class="footer-column">
           <h2>{{ group.title }}</h2>
@@ -82,12 +82,13 @@
   </div>
 </template>
 <script>
+  import '@/styles/public-readability.scss'
   import { publicNavigation, footerGroups } from '@/content/publicNavigation.mjs'
   import BrandMark from './BrandMark.vue'
   export default {
     name: 'PublicShell',
     components: { BrandMark },
-    data: () => ({ menuOpen: false, activeMenu: '', year: new Date().getFullYear(), navigation: publicNavigation, footerGroups }),
+    data: () => ({ menuOpen: false, activeMenu: '', year: new Date().getFullYear(), navigation: publicNavigation.filter((group) => group.id !== 'company'), footerGroups }),
     watch: {
       '$route.fullPath'() {
         this.closeNavigation()

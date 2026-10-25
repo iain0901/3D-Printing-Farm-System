@@ -11,7 +11,7 @@
         <el-input v-model.trim="form.twoFactorCode" autocomplete="one-time-code" placeholder="請輸入兩步驗證碼或復原碼" />
       </el-form-item>
       <el-button class="auth-submit" :loading="loading" native-type="submit" type="primary">
-        {{ requiresTwoFactor ? '驗證並登入' : '登入管理系統 ↗' }}
+        {{ requiresTwoFactor ? '驗證並登入' : '登入管理系統' }}
       </el-button>
     </el-form>
     <p class="auth-note">

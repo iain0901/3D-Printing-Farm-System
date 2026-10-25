@@ -7,7 +7,7 @@
           <b>{{ inquiryService.title }}・自動估價</b>
           <p>已帶入用途提示。上傳模型後設定材料與數量，由既有估價系統試算；備註可自行修改。</p>
         </div>
-        <router-link :to="`/services/${inquiryService.id}`">回到用途介紹 ↗</router-link>
+        <router-link :to="`/services/${inquiryService.id}`">回到用途介紹 →</router-link>
       </div>
       <section class="quote-intro">
         <div>
@@ -215,7 +215,7 @@
                 <el-form-item label="密碼">
                   <el-input v-model="authForm.password" type="password" autocomplete="current-password" show-password />
                 </el-form-item>
-                <el-button type="primary" native-type="submit" :loading="authLoading">登入並帶入資料 ↗</el-button>
+                <el-button type="primary" native-type="submit" :loading="authLoading">登入並帶入資料</el-button>
               </el-form>
               <el-form v-else label-position="top" class="account-form" @submit.prevent="registerForQuote">
                 <div class="form-grid">
@@ -226,7 +226,7 @@
                 <el-form-item label="設定密碼">
                   <el-input v-model="authForm.password" type="password" autocomplete="new-password" show-password placeholder="至少 8 碼" />
                 </el-form-item>
-                <el-button type="primary" native-type="submit" :loading="authLoading">建立帳號並帶入資料 ↗</el-button>
+                <el-button type="primary" native-type="submit" :loading="authLoading">建立帳號並帶入資料</el-button>
               </el-form>
             </section>
             <dl v-if="customer" class="generated-project">

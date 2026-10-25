@@ -75,7 +75,7 @@
             </dl>
             <router-link :to="item.path" class="studio-button" :aria-label="`選擇${item.institution}・${item.name}站點`">
               選擇此站點
-              <span aria-hidden="true">↗</span>
+              <span aria-hidden="true">→</span>
             </router-link>
           </div>
         </article>
@@ -103,9 +103,9 @@
             STL、調整模型並進行切片。切片使用參考機型，不代表現場設備；完成切片不等於取得免費名額，也不會加入列印佇列或操作機器。
           </p>
           <p>免費列印固定使用 3DSTU_PETG。開放資格、免費額度、服務時段與設備，請依站點公告及現場指引確認。</p>
-          <router-link :to="`${station.path}/slicer`" class="studio-button">開啟線上切片 ↗</router-link>
-          <router-link to="/portal/workspace?section=free-print" class="free-text-link">會員免費列印申請與進度 ↗</router-link>
-          <router-link to="/guides/file-prep" class="free-text-link">先看模型檔案準備指南 ↗</router-link>
+          <router-link :to="`${station.path}/slicer`" class="studio-button">開啟線上切片 →</router-link>
+          <router-link to="/portal/workspace?section=free-print" class="free-text-link">會員免費列印申請與進度 →</router-link>
+          <router-link to="/guides/file-prep" class="free-text-link">先看模型檔案準備指南 →</router-link>
         </div>
       </section>
 
@@ -156,7 +156,7 @@
           <h2>需要一般代印服務？</h2>
           <p>急件、指定規格或其他製作需求，可另外使用 3DRFM 付費代印估價。</p>
         </div>
-        <router-link to="/quote" class="free-text-link">前往付費代印估價 ↗</router-link>
+        <router-link to="/quote" class="free-text-link">前往付費代印估價 →</router-link>
       </aside>
     </div>
   </public-shell>

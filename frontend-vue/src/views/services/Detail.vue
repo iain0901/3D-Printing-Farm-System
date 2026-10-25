@@ -19,7 +19,7 @@
               <p class="service-lead">{{ service.summary }}</p>
               <router-link :to="quoteRoute" class="studio-button">
                 開始自動估價
-                <span aria-hidden="true">↗</span>
+                <span aria-hidden="true">→</span>
               </router-link>
               <p class="service-hero-note">
                 {{
@@ -42,7 +42,10 @@
         </ul>
       </div>
       <section class="studio-wrap service-detail-section">
-        <instruction-notes :placement="$route.path" />
+        <details class="service-reading-note">
+          <summary>製作前的小提醒：方向、表面與支撐</summary>
+          <instruction-notes :placement="$route.path" />
+        </details>
         <div class="service-section-heading">
           <div>
             <p class="studio-kicker">這類作品，我們先討論這些</p>
@@ -52,7 +55,7 @@
               還要符合你的用途。
             </h2>
           </div>
-          <span class="service-editorial-note">{{ service.tag }}</span>
+          <span class="service-editorial-note">用途提示：{{ service.tag }}</span>
         </div>
         <div class="service-priority-grid">
           <article v-for="(priority, i) in service.priorities" :key="priority[0]">
@@ -82,6 +85,16 @@
                 <dd>{{ material[1] }}</dd>
               </div>
             </dl>
+            <details class="service-reading-note">
+              <summary>查看全部六種材料與日常用途</summary>
+              <dl class="service-material-list">
+                <div v-for="material in materialGuide" :key="material.name">
+                  <dt>{{ material.name }}</dt>
+                  <dd>{{ material.uses }}。耐熱：{{ material.heat }}；強度：{{ material.strength }}；價格等級：{{ material.price }}。</dd>
+                </div>
+              </dl>
+              <router-link to="/materials">完整材料指南 →</router-link>
+            </details>
           </div>
           <aside class="service-boundary">
             <p class="studio-kicker">製作前，這些限制要先知道</p>
@@ -111,7 +124,7 @@
           <p class="preparation-progress" role="status">已備妥 {{ prepared.length }} ／ {{ service.checklist.length }} 項</p>
           <button type="button" class="studio-button" @click="copyChecklist">
             複製詢價清單
-            <span aria-hidden="true">↗</span>
+            <span aria-hidden="true">→</span>
           </button>
           <p class="copy-status" role="status">{{ copyStatus }}</p>
         </div>
@@ -165,7 +178,7 @@
             </h2>
             <p>自動估價時會帶入「{{ service.title }}」用途提示，你仍可以修改與補充。</p>
           </div>
-          <router-link :to="quoteRoute" class="studio-button light">開始自動估價 ↗</router-link>
+          <router-link :to="quoteRoute" class="studio-button light">開始自動估價 →</router-link>
         </div>
       </section>
       <section class="studio-wrap service-related">
@@ -173,11 +186,11 @@
         <div>
           <router-link v-for="item in related" :key="item.id" :to="`/services/${item.id}`">
             {{ item.title }}
-            <span aria-hidden="true">↗</span>
+            <span aria-hidden="true">→</span>
           </router-link>
           <router-link to="/services">
             全部 FDM 服務
-            <span aria-hidden="true">↗</span>
+            <span aria-hidden="true">→</span>
           </router-link>
         </div>
       </section>
@@ -185,6 +198,7 @@
   </public-shell>
 </template>
 <script>
+  import { materialGuide } from '@/content/materialGuide.mjs'
   import PublicShell from '@/components/public/PublicShell.vue'
   import ObjectCollage from '@/components/public/ObjectCollage.vue'
   import InstructionNotes from '@/components/public/InstructionNotes.vue'
@@ -194,7 +208,7 @@
     name: 'ServiceDetail',
     components: { PublicShell, ObjectCollage, InstructionNotes },
     props: { serviceId: { type: String, required: true } },
-    data: () => ({ prepared: [], copyStatus: '', showCopyFallback: false }),
+    data: () => ({ prepared: [], copyStatus: '', showCopyFallback: false, materialGuide }),
     computed: {
       service() {
         return getService(this.serviceId)

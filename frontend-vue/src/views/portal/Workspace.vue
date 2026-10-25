@@ -8,7 +8,7 @@
       </div>
       <div class="card-actions">
         <button :disabled="busy || loading" @click="load">重新整理</button>
-        <router-link class="solid" to="/quote?new=1">新增列印需求 ↗</router-link>
+        <router-link class="solid" to="/quote?new=1">新增列印需求 →</router-link>
       </div>
     </header>
     <nav class="hub-nav" aria-label="會員服務">
@@ -73,7 +73,7 @@
             <div class="card-actions">
               <button :disabled="busy" @click="preview(model)">3D 預覽</button>
               <button :disabled="busy" @click="downloadModel(model)">下載</button>
-              <router-link :to="{ path: '/quote', query: { model: model.id } }">用於估價 ↗</router-link>
+              <router-link :to="{ path: '/quote', query: { model: model.id } }">用於估價 →</router-link>
               <button :disabled="busy" @click="updateModel(model, { favorite: !model.favorite })">
                 {{ model.favorite ? '取消收藏' : '收藏' }}
               </button>
@@ -122,7 +122,7 @@
             <small>更新於 {{ date(draft.updatedAt) }}</small>
           </div>
           <div class="card-actions">
-            <router-link :to="{ path: '/quote', query: { draft: draft.id } }">繼續編輯 ↗</router-link>
+            <router-link :to="{ path: '/quote', query: { draft: draft.id } }">繼續編輯 →</router-link>
             <router-link v-if="draft.caseId" :to="caseLink(draft.caseId)">查看案件</router-link>
             <button :disabled="busy" @click="deleteDraft(draft)">刪除草稿</button>
           </div>
@@ -130,7 +130,7 @@
         <div v-if="!data.drafts.length" class="hub-empty">
           <instruction-art kind="save" />
           <h3>尚未保存草稿</h3>
-          <router-link to="/quote">開啟線上工作台 ↗</router-link>
+          <router-link to="/quote">開啟線上工作台 →</router-link>
         </div>
       </section>
       <template v-if="section === 'projects'">
@@ -432,7 +432,7 @@
         <section class="hub-panel">
           <h2>付款與單據</h2>
           <p>可付款的正式訂單請前往「訂單與配送」。付款完成並驗證後才能下載付款紀錄。</p>
-          <router-link to="/portal/dashboard?tab=orders">查看訂單與付款 ↗</router-link>
+          <router-link to="/portal/dashboard?tab=orders">查看訂單與付款 →</router-link>
           <article v-for="order in billing.orders" :key="order.id" class="record-row">
             <div>
               <h3>{{ order.id }}</h3>
@@ -552,7 +552,7 @@
         <section class="hub-panel">
           <h2>自助列印排隊與操作</h2>
           <p>完成切片後加入排隊。輪到你時會寄 Email，依步驟準備機台並開始列印。</p>
-          <router-link class="solid" to="/portal/free-print">查看排隊與引導操作 ↗</router-link>
+          <router-link class="solid" to="/portal/free-print">查看排隊與引導操作 →</router-link>
         </section>
         <section class="hub-panel station-panel">
           <p class="eyebrow">免費列印站點 01</p>
@@ -587,7 +587,7 @@
             </label>
             <button class="solid" :disabled="busy">送出免費列印申請</button>
           </form>
-          <router-link to="/free-print/nthu-shuimu/slicer">先試用站點線上切片 ↗</router-link>
+          <router-link to="/free-print/nthu-shuimu/slicer">先試用站點線上切片 →</router-link>
         </section>
         <section class="hub-panel">
           <h2>免費列印紀錄</h2>

@@ -11,7 +11,7 @@
       <el-form-item label="密碼">
         <el-input v-model="form.password" type="password" autocomplete="new-password" show-password placeholder="設定至少 8 碼的密碼" />
       </el-form-item>
-      <el-button class="auth-submit" type="primary" native-type="submit" :loading="loading">建立我的帳號 ↗</el-button>
+      <el-button class="auth-submit" type="primary" native-type="submit" :loading="loading">建立我的帳號</el-button>
     </el-form>
     <div class="auth-links">
       <span>已經有帳號了？</span>

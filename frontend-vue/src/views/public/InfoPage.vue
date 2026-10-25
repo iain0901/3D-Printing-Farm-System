@@ -17,7 +17,7 @@
               <p>{{ page.lead }}</p>
               <router-link v-if="page.cta" :to="page.cta.to" class="studio-button">
                 {{ page.cta.label }}
-                <span aria-hidden="true">↗</span>
+                <span aria-hidden="true">→</span>
               </router-link>
             </div>
             <div v-if="hasArtwork" class="info-hero-art">
@@ -26,7 +26,11 @@
           </div>
         </div>
       </header>
-      <instruction-notes :placement="$route.path" class="studio-wrap" />
+      <figure v-if="page.id === 'process'" class="studio-wrap process-visual">
+        <studio-image kind="printer" />
+        <figcaption>FDM 線材示意・沿用官網產品影像風格，非現場製作照片。</figcaption>
+      </figure>
+      <instruction-notes v-else :placement="$route.path" class="studio-wrap" />
       <div class="studio-wrap info-content">
         <section
           v-for="block in page.blocks"
@@ -52,7 +56,7 @@
               >
                 <h3>
                   {{ card[0] }}
-                  <span v-if="block.type === 'actions'" aria-hidden="true">↗</span>
+                  <span v-if="block.type === 'actions'" aria-hidden="true">→</span>
                 </h3>
                 <p>{{ card[1] }}</p>
               </component>
@@ -122,8 +126,8 @@
             </h2>
           </div>
           <div>
-            <router-link to="/services" class="info-text-link">探索 FDM 製作服務 ↗</router-link>
-            <router-link to="/quote" class="studio-button light">開始自動估價 ↗</router-link>
+            <router-link to="/services" class="info-text-link">探索 FDM 製作服務 →</router-link>
+            <router-link to="/quote" class="studio-button light">開始自動估價 →</router-link>
           </div>
         </div>
       </section>
@@ -133,6 +137,7 @@
 
 <script>
   import PublicShell from '@/components/public/PublicShell.vue'
+  import StudioImage from '@/components/public/StudioImage.vue'
   import ObjectCollage from '@/components/public/ObjectCollage.vue'
   import InstructionNotes from '@/components/public/InstructionNotes.vue'
   import { routeArtwork } from '@/content/publicArtwork.mjs'
@@ -141,7 +146,7 @@
 
   export default {
     name: 'InfoPage',
-    components: { PublicShell, ObjectCollage, InstructionNotes },
+    components: { PublicShell, ObjectCollage, InstructionNotes, StudioImage },
     props: { pageId: { type: String, required: true } },
     computed: {
       hasArtwork() {

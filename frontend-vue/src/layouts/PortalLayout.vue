@@ -16,7 +16,7 @@
         >
           <span class="nav-number" aria-hidden="true">{{ item.number }}</span>
           {{ item.label }}
-          <span class="nav-arrow" aria-hidden="true">↗</span>
+          <span class="nav-arrow" aria-hidden="true">→</span>
         </router-link>
       </nav>
       <div class="sidebar-support">
@@ -28,7 +28,7 @@
         </p>
         <router-link to="/contact">
           聯絡專員
-          <span aria-hidden="true">↗</span>
+          <span aria-hidden="true">→</span>
         </router-link>
       </div>
       <router-link class="back-to-site" to="/">← 返回品牌官網</router-link>
@@ -49,7 +49,7 @@
       <main id="member-content" ref="content" class="portal-main" tabindex="-1"><router-view /></main>
       <footer class="portal-footer">
         <span>3DRFM · 讓設計，進入製造。</span>
-        <router-link to="/faq">常見問題 ↗</router-link>
+        <router-link to="/faq">常見問題 →</router-link>
       </footer>
     </div>
   </div>

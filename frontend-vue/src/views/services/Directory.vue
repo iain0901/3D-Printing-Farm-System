@@ -54,10 +54,10 @@
         <section v-for="group in groups" :key="group.id" class="service-group" :aria-labelledby="`group-${group.id}`">
           <div class="service-section-heading">
             <div>
-              <p class="studio-kicker">{{ group.number }} ／ {{ group.shortTitle }}</p>
+              <p class="studio-kicker">{{ group.shortTitle }}</p>
               <h2 :id="`group-${group.id}`">{{ audience ? '這次，你想做哪一種？' : group.title }}</h2>
             </div>
-            <router-link v-if="!audience" :to="`/for/${group.id}`">進入{{ group.shortTitle }}專區 ↗</router-link>
+            <router-link v-if="!audience" :to="`/for/${group.id}`">進入{{ group.shortTitle }}專區 →</router-link>
           </div>
           <div class="use-case-grid">
             <router-link
@@ -72,7 +72,7 @@
               </div>
               <h3>
                 {{ service.title }}
-                <span aria-hidden="true">↗</span>
+                <span aria-hidden="true">→</span>
               </h3>
               <p>{{ service.summary }}</p>
               <span class="use-case-examples">{{ service.examples.join(' ／ ') }}</span>
@@ -81,7 +81,7 @@
         </section>
       </div>
       <section class="service-tip studio-wrap">
-        <span class="service-tip-mark" aria-hidden="true">↗</span>
+        <span class="service-tip-mark" aria-hidden="true">i</span>
         <div>
           <h2>{{ audience ? '還有一些，你可能沒想到的用途。' : '先看用途，再決定 FDM 適不適合。' }}</h2>
           <p>
@@ -104,7 +104,7 @@
             </h2>
             <p>不提供樹脂光固化或金屬列印。材料供應、可製作尺寸與交期需依案件確認。</p>
           </div>
-          <router-link to="/quote" class="studio-button light">開始自動估價 ↗</router-link>
+          <router-link to="/quote" class="studio-button light">開始自動估價 →</router-link>
         </div>
       </section>
     </div>

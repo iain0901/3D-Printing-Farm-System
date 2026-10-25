@@ -5,7 +5,7 @@
         <p class="studio-kicker">應用領域</p>
         <h2 id="audience-links-title">你的產業，我們的製作起點。</h2>
       </div>
-      <router-link to="/services">看全部用途 ↗</router-link>
+      <router-link to="/services">看全部用途 →</router-link>
     </div>
     <div class="audience-links-grid">
       <router-link
@@ -20,7 +20,7 @@
         </div>
         <h3>
           {{ audience.title }}
-          <span aria-hidden="true">↗</span>
+          <span aria-hidden="true">→</span>
         </h3>
         <p>{{ audience.description }}</p>
         <span class="audience-link-topics">{{ topics(audience.id) }}</span>

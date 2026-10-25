@@ -10,7 +10,6 @@
     <div ref="host" class="stage-canvas" />
     <div class="stage-top">
       <span class="stage-label">
-        3DRFM
         <b>模型準備</b>
       </span>
       <div class="stage-actions">
@@ -59,15 +58,8 @@
     </div>
     <div v-if="!models.length" class="stage-empty">
       <instruction-art v-if="emptyArtwork" :kind="emptyArtwork" />
-      <span v-else class="empty-coordinate" aria-hidden="true">
-        X ─── Y
-        <br />
-        │
-        <br />
-        Z
-      </span>
-      <h3>把模型放上平台。</h3>
-      <p>拖入 STL，或從模型庫帶入你的作品。</p>
+      <h3>第一步：加入你的模型</h3>
+      <p>將 STL 拖放到此處，或按下方按鈕選擇檔案。</p>
       <button type="button" :disabled="disabled" @click="emit('import')">匯入 STL 模型</button>
     </div>
     <p v-if="loading" class="stage-message" role="status">正在準備 3D 模型…</p>
@@ -927,7 +919,11 @@
     left: 50%;
     transform: translateX(-50%);
     text-align: center;
-    max-width: 300px;
+    width: min(400px, calc(100% - 160px));
+    padding: 24px;
+    border: 2px dashed var(--rfm-muted);
+    border-radius: var(--rfm-radius-panel);
+    background: var(--rfm-surface);
     pointer-events: none;
   }
   .stage-empty h3 {
@@ -935,7 +931,7 @@
     letter-spacing: -0.5px;
   }
   .stage-empty p {
-    font-size: 12px;
+    font-size: 16px;
     color: var(--rfm-muted);
     line-height: 1.8;
   }
@@ -1170,8 +1166,11 @@
       font-size: 10px;
     }
     .stage-empty {
-      max-width: 200px;
-      top: 45%;
+      max-width: 260px;
+      width: calc(100% - 108px);
+      padding: 16px;
+      left: calc(50% + 20px);
+      top: 25%;
     }
     .stage-empty h3 {
       font-size: 18px;

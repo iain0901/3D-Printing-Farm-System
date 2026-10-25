@@ -7,13 +7,13 @@
       <el-form-item label="電子郵件">
         <el-input v-model.trim="email" type="email" autocomplete="email" placeholder="請輸入註冊時的電子郵件" />
       </el-form-item>
-      <el-button class="auth-submit" type="primary" native-type="submit" :loading="loading">寄送重設連結 ↗</el-button>
+      <el-button class="auth-submit" type="primary" native-type="submit" :loading="loading">寄送重設連結</el-button>
     </el-form>
     <el-form v-else label-position="top" size="large" @submit.prevent="confirmReset">
       <el-form-item label="新密碼">
         <el-input v-model="password" type="password" autocomplete="new-password" show-password placeholder="設定至少 8 碼的密碼" />
       </el-form-item>
-      <el-button class="auth-submit" type="primary" native-type="submit" :loading="loading">確認重設密碼 ↗</el-button>
+      <el-button class="auth-submit" type="primary" native-type="submit" :loading="loading">確認重設密碼</el-button>
     </el-form>
     <div class="auth-links"><router-link to="/portal/login">← 返回會員登入</router-link></div>
     <p class="auth-note">若沒有收到信件，請確認信箱地址，並檢查垃圾郵件匣。</p>

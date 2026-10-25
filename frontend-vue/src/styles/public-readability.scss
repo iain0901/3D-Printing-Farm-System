@@ -1,0 +1,52 @@
+// UI-20261025-01: public presentation only. No admin theme or system tokens.
+.public-site.brand-surface {
+  #public-content {
+    p, dd, .service-lead, .use-case-card p { font-size: 16px; line-height: 1.85; }
+    small, figcaption, .section-index, .studio-kicker, .story-category,
+    .hero-category, .hero-edition, .poster-footnote, .specimen-label,
+    .hero-object-caption, .hero-sample-label, .hero-sample-label small,
+    .material-caption, .material-sample small, .material-details dt,
+    .use-case-examples, .service-hero-note, .personal-rush,
+    .closing-baseline, .material-tabs button > span { font-size: 14px; }
+    .material-tabs { flex-wrap: wrap; gap: 10px; }
+    .material-tabs button { min-height: 44px; font-size: 16px; }
+    .material-tabs button > span { position: static; margin-left: 6px; }
+    .material-details dd { margin: 0; }
+    .commission-steps li { grid-template-columns: 52px minmax(0, 1fr); align-items: start; }
+    .commission-steps li > span {
+      display: grid; place-items: center; width: 44px; height: 44px;
+      flex-shrink: 0; border: 1px solid currentColor; border-radius: 50%;
+      font: 700 20px/1 var(--rfm-font); letter-spacing: 0;
+    }
+    .use-case-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .use-case-card { display: flex; flex-direction: column; height: 100%; }
+    .use-case-card:hover, .use-case-card:focus-visible { outline: 2px solid var(--rfm-ink); outline-offset: 4px; }
+    .use-case-art { border-radius: 0; background: transparent; }
+    .use-case-art > span { border: 0; border-radius: 0; box-shadow: none; }
+    .instruction-note { align-items: flex-start; }
+    .object-collage__caption { font-size: 14px; color: var(--rfm-ink); }
+    .commission-steps .process-image { float: right; width: 100px; height: 80px; object-fit: contain; margin: 0 0 8px 12px; }
+    .workbench-steps span { font-size: 14px; color: var(--rfm-ink); }
+    .workbench-file-actions details { padding: 10px 14px; border: 1px solid var(--rfm-line); background: var(--rfm-surface); border-radius: var(--rfm-radius-control); }
+    .workbench-file-actions summary { cursor: pointer; font-size: 16px; font-weight: 700; }
+    .workbench-file-actions details button { display: block; margin-top: 10px; }
+    .process-visual { margin-block: 32px; }
+    .process-visual img { width: min(100%, 480px); max-height: 280px; object-fit: contain; }
+    .service-reading-note { margin-block: 20px; }
+    .service-reading-note summary { cursor: pointer; font-size: 16px; font-weight: 700; padding-block: 12px; }
+    .service-editorial-note { padding: 0; background: transparent; border: 0; border-radius: 0; font-size: 14px; color: var(--rfm-muted); }
+  }
+  .public-nav { font-size: 16px; }
+  .public-utility, .footer-column, .footer-bottom, .footer-identity small,
+  .nav-panel-links small { font-size: 14px; }
+  .studio-button, .studio-button.light, #public-content .studio-button, #public-content .studio-button.light {
+    background: var(--rfm-primary); color: #fffdfa; border-color: currentColor;
+  }
+  .studio-button:hover, .studio-button.light:hover, #public-content .studio-button:hover { background: var(--rfm-primary-hover); color: #fffdfa; }
+  @media (max-width: 1000px) { #public-content .use-case-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 600px) {
+    #public-content .use-case-grid { grid-template-columns: minmax(0, 1fr); }
+    #public-content .commission-steps li { gap: 12px; }
+    #public-content .material-recommendation { position: static; display: block; transform: none; border-radius: 0; width: auto; height: auto; padding: 12px; }
+  }
+}

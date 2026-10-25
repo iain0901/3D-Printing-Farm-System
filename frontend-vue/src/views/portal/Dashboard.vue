@@ -11,7 +11,7 @@
       </div>
       <router-link class="new-project" to="/quote">
         新增列印估價
-        <span aria-hidden="true">↗</span>
+        <span aria-hidden="true">→</span>
       </router-link>
     </div>
     <section class="member-summary" aria-label="會員概況" :aria-busy="loading">
@@ -74,7 +74,7 @@
             </div>
             <p class="quote-meta">案件編號：{{ caseItem.caseNo }} · {{ caseItem.parts.length }} 個零件</p>
             <router-link class="case-detail-link" :to="{ path: '/portal/workspace', query: { section: 'case', id: caseItem.id } }">
-              查看完整案件、進度與對話 ↗
+              查看完整案件、進度與對話 →
             </router-link>
             <p v-if="caseItem.quote" class="quote-price">
               {{ money(caseItem.quote.total) }}
@@ -94,7 +94,7 @@
             <span class="empty-index">01 / 開始製作</span>
             <h3>第一件作品，從這裡開始。</h3>
             <p>上傳模型，使用自動估價確認製作需求。送出後就能在這裡追蹤案件。</p>
-            <router-link to="/quote">上傳模型並估價 ↗</router-link>
+            <router-link to="/quote">上傳模型並估價 →</router-link>
           </div>
         </el-card>
       </el-tab-pane>
@@ -196,7 +196,7 @@
             <span class="empty-index">02 / 討論需求</span>
             <h3>把想法交給我們，一起確認細節。</h3>
             <p>報價內容與專員訊息會保留在這裡，方便您隨時接著討論。</p>
-            <router-link to="/quote">開始自動估價 ↗</router-link>
+            <router-link to="/quote">開始自動估價 →</router-link>
           </div>
         </el-card>
       </el-tab-pane>
@@ -248,7 +248,7 @@
           <span class="empty-index">03 / 安心交付</span>
           <h3>目前還沒有訂單。</h3>
           <p>訂單建立後，您可以在這裡付款、查詢物流與再次訂購。</p>
-          <router-link to="/quote">開始新的製作計畫 ↗</router-link>
+          <router-link to="/quote">開始新的製作計畫 →</router-link>
         </div>
       </el-tab-pane>
 

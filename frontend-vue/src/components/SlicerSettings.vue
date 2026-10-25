@@ -6,24 +6,30 @@
         <span>0.4 mm 噴嘴</span>
       </div>
       <label>
-        層高
+        製作品質
         <select v-model.number="settings.layerHeight" aria-label="切片層高">
-          <option :value="0.12">0.12 mm・細緻</option>
-          <option :value="0.16">0.16 mm・平衡</option>
-          <option :value="0.2">0.20 mm・標準</option>
-          <option :value="0.28">0.28 mm・快速</option>
+          <option :value="0.12">精細・外觀件細節（0.12 mm）</option>
+          <option :value="0.2">標準・一般外觀與功能件（0.20 mm）</option>
+          <option :value="0.28">快速・先確認造型（0.28 mm）</option>
+          <optgroup label="進階／既有設定">
+            <option :value="0.16">自訂・平衡（0.16 mm）</option>
+          </optgroup>
         </select>
       </label>
-      <div class="parameter-pair">
-        <label>
-          填充密度 %
-          <input v-model.number="settings.infill" type="number" min="0" max="100" aria-label="切片填充密度" />
-        </label>
-        <label>
-          外壁圈數
-          <input v-model.number="settings.walls" type="number" min="1" max="12" aria-label="切片外壁圈數" />
-        </label>
-      </div>
+      <p>外觀件重視表面細節；功能件請先描述受力與組裝方式。品質選項只調整層高，不代表強度保證，也不會覆寫原有填充。</p>
+      <details>
+        <summary>自訂填充與外壁（功能件請先確認）</summary>
+        <div class="parameter-pair">
+          <label>
+            填充密度 %
+            <input v-model.number="settings.infill" type="number" min="0" max="100" aria-label="切片填充密度" />
+          </label>
+          <label>
+            外壁圈數
+            <input v-model.number="settings.walls" type="number" min="1" max="12" aria-label="切片外壁圈數" />
+          </label>
+        </div>
+      </details>
       <label class="parameter-check">
         <input v-model="settings.autoSupports" type="checkbox" />
         自動產生支撐
@@ -125,7 +131,7 @@
 </script>
 <style scoped>
   .slicer-parameters {
-    font-size: 12px;
+    font-size: 16px;
     color: var(--rfm-ink);
   }
   .parameter-head {
@@ -135,17 +141,17 @@
     gap: 8px;
   }
   .parameter-head h3 {
-    font-size: 13px;
+    font-size: 16px;
   }
   .parameter-head span {
-    font-size: 10px;
+    font-size: 14px;
     color: var(--rfm-muted);
   }
   .slicer-parameters label {
     display: grid;
     gap: 7px;
     margin: 14px 0;
-    font-size: 11px;
+    font-size: 16px;
   }
   .slicer-parameters input:not([type='checkbox']),
   .slicer-parameters select {
@@ -173,7 +179,7 @@
     gap: 12px;
   }
   .slicer-parameters p {
-    font-size: 10px;
+    font-size: 14px;
     color: var(--rfm-muted);
     line-height: 1.8;
   }
@@ -183,12 +189,12 @@
     padding-top: 16px;
   }
   .slicer-parameters summary {
-    font-size: 12px;
+    font-size: 16px;
     cursor: pointer;
     font-weight: 600;
   }
   .slicer-parameters summary span {
-    font-size: 9px;
+    font-size: 14px;
     color: var(--rfm-muted);
     margin-left: 10px;
     font-weight: 400;
@@ -202,7 +208,7 @@
   }
   .slicer-parameters button {
     font: inherit;
-    font-size: 10px;
+    font-size: 14px;
     border: 1px solid var(--rfm-line);
     background: var(--rfm-surface);
     color: inherit;

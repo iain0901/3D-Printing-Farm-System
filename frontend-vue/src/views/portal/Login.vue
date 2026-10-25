@@ -7,7 +7,7 @@
       <el-form-item label="密碼">
         <el-input v-model="form.password" type="password" autocomplete="current-password" show-password placeholder="請輸入密碼" />
       </el-form-item>
-      <el-button class="auth-submit" type="primary" native-type="submit" :loading="loading">登入會員中心 ↗</el-button>
+      <el-button class="auth-submit" type="primary" native-type="submit" :loading="loading">登入會員中心</el-button>
     </el-form>
     <div class="auth-links">
       <router-link :to="{ path: '/portal/register', query: { redirect: $route.query.redirect } }">第一次來？建立帳號</router-link>
@@ -15,7 +15,7 @@
     </div>
     <p class="auth-note">
       只是想先了解價格？
-      <router-link to="/quote">不用登入，也可以開始估價 ↗</router-link>
+      <router-link to="/quote" class="guest-estimate">不用登入，先試試估價 →</router-link>
     </p>
   </auth-shell>
 </template>
@@ -52,3 +52,16 @@
     },
   }
 </script>
+<style scoped>
+  .guest-estimate {
+    display: flex;
+    justify-content: center;
+    margin-top: 12px;
+    padding: 12px 18px;
+    border: 1px solid var(--rfm-ink);
+    border-radius: var(--rfm-radius-control);
+    color: var(--rfm-ink);
+    font-size: 16px;
+    font-weight: 700;
+  }
+</style>

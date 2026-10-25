@@ -3,17 +3,20 @@
     <div class="studio-wrap workbench-wrap">
       <header class="workbench-intro">
         <div>
-          <p class="workbench-kicker">3DRFM ／ 線上切片估價</p>
+          <p class="workbench-kicker">線上切片估價</p>
           <h1>把想法，放上列印平台。</h1>
           <p>調整模型、選擇耗材，讓每個顏色都有自己的位置。</p>
         </div>
-        <button class="text-button" type="button" @click="askSpecialist">需要建模或轉檔？專員協助 ↗</button>
+        <button class="text-button" type="button" @click="askSpecialist">需要建模或轉檔？專員協助</button>
       </header>
       <div class="workbench-file-actions">
+        <details>
+          <summary>檔案</summary>
         <input ref="archiveInput" class="sr-only" type="file" accept=".zip" aria-label="開啟完整代印專案" @change="openArchive" />
         <button type="button" @click="archiveInput.click()">開啟完整專案</button>
         <button type="button" :disabled="!!storageIssues.length" @click="downloadArchive">下載完整專案 ZIP</button>
         <button type="button" :disabled="!layout.models.length" @click="clearLocal">清除此裝置的工作</button>
+        </details>
         <span>此瀏覽器會保留工作。共用裝置使用完畢請清除。</span>
       </div>
       <p v-if="service" class="service-note">已帶入「{{ service.title }}」的用途說明，可在製作備註調整。</p>
@@ -330,7 +333,7 @@
           </label>
           <slicer-settings :settings="settings" advanced-only />
           <p v-if="issues.length && layout.models.length" class="validation-note" role="status">{{ issues[0] }}</p>
-          <button class="primary-button" type="button" :disabled="!!issues.length" @click="review">確認設定，帶入會員資料 ↗</button>
+          <button class="primary-button" type="button" :disabled="!!issues.length" @click="review">確認設定，帶入會員資料</button>
         </section>
       </div>
       <section id="quote-review" class="workbench-panel review-panel" tabindex="-1" aria-labelledby="quote-review-title">
@@ -366,7 +369,7 @@
               自動保存後續修改（需先保存一次）
             </label>
             <p v-if="cloudMessage" role="status">{{ cloudMessage }}</p>
-            <router-link to="/portal/workspace?section=drafts">查看我的雲端草稿 ↗</router-link>
+            <router-link to="/portal/workspace?section=drafts">查看我的雲端草稿 →</router-link>
             <h3>送出製作需求</h3>
             <label class="field">
               交付方式
@@ -385,7 +388,7 @@
               </select>
             </label>
             <router-link v-if="deliveryMethod === 'delivery' && !addresses.length" to="/portal/dashboard?tab=addresses">
-              新增收件地址 ↗
+              新增收件地址
             </router-link>
             <label class="check-field">
               <input v-model="checksAccepted" type="checkbox" />
@@ -400,7 +403,7 @@
               {{ submittedCaseId ? '此草稿已送出' : '送交專員確認報價' }}
             </button>
             <router-link v-if="submittedCaseId" :to="{ path: '/portal/workspace', query: { section: 'case', id: submittedCaseId } }">
-              查看已送出的案件 ↗
+              查看已送出的案件 →
             </router-link>
           </div>
           <div class="draft-summary">

@@ -23,7 +23,7 @@
           <div class="poster-actions">
             <router-link to="/quote" class="studio-button">
               上傳模型・自動估價
-              <span aria-hidden="true">↗</span>
+              <span aria-hidden="true">→</span>
             </router-link>
             <router-link :to="{ path: '/', hash: '#services' }" class="text-link">
               先看看能做什麼
@@ -43,8 +43,15 @@
       <div class="studio-wrap poster-footnote">
         <span>塑膠線材 FDM 列印</span>
         <span>STL ／ 3MF ／ STEP</span>
-        <router-link to="/guides/file-prep">上傳前，先確認檔案 ↗</router-link>
+        <router-link to="/guides/file-prep">上傳前，先確認檔案 →</router-link>
       </div>
+    </section>
+
+    <section class="studio-wrap service-facts" aria-label="服務規模與製作資訊">
+      <div><strong>1 件</strong><span>即可提出製作需求</span></div>
+      <div><strong>{{ guideMaterials.length }} 種</strong><span>材料討論方向・供料需確認</span></div>
+      <div><strong>依案件確認</strong><span>交期與最大尺寸，不作統一保證</span></div>
+      <p>累計製作數量尚未提供可核實資料，因此不顯示推估產量。</p>
     </section>
 
     <aside class="studio-wrap free-print-entry" aria-label="免費列印站點入口">
@@ -52,7 +59,7 @@
         <span>校園免費列印</span>
         <p>第一站，清華大學・水木書苑。</p>
       </div>
-      <router-link to="/free-print" class="text-link">選擇免費列印站點 ↗</router-link>
+      <router-link to="/free-print" class="text-link">選擇免費列印站點 →</router-link>
     </aside>
 
     <section id="services" class="studio-wrap applications-section">
@@ -63,7 +70,7 @@
           <br />
           <span>你自己的。</span>
         </h2>
-        <router-link to="/services" class="text-link">所有 FDM 製作服務 ↗</router-link>
+        <router-link to="/services" class="text-link">所有 FDM 製作服務 →</router-link>
       </header>
       <div class="application-layout">
         <article class="application-story story-school">
@@ -71,7 +78,7 @@
             <span class="specimen-number" aria-hidden="true">01</span>
             <studio-image kind="parts" />
             <span class="specimen-label">結構探索 ／ 格構示意</span>
-            <span class="visual-arrow" aria-hidden="true">↗</span>
+            <span class="visual-arrow" aria-hidden="true">→</span>
           </router-link>
           <div class="story-copy">
             <span class="story-category">學校・實驗室</span>
@@ -82,9 +89,9 @@
             </h3>
             <p>實驗治具、專題外殼，或畢業展桌上的那件作品。先把模型做出來，讓測試與討論繼續。</p>
             <div class="story-links">
-              <router-link to="/services/research-lab">研究模型 ↗</router-link>
-              <router-link to="/services/student-project">專題製作 ↗</router-link>
-              <router-link to="/services/campus-gifts">文創紀念品 ↗</router-link>
+              <router-link to="/services/research-lab">研究模型 →</router-link>
+              <router-link to="/services/student-project">專題製作 →</router-link>
+              <router-link to="/services/campus-gifts">文創紀念品 →</router-link>
             </div>
           </div>
         </article>
@@ -98,22 +105,22 @@
             </h3>
             <p>從外觀樣品、組裝驗證到小批量零件，將關鍵尺寸、材料與驗收條件，一次說清楚。</p>
             <div class="story-links">
-              <router-link to="/services/exhibition">展示模型 ↗</router-link>
-              <router-link to="/services/industrial-parts">工業件 ↗</router-link>
-              <router-link to="/services/small-batch">小批量 ↗</router-link>
+              <router-link to="/services/exhibition">展示模型 →</router-link>
+              <router-link to="/services/industrial-parts">工業件 →</router-link>
+              <router-link to="/services/small-batch">小批量 →</router-link>
             </div>
           </div>
           <router-link to="/for/business" class="application-visual" aria-label="探索企業製作">
             <span class="specimen-number" aria-hidden="true">02</span>
             <studio-image kind="sketch" />
             <span class="specimen-label">從外觀，確認到組裝</span>
-            <span class="visual-arrow" aria-hidden="true">↗</span>
+            <span class="visual-arrow" aria-hidden="true">→</span>
           </router-link>
         </article>
       </div>
       <article class="personal-story">
         <div class="personal-title">
-          <span class="section-index">03 ／ 個人・創作者</span>
+          <span class="story-category">個人・創作者</span>
           <h3>
             剛好，
             <br />
@@ -123,8 +130,8 @@
         <studio-image kind="everyday" decorative />
         <div class="personal-copy">
           <p>一個桌上小物、一件模型配件，或網路找到的設計檔。單件也能製作，先告訴我們要怎麼用。</p>
-          <router-link to="/for/personal" class="text-link">個人代印專區 ↗</router-link>
-          <router-link to="/services/rush-print" class="personal-rush">趕時間？先確認急件可行性 ↗</router-link>
+          <router-link to="/for/personal" class="text-link">個人代印專區 →</router-link>
+          <router-link to="/services/rush-print" class="personal-rush">趕時間？先確認急件可行性 →</router-link>
         </div>
       </article>
     </section>
@@ -148,16 +155,22 @@
           <span class="material-big-type" aria-hidden="true">PETG</span>
           <studio-image kind="printer" decorative />
           <span class="material-recommendation">
-            最推薦的
+            一般功能件
             <br />
-            <strong>選材起點 ↗</strong>
+            <strong>選材討論起點</strong>
           </span>
           <span class="material-caption">線材示意 ／ 一般功能件優先討論 PETG</span>
         </div>
         <div class="material-copy">
+          <label class="material-question">
+            不知道選什麼？先選最接近的用途
+            <select v-model="materialIndex">
+              <option v-for="(item, index) in guideMaterials" :key="item.name" :value="index">{{ item.uses }}（{{ item.name }}）</option>
+            </select>
+          </label>
           <div class="material-tabs" role="group" aria-label="選擇材料">
             <button
-              v-for="(material, index) in materials"
+              v-for="(material, index) in guideMaterials"
               :key="material.name"
               :aria-pressed="materialIndex === index"
               :class="{ active: materialIndex === index }"
@@ -180,9 +193,13 @@
                 <dt>先確認</dt>
                 <dd>{{ selectedMaterial.caution }}</dd>
               </div>
+              <div><dt>耐熱</dt><dd>{{ selectedMaterial.heat }}</dd></div>
+              <div><dt>強度</dt><dd>{{ selectedMaterial.strength }}</dd></div>
+              <div><dt>價格等級</dt><dd>{{ selectedMaterial.price }}・非正式報價</dd></div>
             </dl>
+            <p>以上為一般選材方向，非承重、耐熱或安全認證；實際牌號與製程需另行確認。</p>
           </div>
-          <router-link to="/materials" class="text-link">比較六種 FDM 材料 ↗</router-link>
+          <router-link to="/materials" class="text-link">比較六種 FDM 材料 →</router-link>
           <div class="material-sample">
             <studio-image kind="batch" decorative />
             <p>
@@ -211,7 +228,7 @@
         </p>
         <router-link to="/quote" class="studio-button">
           開始自動估價
-          <span aria-hidden="true">↗</span>
+          <span aria-hidden="true">→</span>
         </router-link>
         <router-link to="/portal/login" class="member-link">已有案件？登入會員中心 →</router-link>
       </div>
@@ -220,31 +237,31 @@
           <span>01</span>
           <div>
             <h3>上傳模型</h3>
-            <instruction-art :kind="homeInstructionArtwork[0]" />
-            <p>提供檔案、實際尺寸與用途；沒有模型可選建模協助。</p>
+            <studio-image kind="sketch" class="process-image" decorative />
+            <p>已有 STL／3MF 模型就直接上傳。不會建模？拍下物件、用尺量長寬高，或畫一張草圖，也能先提出建模需求。</p>
           </div>
         </li>
         <li>
           <span>02</span>
           <div>
-            <h3>登入，帶入資料</h3>
-            <instruction-art :kind="homeInstructionArtwork[1]" />
-            <p>流程第三步登入或註冊，讓需求與個人案件連結。</p>
+            <h3>設定條件，取得初估</h3>
+            <studio-image kind="spool" class="process-image" decorative />
+            <p>先說明物件用途，再比較材料、品質與數量；不確定的地方可留給專員確認。</p>
           </div>
         </li>
         <li>
           <span>03</span>
           <div>
-            <h3>設定條件，取得初估</h3>
-            <instruction-art :kind="homeInstructionArtwork[2]" />
-            <p>選擇材料、品質與數量。正式報價及交期仍需個別確認。</p>
+            <h3>登入，帶入資料</h3>
+            <studio-image kind="everyday" class="process-image" decorative />
+            <p>需要送出需求時再登入或註冊，讓案件與個人資料連結；正式報價及交期仍需確認。</p>
           </div>
         </li>
         <li>
           <span>04</span>
           <div>
             <h3>確認製作，追蹤交付</h3>
-            <instruction-art :kind="homeInstructionArtwork[3]" />
+            <studio-image kind="batch" class="process-image" decorative />
             <p>確認報價與付款安排後，透過案件查看製作進度。</p>
           </div>
         </li>
@@ -255,7 +272,7 @@
           <h3>還停在草圖？</h3>
           <p>帶著尺寸、照片與用途，先確認建模範圍。</p>
         </div>
-        <router-link to="/quote?mode=agent&amp;model=no" class="text-link">我需要建模協助 ↗</router-link>
+        <router-link to="/quote?mode=agent&amp;model=no" class="text-link">我需要建模協助 →</router-link>
       </aside>
     </section>
 
@@ -267,7 +284,7 @@
           <br />
           再開始。
         </h2>
-        <router-link to="/faq" class="text-link">查看所有問題 ↗</router-link>
+        <router-link to="/faq" class="text-link">查看所有問題 →</router-link>
       </div>
       <div class="faq-list">
         <details v-for="(faq, index) in faqs" :key="faq.question">
@@ -288,12 +305,12 @@
             <br />
             我們手上見。
           </p>
-          <router-link to="/quote" aria-label="開始自動估價" class="closing-arrow">↗</router-link>
+          <router-link to="/quote" aria-label="開始自動估價" class="closing-arrow">→</router-link>
         </div>
         <span class="closing-wordmark" aria-hidden="true">3DRFM</span>
         <div class="closing-baseline">
           <span>FDM 3D 列印製造服務</span>
-          <router-link to="/contact">與我們聯絡 ↗</router-link>
+          <router-link to="/contact">與我們聯絡 →</router-link>
         </div>
       </div>
     </section>
@@ -303,57 +320,14 @@
   import PublicShell from '@/components/public/PublicShell.vue'
   import StudioImage from '@/components/public/StudioImage.vue'
   import HeroLayerField from '@/components/public/HeroLayerField.vue'
-  import InstructionArt from '@/components/public/InstructionArt.vue'
-  import { homeInstructionArtwork } from '@/content/instructionArtwork.mjs'
+  import { materialGuide } from '@/content/materialGuide.mjs'
   export default {
     name: 'Landing',
-    components: { PublicShell, StudioImage, HeroLayerField, InstructionArt },
+    components: { PublicShell, StudioImage, HeroLayerField },
     data() {
       return {
-        materialIndex: 1,
-        homeInstructionArtwork,
-        materials: [
-          {
-            name: 'PLA',
-            art: 'parts',
-            background: '#e7e8c8',
-            note: '讓造型先說話',
-            title: '讓第一個想法，輕鬆成型。',
-            description: '適合外觀模型、展示作品與桌上小物，是開始嘗試 3D 列印的好選擇。',
-            uses: '造型模型、展示件、教學作品',
-            caution: '避免高溫環境；受力零件需另外評估。',
-          },
-          {
-            name: 'PETG',
-            art: 'spool',
-            background: '#e9d3c1',
-            note: '日常裡的實用派',
-            title: '多一點韌性，多一些用途。',
-            description: '兼具實用性與韌性，適合製作日常使用的功能零件與收納配件。',
-            uses: '收納配件、機構外殼、實用零件',
-            caution: '請提供受力方式、組裝公差與使用溫度。',
-          },
-          {
-            name: 'ASA',
-            art: 'parts',
-            background: '#c8dcd7',
-            note: '為戶外用途打算',
-            title: '把使用場景，延伸到戶外。',
-            description: '有耐候需求時可考慮 ASA，實際製作方式仍需依尺寸與結構確認。',
-            uses: '戶外外殼、設備配件、耐候零件',
-            caution: '大尺寸與精密配合件，需先評估收縮與變形。',
-          },
-          {
-            name: 'TPU',
-            art: 'spool',
-            background: '#d9dbeb',
-            note: '柔軟，也是一種力量',
-            title: '有些好設計，需要一點彈性。',
-            description: '柔性材料適合需要彎折或緩衝的物件，軟硬感受會隨結構與設定改變。',
-            uses: '防護套、緩衝墊、柔性配件',
-            caution: '請提供軟硬需求；薄壁與細節需先確認。',
-          },
-        ],
+        materialIndex: 0,
+        guideMaterials: materialGuide,
         faqs: [
           {
             question: '沒有 3D 模型，也可以委託嗎？',
@@ -380,12 +354,25 @@
     },
     computed: {
       selectedMaterial() {
-        return this.materials[this.materialIndex]
+        return this.guideMaterials[this.materialIndex]
       },
     },
   }
 </script>
 <style lang="scss" scoped>
+  .service-facts {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 24px;
+    padding-block: 32px;
+    border-block: 1px solid var(--rfm-line);
+  }
+  .service-facts strong, .service-facts span { display: block; }
+  .service-facts strong { font-size: 26px; }
+  .service-facts p { grid-column: 1 / -1; margin: 0; font-size: 14px; color: var(--rfm-muted); }
+  .material-question { display: grid; gap: 10px; margin-bottom: 24px; font-weight: 700; }
+  .material-question select { width: 100%; min-width: 0; padding: 12px; font: inherit; color: var(--rfm-ink); background: var(--rfm-surface); border: 1px solid var(--rfm-line); }
+  @media (max-width: 600px) { .service-facts { grid-template-columns: 1fr; } }
   .brand-home {
     --ink: var(--rfm-ink);
     --paper: var(--rfm-paper);
