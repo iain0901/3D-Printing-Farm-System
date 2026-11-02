@@ -13,6 +13,13 @@ AI-20261025-04｜本對話 Codex（海報精確清單續作）｜待整合｜同
 範圍更正（2026-10-25）：原始使用者只提「身份名牌的生成」，沒有明確提出實體姓名牌、SCAD 或 STL 匯出。本輪姓名牌相關擴充已依協調者要求停止；現有檔案保留未提交，不得把前輪助理摘要當作需求批准，也不要推送或整合此部分。其他明確的 Agent 操作工作可繼續。
 
 AI-20261025-03｜本對話 Codex（原任務續作）｜待整合｜基準 504a774：保留 OpenCode UI；只交付語音／建議非同步隔離、身分隔離及過期建議保護。本輪新增姓名牌 STL 已隔離至專案外可還原 patch，不在整合清單，既有 SCAD 未動。隔離後 QC 45 檔／359 項及兩組瀏覽器腳本通過；未提交、推送或部署。詳見 [續作紀錄](changes/2026-10-25-codex-agent-continuation.md)。
+UI-20261025-05｜MichanLiang／Devin｜待整合（未部署）｜基準 1e1cb3e：只改首頁 `frontend-vue/src/views/landing/Index.vue`「01 製作的可能」（`#services`）版面：標題靠左、兩案例等寬同結構、手機單欄；設計師同意本區可高於一屏。不改文案、圖片、後端、API、共用 token。詳見 [修改紀錄](changes/2026-10-25-michan-devin-home-services-layout.md)。
+
+UI-20261025-04｜MichanLiang／Devin｜待整合（未部署）｜基準 8390f36：只改首頁 `frontend-vue/src/views/landing/Index.vue`「03 開始製作」區塊版面，01～04 步驟欄加寬；761～1100px 步驟圖改放文字下方。不改文案、後端、API、共用 token、`public-readability.scss`。詳見 [修改紀錄](changes/2026-10-25-michan-devin-home-commission-width.md)。
+
+UI-20261025-03｜MichanLiang／Devin｜待整合（未部署）｜基準 90848b6：只改首頁 `frontend-vue/src/views/landing/Index.vue`，修正開啟即下滑、頂欄蓋住首屏（scroll-padding、實測頂欄高度、矮螢幕首屏字級）。不改後端、API、路由、共用 token、`PublicShell.vue`。詳見 [修改紀錄](changes/2026-10-25-michan-devin-home-snap-top.md)。
+
+UI-20261025-02｜芯寧／Cursor｜待整合｜基準 504a774：只改首頁 `frontend-vue/src/views/landing/Index.vue` 呈現。刪多餘小字與產量說明、單屏區塊＋scroll-snap、3D 物件改放材料／FAQ／收尾。不改後端、API、script 業務邏輯、共用 token、路由。詳見 [修改紀錄](changes/2026-10-25-xinning-home-panels.md)。
 
 UI-20261025-01｜OpenCode｜待整合（視覺審閱與正式部署）｜基準 cd65d378：依「網站改善.docx」完成前端呈現調整與本機驗證，詳見 [修改紀錄](changes/2026-10-25-opencode-public-ui.md)。不改後端、API、權限、切片運算或預設設定；正式產量、交期／尺寸資料與實機展示待 H-004。保留 AI-20261024-02 的 Agent／系統成果；未代替原作者宣告部署完成。
 
