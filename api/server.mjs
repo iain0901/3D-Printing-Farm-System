@@ -24,10 +24,12 @@ import { createPaymentProvider, listPaymentProviders } from "./payment-providers
 import { createLogisticsProvider } from "./logistics-tracking.mjs";
 import { createPersistenceAdapter } from "./persistence.mjs";
 import { solveScheduleAssignments } from "./schedule-solver.mjs";
+import { scheduleDifficulty, difficultyDuration } from "./schedule-difficulty.mjs";
 import { seedData } from "./seed.mjs";
 import { registerCaseRoutes } from "./cases-module.mjs";
 import { registerMemberWorkspace, MEMBER_COLLECTIONS } from "./member-workspace.mjs";
 import { registerSiteAgent, AGENT_COLLECTIONS } from "./site-agent.mjs";
+import { registerMaintenanceAdvisor } from "./maintenance-advisor.mjs";
 import { registerFreePrintStation, FREE_PRINT_COLLECTIONS, freePrintOwnsPrinter } from "./free-print-station.mjs";
 import { createAiEngine } from "./ai-engine.mjs";
 import { findRelevantAiKnowledge } from "./ai-knowledge.mjs";
@@ -633,7 +635,7 @@ const autoScheduleBaseSchema = z.object({
 });
 const autoScheduleSchema = autoScheduleBaseSchema.default({});
 const optimizeScheduleSchema = autoScheduleBaseSchema.extend({
-  strategy: z.enum(["material-color", "load-balance", "due-priority"]).default("material-color")
+  strategy: z.enum(["material-color", "load-balance", "due-priority", "multi-factor"]).default("material-color")
 }).default({});
 const constraintScheduleSchema = autoScheduleBaseSchema.extend({
   objective: z.enum(["balanced-cost", "due-risk", "changeover-min"]).default("balanced-cost"),
@@ -660,6 +662,7 @@ const todoActionSchema = z.object({
   snoozeUntil: z.string().min(1).optional()
 });
 const queueCreateSchema = z.object({
+  difficulty: z.number().int().min(1).max(5).optional(),
   fileId: z.string().min(1),
   file: z.string().min(1),
   printerId: z.string().min(1).optional(),
@@ -2400,7 +2403,8 @@ function realtimeUserFromRequest(database, request) {
 }
 
 function publicState(data) {
-  const { sessions, customerSessions, agentTokens, agentCommands, agentUsage, agentContexts, ...safeState } = data;
+  const { sessions, customerSessions, ...safeState } = data;
+  for (const key of AGENT_COLLECTIONS) delete safeState[key];
   return {
     ...safeState,
     dataMeta: sanitizeDataMeta(data.dataMeta),
@@ -6019,7 +6023,7 @@ function seedLaneAvailability(data, startMinute, ignoredJobIds = new Set()) {
     const match = String(job.scheduledStart).match(/(?:(\+(\d+)d)\s*)?(\d{1,2}):(\d{2})/);
     if (!match) continue;
     const start = Number(match[2] || 0) * 1440 + Number(match[3]) * 60 + Number(match[4]);
-    lanes[job.printerId] = Math.max(lanes[job.printerId] || startMinute, start + parseDurationMinutes(job.time));
+    lanes[job.printerId] = Math.max(lanes[job.printerId] || startMinute, start + difficultyDuration(job, parseDurationMinutes(job.time)).reservedMinutes);
   }
   return lanes;
 }
@@ -6059,6 +6063,13 @@ function scorePrinterForJob(data, job, printer, laneAvailability, options) {
 
 function compareJobsForStrategy(strategy) {
   return (a, b) => {
+    if (strategy === "multi-factor") {
+      return priorityWeight(a.priority) - priorityWeight(b.priority)
+        || parseDueRank(a) - parseDueRank(b)
+        || scheduleDifficulty(b).level - scheduleDifficulty(a).level
+        || parseDurationMinutes(b.time) - parseDurationMinutes(a.time)
+        || String(a.color).localeCompare(String(b.color));
+    }
     if (strategy === "material-color") {
       return String(a.material).localeCompare(String(b.material))
         || String(a.color).localeCompare(String(b.color))
@@ -6106,6 +6117,7 @@ export function optimizeScheduleQueue(data, options = {}) {
         const base = scorePrinterForJob(data, job, printer, laneAvailability, normalized);
         return { ...base, score: optimizeScoreForStrategy(normalized.strategy, base.score, job, printer, laneAvailability, normalized) };
       })
+      .filter((candidate) => normalized.strategy !== "multi-factor" || !isSolverHardBlocked(normalized, candidate.warnings))
       .sort((a, b) => a.score - b.score);
     const selected = ranked[0];
     if (!selected) {
@@ -6120,7 +6132,7 @@ export function optimizeScheduleQueue(data, options = {}) {
     job.optimizationStrategy = normalized.strategy;
     const materialReservation = reserveJobMaterial(data, job);
     job.scheduleWarnings = getScheduleWarnings(data, job, selected.printer, scheduledStart);
-    laneAvailability[selected.printer.id] = selected.startMinute + parseDurationMinutes(job.time);
+    laneAvailability[selected.printer.id] = selected.startMinute + difficultyDuration(job, parseDurationMinutes(job.time)).reservedMinutes;
     scheduled.push({
       jobId: job.id,
       file: job.file,
@@ -6129,6 +6141,7 @@ export function optimizeScheduleQueue(data, options = {}) {
       material: job.material,
       color: job.color,
       strategy: normalized.strategy,
+      difficulty: difficultyDuration(job, parseDurationMinutes(job.time)),
       scheduledStart,
       durationMinutes: parseDurationMinutes(job.time),
       changeCost: selected.changeCost,
@@ -6167,7 +6180,7 @@ export function constraintScheduleQueue(data, options = {}) {
     jobs: candidates,
     printers: data.printers.filter(printer=>!freePrintOwnsPrinter(data,printer.id)),
     options: normalized,
-    durationOf: (job) => parseDurationMinutes(job.time),
+    durationOf: (job) => difficultyDuration(job, parseDurationMinutes(job.time)).reservedMinutes,
     dueRankOf: parseDueRank,
     priorityRankOf: (job) => priorityWeight(job.priority),
     isDueRisk,
@@ -6184,7 +6197,7 @@ export function constraintScheduleQueue(data, options = {}) {
     const startMinute = laneAvailability[printer.id] || normalized.startMinute;
     const scheduledStart = formatScheduleMinute(startMinute);
     const warnings = getScheduleWarnings(data, job, printer, scheduledStart);
-    laneAvailability[printer.id] = startMinute + parseDurationMinutes(job.time);
+    laneAvailability[printer.id] = startMinute + difficultyDuration(job, parseDurationMinutes(job.time)).reservedMinutes;
     if (!normalized.dryRun) {
       job.printerId = printer.id;
       job.printer = printer.name;
@@ -6204,6 +6217,7 @@ export function constraintScheduleQueue(data, options = {}) {
       material: job.material,
       color: job.color,
       strategy: `constraint-${normalized.objective}`,
+      difficulty: difficultyDuration(job, parseDurationMinutes(job.time)),
       objective: normalized.objective,
       scheduledStart,
       durationMinutes: parseDurationMinutes(job.time),
@@ -7011,6 +7025,11 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     sensitiveRateLimit, emailClient, lineClient,
   });
   await registerSiteAgent(app, { database, customerFromRequest });
+  await registerMaintenanceAdvisor(app, { database, hasPermission, scopedData: workspaceScopeForUser,
+    audit: (req, report) => dispatchEvent(database, "maintenance.advisor_recorded", "維護顧問記錄已更新", {
+      workspaceId: req.user.workspaceId, reportId: report.id, advisorType: report.advisorType,
+    }, { actor: req.user }),
+  });
   await registerSiteAgent(app, { database, root: '/api/staff-agent', customerFromRequest: (_, req) => ({ customer: req.user && !req.apiKey ? { ...req.user, id: `staff:${req.user.id}` } : null }) });
   await registerChatwootRoutes(app, {
     database,

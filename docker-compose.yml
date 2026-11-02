@@ -75,6 +75,8 @@ services:
       LAYERPILOT_MQTT_RETAIN: ${LAYERPILOT_MQTT_RETAIN:-false}
       LAYERPILOT_SLICER_CMD: ${LAYERPILOT_SLICER_CMD:-}
       LAYERPILOT_SLICER_ARGS: ${LAYERPILOT_SLICER_ARGS:-}
+      ORCA_SLICER_VERSION: ${ORCA_SLICER_VERSION:-2.4.2}
+      ORCA_PROFILE_BUNDLE_MANIFEST: ${ORCA_PROFILE_BUNDLE_MANIFEST:-/profiles/active/manifest.json}
       CHATWOOT_BASE_URL: ${CHATWOOT_BASE_URL:-}
       CHATWOOT_ACCOUNT_ID: ${CHATWOOT_ACCOUNT_ID:-}
       CHATWOOT_INBOX_ID: ${CHATWOOT_INBOX_ID:-}
@@ -98,6 +100,7 @@ services:
       - "${LAYERPILOT_BIND_ADDRESS:-127.0.0.1}:${LAYERPILOT_HOST_PORT:-8797}:8797"
     volumes:
       - layerpilot-data:/data
+      - ${ORCA_PROFILES_HOST_DIR:-/var/lib/3drfm/slicer-profiles}:/profiles:ro
     healthcheck:
       test: ["CMD-SHELL", "node -e \"const port=process.env.LAYERPILOT_API_PORT||8797; fetch('http://127.0.0.1:'+port+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
       interval: 30s
@@ -171,10 +174,11 @@ services:
       ORCA_SLICER_VERSION: ${ORCA_SLICER_VERSION:-2.4.2}
       ORCA_SLICER_SETTINGS_PATH: ${ORCA_SLICER_SETTINGS_PATH:-}
       ORCA_SLICER_FILAMENT_PATH: ${ORCA_SLICER_FILAMENT_PATH:-}
+      ORCA_PROFILE_BUNDLE_MANIFEST: ${ORCA_PROFILE_BUNDLE_MANIFEST:-/profiles/active/manifest.json}
       ORCA_WORKER_INTERVAL_MS: ${ORCA_WORKER_INTERVAL_MS:-3000}
       ORCA_SLICER_TIMEOUT_MS: ${ORCA_SLICER_TIMEOUT_MS:-1200000}
     volumes:
-      - ./deploy/orcaslicer/profiles:/profiles:ro
+      - ${ORCA_PROFILES_HOST_DIR:-/var/lib/3drfm/slicer-profiles}:/profiles:ro
 
 volumes:
   layerpilot-data:

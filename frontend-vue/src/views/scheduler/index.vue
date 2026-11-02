@@ -13,6 +13,7 @@
           <template #header><div>最佳化排程</div></template>
           <p class="hint">依策略重新分配，降低換料成本或平衡負載。</p>
           <el-select v-model="strategy" size="small" style="width: 100%; margin-bottom: 10px">
+            <el-option label="多維排產：交期、工時、難度與顏色" value="multi-factor" />
             <el-option label="降低換料成本" value="material-color" />
             <el-option label="到期優先" value="due-priority" />
             <el-option label="負載平衡" value="load-balance" />
@@ -52,6 +53,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="scheduledStart" label="開始時間" width="100" />
+        <el-table-column label="規則難度／預留" width="160"><template #default="{ row }">{{ row.difficulty ? `${row.difficulty.level}／${row.difficulty.bufferMinutes} 分鐘` : '未計入' }}</template></el-table-column>
         <el-table-column label="警告">
           <template #default="{ row }">{{ (row.warnings || []).join('、') || '—' }}</template>
         </el-table-column>
@@ -68,7 +70,7 @@
     data() {
       return {
         busy: '',
-        strategy: 'material-color',
+        strategy: 'multi-factor',
         objective: 'changeover-min',
         lastResult: null,
       }

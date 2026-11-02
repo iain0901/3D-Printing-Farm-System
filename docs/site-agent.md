@@ -66,6 +66,12 @@ API 的 CSP 已允許 `https://api.openai.com` 與音訊 blob；Ubuntu Nginx 範
 
 ## 驗證入口
 
+2026-10-25 海報需求續作：新增模型外框／三角面數／幾何版本與規則證據、壁數建議、私有審查紀錄；付費報價確認／送出需求也接入用途審查，並可依目前模型與設定生成外觀預估。另提供可下載的 FDM Skill ZIP，以及員工維護頁的多模態診斷／跨機保養推估。精確入口、機制、失敗情境、持久化與限制見 [海報逐項驗收矩陣](poster-ai-acceptance.md)。這不表示真實服務或正式部署已驗收，也沒有套回隔離的姓名牌 STL。
+
 - `api/site-agent.test.mjs`：未設定服務、權杖雜湊／撤銷、會員隔離、重複認領、輸出目標白名單、額度及姓名牌輸入。
 - `api/site-agent-integration.test.mjs`：正式伺服器的會員／員工隔離、私有資料不廣播及員工 MCP 權杖。
+- `api/site-agent-provider-contract.test.mjs`、`api/mcp-http-protocol.test.mjs`：用途／語音／圖片後端契約與真正 localhost HTTP JSON-RPC；provider 使用合成 transport，並非真實 OpenAI。
+- `api/maintenance-advisor.test.mjs`、`api/poster-ai-acceptance.test.mjs`：日誌＋照片／引用／權限、跨機推估／人工任務、四維控制案例及 Skill 套件腳本執行。
+- `scripts/check-poster-ai.cjs`：付費工作台模型／設定審查、擷取與預覽失效、Skill ZIP、員工維護紀錄刷新；AI 和員工 UI 身分採明示 fixture，不弱化正式 2FA。
+- `scripts/check-site-agent-lifecycle.cjs`：本機語音取消／重連／舊 peer 事件、重疊用途建議隔離；語音與判斷採 fixture，不接真實服務。
 - `scripts/check-site-agent.cjs`：本機瀏覽器，包含 MCP 管理、skill 下載、實際 Vue 填充更新、用途建議、圖片擷取／生成流程、語音工具 fixture 與手機排版。測試來源明確為 fixture，不是現場列印或真實通話。

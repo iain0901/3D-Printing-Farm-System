@@ -21,10 +21,10 @@
       </div>
       <p v-if="service" class="service-note">已帶入「{{ service.title }}」的用途說明，可在製作備註調整。</p>
       <aside class="backend-notice" role="note">
-        <b>先準備模型與設定，新機型切片估價即將接上。</b>
+        <b>{{ printingConfig?.available ? 'Creality Hi 設定包已通過完整性檢查，可送出切片估價。' : '設定包尚未就緒；可先準備模型並保存草稿。' }}</b>
         <p>
           可調整擺放、選材與配色，登入後保存雲端草稿或送交專員報價。260 × 260 × 260 mm
-          為編輯參考平台；自動切片價格將於新機型設定完成後開放。
+          為編輯參考平台；目前自動報價使用單色 3DSTU_PETG，完成實際切片後以總耗材 NT$2／克計算。
         </p>
       </aside>
       <nav class="workbench-steps" aria-label="估價流程">
@@ -333,7 +333,10 @@
           </label>
           <slicer-settings :settings="settings" advanced-only />
           <p v-if="issues.length && layout.models.length" class="validation-note" role="status">{{ issues[0] }}</p>
-          <button class="primary-button" type="button" :disabled="!!issues.length" @click="review">確認設定，帶入會員資料</button>
+          <button class="primary-button" type="button" :disabled="!!issues.length || advisorBusy" @click="review">{{ advisorBusy ? '正在檢查模型與設定…' : '確認設定，帶入會員資料' }}</button>
+          <button type="button" :disabled="!memberToken || !layout.ready || advisorBusy" @click="generateIllustration">生成目前模型的 AI 列印外觀預估</button>
+          <p v-if="advisorNotice" role="status">{{ advisorNotice }}</p>
+          <figure v-if="aiIllustration"><img :src="aiIllustration" alt="依目前模型、配色與設定生成的 AI 外觀預估" style="max-width:100%" /><figcaption>AI 預估，非實拍；無法保證尺寸、強度或實際表面。修改模型或設定後需重新生成。</figcaption></figure>
         </section>
       </div>
       <section id="quote-review" class="workbench-panel review-panel" tabindex="-1" aria-labelledby="quote-review-title">
@@ -397,10 +400,10 @@
             <button
               class="primary-button"
               type="button"
-              :disabled="cloudBusy || !!issues.length || !checksAccepted || !!submittedCaseId"
+              :disabled="cloudBusy || advisorBusy || !!issues.length || !checksAccepted || !!submittedCaseId"
               @click="submitCloud"
             >
-              {{ submittedCaseId ? '此草稿已送出' : '送交專員確認報價' }}
+              {{ submittedCaseId ? '此草稿已送出' : sliceQuote ? '送交確認本次切片報價' : '送交專員確認報價' }}
             </button>
             <router-link v-if="submittedCaseId" :to="{ path: '/portal/workspace', query: { section: 'case', id: submittedCaseId } }">
               查看已送出的案件 →
@@ -416,7 +419,7 @@
             <p>層高 {{ settings.layerHeight }} mm・填充 {{ settings.infill }}%・外壁 {{ settings.walls }} 圈</p>
             <p>
               模型重量、支撐與換料耗材、列印時間、價格：
-              <b>待新機型切片</b>
+              <b>{{ sliceQuote ? `${sliceQuote.totalGrams} g／NT$ ${sliceQuote.price}` : '尚未完成實際切片' }}</b>
             </p>
             <button type="button" :disabled="!!issues.length" @click="downloadDraft">下載設定草稿（JSON）</button>
             <p class="workbench-note">
@@ -429,10 +432,14 @@
         <div class="quote-not-ready">
           <div>
             <span>切片結果與價格</span>
-            <strong>尚待新機型設定</strong>
-            <small>不套用免費列印設定，也不以舊機型價格代算。</small>
+            <strong v-if="sliceQuote">NT$ {{ sliceQuote.price }}</strong>
+            <strong v-else>{{ slicingBusy ? '正在等待實際切片…' : 'Creality Hi／0.4 mm／3DSTU_PETG' }}</strong>
+            <small>與免費站點共用已驗證設定包；實際總耗材 × NT$2／克，不另套用舊版最低消費或機時計費。報價會依數量重新自動排盤。</small>
+            <small v-if="!printingConfig?.available">設定包未就緒，暫不能切片；不會退回 X1C 或通用估算。</small>
+            <small v-if="settings.material !== 'PETG' || settings.colorMode !== 'single' || settings.rush">目前自動報價只開放標準單色 3DSTU_PETG，急件與其他設計仍可交由專員。</small>
+            <small v-if="sliceQuote">設定包 {{ sliceQuote.profileBundle?.version }}；{{ sliceQuote.totalGrams }} g，包含模型、支撐及其他實際耗材。實機執行時間仍以現場為準。</small>
           </div>
-          <button type="button" disabled>切片並取得報價（尚未開放）</button>
+          <button type="button" :disabled="slicingBusy || advisorBusy || !printingConfig?.available || !!issues.length || settings.material !== 'PETG' || settings.colorMode !== 'single' || settings.rush" @click="sliceForQuote">{{ slicingBusy ? '正在切片…' : '切片並取得 NT$2／克報價' }}</button>
         </div>
       </section>
     </div>
@@ -447,6 +454,8 @@
   import { useStore } from 'vuex'
   import { workspace, uploadWorkspace, modelFile } from '@/api/memberWorkspace'
   import { fetchAddresses } from '@/api/customerPortal'
+  import { createSlicingQuote, fetchSlicingQuote } from '@/api/cases'
+  import { fetchPrintingConfig, cancelStationSlice } from '@/api/public'
   import PublicShell from '@/components/public/PublicShell.vue'
   import InstructionArt from '@/components/public/InstructionArt.vue'
   import StationLayout from '@/components/StationLayout.vue'
@@ -469,6 +478,78 @@
   const store = useStore(),
     stationLayout = ref(null)
   const memberToken = computed(() => store.getters['customerAuth/accessToken'])
+  const advisorBusy = ref(false), advisorNotice = ref(''), aiIllustration = ref('')
+  const printingConfig = ref(null), sliceQuote = ref(null), slicingBusy = ref(false)
+  let sliceToken = '', quotedKey = ''
+  onMounted(async () => { try { printingConfig.value = await fetchPrintingConfig() } catch { printingConfig.value = { available: false } } })
+  async function sliceForQuote() {
+    if (slicingBusy.value || advisorBusy.value || issues.value.length || settings.material !== 'PETG' || settings.colorMode !== 'single' || settings.rush) return
+    if (!(await purposeReview())) return
+    const key = advisorKey(), identity = memberToken.value
+    slicingBusy.value = true; error.value = ''; sliceQuote.value = null; quotedKey = ''
+    let id, token
+    try {
+      printingConfig.value = await fetchPrintingConfig()
+      if (!printingConfig.value.available) throw new Error('Creality Hi／3DSTU_PETG 設定包未就緒，無法報價。')
+      const response = await createSlicingQuote({ purpose: 'quote', material: 'PETG',
+        quantities: layout.value.models.map((m) => assignments[m.id].quantity), quantity: 1,
+        layerHeight: settings.layerHeight, infill: settings.infill, walls: settings.walls, advanced: settings.advanced,
+        autoSupports: settings.autoSupports, autoOrient: false, autoArrange: true, colors: 1,
+      }, layout.value.files)
+      id = response.slicingQuote.id; token = response.accessToken
+      let job = response.slicingQuote
+      const deadline = Date.now() + 20 * 60 * 1000
+      while (!['completed', 'failed', 'cancelled'].includes(job.status)) {
+        if (!advisorActive || advisorKey() !== key || identity !== memberToken.value) throw new Error('模型、數量、設定或登入已變更，請重新切片。')
+        if (Date.now() > deadline) throw new Error('切片等候逾時，不顯示估算價格。')
+        await new Promise((resolve) => setTimeout(resolve, 1500))
+        job = (await fetchSlicingQuote(id, token)).slicingQuote
+      }
+      if (!advisorActive || advisorKey() !== key || identity !== memberToken.value) throw new Error('設定已變更，不採用舊報價。')
+      if (job.status !== 'completed' || !Number.isFinite(job.price) || !job.profileBundle) throw new Error(job.error || '尚未取得有完整設定紀錄的實際切片結果。')
+      sliceQuote.value = job; sliceToken = token; quotedKey = key
+    } catch (e) {
+      if (id && token) await cancelStationSlice(id, token).catch(() => {})
+      if (advisorActive) error.value = e.response?.data?.error || e.message || '切片報價未完成。'
+    } finally { slicingBusy.value = false }
+  }
+  let advisorActive = true, reviewedKey = ''
+  const advisorKey = () => JSON.stringify({ settings, slots, assignments, models: layout.value.models.map((m) => ({ id: m.id, geometryHash: m.geometryHash, transform: m.transform, position: m.position })) })
+  async function purposeReview() {
+    if (!memberToken.value || !settings.notes.trim()) return true
+    const key = advisorKey(), identity = memberToken.value
+    if (key === reviewedKey) return true
+    if (advisorBusy.value) return false
+    advisorBusy.value = true
+    try {
+      const decision = await new Promise((resolve) => window.dispatchEvent(new CustomEvent('3drfm:before-slice', { detail: {
+        purpose: settings.notes,
+        models: layout.value.models.map((m) => ({ name: m.name || '模型', dimensions: m.dimensions || null, geometryHash: m.geometryHash, triangleCount: m.triangleCount })),
+        settings: { material: settings.material, infill: settings.infill, walls: settings.walls, layerHeight: settings.layerHeight, supports: settings.autoSupports }, resolve,
+      } })))
+      if (!advisorActive || key !== advisorKey() || identity !== memberToken.value) {
+        advisorNotice.value = '模型、配色、用途、設定或登入已改變，請重新檢查。'; return false
+      }
+      if (decision.infill != null) settings.infill = decision.infill
+      if (decision.walls != null) settings.walls = decision.walls
+      if (!decision.proceed || key !== advisorKey()) { advisorNotice.value = '已返回編輯，請確認設定後再送出。'; return false }
+      reviewedKey = key; return true
+    } finally { advisorBusy.value = false }
+  }
+  async function generateIllustration() {
+    if (advisorBusy.value || !memberToken.value || !layout.value.ready) return
+    advisorBusy.value = true; advisorNotice.value = ''
+    const key = advisorKey(), identity = memberToken.value
+    try {
+      const image = await stationLayout.value.capture()
+      if (!image) throw new Error('尚未取得目前模型畫面。')
+      const result = await workspace('/../agent/illustration', 'post', { image, material: settings.material,
+        settings: { infill: settings.infill, walls: settings.walls, layerHeight: settings.layerHeight, supports: settings.autoSupports } }, { timeout: 70000 })
+      if (advisorActive && key === advisorKey() && identity === memberToken.value) aiIllustration.value = result.image
+      else advisorNotice.value = '模型或設定已更新，未採用舊外觀預估。'
+    } catch (e) { advisorNotice.value = e.response?.data?.error || e.message || '外觀服務尚未連接。' }
+    finally { advisorBusy.value = false }
+  }
   const cloudName = ref('我的列印草稿'),
     cloudId = ref(''),
     cloudRevision = ref(0),
@@ -753,6 +834,7 @@
   }
   async function submitCloud() {
     if (!checksAccepted.value || submittedCaseId.value) return
+    if (!(await purposeReview())) return
     const saved = await saveCloud(false)
     if (!saved) return
     cloudBusy.value = true
@@ -761,6 +843,7 @@
         checksAccepted: true,
         deliveryMethod: deliveryMethod.value,
         addressId: addressId.value,
+        ...(sliceQuote.value && quotedKey === advisorKey() ? { slicingQuoteId: sliceQuote.value.id, slicingQuoteToken: sliceToken } : {}),
       })
       submittedCaseId.value = result.case.id
       autosaveEnabled.value = false
@@ -781,6 +864,10 @@
     [settings, slots, assignments, layout],
     () => {
       downloaded.value = false
+      sliceQuote.value = null
+      sliceToken = ''; quotedKey = ''
+      aiIllustration.value = ''
+      reviewedKey = ''
       error.value = ''
     },
     { deep: true }
@@ -883,6 +970,7 @@
       await focusSection('quote-review')
       return
     }
+    if (!(await purposeReview())) return
     reviewing.value = true
     error.value = ''
     await focusSection('quote-review')
@@ -906,6 +994,7 @@
     emit('assistance')
   }
   onBeforeUnmount(() => {
+    advisorActive = false
     window.removeEventListener('beforeunload', beforeUnload)
     clearTimeout(recoveryTimer)
     persistRecovery()

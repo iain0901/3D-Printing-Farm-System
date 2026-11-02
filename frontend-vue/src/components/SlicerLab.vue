@@ -63,7 +63,7 @@
             <textarea v-model="agentPurpose" maxlength="1000" placeholder="例如：室內花盆支架。切片前可依用途取得參數建議。" />
           </label>
           <details>
-            <summary>進階：參考機台與尺寸限制</summary>
+            <summary>進階：機台與設定包狀態</summary>
             <div class="lab-section-title">
               <h2>機台</h2>
               <span>FDM</span>
@@ -71,24 +71,22 @@
             <label>
               列印設定檔
               <select aria-label="切片機台" disabled>
-                <option>Artillery M1 Pro・0.4 mm（參考）</option>
+                <option>Creality Hi・0.4 mm</option>
               </select>
             </label>
-            <p>260 × 260 × 260 mm。此為可試切片的參考設定，不代表站點或新機型的實際設備。</p>
+            <p v-if="printingConfig?.available">已發布版本：{{ printingConfig.profileBundle.version }}；實機範圍 {{ printingConfig.profileBundle.buildVolume.join(' × ') }} mm。編輯區仍採保守的 260 mm 參考範圍。</p>
+            <p v-else role="status">設定包尚未就緒，不能切片；不會改用其他機型。</p>
           </details>
         </section>
         <section class="lab-material">
           <div class="lab-section-title">
             <h2>耗材</h2>
-            <span>{{ isFree ? '站點指定' : '參考耗材設定' }}</span>
+            <span>已確認材料</span>
           </div>
           <label v-if="!isFree">
             材料
-            <select v-model="settings.material" :disabled="busy" aria-label="切片材料">
-              <option value="PETG">PETG・優先推薦</option>
-              <option value="PLA">PLA</option>
-              <option value="ASA">ASA</option>
-              <option value="TPU">TPU</option>
+            <select v-model="settings.material" disabled aria-label="切片材料">
+              <option value="PETG">3DSTU_PETG</option>
             </select>
           </label>
           <div v-else class="locked-filament">
@@ -97,7 +95,7 @@
             <small>免費列印固定材料</small>
           </div>
           <p v-if="!isFree">
-            此工作區試切單色。更多材料、多色與上色需求，請使用
+            目前使用與免費站點相同的單色 3DSTU_PETG 設定；代印以實際總耗材 NT$2／克計算。更多材料、多色與上色需求，請使用
             <router-link to="/quote">代印工作台 →</router-link>
             。
           </p>
@@ -151,6 +149,8 @@
               <summary>切片來源</summary>
               <p>{{ job.engine }} {{ job.engineVersion }}</p>
               <p>{{ job.profileName }}</p>
+              <p v-if="job.profileBundle">{{ job.profileBundle.machine }}／{{ job.profileBundle.nozzleDiameter }} mm／{{ job.profileBundle.materialLabel }}；設定包 {{ job.profileBundle.version }}</p>
+              <p v-if="!isFree && job.price != null">代印估價：NT$ {{ job.price }}（總耗材 {{ job.totalGrams }} g × NT$2／g）</p>
               <p v-for="(warning, index) in job.warnings" :key="index">{{ warning }}</p>
             </details>
           </template>
@@ -251,7 +251,7 @@
   import { workspace, uploadWorkspace, modelFile } from '@/api/memberWorkspace'
   import staffRequest from '@/utils/request'
   import { createQuoteDraft, defaultQuoteSettings } from '@/utils/quote-workspace.mjs'
-  import { createStudioSlice, createStationSlice, fetchStationSlice, fetchToolpaths, cancelStationSlice } from '@/api/public'
+  import { createStudioSlice, createStationSlice, fetchStationSlice, fetchToolpaths, cancelStationSlice, fetchPrintingConfig } from '@/api/public'
   import { slicerSettingFields } from '@/utils/slicer-settings.mjs'
   const props = defineProps({ stationId: { type: String, default: '' }, embedded: Boolean })
   const router = useRouter()
@@ -359,6 +359,9 @@
     station = ref(null),
     projectInput = ref(null),
     mode = ref('prepare')
+  const printingConfig = ref(null)
+  const checkingConfig = ref(false)
+  onMounted(async () => { try { printingConfig.value = await fetchPrintingConfig() } catch { printingConfig.value = { available: false } } })
   const settings = reactive({
     material: 'PETG',
     layerHeight: 0.2,
@@ -390,14 +393,15 @@
     const identity = agentAccess.value
     try {
       const image = await agentPreview.value.capture()
+      const illustrationSettings = { infill: settings.infill, walls: settings.walls, layerHeight: Number(settings.layerHeight), supports: settings.autoSupports }
       const result = await (props.embedded
         ? staffRequest({
             url: '/api/staff-agent/illustration',
             method: 'post',
-            data: { image, material: settings.material },
+            data: { image, material: settings.material, settings: illustrationSettings },
             timeout: 70000,
           })
-        : workspace('/../agent/illustration', 'post', { image, material: settings.material }, { timeout: 70000 }))
+        : workspace('/../agent/illustration', 'post', { image, material: settings.material, settings: illustrationSettings }, { timeout: 70000 }))
       if (active && id === job.value?.id && identity === agentAccess.value) illustration.value = result.image
     } catch (e) {
       illustrationError.value = e.response?.data?.error || e.message || '無法生成示意圖，請稍後重試。'
@@ -498,16 +502,25 @@
   watch(settings, invalidate, { deep: true })
   async function submit() {
     if (!layout.value.ready || busy.value || agentReviewing.value || parameterError.value) return
+    if (checkingConfig.value) return
+    checkingConfig.value = true
+    try { printingConfig.value = await fetchPrintingConfig() } catch { printingConfig.value = { available: false } }
+    finally { checkingConfig.value = false }
+    if (!printingConfig.value.available) { error.value = 'Creality Hi／3DSTU_PETG 設定包尚未就緒，請稍後再試；不會使用預設機型。'; return }
+    settings.material = 'PETG'
     if (agentPurpose.value.trim() && agentAccess.value) {
       agentReviewing.value = true
       const before = JSON.stringify(settings)
+      const reviewedRevision = revision,
+        reviewedIdentity = agentAccess.value,
+        reviewedPurpose = agentPurpose.value.trim()
       const decision = await new Promise((resolve) =>
         window.dispatchEvent(
           new CustomEvent('3drfm:before-slice', {
             detail: {
               purpose: agentPurpose.value,
-              models: layout.value.models.map((m) => ({ name: m.name || '模型', dimensions: m.dimensions || null })),
-              settings: { material: settings.material, infill: settings.infill, walls: settings.walls },
+              models: layout.value.models.map((m) => ({ name: m.name || '模型', dimensions: m.dimensions || null, geometryHash: m.geometryHash, triangleCount: m.triangleCount })),
+              settings: { material: settings.material, infill: settings.infill, walls: settings.walls, layerHeight: Number(settings.layerHeight), supports: settings.autoSupports },
               resolve,
             },
           })
@@ -515,7 +528,19 @@
       )
       agentReviewing.value = false
       if (!active) return
-      if (decision.infill !== undefined) settings.infill = decision.infill
+      if (
+        revision !== reviewedRevision ||
+        before !== JSON.stringify(settings) ||
+        reviewedIdentity !== agentAccess.value ||
+        reviewedPurpose !== agentPurpose.value.trim() ||
+        !layout.value.ready ||
+        parameterError.value
+      ) {
+        error.value = '模型、用途或參數已變更，請重新取得建議。'
+        return
+      }
+      if (decision.infill != null) settings.infill = decision.infill
+      if (decision.walls != null) settings.walls = decision.walls
       if (!decision.proceed || before !== JSON.stringify(settings)) return
     }
     invalidate()

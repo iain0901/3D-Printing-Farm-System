@@ -1,5 +1,6 @@
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
+import { printingPolicy } from '../frontend-vue/src/utils/printing-policy.mjs';
 import { fetchBridgeStatus } from "./hardware-bridge.mjs";
 import { stationHardwareCommand } from "./free-print-hardware.mjs";
 
@@ -663,6 +664,7 @@ export async function registerFreePrintStation(
       !job.gcodeFileId
     )
       fail(400, "請先完成此站點的單色 PETG 切片。");
+    if (job.profileBundle?.policyId !== printingPolicy.id) fail(409, '這是舊機型設定的切片，請用 Creality Hi／3DSTU_PETG 重新切片後再排隊。');
     const existing = records().find(
       (r) => owns(r, c) && !terminalStates.includes(r.status)
     );
@@ -879,6 +881,7 @@ export async function registerFreePrintStation(
         if (
           !job ||
           job.gcodeFileId !== r.gcodeFileId ||
+          job.profileBundle?.policyId !== printingPolicy.id ||
           job.status !== "completed"
         )
           fail(409, "切片結果已變更，請重新切片。");

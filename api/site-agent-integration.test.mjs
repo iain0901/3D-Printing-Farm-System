@@ -61,6 +61,8 @@ it("keeps staff and member agent identities separate and excludes private agent 
       "agentContexts",
       "agentCommands",
       "agentUsage",
+      "agentReviews",
+      "maintenanceAdvisorRecords",
     ]) {
       expect(state).not.toHaveProperty(key);
       expect(

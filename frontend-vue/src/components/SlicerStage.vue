@@ -804,7 +804,20 @@
     renderer?.forceContextLoss()
     renderer?.domElement.remove()
   })
-  defineExpose({ cameraView, fitCamera })
+  async function capture() {
+    const deadline = Date.now() + 5000
+    while (!disposed && (loading.value || !renderer || !groups.size) && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 25))
+    }
+    if (disposed || loading.value || !renderer || !groups.size) throw new Error('請等待模型與配色載入。')
+    renderer.render(scene, camera)
+    const source = renderer.domElement, canvas = document.createElement('canvas')
+    const ratio = Math.min(1, 640 / Math.max(source.width, source.height))
+    canvas.width = Math.max(1, Math.round(source.width * ratio)); canvas.height = Math.max(1, Math.round(source.height * ratio))
+    canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height)
+    return canvas.toDataURL('image/png')
+  }
+  defineExpose({ cameraView, fitCamera, capture })
 </script>
 
 <style scoped>

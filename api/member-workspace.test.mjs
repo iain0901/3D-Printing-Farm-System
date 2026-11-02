@@ -6,7 +6,9 @@ import { buildServer, openDatabase } from "./server.mjs";
 import { createObjectStorage } from "./object-storage.mjs";
 import { inspectMemberStl } from "./member-workspace.mjs";
 import { createPaymentProvider } from "./payment-providers.mjs";
-import { createHmac } from "node:crypto";
+import { createHmac, createHash } from "node:crypto";
+import { printingPolicy } from '../frontend-vue/src/utils/printing-policy.mjs';
+import { computePublishedQuote } from './profile-bundle.mjs';
 
 const cleanups = [];
 afterEach(async () => {
@@ -163,6 +165,30 @@ async function saveDraft(f, payload = draftPayload(), id = "", revision) {
 }
 
 describe("member workspace ownership and durable workflows", () => {
+  it('attaches a token-bound measured quote only when draft model bytes, quantity and parameters match', async () => {
+    const f = await fixture();
+    const saved = (await saveDraft(f)).json().draft;
+    const source = f.db.data.memberModels.find((m) => m.id === saved.modelIds[0]);
+    const token = 'synthetic-quote-secret';
+    const quote = { id: 'synthetic-hi-quote', workspaceId: 'ws-default', purpose: 'quote', status: 'completed',
+      material: 'PETG', layerHeight: 0.2, infill: 15, walls: 2, autoSupports: true,
+      sourceFileIds: [source.fileId], quantity: 2, quantities: [1], totalGrams: 48.5,
+      profileBundle: { policyId: printingPolicy.id, machine: 'Creality Hi', nozzleDiameter: 0.4, materialLabel: '3DSTU_PETG', version: 'synthetic-only' },
+      quote: computePublishedQuote(48.5, 2), publicAccessTokenHash: createHash('sha256').update(token).digest('hex') };
+    f.db.data.slicingQuotes.push(quote);
+    const input = { checksAccepted: true, deliveryMethod: 'pickup', slicingQuoteId: quote.id, slicingQuoteToken: token };
+    expect((await f.api(f.a, 'POST', `/drafts/${saved.id}/submit`, input)).statusCode).toBe(409);
+    quote.quantities = [2];
+    expect((await f.api(f.a, 'POST', `/drafts/${saved.id}/submit`, { ...input, slicingQuoteToken: 'wrong' })).statusCode).toBe(409);
+    quote.infill = 5;
+    expect((await f.api(f.a, 'POST', `/drafts/${saved.id}/submit`, input)).statusCode).toBe(409);
+    quote.infill = 15;
+    const result = await f.api(f.a, 'POST', `/drafts/${saved.id}/submit`, input);
+    expect(result.statusCode, result.body).toBe(201);
+    expect(result.json().case.slicingQuote.price).toBe(97);
+    expect(result.json().case.slicingQuote.profileBundle.machine).toBe('Creality Hi');
+    expect(JSON.stringify(result.json())).not.toContain(token);
+  });
   it("persists model versions, archives, favorites and cloud drafts without leaking file payloads or duplicating autosaves", async () => {
     const f = await fixture();
     const created = await saveDraft(f);

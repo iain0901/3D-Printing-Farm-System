@@ -12,6 +12,7 @@
         @change="selectFiles($event.target.files)"
       />
       <slicer-stage
+        ref="stage"
         :models="items"
         :selected-ids="selectedIds"
         :disabled="disabled || preparing"
@@ -409,7 +410,8 @@
     selectedIds.value = items.length ? [String(items[0].id)] : []
     schedule()
   }
-  defineExpose({ restoreModels, selectFiles, command })
+  const stage = ref(null)
+  defineExpose({ restoreModels, selectFiles, command, capture: () => stage.value?.capture() })
   function schedule() {
     clearTimeout(timer)
     worker?.terminate()

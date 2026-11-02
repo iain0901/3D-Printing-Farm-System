@@ -28,19 +28,29 @@
       <input v-model="badgeName" maxlength="24" />
     </label>
     <button :disabled="busy || !badgeName.trim()" @click="badge">下載可編輯姓名牌模型</button>
+    <button :disabled="busy" @click="skillPackage">下載 FDM 建模 Skill 套件</button>
     <p>下載 OpenSCAD 原始檔，請確認字型及文字範圍後匯出 STL，再匯入線上切片。預設 80 × 28 mm，含吊孔與凸字。</p>
   </section>
 </template>
 <script setup>
-  import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+  import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+  import { useStore } from 'vuex'
   import customerRequest from '@/utils/customerRequest'
   import staffRequest from '@/utils/request'
   const props = defineProps({ staff: Boolean })
-  function request(options) {
-    return (props.staff ? staffRequest : customerRequest)({
+  const store = useStore()
+  const identity = computed(
+    () => `${props.staff ? 'staff' : 'member'}:${store.getters[props.staff ? 'user/accessToken' : 'customerAuth/accessToken'] || ''}`
+  )
+  let active = true
+  async function request(options) {
+    const owner = identity.value
+    const result = await (props.staff ? staffRequest : customerRequest)({
       ...options,
       url: props.staff ? options.url.replace('/api/customer/agent', '/api/staff-agent') : options.url,
     })
+    if (!active || owner !== identity.value) throw new Error('登入狀態已變更，請重新操作。')
+    return result
   }
   const name = ref('我的 Agent'),
     secret = ref(''),
@@ -58,6 +68,14 @@
     )
   )
   const badgeName = ref('')
+  function skillPackage() {
+    return run(async () => {
+      const blob = await request({ url: '/api/customer/agent/skills/model-package', method: 'get', responseType: 'blob' })
+      const url = URL.createObjectURL(blob), link = document.createElement('a')
+      link.href = url; link.download = '3drfm-model-skill.zip'; link.click()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    })
+  }
   function badge() {
     return run(async () => {
       const source = await request({
@@ -84,7 +102,13 @@
       await fn()
       await load()
     } catch (e) {
-      error.value = e.response?.data?.error || '無法完成連線設定'
+      let payload = e.response?.data
+      if (payload instanceof Blob) {
+        try {
+          payload = JSON.parse(await payload.text())
+        } catch {}
+      }
+      error.value = payload?.error || '無法完成連線設定或模型下載，請確認登入與服務設定。'
     } finally {
       busy.value = false
     }
@@ -114,7 +138,14 @@
     })
   }
   onMounted(() => run(async () => {}))
+  watch(identity, () => {
+    secret.value = ''
+    tokens.value = []
+    notice.value = ''
+    error.value = ''
+  })
   onBeforeUnmount(() => {
+    active = false
     secret.value = ''
   })
 </script>

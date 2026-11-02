@@ -28,6 +28,7 @@ COPY --chown=node:node package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --chown=node:node api ./api
+COPY --chown=node:node frontend-vue/src/utils ./frontend-vue/src/utils
 COPY --chown=node:node --from=build /app/frontend-vue/dist ./dist
 
 RUN mkdir -p /data/storage && chown -R node:node /data

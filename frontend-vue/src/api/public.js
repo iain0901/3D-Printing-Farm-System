@@ -11,6 +11,7 @@ const publicRequest = axios.create({
   timeout: requestTimeout,
   headers: { 'Content-Type': contentType },
 })
+export const fetchPrintingConfig = () => publicRequest.get('/api/public/slicing-quotes/config').then((r) => r.data)
 
 export function createStationSlice(file, settings, onUploadProgress) {
   const data = new FormData()

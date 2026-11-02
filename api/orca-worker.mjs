@@ -6,16 +6,10 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { createStationPlate } from "./station-plate.mjs";
 import { orcaAdvancedSettings } from "./studio-settings.mjs";
+import { loadProfileBundle, requireMatchingBundle, sha256 } from './profile-bundle.mjs';
+import { printingPolicy } from '../frontend-vue/src/utils/printing-policy.mjs';
 
 const execFileAsync = promisify(execFile);
-const REFERENCE_MACHINE = "Artillery M1 Pro 0.4 nozzle";
-const REFERENCE_PROCESS = "0.20mm Standard @Artillery M1 Pro 0.4 nozzle";
-const MATERIAL_FILAMENTS = Object.freeze({
-  PLA: "Artillery PLA Basic @Artillery M1 Pro 0.4 nozzle",
-  PETG: "Artillery PETG @Artillery M1 Pro 0.4 nozzle",
-  ASA: "Artillery ASA @Artillery M1 Pro 0.4 nozzle",
-  TPU: "Artillery TPU @Artillery M1 Pro 0.4 nozzle"
-});
 
 const envNumber = (name, fallback, env = process.env) => {
   const value = Number(env[name]);
@@ -32,6 +26,7 @@ export function parseOrcaWorkerConfig(env = process.env) {
     resourcesRoot: String(env.ORCA_SLICER_RESOURCES_ROOT || "/opt/orca/resources/profiles"),
     settingsPath: String(env.ORCA_SLICER_SETTINGS_PATH || ""),
     filamentPath: String(env.ORCA_SLICER_FILAMENT_PATH || ""),
+    profileManifestPath: String(env.ORCA_PROFILE_BUNDLE_MANIFEST || ''),
     intervalMs: envNumber("ORCA_WORKER_INTERVAL_MS", 3000, env),
     timeoutMs: envNumber("ORCA_SLICER_TIMEOUT_MS", 20 * 60 * 1000, env),
     runOnce: ["1", "true", "yes"].includes(String(env.ORCA_WORKER_RUN_ONCE || "").toLowerCase())
@@ -51,20 +46,6 @@ async function api(config, pathName, init = {}) {
   return response;
 }
 
-export function resolveReferenceProfiles(material, resourcesRoot = "/opt/orca/resources/profiles") {
-  const normalized = String(material || "").trim().toUpperCase();
-  const filament = MATERIAL_FILAMENTS[normalized];
-  if (!filament) throw new Error(`Unsupported material: ${material}. Supported materials: ${Object.keys(MATERIAL_FILAMENTS).join(", ")}`);
-  const vendorRoot = path.join(resourcesRoot, "Artillery");
-  return {
-    material: normalized,
-    machinePath: path.join(vendorRoot, "machine", `${REFERENCE_MACHINE}.json`),
-    processPath: path.join(vendorRoot, "process", `${REFERENCE_PROCESS}.json`),
-    filamentPath: path.join(vendorRoot, "filament", `${filament}.json`),
-    profileName: `${REFERENCE_MACHINE} / ${REFERENCE_PROCESS} / ${filament} (bundled reference profile; not the customer's configured printer)`
-  };
-}
-
 export async function resolvePresetInheritance(filename, seen = new Set()) {
   if (seen.has(filename)) throw new Error("Cyclic Orca profile inheritance");
   seen.add(filename);
@@ -82,14 +63,13 @@ export async function resolvePresetInheritance(filename, seen = new Set()) {
   return merged;
 }
 
-export function buildJobProcessConfig(job) {
+export function buildJobProcessConfig(job, machineName) {
   return {
     type: "process",
     name: `FarmFlow private ${job.id || "quote"}`,
-    inherits: REFERENCE_PROCESS,
     from: "user",
     instantiation: "true",
-    compatible_printers: [REFERENCE_MACHINE],
+    ...(machineName ? { compatible_printers: [machineName] } : {}),
     layer_height: String(job.layerHeight),
     initial_layer_print_height: String(Math.max(0.2, Number(job.layerHeight))),
     sparse_infill_density: `${Number(job.infill)}%`,
@@ -201,7 +181,25 @@ async function locateGcodePaths(outputDir) {
   return candidates.map((file) => path.join(outputDir, file));
 }
 
-export async function runOrcaSlice(job, sourceInputs, config) {
+export function validateGcodeProfile(text, expectedVersion) {
+  const field = (key) => text.match(new RegExp(`^;\\s*${key}\\s*=\\s*(.+)$`, 'mi'))?.[1]?.trim();
+  if (!/Creality\s+Hi\b/i.test(field('printer_model') || field('printer_settings_id') || '') ||
+    Number(field('nozzle_diameter')) !== 0.4 || field('filament_type')?.replaceAll('"', '').toUpperCase() !== 'PETG')
+    throw new Error('切片 G-code 的機型、噴嘴或材料與發布設定包不符，未採用此結果。');
+  const actualVersion = text.match(/generated\s+by\s+OrcaSlicer\s+([^\s;]+)/i)?.[1];
+  if (expectedVersion && actualVersion !== expectedVersion) throw new Error('G-code 回報的 OrcaSlicer 版本與發布設定包不符，未採用此結果。');
+  return actualVersion;
+}
+
+export async function runOrcaSlice(job, sourceInputs, config, dependencies = {}) {
+  let published;
+  if (job.scope === 'public-slicing-quote') {
+    if (job.material !== printingPolicy.material) throw new Error('目前自動切片僅開放 3DSTU_PETG。');
+    published = await loadProfileBundle({ manifestPath: config.profileManifestPath, engineVersion: config.version });
+    requireMatchingBundle(job.profileBundle, published.summary);
+  } else if (!(job.settingsPath || config.settingsPath) || !(job.filamentPath || config.filamentPath)) {
+    throw new Error('未指定機器／製程及耗材設定，不會使用切片器內建預設。');
+  }
   const root = await mkdtemp(path.join(os.tmpdir(), "farmflow-orca-"));
   try {
     const inputDir = path.join(root, "input");
@@ -226,6 +224,7 @@ export async function runOrcaSlice(job, sourceInputs, config) {
     }
 
     let effectiveJob = job;
+    let effectiveProfileHashes;
     if (["free-print","studio"].includes(job.purpose)) {
       if (job.purpose === "free-print"&&job.material !== "PETG") throw new Error("免費列印固定使用 3DSTU_PETG，請重新建立切片工作");
       const platePath = path.join(inputDir, "station-plate.3mf");
@@ -234,29 +233,31 @@ export async function runOrcaSlice(job, sourceInputs, config) {
     }
     let profileName = String(job.profileName || job.profileId || "");
     if (job.scope === "public-slicing-quote") {
-      const profiles = resolveReferenceProfiles(job.material, config.resourcesRoot);
       const privateProcessPath = path.join(root, "private-process.json");
       const privateMachinePath = path.join(root, "private-machine.json");
       const privateFilamentPath = path.join(root, "private-filament.json");
-      const bundledProcess = await resolvePresetInheritance(profiles.processPath);
-      const processProfile = { ...bundledProcess, ...buildJobProcessConfig(job), from: "system" };
+      const processProfile = { ...published.profiles.process, ...buildJobProcessConfig(job, published.profiles.machine.name), from: "system" };
       delete processProfile.inherits;
       await writeFile(privateProcessPath, JSON.stringify(processProfile, null, 2));
-      await writeFile(privateMachinePath, JSON.stringify({...await resolvePresetInheritance(profiles.machinePath),...orcaAdvancedSettings(job.advanced).machine}, null, 2));
-      await writeFile(privateFilamentPath, JSON.stringify(await resolvePresetInheritance(profiles.filamentPath), null, 2));
+      await writeFile(privateMachinePath, JSON.stringify({...published.profiles.machine,...orcaAdvancedSettings(job.advanced).machine}, null, 2));
+      await writeFile(privateFilamentPath, JSON.stringify(published.profiles.filament, null, 2));
       effectiveJob = {
         ...job,
         settingsPath: `${privateMachinePath};${privateProcessPath}`,
         filamentPath: privateFilamentPath
       };
-      profileName = profiles.profileName;
+      profileName = `${printingPolicy.machine} / 0.4 mm / ${printingPolicy.materialLabel} / ${published.summary.version}`;
+      effectiveProfileHashes = {
+        machine: sha256(await readFile(privateMachinePath)), process: sha256(await readFile(privateProcessPath)), filament: sha256(await readFile(privateFilamentPath)),
+      };
     }
 
     const args = buildOrcaArgs(effectiveJob, inputPaths, outputDir, config);
-    const execution = await execFileAsync(config.command, args, { timeout: config.timeoutMs, maxBuffer: 16 * 1024 * 1024, windowsHide: true });
+    const execution = await (dependencies.execFile || execFileAsync)(config.command, args, { timeout: config.timeoutMs, maxBuffer: 16 * 1024 * 1024, windowsHide: true });
     const gcodePaths = await locateGcodePaths(outputDir);
     const plates = await Promise.all(gcodePaths.map(async (gcodePath) => {
       const buffer = await readFile(gcodePath);
+      if (published) validateGcodeProfile(buffer.toString('utf8'), published.summary.engineVersion);
       return { gcodePath, buffer, metrics: parseGcodeMetrics(buffer.toString("utf8")) };
     }));
     const metrics = plates.reduce((sum, plate) => ({
@@ -277,6 +278,9 @@ export async function runOrcaSlice(job, sourceInputs, config) {
       buffer: gcode,
       ...metrics,
       profileName,
+      profileBundle: published?.summary,
+      effectiveProfileHashes,
+      appliedSettings: published ? { layerHeight: job.layerHeight, infill: job.infill, walls: job.walls, autoSupports: job.autoSupports, advanced: job.advanced || {} } : undefined,
       warnings,
       stdout: String(execution.stdout || "").slice(-4000)
     };
@@ -294,6 +298,11 @@ async function uploadResult(config, job, result) {
   form.append("otherGrams", String(result.otherGrams));
   form.append("totalGrams", String(result.totalGrams));
   form.append("profileName", result.profileName);
+  if (result.profileBundle) {
+    form.append('profileBundle', JSON.stringify(result.profileBundle));
+    form.append('effectiveProfileHashes', JSON.stringify(result.effectiveProfileHashes));
+    form.append('appliedSettings', JSON.stringify(result.appliedSettings));
+  }
   form.append("warnings", result.warnings.join("\n"));
   form.append("workerVersion", config.version);
   form.append("file", new Blob([result.buffer], { type: "text/x-gcode" }), result.filename);

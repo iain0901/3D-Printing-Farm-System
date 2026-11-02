@@ -17,7 +17,7 @@
         <agent-connections v-if="connectionsOpen" :staff="staffMode" />
         <div v-if="review" class="agent-proposal">
           <p>{{ review.message }}</p>
-          <button v-if="review.suggestedInfill !== null" @click="finishReview(false, review.suggestedInfill)">套用建議後返回檢查</button>
+          <button v-if="review.suggestedInfill != null || review.suggestedWalls != null" @click="finishReview(false, review.suggestedInfill, review.suggestedWalls)">套用建議後返回檢查</button>
           <button @click="finishReview(true)">依目前設定繼續切片</button>
           <button @click="finishReview(false)">返回修改</button>
         </div>
@@ -43,7 +43,9 @@
               <input type="file" accept="image/png,image/jpeg,image/webp" @change="attach" />
             </label>
             <button :disabled="busy || !text.trim()">{{ busy ? '處理中…' : '傳送' }}</button>
-            <button type="button" :disabled="busy" @click="calling ? hangup() : call()">{{ calling ? '掛斷' : '語音通話' }}</button>
+            <button type="button" :disabled="busy" @click="calling || voiceConnecting ? hangup() : call()">
+              {{ calling || voiceConnecting ? '掛斷' : '語音通話' }}
+            </button>
           </div>
         </form>
         <div v-if="calling">
@@ -79,7 +81,7 @@
   }
   const opened = ref(false),
     nudge = ref(false),
-    busy = ref(false),
+    actionBusy = ref(false),
     error = ref(''),
     text = ref(''),
     image = ref(''),
@@ -92,7 +94,13 @@
     stream,
     audio,
     callTimer,
+    voiceEpoch = 0,
+    voiceAbort,
     generation = 0
+  const voiceConnecting = ref(false)
+  const reviewBusy = ref(false),
+    busy = computed(() => actionBusy.value || reviewBusy.value)
+  let reviewEpoch = 0
   const review = ref(null)
   const micMuted = ref(false),
     audioBlocked = ref(false)
@@ -103,11 +111,13 @@
     })
   }
   async function resumeAudio() {
+    const speaker = audio,
+      owner = voiceEpoch
     try {
-      await audio?.play()
-      audioBlocked.value = false
+      await speaker?.play()
+      if (speaker === audio && owner === voiceEpoch) audioBlocked.value = false
     } catch {
-      audioBlocked.value = true
+      if (speaker === audio && owner === voiceEpoch) audioBlocked.value = true
     }
   }
   const reviewCache = new Map()
@@ -118,9 +128,11 @@
     finishReview(false)
   }
   let reviewResolve
-  function finishReview(proceed, infill) {
+  function finishReview(proceed, infill, walls) {
+    reviewEpoch++
+    reviewBusy.value = false
     const pending = !!reviewResolve
-    reviewResolve?.({ proceed, infill })
+    reviewResolve?.({ proceed, infill, walls })
     reviewResolve = null
     review.value = null
     if (pending) opened.value = false
@@ -140,18 +152,19 @@
       event.detail.resolve({ proceed: true })
       return
     }
-    opened.value = true
-    busy.value = true
     error.value = ''
     finishReview(false)
+    opened.value = true
+    reviewBusy.value = true
     reviewResolve = event.detail.resolve
+    const reviewId = ++reviewEpoch
     const key = generation,
       page = location.hash
     try {
       const payload = { purpose: event.detail.purpose, settings: event.detail.settings, models: event.detail.models || [] }
       const cacheKey = JSON.stringify(payload)
       const value = reviewCache.get(cacheKey) || (await workspace('/../agent/review', 'post', payload, { timeout: 65000 }))
-      if (key !== generation || page !== location.hash || !reviewResolve) {
+      if (reviewId !== reviewEpoch || key !== generation || page !== location.hash || !reviewResolve) {
         event.detail.resolve({ proceed: false })
         return
       }
@@ -160,9 +173,9 @@
       review.value = value
     } catch {
       error.value = 'AI 建議暫時無法取得，你仍可依自己的設定切片。'
-      if (key === generation && page === location.hash && reviewResolve) finishReview(true)
+      if (reviewId === reviewEpoch && key === generation && page === location.hash && reviewResolve) finishReview(true)
     } finally {
-      busy.value = false
+      if (reviewId === reviewEpoch) reviewBusy.value = false
     }
   }
   window.addEventListener('3drfm:slicer-enter', entered)
@@ -176,7 +189,7 @@
     if (busy.value) return
     const key = generation,
       message = text.value
-    busy.value = true
+    actionBusy.value = true
     error.value = ''
     messages.value.push({ role: '你', text: message })
     text.value = ''
@@ -203,11 +216,11 @@
     } catch (e) {
       error.value = e.response?.data?.error || '助理暫時無法回應，請稍後重試。'
     } finally {
-      busy.value = false
+      actionBusy.value = false
     }
   }
   async function apply(action, index) {
-    busy.value = true
+    actionBusy.value = true
     error.value = ''
     const key = generation
     opened.value = false
@@ -222,7 +235,7 @@
     } catch (e) {
       error.value = e.message
     } finally {
-      busy.value = false
+      actionBusy.value = false
       if (key === generation && token.value) opened.value = true
     }
   }
@@ -249,6 +262,9 @@
     })
   }
   function hangup() {
+    voiceEpoch++
+    voiceAbort?.abort()
+    voiceConnecting.value = false
     clearTimeout(callTimer)
     pc?.close()
     stream?.getTracks().forEach((t) => t.stop())
@@ -263,31 +279,40 @@
     audioBlocked.value = false
   }
   async function call() {
-    busy.value = true
+    if (voiceConnecting.value || calling.value) return
+    voiceConnecting.value = true
     error.value = ''
     const key = generation
+    const voiceId = ++voiceEpoch,
+      controller = new AbortController()
+    voiceAbort = controller
+    const owns = () => voiceId === voiceEpoch && key === generation
+    const current = () => owns() && !controller.signal.aborted
     try {
-      const secret = await workspace('/../agent/realtime-session', 'post', {})
-      if (key !== generation) return
+      const secret = await workspace('/../agent/realtime-session', 'post', {}, { signal: controller.signal })
+      if (!current()) return
       const microphone = await navigator.mediaDevices.getUserMedia({ audio: true })
-      if (key !== generation) {
+      if (!current()) {
         microphone.getTracks().forEach((t) => t.stop())
         return
       }
       stream = microphone
       pc = new RTCPeerConnection()
+      const connection = pc
       audio = new Audio()
       audio.autoplay = true
       pc.ontrack = (e) => {
+        if (!current() || pc !== connection) return
         audio.srcObject = e.streams[0]
         resumeAudio()
       }
       pc.onconnectionstatechange = () => {
-        if (pc && ['failed', 'closed', 'disconnected'].includes(pc.connectionState)) hangup()
+        if (owns() && pc === connection && ['failed', 'closed', 'disconnected'].includes(connection.connectionState)) hangup()
       }
       stream.getTracks().forEach((track) => pc.addTrack(track, stream))
       const channel = pc.createDataChannel('oai-events')
-      channel.onopen = () =>
+      channel.onopen = () => {
+        if (!current() || pc !== connection) return
         channel.send(
           JSON.stringify({
             type: 'session.update',
@@ -320,8 +345,9 @@
             },
           })
         )
+      }
       channel.onmessage = (event) => {
-        if (key !== generation || !pc) return
+        if (!current() || pc !== connection) return
         try {
           const item = JSON.parse(event.data)
           if (item.type !== 'response.function_call_arguments.done') return
@@ -345,23 +371,30 @@
           error.value = '語音操作無法確認，請改用文字或手動操作。'
         }
       }
-      const offer = await pc.createOffer()
-      await pc.setLocalDescription(offer)
+      const offer = await connection.createOffer()
+      if (!current()) return
+      await connection.setLocalDescription(offer)
+      if (!current()) return
       const response = await fetch('https://api.openai.com/v1/realtime/calls', {
         method: 'POST',
         headers: { authorization: `Bearer ${secret.value}`, 'content-type': 'application/sdp' },
         body: offer.sdp,
-        signal: AbortSignal.timeout(20000),
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20000)]),
       })
       if (!response.ok) throw new Error('無法建立通話')
-      await pc.setRemoteDescription({ type: 'answer', sdp: await response.text() })
+      const sdp = await response.text()
+      if (!current()) return
+      await connection.setRemoteDescription({ type: 'answer', sdp })
+      if (!current()) return
       calling.value = true
       callTimer = setTimeout(hangup, 10 * 60 * 1000)
     } catch {
-      hangup()
-      error.value = '通話未建立，請確認麥克風權限與服務設定。'
+      if (owns()) {
+        hangup()
+        error.value = '通話未建立，請確認麥克風權限與服務設定。'
+      }
     } finally {
-      busy.value = false
+      if (owns()) voiceConnecting.value = false
     }
   }
   async function poll() {

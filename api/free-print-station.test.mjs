@@ -106,6 +106,7 @@ async function fixture({ mail = true, createCameraSession = null } = {}) {
       status: "completed",
       gcodeFileId: "gcode-" + id,
       profileName: config.profileName,
+      profileBundle: { policyId: 'creality-hi-04-3dstu-petg-v1' },
       estimatedMinutes: 15,
       publicAccessTokenHash: createHash("sha256").update(token).digest("hex"),
     });
@@ -135,6 +136,14 @@ async function fixture({ mail = true, createCameraSession = null } = {}) {
   };
 }
 describe("free print FIFO sessions and exclusive hardware control", () => {
+  it('rejects legacy/unversioned slices before joining the free-print queue', async () => {
+    const f = await fixture();
+    const payload = f.job('legacy-profile');
+    delete f.db.data.slicingQuotes[0].profileBundle;
+    const result = await f.api('a', 'POST', '/reservations', payload);
+    expect(result.statusCode).toBe(409);
+    expect(result.json().error).toContain('重新切片');
+  });
   it("keeps camera sessions private, rejects queued/expired/ended slots, and reports unconfigured honestly", async () => {
     const f = await fixture();
     const first = await f.api(

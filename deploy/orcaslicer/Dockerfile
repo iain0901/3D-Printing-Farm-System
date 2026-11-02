@@ -21,6 +21,8 @@ COPY --chown=orca:orca package*.json ./
 RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
 # Worker helpers are part of the runtime contract, not just the entry point.
 COPY --chown=orca:orca api/ /app/api/
+COPY --chown=orca:orca frontend-vue/src/utils/ /app/frontend-vue/src/utils/
+COPY --chown=orca:orca scripts/check-slicer-profile.mjs /app/scripts/check-slicer-profile.mjs
 USER orca
 WORKDIR /home/orca
 CMD ["node", "/app/api/orca-worker.mjs"]

@@ -328,8 +328,7 @@
                     G-code，價格依目前系統費率計算；不是用體積或參考件猜測。列印時間為切片器預測，並非實體機台已完成列印。
                   </small>
                   <small>
-                    {{ sliceQuote.profileName }} ·
-                    {{ sliceQuote.engine || 'OrcaSlicer' }}。參考機台設定；正式機台、耗材及多色換料條件仍需製程確認。
+                    {{ sliceQuote.profileName }} · {{ sliceQuote.engine || 'OrcaSlicer' }}。Creality Hi／0.4 mm／3DSTU_PETG；實際總耗材 NT$2／克。其他材質與多色請交由專員。
                   </small>
                   <small>自動方向（減少支撐）／自動支撐／自動擺盤；實際啟用項目依此次切片設定。</small>
                 </template>
@@ -420,7 +419,7 @@
     budget: 0,
     notes: '',
     defaults: {
-      material: 'PLA',
+      material: 'PETG',
       color: '白色',
       quantity: 1,
       quality: 'Standard',
@@ -446,7 +445,7 @@
           hasModel: this.$route.query.model !== 'no',
           notes: inquiryNotes(this.$route.query.service),
         },
-        materials: fdmMaterials,
+        materials: ['PETG'],
         palette: COLOR_PALETTE,
         fileList: [],
         attachmentList: [],

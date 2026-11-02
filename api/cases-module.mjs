@@ -9,6 +9,8 @@ import { buildLayerPreview } from "./layer-preview.mjs";
 import { buildToolpathPreview } from "./toolpath-preview.mjs";
 import { advancedSlicerSchema } from "./studio-settings.mjs";
 import { validateStationPlate } from "./station-plate.mjs";
+import { printingPolicy } from '../frontend-vue/src/utils/printing-policy.mjs';
+import { loadProfileBundle, requireMatchingBundle, computePublishedQuote } from './profile-bundle.mjs';
 import {
   CASE_STATUSES,
   canTransitionCase,
@@ -22,7 +24,6 @@ import {
 import {
   computeAutoQuote,
   defaultAutoQuoteConfig,
-  taiwanFdmQuoteConfig,
   referencePartUsage,
 } from "./pricing-engine.mjs";
 
@@ -56,7 +57,7 @@ function ensureCollections(data) {
   }
 }
 
-const PUBLIC_SLICE_MATERIALS = ["PLA", "PETG", "ASA", "TPU"];
+const PUBLIC_SLICE_MATERIALS = ["PETG"];
 export const FREE_PRINT_STATION_IDS = ["nthu-shuimu"];
 const PUBLIC_SLICE_EXTENSIONS = new Set(["STL", "3MF", "OBJ"]);
 const PUBLIC_SLICE_MAX_FILES = 5;
@@ -84,14 +85,17 @@ const publicSlicingQuoteSchema = z.object({
   quality: z.enum(["standard", "appearance", "functional"]).default("standard")
 });
 
-function publicSlicingQuote(record) {
+export function publicSlicingQuote(record) {
   const value = {
     id: record.id,
     purpose: record.purpose || "quote",
     stationId: record.stationId,
     status: record.status,
     material: record.material,
-    materialLabel: record.purpose === "free-print" && record.material === "PETG" ? "3DSTU_PETG" : record.material,
+    materialLabel: record.profileBundle?.materialLabel || (record.purpose === "free-print" && record.material === "PETG" ? "3DSTU_PETG" : record.material),
+    profileBundle: record.profileBundle,
+    appliedSettings: record.appliedSettings,
+    effectiveProfileHashes: record.effectiveProfileHashes,
     quantity: record.quantity,
     fileCount: record.sourceFileIds.length,
     layerHeight: record.layerHeight,
@@ -122,7 +126,7 @@ function publicSlicingQuote(record) {
     completedAt: record.completedAt
   });
   if (record.status === "failed") Object.assign(value, { error: record.error, completedAt: record.completedAt });
-  if (["free-print", "studio"].includes(record.purpose)) {
+  if (['free-print', 'studio'].includes(record.purpose)) {
     delete value.price;
     delete value.quote;
     delete value.pricingPolicy;
@@ -153,6 +157,8 @@ async function parsePublicSlicingQuote(request, storeCaseFile, workspaceId) {
   if (uploads.length > PUBLIC_SLICE_MAX_FILES) throw new Error(`At most ${PUBLIC_SLICE_MAX_FILES} model files are allowed`);
   const parsed = publicSlicingQuoteSchema.safeParse(input || {});
   if (!parsed.success) return { validationError: parsed.error };
+  if (parsed.data.colors !== 1) throw new Error('目前自動報價只開放單色 3DSTU_PETG；多色請先交由專員確認設定。');
+  if (parsed.data.purpose === 'quote' && (parsed.data.rush || parsed.data.postProcessing.length || parsed.data.businessTier !== 'economy')) throw new Error('每克 NT$2 為標準列印；急件、後製與其他服務請交由專員確認，不自動加費。');
   if (["free-print", "studio"].includes(parsed.data.purpose)) {
     if (parsed.data.purpose === "free-print" && !FREE_PRINT_STATION_IDS.includes(parsed.data.stationId)) throw new Error("請選擇有效的免費列印站點");
     if (parsed.data.purpose === "free-print" && parsed.data.material !== "PETG") throw new Error("免費列印固定使用 3DSTU_PETG");
@@ -718,8 +724,16 @@ export async function registerCaseRoutes(app, options) {
     costCatalogForWorkspace,
   } = options;
   ensureCollections(database.data);
+  app.get('/api/public/slicing-quotes/config', { config: { rateLimit: { max: 120, timeWindow: '1 minute' } } }, async (_, reply) => {
+    reply.header('cache-control', 'no-store');
+    try { return { available: true, policy: printingPolicy, profileBundle: (await loadProfileBundle()).summary }; }
+    catch (error) { return { available: false, policy: printingPolicy, error: error.message }; }
+  });
 
   app.post("/api/public/slicing-quotes", { config: { rateLimit: { max: 10, timeWindow: "1 minute", groupId: "public-slicing-quotes" } } }, async (request, reply) => {
+    let published;
+    try { published = await loadProfileBundle(); }
+    catch (error) { return reply.code(503).send({ error: error.message }); }
     reply.header("cache-control", "no-store");
     const workspaceId = DEFAULT_WORKSPACE_ID;
     const used = database.data.slicingQuotes.reduce((sum, item) => sum + (item.sourceBytes || 0) + (item.artifactBytes || 0), 0);
@@ -760,8 +774,10 @@ export async function registerCaseRoutes(app, options) {
       quality: incoming.input.quality,
       engine: "OrcaSlicer",
       engineVersion: process.env.ORCA_SLICER_VERSION || "2.4.2",
-      profileName: "Artillery M1 Pro bundled reference profiles (pending worker resolution)",
-      profileDisclosure: "Reference machine and vendor filament profiles are used for estimation; this is not represented as the customer's configured printer.",
+      profileName: `${printingPolicy.machine} / 0.4 mm / ${printingPolicy.materialLabel} / ${published.summary.version}`,
+      profileBundle: published.summary,
+      profileDisclosure: '使用伺服器已發布且通過完整性檢查的設定包；不是內建參考機型。',
+      pricingPolicyVersion: printingPolicy.id,
       createdAt: now,
       updatedAt: now
     };
@@ -780,7 +796,7 @@ export async function registerCaseRoutes(app, options) {
   app.delete("/api/public/slicing-quotes/:id", async (request, reply) => {
     reply.header("cache-control", "no-store");
     const job = database.data.slicingQuotes.find(item => item.id === request.params.id && inWorkspace(item, DEFAULT_WORKSPACE_ID));
-    if (!job || !["free-print","studio"].includes(job.purpose) || !safeTokenMatches(job, request.headers["x-slicing-token"])) return reply.code(404).send({ error: "切片工作不存在" });
+    if (!job || !safeTokenMatches(job, request.headers["x-slicing-token"])) return reply.code(404).send({ error: "切片工作不存在" });
     if (["queued", "processing"].includes(job.status)) {
       job.status = "cancelled";
       job.updatedAt = job.completedAt = nowIso();
@@ -819,6 +835,7 @@ export async function registerCaseRoutes(app, options) {
     const parsed = preliminaryEstimateSchema.safeParse(request.body || {});
     if (!parsed.success) return reply.code(400).send({ error: "估價條件格式錯誤", issues: parsed.error.issues });
     const value = parsed.data;
+    if (value.hasModel) return reply.code(409).send({ error: '模型代印必須使用實際切片總耗材報價；請上傳模型，不使用參考件或通用估算。', code: 'real_slice_required' });
     // 自動報價引擎：參考件用量模型 → 階梯價/機時/最低消費取高 + 多色/急件/風險規則。
     // 這是「未切片前的初步估計」，正式報價仍由專員以實際切片數據確認。
     const catalog = costCatalogForWorkspace?.(database.data) || {};
@@ -877,6 +894,7 @@ export async function registerCaseRoutes(app, options) {
     if (quoteId) {
       measuredQuote = database.data.slicingQuotes.find(item => item.id === quoteId && inWorkspace(item, workspaceId));
       if (!measuredQuote || measuredQuote.purpose !== "quote" || !safeTokenMatches(measuredQuote, parsedIncoming.input.slicingQuoteToken) || measuredQuote.status !== "completed") return reply.code(409).send({ error: "切片報價無效或尚未完成" });
+      if (measuredQuote.profileBundle?.policyId !== printingPolicy.id) return reply.code(409).send({ error: '這是舊設定的報價，請用目前發布的設定重新切片。' });
       const sourceModels = measuredQuote.sourceFileIds.map(id => database.data.files.find(file => file.id === id));
       const intakeModels = parsedIncoming.uploadResults.map(item => item.file).filter(file => PUBLIC_SLICE_EXTENSIONS.has(String(file.name).split(".").pop().toUpperCase()));
       const digest = async file => createHash("sha256").update(await readCaseFile(file)).digest("hex");
@@ -1515,30 +1533,26 @@ export async function registerCaseRoutes(app, options) {
       if (values.some((value) => !Number.isFinite(value)) || metrics.estimatedMinutes <= 0 || metrics.totalGrams <= 0 || metrics.modelGrams < 0 || metrics.supportGrams < 0 || metrics.otherGrams < 0 || Math.abs(componentTotal - metrics.totalGrams) > Math.max(0.05, metrics.totalGrams * 0.01)) {
         return reply.code(400).send({ error: "Worker result must contain positive real slice time and consistent extrusion measurements" });
       }
-      const profileName = field("profileName").trim();
-      if (!profileName) return reply.code(400).send({ error: "Worker result is missing its reference profile name" });
+      let reportedBundle;
+      let effectiveProfileHashes;
+      try {
+        reportedBundle = JSON.parse(field('profileBundle'));
+        requireMatchingBundle(publicQuote.profileBundle, reportedBundle);
+        if (field('workerVersion') !== publicQuote.profileBundle.engineVersion) throw new Error('engine mismatch');
+        const hash = z.string().regex(/^[a-f0-9]{64}$/);
+        effectiveProfileHashes = z.object({ machine: hash, process: hash, filament: hash }).strict().parse(JSON.parse(field('effectiveProfileHashes')));
+      } catch { return reply.code(409).send({ error: '切片結果缺少或不符合工作指定的機型／設定包版本，請重新切片。' }); }
+      if (!field('profileName').trim()) return reply.code(400).send({ error: '切片結果缺少設定名稱。' });
+      const profileName = `${publicQuote.profileBundle.machine} / 0.4 mm / ${publicQuote.profileBundle.materialLabel} / ${publicQuote.profileBundle.version}`;
       const gcode = await storeGcodeFile({ filename: part.filename || `${publicQuote.id}.gcode`, buffer, workspaceId: publicQuote.workspaceId, caseId: publicQuote.id, slicerJobId: publicQuote.id });
       // Cancellation can arrive while the artifact is being persisted.
       if (publicQuote.status !== "processing") return reply.code(409).send({ error: "切片工作已停止，不再採用此結果" });
       const round = (value) => Math.round(value * 1000) / 1000;
       Object.assign(publicQuote, Object.fromEntries(Object.entries(metrics).map(([key, value]) => [key, round(value)])));
-      const supportPercent = publicQuote.totalGrams > 0 ? publicQuote.supportGrams / publicQuote.totalGrams * 100 : 0;
-      const catalog = costCatalogForWorkspace?.(database.data, publicQuote.workspaceId) || {};
-      if (publicQuote.purpose === "quote") publicQuote.quote = computeAutoQuote(taiwanFdmQuoteConfig, {
-        scope: "order",
-        grams: publicQuote.totalGrams,
-        minutes: publicQuote.estimatedMinutes,
-        quantity: publicQuote.quantity,
-        material: publicQuote.material,
-        businessTier: publicQuote.businessTier,
-        quality: publicQuote.quality,
-        supportPercent,
-        dueInHours: publicQuote.rush ? 48 : null,
-        colorMode: publicQuote.colors > 1 ? "separated" : "single",
-        colorCount: publicQuote.colors || 1,
-        services: publicQuote.postProcessing || []
-      });
-      publicQuote.pricingPolicyVersion = "TW-FDM-v1 (TWD, 5% tax; max of material, machine time and minimum order)";
+      if (publicQuote.purpose === 'quote') publicQuote.quote = computePublishedQuote(metrics.totalGrams, publicQuote.quantity, metrics.estimatedMinutes);
+      publicQuote.pricingPolicyVersion = printingPolicy.id;
+      publicQuote.appliedSettings = { layerHeight: publicQuote.layerHeight, infill: publicQuote.infill, walls: publicQuote.walls, autoSupports: publicQuote.autoSupports, advanced: publicQuote.advanced || {} };
+      publicQuote.effectiveProfileHashes = effectiveProfileHashes;
       publicQuote.status = "completed";
       publicQuote.profileName = profileName;
       publicQuote.gcodeFileId = gcode.file.id;

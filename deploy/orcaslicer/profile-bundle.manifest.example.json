@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "policyId": "creality-hi-04-3dstu-petg-v1",
+  "version": "replace-with-tested-release-version",
+  "engine": "OrcaSlicer",
+  "engineVersion": "2.4.2",
+  "machine": "Creality Hi",
+  "nozzleDiameter": 0.4,
+  "material": "PETG",
+  "materialLabel": "3DSTU_PETG",
+  "baseLayerHeight": 0.2,
+  "buildVolume": [0, 0, 0],
+  "files": {
+    "machine": { "path": "machine.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
+    "process": { "path": "process.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
+    "filament": { "path": "filament.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" }
+  }
+}

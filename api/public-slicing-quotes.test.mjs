@@ -6,9 +6,15 @@ import { buildServer, openDatabase } from "./server.mjs";
 import { FREE_PRINT_STATION_IDS } from "./cases-module.mjs";
 import { freePrintStations } from "../frontend-vue/src/content/freePrintStations.mjs";
 import { testStl } from "./test-helpers/stl.mjs";
+import { fixtureProfileBundle } from './test-helpers/profile-bundle.mjs';
+
+const originalManifest = process.env.ORCA_PROFILE_BUNDLE_MANIFEST;
+let fixtureBundle;
 
 const cleanups = [];
 afterEach(async () => {
+  if (originalManifest === undefined) delete process.env.ORCA_PROFILE_BUNDLE_MANIFEST;
+  else process.env.ORCA_PROFILE_BUNDLE_MANIFEST = originalManifest;
   delete process.env.LAYERPILOT_WORKER_TOKEN;
   while (cleanups.length)
     await rm(cleanups.pop(), { recursive: true, force: true });
@@ -17,6 +23,10 @@ afterEach(async () => {
 const cubeStl = testStl();
 
 function multipart({ boundary, files = [], payload, fields = {} }) {
+  if (fields.profileName && fixtureBundle) fields = {
+    workerVersion: '2.4.2', profileBundle: JSON.stringify(fixtureBundle.summary),
+    effectiveProfileHashes: JSON.stringify(fixtureBundle.summary.hashes), ...fields,
+  };
   const chunks = [];
   const field = (name, value) => {
     chunks.push(
@@ -47,6 +57,8 @@ async function createApp() {
     path.join(tmpdir(), "farmflow-public-slice-")
   );
   cleanups.push(directory);
+  fixtureBundle = await fixtureProfileBundle(path.join(directory, 'synthetic-profiles'));
+  process.env.ORCA_PROFILE_BUNDLE_MANIFEST = fixtureBundle.manifestPath;
   const dbFile = path.join(directory, "state.json");
   const db = await openDatabase(dbFile);
   const app = await buildServer({ db, serveStatic: false });
@@ -84,6 +96,25 @@ const workerHeaders = () => ({
 });
 
 describe("public real Orca slicing quote jobs", () => {
+  it('fails closed before storing uploads when the independent preset bundle is missing', async () => {
+    const { app, db } = await createApp();
+    const count = db.data.files.length;
+    delete process.env.ORCA_PROFILE_BUNDLE_MANIFEST;
+    const configuration = await app.inject({ url: '/api/public/slicing-quotes/config' });
+    expect(configuration.json()).toMatchObject({ available: false, policy: { machine: 'Creality Hi', materialLabel: '3DSTU_PETG', pricePerGram: 2 } });
+    expect((await postQuote(app)).statusCode).toBe(503);
+    const guessed = await app.inject({ method: 'POST', url: '/api/public/cases/estimate', payload: { hasModel: true, material: 'PETG' } });
+    expect(guessed.statusCode).toBe(409);
+    expect(guessed.json()).not.toHaveProperty('estimate');
+    expect(db.data.files).toHaveLength(count); expect(db.data.slicingQuotes).toHaveLength(0);
+    await app.close();
+  });
+  it('rejects PLA and other unapproved automatic materials instead of mapping them to PETG', async () => {
+    const { app } = await createApp();
+    for (const material of ['PLA', 'ASA', 'TPU', 'ABS']) expect((await postQuote(app, { material })).statusCode).toBe(400);
+    expect((await postQuote(app, { colors: 2 })).statusCode).toBe(400);
+    await app.close();
+  });
   it("slices a standalone studio project without a price and authorizes real 3D paths by its private token", async () => {
     process.env.LAYERPILOT_WORKER_TOKEN = "test-worker-token";
     const { app, db } = await createApp();
@@ -94,7 +125,7 @@ describe("public real Orca slicing quote jobs", () => {
     ];
     const created = await postQuote(app, {
       purpose: "studio",
-      material: "PLA",
+      material: "PETG",
       quantity: 1,
       autoOrient: false,
       autoArrange: false,
@@ -194,7 +225,7 @@ describe("public real Orca slicing quote jobs", () => {
           headers: { "x-slicing-token": paid.accessToken },
         })
       ).statusCode
-    ).toBe(404);
+    ).toBe(200);
     for (const processing of [false, true]) {
       const created = (
         await postQuote(app, {
@@ -588,9 +619,9 @@ describe("public real Orca slicing quote jobs", () => {
       estimatedMinutes: 142,
       engine: "OrcaSlicer",
       profileName:
-        "Artillery M1 Pro 0.4 nozzle / 0.20mm Standard / Artillery PETG",
+        "Creality Hi / 0.4 mm / 3DSTU_PETG / synthetic-fixture-v1",
     });
-    expect(quote.price).toBeGreaterThan(0);
+    expect(quote.price).toBe(97);
     expect(quote.quote.total).toBe(quote.price);
     expect(quote.quote.input).toMatchObject({
       scope: "order",

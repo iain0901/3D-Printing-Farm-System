@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
-import { createCaseFromIntake, publicCase } from "./cases-module.mjs";
+import { createCaseFromIntake, publicCase, publicSlicingQuote } from "./cases-module.mjs";
 import { advancedSlicerSchema } from "./studio-settings.mjs";
+import { printingPolicy } from '../frontend-vue/src/utils/printing-policy.mjs';
 import {
   caseIntakeSchema,
   publicQuoteVersion,
@@ -742,6 +743,8 @@ export async function registerMemberWorkspace(
         checksAccepted: z.literal(true),
         deliveryMethod: z.enum(["delivery", "pickup"]),
         addressId: text(100).default(""),
+        slicingQuoteId: key.optional(),
+        slicingQuoteToken: text(200).optional(),
       })
       .parse(request.body);
     const address =
@@ -756,6 +759,27 @@ export async function registerMemberWorkspace(
       );
     if (draftLayoutIssues(manifest).length)
       fail(400, draftLayoutIssues(manifest)[0]);
+    let measuredQuote;
+    if (input.slicingQuoteId) {
+      measuredQuote = (data.slicingQuotes || []).find((q) => q.id === input.slicingQuoteId && (q.workspaceId || 'ws-default') === (customer.workspaceId || 'ws-default'));
+      if (!measuredQuote || measuredQuote.purpose !== 'quote' || measuredQuote.status !== 'completed' || measuredQuote.publicAccessTokenHash !== createHash('sha256').update(input.slicingQuoteToken || '').digest('hex')) fail(409, '切片報價無效或尚未完成。');
+      if (measuredQuote.profileBundle?.policyId !== printingPolicy.id) fail(409, '這是舊設定的報價，請重新切片。');
+      const settings = manifest.settings;
+      if (settings.rush || settings.material !== measuredQuote.material || settings.layerHeight !== measuredQuote.layerHeight || settings.infill !== measuredQuote.infill || settings.walls !== measuredQuote.walls || settings.autoSupports !== measuredQuote.autoSupports || settings.colorMode !== 'single' ||
+        JSON.stringify(settings.advanced || {}) !== JSON.stringify(measuredQuote.advanced || {})) fail(409, '模型設定已改變，請重新切片報價。');
+      const expected = [], actual = [];
+      for (let i = 0; i < modelRecords.length; i++) {
+        const file = data.files.find((f) => f.id === modelRecords[i].fileId);
+        if (!file) fail(409, '草稿模型來源不存在。');
+        expected.push(`${createHash('sha256').update(await readFile(file)).digest('hex')}:${manifest.models[i].quantity}`);
+      }
+      for (let i = 0; i < measuredQuote.sourceFileIds.length; i++) {
+        const file = data.files.find((f) => f.id === measuredQuote.sourceFileIds[i]);
+        if (!file) fail(409, '切片模型來源不存在。');
+        actual.push(`${createHash('sha256').update(await readFile(file)).digest('hex')}:${measuredQuote.quantities[i]}`);
+      }
+      if (expected.sort().join(',') !== actual.sort().join(',')) fail(409, '模型或數量與報價不一致，請重新切片。');
+    }
     const intake = caseIntakeSchema.parse({
       mode: "agent",
       source: "website",
@@ -799,6 +823,7 @@ export async function registerMemberWorkspace(
       systemGeneratedProject: true,
     });
     result.caseRecord.workspaceDraft = structuredClone(manifest);
+    if (measuredQuote) result.caseRecord.slicingQuote = publicSlicingQuote(measuredQuote);
     result.caseRecord.workspaceModelIds = [...draft.modelIds];
     result.caseRecord.memberProjectId = draft.projectId;
     result.caseRecord.deliveryPreference = {

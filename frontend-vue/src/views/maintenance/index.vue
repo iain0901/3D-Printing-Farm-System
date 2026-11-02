@@ -19,6 +19,7 @@
       <el-table-column prop="due" label="到期" width="120" />
     </el-table>
     <div v-if="!jobs.length" class="empty-hint">尚無維護任務</div>
+    <maintenance-advisor v-if="canWrite" :printers="printers" @task-created="load" />
 
     <el-dialog title="新增維護任務" v-model="dialogVisible" width="420px">
       <el-form label-width="80px" size="small">
@@ -46,11 +47,13 @@
   import { mapGetters } from 'vuex'
   import { fetchState } from '@/api/realtime'
   import { createMaintenance, updateMaintenance } from '@/api/maintenance'
+  import MaintenanceAdvisor from '@/components/MaintenanceAdvisor.vue'
 
   const STATUS_OPTIONS = ['scheduled', 'in progress', 'done', 'blocked']
 
   export default {
     name: 'Maintenance',
+    components: { MaintenanceAdvisor },
     data() {
       return {
         jobs: [],

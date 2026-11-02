@@ -69,6 +69,10 @@ async function main() {
       buffer: testStl(),
     });
     await page.locator(".object-row").first().waitFor();
+    // 504a774 intentionally keeps fill/walls collapsed until the user opens them.
+    await page
+      .getByText("自訂填充與外壁（功能件請先確認）", { exact: true })
+      .click();
     const launcher = page.getByRole("button", {
       name: "詢問列印助理",
       exact: true,
@@ -212,6 +216,7 @@ async function main() {
         document.querySelector('[aria-label="切片填充密度"]')?.value === "15"
     );
     const preview = {
+      // Actual toolpath fixture; this test never dispatches a hardware job.
       layers: [
         {
           z: 0.2,
@@ -232,8 +237,25 @@ async function main() {
       bounds: { min: [125, 125, 0.2], max: [135, 125, 0.2] },
       segmentCount: 1,
     };
-    await page.route("**/api/public/slicing-quotes**", (r) =>
-      r.fulfill({
+    await page.getByRole("button", { name: /^開始切片/ }).click();
+    await page
+      .getByRole("button", { name: "套用建議後返回檢查", exact: true })
+      .waitFor();
+    await page.getByLabel("切片填充密度", { exact: true }).fill("25");
+    await page
+      .getByRole("button", { name: "套用建議後返回檢查", exact: true })
+      .click();
+    await page
+      .getByText("模型、用途或參數已變更，請重新取得建議。", { exact: true })
+      .waitFor();
+    assert.equal(
+      await page.getByLabel("切片填充密度", { exact: true }).inputValue(),
+      "25"
+    );
+    await page.getByLabel("切片填充密度", { exact: true }).fill("15");
+    await page.route("**/api/public/slicing-quotes**", (r) => {
+      if (new URL(r.request().url()).pathname.endsWith('/config')) return r.continue();
+      return r.fulfill({
         contentType: "application/json",
         body: JSON.stringify(
           r.request().url().endsWith("/toolpaths")
@@ -252,8 +274,8 @@ async function main() {
                 },
               }
         ),
-      })
-    );
+      });
+    });
     await page.route("**/api/customer/agent/illustration", async (r) => {
       assert.ok(
         r.request().postDataJSON().image.startsWith("data:image/png;base64,")
@@ -298,6 +320,11 @@ async function main() {
     await page
       .getByRole("button", { name: "關閉列印助理", exact: true })
       .click();
+    const savedInfill = await page.getByLabel('切片填充密度', { exact: true }).inputValue();
+    await page.reload();
+    await page.getByLabel('選擇 STL 模型', { exact: true }).waitFor();
+    await page.getByText('自訂填充與外壁（功能件請先確認）', { exact: true }).click();
+    assert.equal(await page.getByLabel('切片填充密度', { exact: true }).inputValue(), savedInfill);
     assert.deepEqual(errors, []);
     passed = true;
     console.log(
@@ -310,9 +337,11 @@ async function main() {
           "actual-Vue-infill-update",
           "voice-tool-proposal-and-microphone-cleanup-fixture",
           "purpose-review-apply-and-continue-fixture",
+          "stale-review-rejected-after-parameter-change",
           "automatic-illustration-from-real-model-capture-fixture",
           "320/390/1440px",
           "close-assistant",
+          "settings-consistent-after-refresh",
         ],
       })
     );
