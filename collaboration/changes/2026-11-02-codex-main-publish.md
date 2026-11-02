@@ -20,4 +20,8 @@
 
 整合處理：只有 CURRENT_WORK 的並行新增條目發生文字衝突，兩方條目全部保留；遠端 H-005 與本機同號但不同事項，將本機條目改列 H-008 並保留舊編號註記。首頁程式及協作者證據保持遠端 ade8131 原樣。
 
+整合後 `npm run qc` 成功：Rspack compiled successfully（6.50 秒），50 檔／392 項測試全部通過（測試 64.27 秒），log `/tmp/3drfm-main-publish-qc.log`。`git diff --exit-code origin/main -- frontend-vue/src/views/landing/Index.vue` 無差異，`git diff --check` 通過。54 個待提交路徑檢查未見禁止檔案或高可信度密鑰樣式；沒有提交生產設定或 `.env`。倉庫既有 GitHub workflow 為 build/test 及 CI runner 的 Compose smoke，未發現正式 VPS 部署步驟；本輪沒有修改 workflow。
+
+程式提交 `ddfcef4`，整合提交 `daae257` 保留 ade8131 歷史。伺服器交接文件已改成使用本次 main 完整程式，不再要求手動套用前輪本機增量。最後以非強制 `git push origin main` 交付，實際遠端版本須在命令成功後核對；若有新遠端提交，先整合再推，不能 force。
+
 此前每批紀錄的「未提交／未推送」是當時狀態；本次使用者授權提交交付，不將歷史測試宣稱為正式服務驗收。真實 Creality Hi 原始設定包、VPS 唯讀掛載、真實切片比對、OpenAI、MCP 外部客戶端、正式部署仍待原交接流程。缺包時公開切片會拒絕，不能把提交程式當成設定已載入。

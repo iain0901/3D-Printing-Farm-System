@@ -8,6 +8,8 @@
 
 ## 目前證據與工作界線
 
+- 程式交付更新：使用者已要求推送新版，本任務的 AI 依賴、Creality Hi 接線與遠端四筆首頁更新已整合為本次 main 交付；請使用完整 main 版本並記錄實際 commit，不要再套先前本機增量 patch。實際推送狀態以 GitHub main／本次交付訊息核對，正式部署仍未執行。
+
 - 另一個 Bot 回報正式站 3drfm.com 的預設為 X1C＋PLA，舊試切成果位於 `/app/hermes/shared-files/default/creality-hi-machine-trial-v1/`；網站端本輪沒有登入該 VPS 獨立重查，也沒有替換正式預設。
 - 本專案原公開 worker 另外硬選 Artillery bundled reference profiles，會繞過部署設定；本輪已移除這個選擇分支。不能將此程式碼狀態當成 VPS 現行部署版本。
 - 本輪只寫契約／驗證／接線／計價和本機測試，沒有原始 Creality Hi 生產設定，因此不提供假 PETG 溫度、速度、回抽等參數。
@@ -55,7 +57,7 @@ ORCA_SLICER_VERSION=2.4.2
 
 ## 上線前驗收，依序回報
 
-1. 先將本輪網站與 worker 程式交付整合；目前對話工作區還有前輪 AI 功能未提交，origin/main 也有另外四筆首頁 UI 更新，不能盲目覆蓋、force push 或把舊 checkout 整包蓋回正式站。
+1. 取得本次 main 完整程式並記錄 commit，核對已有 profile-bundle、maintenance-advisor、printing-policy 及本文件。前輪 AI 依賴與四筆首頁更新已一併整合；不能拿舊增量 patch 當獨立發布包，不 force push，也不把舊 checkout 整包蓋回正式站。
 2. 唯讀確認原始設定、依賴、Orca 實際版本、目前掛載與環境變數名稱；不可輸出憑證或整份 `.env`。
 3. 以原始設定解析繼承、真切片驗證；使用新版本目錄＋實值 manifest。網站程式不製造原始機型／耗材參數。
 4. 取得部署批准後，備份現行映像／設定／資料庫，確認活躍佇列處理方式及回復步驟，才切換唯讀掛載、發布 active、更新 API／worker。不要用刪除舊資料的方式切換。
