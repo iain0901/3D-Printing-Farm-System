@@ -4,6 +4,8 @@
 
 ## 目前作業
 
+DEPLOY-20261103-01｜Hermes｜進行中｜基準 7433c50：合併正式站既有 server.mjs 小修（測試站限定登入別名／noindex、附件類型判斷），維持正式站驗證規則；169 項相關回歸通過。沿用已建置前端與已驗證 Hi/PETG v4 設定包，不重建 Orca／無變更依賴。新增 ops/deploy-fast.py：完整性驗證、相同版本 no-op、設定及資料保留、備份／失敗回滾；部署狀態以主機 deployment-state.json 與實測為準，非此列宣告。
+
 PUBLISH-20261102-01｜本對話 Codex｜整合完成、本機驗證通過、交付 main｜使用者明確要求「請推送新版」，本輪將同任務先前保留的 AI-20261025-03／04 與 SLICE-20261102-01 一併提交交付，保留遠端四筆首頁更新。整合後建置成功、50 檔／392 項測試通過；沒有正式部署、真實 AI／機台操作或隔離姓名牌 STL。下方「未提交／未推送」是各批歷史狀態，實際交付 SHA 以 GitHub main 及 [推送紀錄](changes/2026-11-02-codex-main-publish.md) 核對。
 
 SLICE-20261102-01｜本對話 Codex｜待整合／待原始設定包與正式驗收｜基準 504a774，origin/main 已有四個首頁 UI 提交至 ade8131；保留所有前輪未提交成果及首頁，不強制合併／推送。已改設定包契約、worker 無回退、Creality Hi 0.4 mm／3DSTU_PETG、實際總耗材每克 NT$2、工作台真切片報價／案件驗證及伺服器交接。建置、50 檔／391 測試、付費流程七項 fixture 瀏覽器檢查通過；沒有生產設定、真 Orca／硬體或部署驗收。見 [紀錄](changes/2026-11-02-codex-published-slicer.md) 及 [Bot 訊息](../docs/server-bot-slicer-handoff.md)。

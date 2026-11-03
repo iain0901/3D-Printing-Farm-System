@@ -124,8 +124,11 @@ const severitySchema = z.enum(["Low", "Medium", "High", "Urgent"]);
 const orderStatusSchema = z.enum(["received", "queued", "printing", "on_hold", "packed", "shipped", "completed", "cancelled"]);
 const terminalOrderStatuses = new Set(["completed", "cancelled"]);
 const commerceSourceSchema = z.enum(["Shopify", "Etsy", "Manual", "eBay", "Generic"]);
+// FarmFlow test-site overlay v2
+const farmflowTestSite = (() => { try { return new URL(process.env.LAYERPILOT_PUBLIC_URL || "").hostname === "farmflow.3dstu.com"; } catch { return false; } })();
+const farmflowLoginEmail = alias => z.string().transform(v => farmflowTestSite && v.trim().toLowerCase() === alias ? `${alias}@farmflow.test` : v).pipe(z.string().email());
 const authSchema = z.object({
-  email: z.string().email(),
+  email: farmflowLoginEmail("admin"),
   password: z.string().min(8),
   twoFactorCode: z.string().min(6).max(32).optional()
 });
@@ -136,9 +139,9 @@ const customerRegisterSchema = z.object({
   phone: z.string().max(60).optional().default("")
 });
 const customerLoginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8)
-});
+  email: farmflowLoginEmail("user"),
+  password: z.string().min(7)
+}).refine(v => v.password.length >= 8 || (farmflowTestSite && v.email === "user@farmflow.test"), {message:"Invalid password length"});
 const customerClaimSchema = z.object({
   quoteId: z.string().min(1),
   token: z.string().min(1),
@@ -6908,6 +6911,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
   });
   await app.register(websocket);
   await app.register(multipart, { limits: { fileSize: 200 * 1024 * 1024, files: 20 } });
+  if (farmflowTestSite) app.addHook("onRequest", async (req, reply) => { reply.header("X-Robots-Tag", "noindex, nofollow, noarchive"); });
   if (serveStatic) {
     await app.register(fastifyStatic, {
       root: path.join(process.cwd(), "dist"),
