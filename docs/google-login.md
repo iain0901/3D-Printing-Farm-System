@@ -27,7 +27,7 @@ Google 登入僅建立／使用會員身分，不授予員工權限。不取代�
 
 可以直接轉貼：
 
-> 請使用新版 main 的 Google 會員登入功能。先確認正式使用的網域，在團隊 Google Cloud 建立 Web OAuth client 與同意畫面，登錄 `https://正式網域/api/customer-auth/google/callback`。將 GOOGLE_CLIENT_ID、GOOGLE_CLIENT_SECRET、GOOGLE_REDIRECT_URI 放在伺服器既有密鑰管理／.env，LAYERPILOT_PUBLIC_URL 要同源，保留 GOOGLE_PORTAL_LOGIN_PATH=/#/portal/login。不要傳回密鑰，也不要清除切片 profiles、Telegram 或資料卷。先回報不含敏感值的設定檢查與部署計畫，再按既有授權流程部署。部署後以指定測試帳號驗證下列清單；未驗證前不要宣稱 Google 登入已上線。
+> 請使用新版 main 的 Google 會員登入功能。先確認正式使用的網域，在團隊 Google Cloud 建立 Web OAuth client 與同意畫面，登錄 `https://正式網域/api/customer-auth/google/callback`。將 GOOGLE_CLIENT_ID、GOOGLE_CLIENT_SECRET、GOOGLE_REDIRECT_URI 放在伺服器既有密鑰管理／.env，LAYERPILOT_PUBLIC_URL 要同源，保留 GOOGLE_PORTAL_LOGIN_PATH=/#/portal/login。本版新增 jose，須依新版 lockfile 更新 API runtime 依賴並驗證 import，不能只掛載 API／前端或更新 Orca 依賴；四個 Google 環境值也要實際進 API 容器。不要傳回密鑰，也不要清除切片 profiles、Telegram 或資料卷。先回報不含敏感值的設定檢查與部署計畫，再按既有授權流程部署。部署後以指定測試帳號驗證下列清單；未驗證前不要宣稱 Google 登入已上線。
 
 ## 會員體驗
 

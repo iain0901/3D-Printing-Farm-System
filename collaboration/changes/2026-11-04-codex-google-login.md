@@ -36,3 +36,11 @@
 
 H-009：維護者設定 Google Web client、正式同意畫面與回呼網址，批准部署後再以真測試會員驗收。新增 jose 需要新版 API runtime 依賴，不能盲用先前快取 API 映像。單程序 flow state，重啟會讓未完成登入失效；多程序必須 sticky routing 或另實作共用 TTL store。
 不把測試或推送當正式上線；未變更切片 profiles、Telegram 或正式安全政策。整合遠端後的測試與推送結果於收尾補入。
+
+## 整合收尾
+
+- Google 程式提交 `c1baa82`，合併 `fa9639a` 保留 Hermes `370669a`。只有 CURRENT_WORK 同位置新增條目發生衝突，兩條完整保留；server 自動合併後檢查，沒有覆蓋登入 overlay／noindex。
+- 合併後 `npm run qc`：建置成功（6.07 秒），**52 檔／408 項全部通過**（65.38 秒）。log `/tmp/3drfm-google-merged-qc.log`。包含新增跨 workspace／flow 容量防呆的最新程式。
+- 合併後瀏覽器六組驗收再次全部通過，log `/tmp/3drfm-google-merged-browser.log`，截圖 `/tmp/rfm-google-browser-Yrh4fD/`。登入／註冊三尺寸及真 fixture STL 留在原工作頁均驗證；仍非真 Google 或實體手機。
+- `docker compose --env-file .env.example config --quiet` 與 `git diff --check` 成功；沒有載入正式 .env 或啟動 Docker。首頁、Hermes 部署腳本及 overlay 測試與 origin/main byte-identical。
+- 收尾 fetch 確認遠端仍是 370669a；依使用者既有 main 交付／推送要求使用普通 push，不 force。精確交付 SHA 由本紀錄 `git log` 與遠端 main 查詢；推送不是部署。新 Google 憑證／同意畫面、API 新依賴部署及真實驗收仍為 H-009。
