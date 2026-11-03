@@ -238,6 +238,7 @@ This writes a private `tenants/<slug>/<slug>.env` (mode `600`) with a unique `CO
 - `LAYERPILOT_SMTP_SECURE`, optional `true`/`false`; defaults to `true` only when the port is `465`
 - `LAYERPILOT_SMTP_USER` and `LAYERPILOT_SMTP_PASSWORD`, optional SMTP credentials
 - `LAYERPILOT_SMTP_FROM`, the From address for customer portal transactional email, defaults to `LAYERPILOT_SMTP_USER`
+- Google 會員登入：設定 `GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET`、`GOOGLE_REDIRECT_URI`；完整部署／帳號連結／驗收及多副本限制見 [Google 登入交接](docs/google-login.md)。未設定時保留原密碼登入。
 
 </details>
 

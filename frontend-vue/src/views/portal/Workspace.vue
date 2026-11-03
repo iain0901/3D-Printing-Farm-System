@@ -384,7 +384,9 @@
         </section>
         <section class="hub-panel">
           <h2>變更密碼</h2>
-          <form class="form-grid" @submit.prevent="changePassword">
+          <p v-if="!data.customer.hasPassword">你目前使用 Google 登入。如需密碼登入或申請刪除帳號，請先透過「忘記密碼」寄送驗證信設定密碼。</p>
+          <router-link v-if="!data.customer.hasPassword" to="/portal/reset">寄送設定密碼驗證信</router-link>
+          <form v-else class="form-grid" @submit.prevent="changePassword">
             <label>
               目前密碼
               <input v-model="password.currentPassword" type="password" required autocomplete="current-password" maxlength="256" />
@@ -400,6 +402,14 @@
             <button :disabled="busy">更新密碼</button>
           </form>
           <p class="small">變更後，其他登入工作階段會登出。</p>
+        </section>
+        <section class="hub-panel">
+          <h2>Google 登入</h2>
+          <p v-if="data.customer.hasGoogle">已連結 Google 帳戶，可使用 Google 登入此會員帳號。</p>
+          <template v-else>
+            <p>請選擇與會員 Email 相同的 Google 帳戶。連結後仍保留原本的密碼登入。</p>
+            <google-sign-in mode="link" return-to="/portal/workspace?section=settings" :disabled="busy" />
+          </template>
         </section>
         <section class="hub-panel">
           <h2>登入工作階段</h2>
@@ -614,6 +624,7 @@
   import customerRequest from '@/utils/customerRequest'
   import ModelViewer from '@/components/ModelViewer.vue'
   import AgentConnections from '@/components/AgentConnections.vue'
+  import GoogleSignIn from '@/components/GoogleSignIn.vue'
   import InstructionArt from '@/components/public/InstructionArt.vue'
   import { workspace, uploadWorkspace, modelFile } from '@/api/memberWorkspace'
   import { fetchMyCases, decideCase } from '@/api/customerPortal'

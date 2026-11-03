@@ -9,6 +9,13 @@
 - 下一步：對方開始前閱讀根目錄 `AGENTS.md`，在 `CURRENT_WORK.md` 登記具體頁面與元件。圓角、色彩、間距等已確認結果記入 `DESIGN_DECISIONS.md`，附原因及適用範圍。
 - 注意：不能把「可能負責 UI/UX」當成已授權的人員任命，也不應鎖死所有前端修改。
 
+## H-009：Google 會員登入正式憑證與部署驗收
+
+- AUTH-20261104-01 已補會員 Google 登入／註冊、明確連結、切片保留頁面的另開登入、Google-only 的 Email 設密碼與防帳號接管；沿用會員 session，不開員工權限。
+- 缺少團隊 Google Web OAuth client、精確 redirect URI、同意畫面與真實帳號測試。請維護者按 [設定及 Bot 訊息](../docs/google-login.md) 自行安全設定，不傳回 client secret。本輪沒有建立憑證、呼叫真 Google、改正式 .env／Nginx 或部署。
+- `jose` 是新增 runtime dependency；快取部署也須先更新 API runtime 依賴及前端同版 artifact，不可只熱掛 api 或更新 Orca 的 node_modules。單程序 flow store；多副本必須先做 sticky routing 或改共用原子 TTL store。
+- 本機 RSA fixture／真 API 與瀏覽器六組驗收通過不是正式 Google／手機實機或 SMTP 的驗收；Google-only 設定密碼需要真實寄信服務。推送與整合狀態見本次修改紀錄及 Git，不以文件推論上線。
+
 ## H-002：印表機與即時影像後端尚待實機串接
 
 - 狀態：待後續接手；本次不新增連線工作。

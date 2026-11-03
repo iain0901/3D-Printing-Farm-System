@@ -48,6 +48,7 @@
     "@fastify/websocket": "^11.2.0",
     "fastify": "^5.8.5",
     "javascript-lp-solver": "^1.0.3",
+    "jose": "^6.2.15",
     "jszip": "^3.10.1",
     "lowdb": "^7.0.1",
     "mqtt": "^5.15.1",

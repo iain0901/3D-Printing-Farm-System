@@ -1,5 +1,7 @@
 <template>
   <auth-shell title="歡迎回來。" description="登入會員中心，接著完成你的下一件作品。">
+    <p v-if="googleStatus" role="status">{{ googleStatus }}</p>
+    <google-sign-in :disabled="loading" />
     <el-form label-position="top" size="large" @submit.prevent="submit">
       <el-form-item label="電子郵件">
         <el-input v-model.trim="form.email" type="email" autocomplete="email" placeholder="請輸入電子郵件" />
@@ -22,14 +24,33 @@
 
 <script>
   import AuthShell from '@/components/public/AuthShell.vue'
+  import GoogleSignIn from '@/components/GoogleSignIn.vue'
+  import customerRequest from '@/utils/customerRequest'
   import { loginCustomer } from '@/api/customerAuth'
   import { memberReturnPath } from '@/utils/member-return.mjs'
 
   export default {
-    components: { AuthShell },
+    components: { AuthShell, GoogleSignIn },
     name: 'PortalLogin',
     data() {
-      return { form: { email: '', password: '' }, loading: false }
+      return { form: { email: '', password: '' }, loading: false, googleStatus: '' }
+    },
+    async mounted() {
+      const status = this.$route.query.google
+      if (!status) return
+      await this.$router.replace({ path: '/portal/login', query: { redirect: this.$route.query.redirect } })
+      if (status !== 'complete') {
+        this.googleStatus = status === 'cancelled' ? '已取消 Google 登入，你仍可使用 Email 登入。' : 'Google 登入未完成或已逾時，請再試一次。'
+        return
+      }
+      this.loading = true
+      this.googleStatus = '正在完成 Google 登入…'
+      try {
+        const result = await customerRequest.post('/api/customer-auth/google/complete', {}, { skipCustomerAuthRedirect: true })
+        await this.$store.dispatch('customerAuth/setSession', result)
+        await this.$router.replace(memberReturnPath(result.returnTo))
+      } catch (error) { this.googleStatus = error.response?.data?.error || '無法完成 Google 登入，請重試或使用 Email 登入。' }
+      finally { this.loading = false }
     },
     methods: {
       async submit() {

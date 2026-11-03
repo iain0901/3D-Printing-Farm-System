@@ -28,6 +28,7 @@ import { scheduleDifficulty, difficultyDuration } from "./schedule-difficulty.mj
 import { seedData } from "./seed.mjs";
 import { registerCaseRoutes } from "./cases-module.mjs";
 import { registerMemberWorkspace, MEMBER_COLLECTIONS } from "./member-workspace.mjs";
+import { registerGoogleAuth } from "./google-auth.mjs";
 import { registerSiteAgent, AGENT_COLLECTIONS } from "./site-agent.mjs";
 import { registerMaintenanceAdvisor } from "./maintenance-advisor.mjs";
 import { registerFreePrintStation, FREE_PRINT_COLLECTIONS, freePrintOwnsPrinter } from "./free-print-station.mjs";
@@ -3110,10 +3111,12 @@ function sanitizeQuoteRequest(quote) {
 
 function sanitizeCustomer(customer) {
   if (!customer) return null;
-  const { passwordHash, resetTokenHash, resetTokenExpiresAt, ...safeCustomer } = customer;
+  const { passwordHash, resetTokenHash, resetTokenExpiresAt, googleSubject, ...safeCustomer } = customer;
   return {
     ...safeCustomer,
-    hasPortalAccount: Boolean(passwordHash),
+    hasPortalAccount: Boolean(passwordHash || googleSubject),
+    hasPassword: Boolean(passwordHash),
+    hasGoogle: Boolean(googleSubject),
     hasPendingPasswordReset: Boolean(resetTokenHash) && Date.parse(resetTokenExpiresAt || "") > Date.now()
   };
 }
@@ -5641,6 +5644,10 @@ function customerPortalUrl(request, params = {}) {
   const host = forwardedHost || request.headers.host || "127.0.0.1:8797";
   const base = (configured || `${forwardedProto || "http"}://${host}`).replace(/\/+$/, "");
   const query = new URLSearchParams(params).toString();
+  if (params.resetToken) {
+    const resetPath = process.env.GOOGLE_PORTAL_LOGIN_PATH === '/portal/login' ? '/portal/reset' : '/#/portal/reset';
+    return `${base}${resetPath}?${query}`;
+  }
   return `${base}/?${query}#portal`;
 }
 
@@ -6859,7 +6866,7 @@ export async function runTelemetryTick(database, options = {}) {
   return { changed: true, changedPrinters, completedJobs, todos: deriveTodos(stateData) };
 }
 
-export async function buildServer({ db, enableTelemetry = false, telemetryIntervalMs = 5000, enableBridgePolling = false, bridgePollingIntervalMs = 10000, serveStatic = process.env.LAYERPILOT_SERVE_STATIC === "true", authRateLimit = defaultAuthRateLimit, sensitiveRateLimit = defaultSensitiveRateLimit, mqttPublisher = null, stripeClient = saasBillingEnabled() ? createStripeClient() : null, objectStorageAdapter = createObjectStorage(), emailClient = createEmailClient(), lineClient = createLineClient(), aiEngine = createAiEngine(), chatwootClient = createChatwootClient() } = {}) {
+export async function buildServer({ db, googleAuth = {}, enableTelemetry = false, telemetryIntervalMs = 5000, enableBridgePolling = false, bridgePollingIntervalMs = 10000, serveStatic = process.env.LAYERPILOT_SERVE_STATIC === "true", authRateLimit = defaultAuthRateLimit, sensitiveRateLimit = defaultSensitiveRateLimit, mqttPublisher = null, stripeClient = saasBillingEnabled() ? createStripeClient() : null, objectStorageAdapter = createObjectStorage(), emailClient = createEmailClient(), lineClient = createLineClient(), aiEngine = createAiEngine(), chatwootClient = createChatwootClient() } = {}) {
   const database = db || await openDatabase();
   activeObjectStorage = objectStorageAdapter;
   database.realtimeClients ||= new Set();
@@ -7023,6 +7030,14 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     storeFile: (payload) => createStoredCaseFile(database, payload, { workspaceId: payload.workspaceId }),
     readFile: (file) => objectStorage().get(file),
     sensitiveRateLimit, emailClient, lineClient,
+  });
+  await registerGoogleAuth(app, {
+    database, customerFromRequest, createCustomerSession, sanitizeCustomer,
+    workspaceId: DEFAULT_WORKSPACE_ID, rateLimit: customerAuthRateLimit,
+    audit: ({ customerId, workspaceId, mode }) => dispatchEvent(database,
+      mode === 'link' ? 'customer.google_linked' : 'customer.google_login',
+      mode === 'link' ? '會員已連結 Google 登入' : '會員使用 Google 登入', { workspaceId, customerId }),
+    ...googleAuth,
   });
   await registerSiteAgent(app, { database, customerFromRequest });
   await registerMaintenanceAdvisor(app, { database, hasPermission, scopedData: workspaceScopeForUser,
@@ -7263,7 +7278,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const workspaceId = DEFAULT_WORKSPACE_ID;
     database.data.customers ||= [];
     let customer = database.data.customers.find((item) => itemInWorkspace(item, workspaceId) && String(item.email || "").toLowerCase() === email);
-    if (customer?.passwordHash) return reply.code(409).send({ error: "An account with this email already exists. Sign in instead." });
+    if (customer?.passwordHash || customer?.googleSubject) return reply.code(409).send({ error: "此 Email 已有會員帳號，請登入或重設密碼。" });
     const now = new Date().toISOString();
     if (!customer) {
       customer = {
@@ -7311,7 +7326,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
       if (customer) quote.customerId = customer.id;
     }
     if (!customer) return reply.code(404).send({ error: "No customer record linked to this quote request" });
-    if (customer.passwordHash) return reply.code(409).send({ error: "This account already has a password. Sign in instead." });
+    if (customer.passwordHash || customer.googleSubject) return reply.code(409).send({ error: "此會員已有登入方式，請登入或重設密碼。" });
     const now = new Date().toISOString();
     if (parsed.data.name) customer.name = parsed.data.name;
     customer.passwordHash = createPasswordHash(parsed.data.password);
@@ -7349,7 +7364,7 @@ export async function buildServer({ db, enableTelemetry = false, telemetryInterv
     const parsed = customerResetRequestSchema.safeParse(request.body || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid request", issues: parsed.error.issues });
     const email = parsed.data.email.trim().toLowerCase();
-    const customer = (database.data.customers || []).find((item) => itemInWorkspace(item, DEFAULT_WORKSPACE_ID) && String(item.email || "").toLowerCase() === email && item.passwordHash);
+    const customer = (database.data.customers || []).find((item) => itemInWorkspace(item, DEFAULT_WORKSPACE_ID) && String(item.email || "").toLowerCase() === email && (item.passwordHash || item.googleSubject));
     if (customer) {
       const resetToken = randomBytes(24).toString("base64url");
       customer.resetTokenHash = createPasswordHash(resetToken);

@@ -1,5 +1,6 @@
 <template>
   <auth-shell title="給好點子，一個家。" description="建立帳號，讓你的製作需求與案件有跡可循。">
+    <google-sign-in :disabled="loading" />
     <el-form label-position="top" size="large" @submit.prevent="submit">
       <el-form-item label="姓名"><el-input v-model="form.name" autocomplete="name" placeholder="我們該怎麼稱呼你？" /></el-form-item>
       <el-form-item label="電子郵件">
@@ -22,11 +23,12 @@
 
 <script>
   import AuthShell from '@/components/public/AuthShell.vue'
+  import GoogleSignIn from '@/components/GoogleSignIn.vue'
   import { registerCustomer } from '@/api/customerAuth'
   import { memberReturnPath } from '@/utils/member-return.mjs'
 
   export default {
-    components: { AuthShell },
+    components: { AuthShell, GoogleSignIn },
     name: 'PortalRegister',
     data() {
       return { form: { name: '', email: '', phone: '', password: '' }, loading: false }

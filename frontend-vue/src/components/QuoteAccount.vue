@@ -16,6 +16,7 @@
       <p>案件名稱將由系統依「日期＋使用者＋模型序號」產生。現在尚未送出案件，不預先占用序號。</p>
     </template>
     <template v-else>
+      <google-sign-in preserve-page :disabled="busy" />
       <div class="auth-choice" aria-label="帳號操作">
         <button type="button" :aria-pressed="mode === 'login'" @click="mode = 'login'">登入會員</button>
         <button type="button" :aria-pressed="mode === 'register'" @click="mode = 'register'">建立帳號</button>
@@ -50,6 +51,7 @@
 
 <script setup>
   import { computed, onMounted, reactive, ref } from 'vue'
+  import GoogleSignIn from '@/components/GoogleSignIn.vue'
   import { useStore } from 'vuex'
   import { fetchCustomerMe, loginCustomer, registerCustomer, logoutCustomer } from '@/api/customerAuth'
   const store = useStore(),
