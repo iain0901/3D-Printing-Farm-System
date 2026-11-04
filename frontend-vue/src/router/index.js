@@ -184,6 +184,14 @@ export const constantRoutes = [
 
 export const asyncRoutes = [
   {
+    path: '/free-print-admin', component: Layout,
+    children: [{ path: '', name: 'FreePrintAdmin', component: () => import('@/views/dashboard/Station.vue'), meta: { title: '免費列印站', icon: 'print', permissions: ['*'] } }],
+  },
+  {
+    path: '/agent-tools', component: Layout,
+    children: [{ path: '', name: 'StaffAgentTools', component: () => import('@/views/dashboard/AgentTools.vue'), meta: { title: 'MCP 與 Skill', icon: 'plug' } }],
+  },
+  {
     path: '/cases',
     component: Layout,
     redirect: '/cases/index',

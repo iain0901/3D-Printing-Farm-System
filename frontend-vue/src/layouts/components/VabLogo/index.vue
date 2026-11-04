@@ -1,22 +1,18 @@
 <template>
   <div :class="'logo-container-' + layout">
-    <router-link to="/">
-      <!-- 这里是logo变更的位置 -->
-      <svg v-if="logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="logo">
-        <path fill="none" d="M0 0h24v24H0z" />
-        <path d="M1 3h4l7 12 7-12h4L12 22 1 3zm8.667 0L12 7l2.333-4h4.035L12 14 5.632 3h4.035z" />
-      </svg>
-      <span :class="{ 'hidden-xs-only': layout === 'horizontal' }" :title="title" class="title">
-        {{ title }}
-      </span>
+    <router-link to="/dashboard" aria-label="3DRFM，回到管理總覽" class="staff-brand">
+      <b v-if="collapse && layout !== 'horizontal'">3D</b>
+      <brand-mark v-else compact subtitle="營運管理工作台" />
     </router-link>
   </div>
 </template>
 <script>
   import { mapGetters } from 'vuex'
+  import BrandMark from '@/components/public/BrandMark.vue'
 
   export default {
     name: 'VabLogo',
+    components: { BrandMark },
     data() {
       return {
         title: this.$baseTitle,
@@ -25,12 +21,14 @@
     computed: {
       ...mapGetters({
         logo: 'settings/logo',
+        collapse: 'settings/collapse',
         layout: 'settings/layout',
       }),
     },
   }
 </script>
 <style lang="scss" scoped>
+  .staff-brand { display:flex; height:100%; align-items:center; justify-content:center; color:#fff; text-decoration:none; line-height:1.2; }
   @mixin container {
     position: relative;
     height: $base-top-bar-height;

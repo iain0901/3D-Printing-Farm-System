@@ -12,8 +12,9 @@
       :unique-opened="uniqueOpened"
       mode="vertical"
     >
-      <template v-for="route in routes">
-        <vab-side-item :full-path="route.path" :item="route" />
+      <template v-for="group in groupedRoutes" :key="group.label">
+        <li v-if="!collapse" class="admin-nav-label" role="presentation">{{ group.label }}</li>
+        <vab-side-item v-for="route in group.items" :key="route.path" :full-path="route.path" :item="route" />
       </template>
     </el-menu>
   </el-scrollbar>
@@ -22,6 +23,7 @@
   import variables from '@/styles/variables.scss'
   import { mapGetters } from 'vuex'
   import { defaultOopeneds, uniqueOpened } from '@/config'
+  import { adminNavGroup } from '@/utils/admin-workspace.mjs'
 
   export default {
     name: 'VabSide',
@@ -31,6 +33,10 @@
       }
     },
     computed: {
+      groupedRoutes() {
+        const visible = this.routes.filter(r => !r.hidden && (!r.children || r.children.length))
+        return ['工作總覽', '接單與服務', '生產與設備', '檔案與材料', 'AI 與整合', '營運與設定'].map(label => ({ label, items: visible.filter(r => adminNavGroup(r.path) === label) })).filter(g => g.items.length)
+      },
       ...mapGetters({
         collapse: 'settings/collapse',
         routes: 'routes/routes',
@@ -55,6 +61,7 @@
   }
 </script>
 <style lang="scss" scoped>
+  .admin-nav-label { padding:20px 20px 6px; font-size:11px; letter-spacing:.1em; color:#a9b8cf; line-height:1.4; list-style:none; }
   @mixin active {
     &:hover {
       color: $base-color-white;

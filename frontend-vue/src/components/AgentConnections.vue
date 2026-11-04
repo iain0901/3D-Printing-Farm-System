@@ -61,7 +61,7 @@
   const config = computed(() =>
     JSON.stringify(
       {
-        mcpServers: { '3drfm': { url: `${location.origin}/api/customer/agent/mcp`, headers: { Authorization: `Bearer ${secret.value}` } } },
+        mcpServers: { '3drfm': { url: `${location.origin}${props.staff ? '/api/staff-agent' : '/api/customer/agent'}/mcp`, headers: { Authorization: `Bearer ${secret.value}` } } },
       },
       null,
       2

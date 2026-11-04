@@ -1,10 +1,10 @@
 <template>
   <el-dropdown @command="handleCommand" trigger="click">
-    <div class="avatar-container">
+    <button class="avatar-container" aria-label="員工帳號選單" type="button">
       <div class="avatar-wrapper">
         <div class="user-avatar">{{ initials }}</div>
       </div>
-    </div>
+    </button>
 
     <template #dropdown><el-dropdown-menu class="custom-dropdown">
       <div class="dropdown-header">
@@ -16,9 +16,10 @@
         </div>
       </div>
 
+      <el-dropdown-item command="settings">帳號與系統設定</el-dropdown-item>
       <el-dropdown-item command="logout" class="dropdown-item logout-item">
         <el-icon><SwitchButton /></el-icon>
-        <span>退出登录</span>
+        <span>登出</span>
       </el-dropdown-item>
     </el-dropdown-menu></template>
   </el-dropdown>
@@ -42,10 +43,11 @@
     },
     methods: {
       handleCommand(command) {
+        if (command === 'settings') this.$router.push('/settings/index')
         if (command === 'logout') this.logout()
       },
       logout() {
-        this.$baseConfirm('您确定要退出' + this.$baseTitle + '吗?', null, async () => {
+        this.$baseConfirm('確定要登出 ' + this.$baseTitle + '？', null, async () => {
           await this.$store.dispatch('user/logout')
           if (recordRoute) {
             const fullPath = this.$route.fullPath
@@ -61,6 +63,9 @@
 
 <style lang="scss" scoped>
   .avatar-container {
+    border:0;
+    background:transparent;
+    padding:3px;
     display: flex;
     align-items: center;
     border-radius: 8px;

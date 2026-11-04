@@ -2,7 +2,7 @@
   <component :is="memberMode ? 'div' : PublicShell">
     <main class="station-session studio-wrap">
       <p class="eyebrow">清華大學水木書苑 ／ 3DSTU_PETG</p>
-      <h1>一步一步，完成你的免費列印。</h1>
+      <h1>排隊與到站列印</h1>
       <p>先完成切片並排隊。輪到你時會寄 Email；列印完成後，也會通知你來清空平台。</p>
       <ol class="session-journey" aria-label="自助列印流程">
         <li
@@ -22,8 +22,7 @@
         <div class="station-toolbar">
           <router-link :to="memberMode ? '/portal/free-slicer' : '/free-print/nthu-shuimu/slicer'">準備模型與切片 →</router-link>
           <button type="button" :disabled="busy" @click="load">更新狀態</button>
-          <router-link to="/portal/workspace">會員工作台 →</router-link>
-          <button type="button" :disabled="busy" @click="store.dispatch('customerAuth/resetAccessToken')">登出會員</button>
+          <router-link v-if="!memberMode" to="/portal/dashboard">會員工作台 →</router-link>
         </div>
         <div class="station-overview">
           <div>
@@ -61,7 +60,8 @@
               leaseExpired ? '期限已到，請等候狀態更新。' : '完成列印後，取件交棒才會結束使用。'
             }}
           </p>
-          <div v-if="item.canControl || item.status === 'queued'" class="reservation-console">
+          <p v-if="['notified', 'preparing', 'starting', 'printing', 'paused', 'awaiting_removal'].includes(item.status) && !allowed(item)" class="connection-warning">操作權限待重新確認，控制與影像暫時收起。請更新狀態。</p>
+          <div v-if="allowed(item)" class="reservation-console">
             <div v-if="item.canControl" class="telemetry-grid" aria-label="機台即時狀態">
               <div>
                 <span>機台連線</span>
@@ -84,7 +84,7 @@
             </div>
             <free-print-camera
               :reservation-id="item.id"
-              :allowed="item.canControl && !leaseExpired && !stale"
+              :allowed="allowed(item)"
               :access-token="memberToken"
             />
           </div>
@@ -92,7 +92,7 @@
             <p>你目前是等待中的第 {{ item.position }} 位。請等 Email 或此頁通知，再到場操作。</p>
             <button type="button" :disabled="busy" @click="act(item, 'cancel')">取消這次排隊</button>
           </template>
-          <template v-if="item.status === 'notified'">
+          <template v-if="item.status === 'notified' && allowed(item)">
             <p>現在可以到水木書苑列印。請在 {{ time(item.leaseExpiresAt) }} 前到場報到。</p>
             <p>到場後先找到指定機台，再按下方按鈕。</p>
             <button class="primary" type="button" :disabled="busy || !controlReady" @click="act(item, 'checkin')">
@@ -100,17 +100,25 @@
             </button>
             <button type="button" :disabled="busy" @click="act(item, 'cancel')">這次無法到場，取消時段</button>
           </template>
-          <template v-if="item.status === 'preparing'">
+          <template v-if="item.status === 'preparing' && allowed(item)">
+            <section class="print-file-panel" aria-label="本次列印檔案">
+              <h3>選擇本次排隊的檔案</h3>
+              <label v-if="item.printFile?.id"><input v-model="selectedFileId" type="radio" :value="item.printFile.id" name="queued-file" />{{ item.printFile.models?.join('、') || item.printFile.name }}</label>
+              <p v-else role="alert">找不到本次檔案資訊，請更新狀態或聯絡站點人員。</p>
+              <p>{{ item.printFile?.material || '3DSTU_PETG' }} · 預估 {{ Math.ceil(item.estimatedMinutes || 0) }} 分鐘</p>
+              <details><summary>？為什麼只能選這個檔案？</summary><p>這是本次排隊已綁定的切片結果。其他模型需要另行切片與排隊，不能替換別人的工作或任意上傳 G-code。</p><p>機台檔名：{{ item.printFile?.name }}</p></details>
+            </section>
             <ol class="guide-steps">
               <li>
                 <h3>確認機台與平台</h3>
                 <p>先查看機台，確認沒有其他人的列印件，手與工具已離開移動範圍。</p>
                 <details>
                   <summary>？什麼是歸零？</summary>
-                  <p>讓印表機尋找各軸的基準位置。按下後機台會移動，請保持移動範圍淨空。</p>
+                  <p>讓印表機尋找各軸的基準位置。按下後機台會移動，請保持移動範圍淨空。歸零不等於熱床調平或耗材校準。</p>
                 </details>
                 <button type="button" :disabled="busy || !controlReady" @click="act(item, 'home')">機台範圍已淨空，執行歸零</button>
                 <p v-if="state.telemetry?.homed" class="step-complete">已收到歸零操作回應。請再查看現場機台是否已停止移動。</p>
+                <details><summary>需要調平或校準？</summary><p>目前橋接尚未提供經此機型驗證的校準指令。請由站點人員依機台流程執行；網頁不會以通用指令冒充校準。</p></details>
               </li>
               <li>
                 <h3>準備耗材</h3>
@@ -152,7 +160,7 @@
                   class="primary"
                   type="button"
                   :disabled="
-                    busy || !controlReady || !state.telemetry?.homed || !checks.bedClear || !checks.filamentReady || !checks.areaClear
+                    busy || !controlReady || !item.printFile?.id || selectedFileId !== item.printFile.id || !state.telemetry?.homed || !checks.bedClear || !checks.filamentReady || !checks.areaClear
                   "
                   @click="start(item)"
                 >
@@ -171,7 +179,7 @@
                 </select>
               </label>
               <div v-for="axis in ['x', 'y', 'z']" :key="axis" class="station-controls">
-                <b>{{ axis.toUpperCase() }} 軸</b>
+                <b>{{ axis.toUpperCase() }} 軸 · {{ state.telemetry?.position?.[axis] ?? '—' }} mm</b>
                 <button
                   type="button"
                   :disabled="busy || !controlReady || !state.telemetry?.homed || !state.telemetry?.position"
@@ -206,7 +214,8 @@
               </button>
             </details>
           </template>
-          <template v-if="['starting', 'printing', 'paused'].includes(item.status)">
+          <template v-if="['starting', 'printing', 'paused'].includes(item.status) && allowed(item)">
+            <p>本次檔案：{{ item.printFile?.name || '等待機台確認' }}</p>
             <p>
               {{
                 item.status === 'starting'
@@ -232,7 +241,7 @@
               </p>
             </details>
           </template>
-          <template v-if="item.status === 'awaiting_removal'">
+          <template v-if="item.status === 'awaiting_removal' && allowed(item)">
             <h3>最後一步：取件並清空平台</h3>
             <p>等待平台冷卻後，移除列印件、支撐及殘料。確認完成後，系統才會通知下一位。</p>
             <label>
@@ -251,7 +260,7 @@
           <p v-if="item.status === 'attention'" role="alert">
             {{ item.lastError || '機台狀態需要站點人員確認，請先停止操作並聯絡水木書苑。' }}
           </p>
-          <p v-if="item.canControl && state.telemetry">
+          <p v-if="allowed(item) && state.telemetry">
             噴嘴 {{ state.telemetry.nozzle ?? '—' }} °C ／平台 {{ state.telemetry.bed ?? '—' }} °C ·
             {{ state.telemetry.status === 'offline' ? '連線中斷，操作暫停' : '機台狀態已更新' }}
           </p>
@@ -285,6 +294,7 @@
   import QuoteAccount from '@/components/QuoteAccount.vue'
   import FreePrintCamera from '@/components/FreePrintCamera.vue'
   import { workspace } from '@/api/memberWorkspace'
+  import { stationControlAllowed } from '@/utils/admin-workspace.mjs'
   const store = useStore(),
     memberToken = computed(() => store.getters['customerAuth/accessToken'])
   const state = ref({ station: null, reservations: [] }),
@@ -294,7 +304,8 @@
     notice = ref(''),
     distance = ref(1),
     removed = ref(false),
-    abandonClear = ref(false)
+    abandonClear = ref(false),
+    selectedFileId = ref('')
   const checks = reactive({ bedClear: false, filamentReady: false, areaClear: false })
   const confirmStop = ref(null),
     stopDialog = ref(null),
@@ -306,6 +317,7 @@
   }, 1000)
   const currentReservation = computed(() => state.value.reservations.find((r) => r.canControl))
   const stale = computed(() => currentTime.value - lastUpdated.value > 15000)
+  const allowed = (item) => stationControlAllowed(item, currentTime.value, stale.value)
   const leaseExpired = computed(
     () =>
       ['notified', 'preparing'].includes(currentReservation.value?.status) &&
@@ -313,7 +325,7 @@
   )
   const controlReady = computed(
     () =>
-      !!currentReservation.value &&
+      allowed(currentReservation.value) &&
       !!state.value.telemetry &&
       !['offline', 'unknown'].includes(state.value.telemetry.status) &&
       !!state.value.telemetry.status &&
@@ -364,9 +376,10 @@
       if (active && token === memberToken.value && revision === stateRevision) {
         state.value = next
         lastUpdated.value = Date.now()
+        error.value = ''
       }
     } catch (e) {
-      if (active && token === memberToken.value) error.value = e.response?.data?.error || '無法更新狀態，請稍後重試。'
+      if (active && token === memberToken.value) { lastUpdated.value = 0; error.value = e.response?.data?.error || '無法更新狀態，請稍後重試。' }
     } finally {
       loading.value = false
       if (active) timer = setTimeout(load, 5000)
@@ -374,6 +387,7 @@
   }
   async function act(item, action, extra = {}) {
     if (busy.value) return
+    if (!(action === 'cancel' && item.status === 'queued') && !allowed(item)) return
     stateRevision++
     busy.value = true
     const token = memberToken.value
@@ -415,7 +429,7 @@
       }
       if (['load', 'unload'].includes(action)) checks.filamentReady = false
     } catch (e) {
-      if (active && token === memberToken.value) error.value = e.response?.data?.error || '操作結果尚未確認，請更新狀態後查看機台。'
+      if (active && token === memberToken.value) { lastUpdated.value = 0; error.value = e.response?.data?.error || '操作結果尚未確認，請更新狀態後查看機台。' }
     } finally {
       busy.value = false
       clearTimeout(timer)
@@ -423,10 +437,10 @@
     }
   }
   async function start(item) {
-    if (busy.value || !controlReady.value) return
+    if (busy.value || !controlReady.value || !item.printFile?.id || selectedFileId.value !== item.printFile.id) return
     const token = memberToken.value
     await act(item, 'checks', { checks: { ...checks } })
-    if (!error.value && token === memberToken.value && active) await act(item, 'start')
+    if (!error.value && token === memberToken.value && active) await act(item, 'start', { selectedFileId: selectedFileId.value })
   }
   watch(
     memberToken,
@@ -458,9 +472,19 @@
       Object.assign(checks, { bedClear: false, filamentReady: false, areaClear: false })
       removed.value = false
       abandonClear.value = false
+      selectedFileId.value = ''
       confirmStop.value = null
     }
   )
+  watch(() => allowed(currentReservation.value), (value) => {
+    if (!value) {
+      Object.assign(checks, { bedClear: false, filamentReady: false, areaClear: false })
+      selectedFileId.value = ''
+      removed.value = false
+      abandonClear.value = false
+      confirmStop.value = null
+    }
+  })
   onBeforeUnmount(() => {
     active = false
     clearTimeout(timer)
@@ -468,6 +492,7 @@
   })
 </script>
 <style scoped>
+  .print-file-panel { margin:24px 0; padding:20px; background:var(--rfm-paper); border:1px solid var(--rfm-line); border-radius:12px; overflow-wrap:anywhere; }
   .station-session {
     padding-block: 48px;
     max-width: 1100px;

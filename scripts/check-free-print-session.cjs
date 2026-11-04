@@ -199,6 +199,7 @@ async function main() {
       reservations: [
         {
           id: currentId,
+          printFile: { id: 'session-file', name: '測試排隊模型.gcode', material: '3DSTU_PETG' },
           status: phase,
           statusLabel: {
             notified: "輪到你了，請到站點",
@@ -322,6 +323,7 @@ async function main() {
         exact: true,
       })
       .check();
+    await page.getByRole('radio').check();
     await page
       .getByRole("button", { name: "確認完成，開始列印", exact: true })
       .click();

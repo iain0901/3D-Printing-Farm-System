@@ -118,7 +118,7 @@ try {
   assert.equal(await page.locator(".portal-sidebar").count(), 1);
   await page.getByRole("link", { name: "我的排隊與列印操作" }).click();
   await page
-    .getByRole("heading", { name: "一步一步，完成你的免費列印。" })
+    .getByRole("heading", { name: "排隊與到站列印" })
     .waitFor();
   assert.equal(await page.locator(".public-site").count(), 0);
   await page.getByRole("link", { name: "準備模型與切片" }).click();

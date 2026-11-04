@@ -136,6 +136,34 @@ async function fixture({ mail = true, createCameraSession = null } = {}) {
   };
 }
 describe("free print FIFO sessions and exclusive hardware control", () => {
+  it('rejects missing lease deadlines and attention-state camera access', async () => {
+    const f = await fixture();
+    const response = await f.api('a', 'POST', '/reservations', f.job('invalid-lease'));
+    const id = response.json().reservationId;
+    f.db.data.freePrintReservations[0].leaseExpiresAt = 'invalid';
+    expect((await f.action('a', id, 'checkin')).statusCode).toBe(409);
+    expect((await f.api('a', 'POST', `/reservations/${id}/camera-session`, {})).statusCode).toBe(403);
+    f.db.data.freePrintReservations[0].status = 'attention';
+    expect((await f.api('a', 'POST', `/reservations/${id}/camera-session`, {})).statusCode).toBe(403);
+    expect(f.hardware).not.toHaveBeenCalled();
+  });
+  it('exposes only own queued file and rejects file substitution before hardware dispatch', async () => {
+    const f = await fixture();
+    const first = (await f.api('a', 'POST', '/reservations', f.job('bound'))).json();
+    const id = first.reservationId;
+    expect(first.reservations[0].printFile).toMatchObject({ id: 'gcode-bound', material: '3DSTU_PETG', name: `3drfm-free-${id}.gcode` });
+    const second = (await f.api('b', 'POST', '/reservations', f.job('other-file'))).json();
+    expect(second.reservations).toHaveLength(1);
+    expect(second.reservations[0].printFile.id).toBe('gcode-other-file');
+    expect(second.reservations[0].canControl).toBe(false);
+    expect((await f.action('a', id, 'start', { selectedFileId: 'gcode-other-file' })).statusCode).toBe(409);
+    expect(f.hardware).not.toHaveBeenCalled();
+    await f.action('a', id, 'checkin');
+    await f.action('a', id, 'home');
+    await f.action('a', id, 'checks', { checks: { bedClear: true, filamentReady: true, areaClear: true } });
+    expect((await f.action('a', id, 'start', { selectedFileId: 'gcode-bound' })).statusCode).toBe(200);
+    expect(f.hardware.mock.calls.find(([, command]) => command.action === 'start')[1].filename).toBe(`3drfm-free-${id}.gcode`);
+  });
   it('rejects legacy/unversioned slices before joining the free-print queue', async () => {
     const f = await fixture();
     const payload = f.job('legacy-profile');

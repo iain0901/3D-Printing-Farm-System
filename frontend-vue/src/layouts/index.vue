@@ -69,6 +69,9 @@
         }
       },
     },
+    watch: {
+      '$route.fullPath'() { if (this.device === 'mobile') this.handleFoldSideBar() },
+    },
     beforeMount() {
       window.addEventListener('resize', this.handleResize)
     },
@@ -89,9 +92,7 @@
           this.$store.dispatch('settings/changeLayout', this.oldLayout)
         }
         this.$store.dispatch('settings/toggleDevice', 'mobile')
-        this.timeOutID = setTimeout(() => {
-          this.$store.dispatch('settings/foldSideBar')
-        }, 2000)
+        this.$store.dispatch('settings/foldSideBar')
       } else {
         this.$store.dispatch('settings/openSideBar')
       }
@@ -119,6 +120,7 @@
       handleResize() {
         if (!document.hidden) {
           const isMobile = this.handleIsMobile()
+          if (isMobile && this.device !== 'mobile') this.$store.dispatch('settings/foldSideBar')
           if (isMobile) {
             //横向布局时如果是手机端访问那么改成纵向版
             this.$store.dispatch('settings/changeLayout', 'vertical')

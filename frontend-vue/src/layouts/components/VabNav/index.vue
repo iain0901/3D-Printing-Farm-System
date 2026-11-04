@@ -3,12 +3,13 @@
     <el-row :gutter="15">
       <el-col :lg="12" :md="12" :sm="12" :xl="12" :xs="4">
         <div class="left-panel">
-          <vab-icon :icon="['fas', collapse ? 'indent' : 'outdent']" class="fold-unfold" @click="handleCollapse" />
+          <button class="nav-toggle" type="button" aria-label="切換管理功能選單" :aria-expanded="!collapse" @click="handleCollapse"><vab-icon :icon="['fas', collapse ? 'indent' : 'outdent']" class="fold-unfold" /></button>
           <vab-breadcrumb class="hidden-xs-only" />
         </div>
       </el-col>
       <el-col :lg="12" :md="12" :sm="12" :xl="12" :xs="20">
         <div class="right-panel">
+          <router-link class="staff-notifications" to="/notifications/index"><vab-icon :icon="['fas', 'bell']" />通知</router-link>
           <vab-error-log />
           <vab-full-screen @refresh="refreshRoute" />
           <vab-theme class="hidden-xs-only" />
@@ -67,6 +68,9 @@
 </script>
 
 <style lang="scss" scoped>
+  .nav-toggle { border:0; background:transparent; padding:0; min-width:44px; min-height:44px; cursor:pointer; }
+  .staff-notifications { display:flex; align-items:center; gap:6px; color:var(--rfm-ink); white-space:nowrap; min-height:44px; }
+  @media (max-width:767px) { .nav-container .hidden-xs-only { display:none!important; } }
   .nav-container {
     position: relative;
     height: $base-nav-bar-height;

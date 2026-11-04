@@ -54,6 +54,7 @@ async function main() {
       reservations: [
         {
           id: "camera-own",
+          printFile: { id: 'camera-file', name: '測試排隊模型.gcode', material: '3DSTU_PETG' },
           sequence: 12,
           status: phase,
           statusLabel: {
@@ -144,7 +145,8 @@ async function main() {
     const connect = () =>
       page.getByRole("button", { name: "連接即時影像", exact: true }).click();
     await page.goto(base + "/#/portal/free-print");
-    await page.getByText("輪到你時才能觀看", { exact: true }).waitFor();
+    await page.getByRole('button', {name:'取消這次排隊',exact:true}).waitFor();
+    assert.equal(await page.locator('.printer-camera').count(),0, 'camera is hidden until the member owns the active slot');
     assert.equal(sessions, 0, "queued member never requests a camera session");
     phase = "preparing";
     await refresh();
@@ -290,7 +292,8 @@ async function main() {
     mode = "snapshot";
     await refresh();
     await page.getByText("正在接收影像", { exact: true }).waitFor();
-    await page.getByRole("button", { name: "登出會員", exact: true }).click();
+    await page.getByRole('button', {name:'會員選單',exact:true}).click();
+    await page.getByRole('menuitem', {name:'登出',exact:true}).click();
     await page.waitForFunction(
       () => !document.querySelector(".printer-camera")
     );

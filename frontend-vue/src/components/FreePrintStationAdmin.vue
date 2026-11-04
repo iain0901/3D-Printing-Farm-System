@@ -5,10 +5,12 @@
     <p v-if="error" role="alert">{{ error }}</p>
     <p v-if="notice" role="status">{{ notice }}</p>
     <button :disabled="busy" @click="load">更新站點狀態</button>
+    <div v-if="state.station" class="station-summary"><span>{{ state.station.availability }}</span><b>等待 {{ state.station.queueLength }} 位</b><b>需協助 {{ state.allReservations?.filter(r => r.status === 'attention').length || 0 }} 筆</b></div>
     <ul>
       <li v-for="reason in state.readiness" :key="reason">{{ reason }}</li>
     </ul>
-    <section class="integration-note" aria-label="後端連接狀態">
+    <details class="integration-note" aria-label="後端連接狀態">
+      <summary>連線狀態與串接說明</summary>
       <h3>即時影像與後端串接</h3>
       <p>
         會員操作與影像介面已準備。攝影機：{{
@@ -22,7 +24,9 @@
           排隊與時段狀態、溫度與座標回報、歸零與各軸移動、預熱與進退料、送印與暫停／繼續／停止、列印完成與通知，以及授權即時影像。現有通知設定不會因為這個介面被修改。
         </p>
       </details>
-    </section>
+    </details>
+    <details class="station-settings">
+    <summary>站點設定：機台、溫度與使用期限</summary>
     <form v-if="state.config" class="station-form" @submit.prevent="save">
       <label>
         站點機台
@@ -67,9 +71,13 @@
       </label>
       <button :disabled="busy">保存站點設定</button>
     </form>
+    </details>
     <h3>使用時段</h3>
-    <article v-for="r in state.allReservations" :key="r.id">
+    <label class="history-toggle"><input v-model="showHistory" type="checkbox" />顯示已結束時段</label>
+    <p v-if="!reservations.length">{{ showHistory ? '尚無使用紀錄。' : '目前沒有等待或使用中的時段。' }}</p>
+    <article v-for="r in reservations" :key="r.id">
       <p>第 {{ r.sequence }} 號 · {{ status(r.status) }} · 會員 {{ r.customerId }}</p>
+      <p>{{ r.filename }} · 預估 {{ Math.ceil(r.estimatedMinutes || 0) }} 分鐘</p>
       <p v-if="r.lastError">{{ r.lastError }}</p>
       <div v-if="['attention', 'awaiting_removal', 'starting', 'printing', 'paused', 'preparing', 'notified'].includes(r.status)">
         <label>
@@ -87,6 +95,7 @@
   import { computed, onMounted, reactive, ref } from 'vue'
   import { useStore } from 'vuex'
   import request from '@/utils/request'
+  import { ElMessageBox } from 'element-plus'
   const store = useStore(),
     allowed = computed(() => ['Owner', 'Admin'].includes(store.getters['user/role']))
   const state = ref({}),
@@ -94,7 +103,9 @@
     notes = reactive({}),
     busy = ref(false),
     error = ref(''),
-    notice = ref('')
+    notice = ref(''),
+    showHistory = ref(false)
+  const reservations = computed(() => (state.value.allReservations || []).filter(r => showHistory.value || !['completed', 'cancelled', 'expired'].includes(r.status)).sort((a, b) => Number(b.status === 'attention') - Number(a.status === 'attention') || a.sequence - b.sequence))
   const root = '/api/member-service/free-print-station'
   const keys = [
     'enabled',
@@ -146,11 +157,18 @@
     if (!error.value) notice.value = '站點設定已保存。'
   }
   async function resolve(r) {
+    try { await ElMessageBox.confirm('此操作會結束會員時段，並可能通知下一位。請先在現場確認機台停止、冷卻且平台清空；這不是遠端停止按鈕。', '確認結束使用時段', { confirmButtonText: '現場已確認，結束時段', cancelButtonText: '返回', type: 'warning' }) } catch { return }
     await run(() => request({ url: root + '/resolve', method: 'post', data: { id: r.id, bedClear: true, note: notes[r.id] } }))
   }
   onMounted(load)
 </script>
 <style scoped>
+  .station-summary { display:flex; flex-wrap:wrap; gap:20px; margin:24px 0; padding:20px; background:var(--rfm-paper); border-radius:10px; }
+  .station-settings { margin:24px 0; border:1px solid var(--rfm-line); padding:16px; border-radius:10px; }
+  .station-settings summary { cursor:pointer; padding:8px 0; }
+  .station-form { margin-top:16px; }
+  .history-toggle { display:flex; align-items:center; }
+  article { overflow-wrap:anywhere; }
   .station-admin {
     padding: 24px;
     border: 1px solid var(--rfm-line);

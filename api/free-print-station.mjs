@@ -448,11 +448,20 @@ export async function registerFreePrintStation(
             : 0,
         leaseExpiresAt: r.leaseExpiresAt,
         estimatedMinutes: r.estimatedMinutes,
+        printFile: {
+          id: r.gcodeFileId,
+          name: r.filename,
+          profileName: r.profileName,
+          material: "3DSTU_PETG",
+          models: r.modelNames || [],
+        },
         finishedAt: r.finishedAt,
         checks: r.checks || {},
         lastError: r.lastError,
         history: r.history,
-        canControl: r.id === current?.id && !terminalStates.includes(r.status),
+        canControl: r.id === current?.id &&
+          ["notified", "preparing", "starting", "printing", "paused", "awaiting_removal"].includes(r.status) &&
+          (!["notified", "preparing"].includes(r.status) || Date.parse(r.leaseExpiresAt) > clock()),
         email: data()
           .freePrintMail.filter((m) => m.reservationId === r.id)
           .map((m) => ({ subject: m.subject, status: m.status })),
@@ -559,11 +568,11 @@ export async function registerFreePrintStation(
       function authorized() {
         const r = records().find((r) => r.id === req.params.id && owns(r, c));
         if (!r) fail(404, "找不到你的使用時段");
-        if (active()?.id !== r.id || terminalStates.includes(r.status))
+        if (active()?.id !== r.id || terminalStates.includes(r.status) || r.status === 'attention')
           fail(403, "只有目前使用時段的會員可以觀看影像。");
         if (
           ["notified", "preparing"].includes(r.status) &&
-          Date.parse(r.leaseExpiresAt) <= clock()
+          !(Date.parse(r.leaseExpiresAt) > clock())
         )
           fail(403, "使用時段已過，影像觀看已停止。");
         if (!station().enabled) fail(403, "站點目前暫停開放影像。");
@@ -683,6 +692,7 @@ export async function registerFreePrintStation(
       customerId: c.id,
       slicingQuoteId: job.id,
       gcodeFileId: job.gcodeFileId,
+      modelNames: (job.sourceFileIds || []).map(id => data().files.find(f => f.id === id && (f.workspaceId || "ws-default") === s.workspaceId)?.name).filter(Boolean),
       profileName: job.profileName,
       estimatedMinutes: job.estimatedMinutes,
       status: "queued",
@@ -727,6 +737,7 @@ export async function registerFreePrintStation(
           "release",
         ]),
         requestId: z.string().uuid(),
+        selectedFileId: z.string().min(1).max(200).optional(),
         axis: z.enum(["x", "y", "z"]).optional(),
         distance: z
           .union([z.literal(-10), z.literal(-1), z.literal(1), z.literal(10)])
@@ -743,6 +754,8 @@ export async function registerFreePrintStation(
       .parse(req.body);
     const r = records().find((r) => r.id === req.params.id && owns(r, c));
     if (!r) fail(404, "找不到你的使用時段");
+    if (input.selectedFileId && (input.action !== "start" || input.selectedFileId !== r.gcodeFileId))
+      fail(409, "只能列印本次排隊綁定的檔案，請重新確認。");
     const previous = data().freePrintCommands.find(
       (x) => x.requestId === input.requestId && x.reservationId === r.id
     );
@@ -765,7 +778,7 @@ export async function registerFreePrintStation(
       fail(409, "無法確認機台連線，請稍後再試。");
     const expires =
       ["notified", "preparing"].includes(r.status) &&
-      Date.parse(r.leaseExpiresAt) <= clock();
+      !(Date.parse(r.leaseExpiresAt) > clock());
     if (expires) {
       await tickInternal();
       fail(409, "使用時段已過，請重新排隊。");
