@@ -4,14 +4,14 @@
       <div>
         <p class="eyebrow">3DRFM ／ 會員工作台</p>
         <h1>{{ titles[section] || '會員工作台' }}</h1>
-        <p>讓模型、製作細節與每一次討論，都有地方保存。</p>
+        <p>{{ section === 'models' ? '上傳、下載模型，或選擇模型開始列印。' : section === 'drafts' ? '選擇草稿，接著完成切片與送出。' : '查看資料並完成下一步。' }}</p>
       </div>
       <div class="card-actions">
         <button :disabled="busy || loading" @click="load">重新整理</button>
-        <router-link class="solid" to="/quote?new=1">新增列印需求 →</router-link>
+        <router-link class="solid" to="/portal/dashboard">開始新製作</router-link>
       </div>
     </header>
-    <nav class="hub-nav" aria-label="會員服務">
+    <details class="member-extra-tools"><summary>更多會員功能</summary><nav class="hub-nav" aria-label="會員服務">
       <router-link
         v-for="item in navigation"
         :key="item.id"
@@ -22,7 +22,7 @@
         <span v-if="item.id === 'notifications' && unread">{{ unread }}</span>
       </router-link>
       <router-link to="/portal/dashboard?tab=addresses">收件地址</router-link>
-    </nav>
+    </nav></details>
     <p v-if="error" class="hub-error" role="alert">{{ error }}</p>
     <p v-if="notice" class="hub-notice" role="status">{{ notice }}</p>
     <div v-if="loading" class="hub-panel" role="status">正在載入您的工作台…</div>
@@ -73,7 +73,7 @@
             <div class="card-actions">
               <button :disabled="busy" @click="preview(model)">3D 預覽</button>
               <button :disabled="busy" @click="downloadModel(model)">下載</button>
-              <router-link :to="{ path: '/quote', query: { model: model.id } }">用於估價 →</router-link>
+              <router-link :to="{ path: '/portal/print', query: { model: model.id } }">用於付費列印 →</router-link>
               <button :disabled="busy" @click="updateModel(model, { favorite: !model.favorite })">
                 {{ model.favorite ? '取消收藏' : '收藏' }}
               </button>
@@ -122,7 +122,7 @@
             <small>更新於 {{ date(draft.updatedAt) }}</small>
           </div>
           <div class="card-actions">
-            <router-link :to="{ path: '/quote', query: { draft: draft.id } }">繼續編輯 →</router-link>
+            <router-link :to="{ path: '/portal/print', query: { draft: draft.id } }">繼續編輯 →</router-link>
             <router-link v-if="draft.caseId" :to="caseLink(draft.caseId)">查看案件</router-link>
             <button :disabled="busy" @click="deleteDraft(draft)">刪除草稿</button>
           </div>
@@ -130,7 +130,7 @@
         <div v-if="!data.drafts.length" class="hub-empty">
           <instruction-art kind="save" />
           <h3>尚未保存草稿</h3>
-          <router-link to="/quote">開啟線上工作台 →</router-link>
+          <router-link to="/portal/print">開啟線上工作台 →</router-link>
         </div>
       </section>
       <template v-if="section === 'projects'">
@@ -597,7 +597,7 @@
             </label>
             <button class="solid" :disabled="busy">送出免費列印申請</button>
           </form>
-          <router-link to="/free-print/nthu-shuimu/slicer">先試用站點線上切片 →</router-link>
+          <router-link to="/portal/free-slicer">準備模型與切片 →</router-link>
         </section>
         <section class="hub-panel">
           <h2>免費列印紀錄</h2>
@@ -905,7 +905,7 @@
   async function reorderCase() {
     await action(async () => {
       const result = await workspace(`/cases/${route.query.id}/reorder-draft`, 'post', {})
-      await router.push({ path: '/quote', query: { draft: result.draft.id } })
+      await router.push({ path: '/portal/print', query: { draft: result.draft.id } })
     }, '')
   }
   async function saveSettings() {

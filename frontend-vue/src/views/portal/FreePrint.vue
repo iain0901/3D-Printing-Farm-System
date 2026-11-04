@@ -1,5 +1,5 @@
 <template>
-  <public-shell>
+  <component :is="memberMode ? 'div' : PublicShell">
     <main class="station-session studio-wrap">
       <p class="eyebrow">清華大學水木書苑 ／ 3DSTU_PETG</p>
       <h1>一步一步，完成你的免費列印。</h1>
@@ -20,7 +20,7 @@
         <p v-if="error" role="alert" class="station-error">{{ error }}</p>
         <p v-if="notice" role="status">{{ notice }}</p>
         <div class="station-toolbar">
-          <router-link to="/free-print/nthu-shuimu/slicer">準備模型與切片 →</router-link>
+          <router-link :to="memberMode ? '/portal/free-slicer' : '/free-print/nthu-shuimu/slicer'">準備模型與切片 →</router-link>
           <button type="button" :disabled="busy" @click="load">更新狀態</button>
           <router-link to="/portal/workspace">會員工作台 →</router-link>
           <button type="button" :disabled="busy" @click="store.dispatch('customerAuth/resetAccessToken')">登出會員</button>
@@ -275,9 +275,10 @@
         </div>
       </dialog>
     </main>
-  </public-shell>
+  </component>
 </template>
 <script setup>
+  defineProps({ memberMode: Boolean })
   import { ref, reactive, computed, watch, onBeforeUnmount, nextTick } from 'vue'
   import { useStore } from 'vuex'
   import PublicShell from '@/components/public/PublicShell.vue'

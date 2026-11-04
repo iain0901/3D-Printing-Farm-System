@@ -1,0 +1,55 @@
+// Advice describes persisted workflow states, never infers that printing/payment succeeded.
+export function nextMemberAction(status, kind = 'case') {
+  const states = {
+    draft: ['尚未送出', '繼續編輯模型，完成切片後送出需求。', '繼續編輯'],
+    submitted: ['需求確認中', '已送出需求，等待專員確認模型與製作規格。', '查看需求'],
+    new: ['需求確認中', '等待專員確認模型與製作規格。', '查看需求'],
+    under_review: ['專員審核中', '等待模型與製作規格確認；如需補件會通知你。', '查看進度'],
+    accepted: ['已確認報價', '查看訂單的付款狀態與後續安排。', '查看訂單'],
+    paid: ['已付款', '等待安排製作。', '查看排程'],
+    production_pending: ['等待安排製作', '製作尚未開始，等待排程更新。', '查看排程'],
+    ready_to_print: ['準備列印', '模型已準備，等待機台開始列印。', '查看進度'],
+    quality_check: ['品質檢查中', '列印已完成，等待品質檢查。', '查看進度'],
+    ready_for_delivery: ['準備交付', '等待出貨或取件通知。', '查看交付'],
+    packed: ['已包裝', '等待出貨與物流單號。', '查看配送'],
+    revision: ['報價調整中', '等待專員更新報價。', '查看討論'],
+    starting: ['列印啟動中', '正在確認機台是否開始列印，請勿重複送出。', '查看機台'],
+    supplement_requested: ['需要你補件', '專員需要更多資料，請查看要求並補上檔案。', '查看補件要求'],
+    awaiting_customer: ['需要你回覆', '請回覆案件中的待確認事項。', '回覆專員'],
+    formal_quote_sent: ['需要你確認報價', '確認金額與製作規格後，接受報價或要求修改。', '確認報價'],
+    quoted: ['需要你確認報價', '確認報價後才能安排製作。', '確認報價'],
+    awaiting_payment: ['等待付款', '請查看付款方式與應付金額。', '查看付款'],
+    unpaid: ['等待付款', '請查看付款方式與應付金額。', '查看付款'],
+    on_hold: ['製作暫停', '查看案件訊息，確認暫停原因與處理方式。', '查看原因'],
+    failed: ['需要處理', '查看失敗原因，再決定重試或聯絡專員。', '查看原因'],
+    queued: ['排隊中', '等待安排，最新進度會顯示在這裡。', '查看排程'],
+    notified: ['輪到你了', '請依通知到水木書苑報到。', '前往報到'],
+    preparing: ['準備機台', '依引導確認平台與耗材，再開始列印。', '繼續準備'],
+    paused: ['列印暫停', '查看機台狀態與暫停原因。', '查看列印'],
+    awaiting_removal: ['請取件', '取下列印件並確認平台已清空。', '取件與交棒'],
+    printing: ['列印中', '等待列印完成，可查看目前進度。', '查看列印'],
+    in_production: ['製作中', '等待完成製作與品質檢查。', '查看進度'],
+    shipped: ['已出貨', '查看物流單號與配送狀態。', '追蹤配送'],
+    completed: ['已完成', '可查看紀錄、下載檔案或提出售後需求。', '查看紀錄'],
+    cancelled: ['已取消', '這筆製作已停止，可查看紀錄。', '查看紀錄'],
+    rejected: ['未通過', '查看原因及專員建議。', '查看原因'],
+    expired: ['時段已到期', '查看站點紀錄，再確認是否需重新排隊。', '查看紀錄'],
+  }
+  const fallback = ['等待處理', '等待專員或站點更新，詳細狀態請查看紀錄。', '查看進度']
+  const [title, detail, action] = states[status] || fallback
+  const attention = [
+    'supplement_requested',
+    'awaiting_customer',
+    'formal_quote_sent',
+    'quoted',
+    'awaiting_payment',
+    'unpaid',
+    'on_hold',
+    'failed',
+    'notified',
+    'preparing',
+    'paused',
+    'awaiting_removal',
+  ].includes(status)
+  return { title, detail, action, attention, kind }
+}

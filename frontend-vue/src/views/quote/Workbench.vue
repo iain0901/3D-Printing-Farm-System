@@ -1,5 +1,5 @@
 <template>
-  <public-shell class="quote-workbench">
+  <component :is="memberMode ? 'div' : PublicShell" class="quote-workbench">
     <div class="studio-wrap workbench-wrap">
       <header class="workbench-intro">
         <div>
@@ -343,8 +343,8 @@
         <div class="panel-heading">
           <span>03</span>
           <div>
-            <h2 id="quote-review-title">登入與確認製作需求</h2>
-            <p>會員資料與模型設定分開保護，不將密碼寫入草稿。</p>
+            <h2 id="quote-review-title">{{ memberMode ? '確認與送出製作需求' : '登入與確認製作需求' }}</h2>
+            <p>{{ memberMode ? '確認模型、規格與收件資料，再送出。' : '會員資料與模型設定分開保護，不將密碼寫入草稿。' }}</p>
           </div>
         </div>
         <p v-if="!reviewing">完成模型與配色後，按下「確認設定」即可在此登入或註冊。</p>
@@ -443,7 +443,7 @@
         </div>
       </section>
     </div>
-  </public-shell>
+  </component>
 </template>
 
 <script setup>
@@ -474,6 +474,7 @@
     modelAppearance,
   } from '@/utils/quote-workspace.mjs'
   const emit = defineEmits(['assistance'])
+  const props = defineProps({ memberMode: Boolean })
   const authNotice = ref('')
   const store = useStore(),
     stationLayout = ref(null)
@@ -990,6 +991,7 @@
     }
   }
   function askSpecialist() {
+    if (props.memberMode) { router.push('/portal/workspace?section=support'); return }
     if (layout.value.models.length && !window.confirm('轉為專員協助會離開工作台，未下載的模型擺放與配色設定不會保留。確定繼續？')) return
     emit('assistance')
   }

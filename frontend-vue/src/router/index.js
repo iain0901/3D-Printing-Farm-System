@@ -15,7 +15,8 @@ export const constantRoutes = [
   {
     path: '/portal/free-print',
     name: 'FreePrintSession',
-    component: () => import('@/views/portal/FreePrint.vue'),
+    component: () => import('@/layouts/PortalLayout'),
+    children: [{ path: '', component: () => import('@/views/portal/FreePrint.vue'), props: { memberMode: true } }],
     meta: { title: '免費列印・我的使用時段', publicService: true },
     hidden: true,
   },
@@ -148,9 +149,21 @@ export const constantRoutes = [
     hidden: true,
   },
   {
+    path: '/portal/print',
+    component: () => import('@/layouts/PortalLayout'),
+    children: [{ path: '', component: () => import('@/views/quote/Workbench.vue'), props: { memberMode: true } }],
+    hidden: true,
+  },
+  {
+    path: '/portal/free-slicer',
+    component: () => import('@/layouts/PortalLayout'),
+    children: [{ path: '', component: () => import('@/components/SlicerLab.vue'), props: { memberMode: true, stationId: 'nthu-shuimu' } }],
+    hidden: true,
+  },
+  {
     path: '/portal/dashboard',
     component: () => import('@/layouts/PortalLayout'),
-    children: [{ path: '', component: () => import('@/views/portal/Dashboard') }],
+    children: [{ path: '', component: () => import('@/views/portal/Home.vue') }],
     hidden: true,
   },
   {

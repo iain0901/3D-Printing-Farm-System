@@ -1,7 +1,7 @@
 <template>
   <div class="slicer-lab brand-surface" :class="{ embedded }">
     <header class="lab-header">
-      <router-link v-if="!embedded" to="/" class="lab-brand">
+      <router-link v-if="!embedded && !memberMode" to="/" class="lab-brand">
         <brand-mark compact />
       </router-link>
       <div>
@@ -253,7 +253,7 @@
   import { createQuoteDraft, defaultQuoteSettings } from '@/utils/quote-workspace.mjs'
   import { createStudioSlice, createStationSlice, fetchStationSlice, fetchToolpaths, cancelStationSlice, fetchPrintingConfig } from '@/api/public'
   import { slicerSettingFields } from '@/utils/slicer-settings.mjs'
-  const props = defineProps({ stationId: { type: String, default: '' }, embedded: Boolean })
+  const props = defineProps({ stationId: { type: String, default: '' }, embedded: Boolean, memberMode: Boolean })
   const router = useRouter()
   const queueOpen = ref(false),
     queueBusy = ref(false),

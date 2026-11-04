@@ -2,15 +2,14 @@
   <div class="portal-dashboard">
     <div class="welcome-row">
       <div>
-        <p class="welcome-eyebrow">每個想法，都有下一步。</p>
+        <p class="welcome-eyebrow">製作紀錄</p>
         <h1>
-          你好，{{ (customer && customer.name) || '會員' }}
-          <span>。</span>
+          {{ currentSection.label }}
         </h1>
-        <p class="welcome-description">讓製作的每一步，都清楚可見。</p>
+        <p class="welcome-description">確認報價、回覆訊息與追蹤交付。</p>
       </div>
-      <router-link class="new-project" to="/quote">
-        新增列印估價
+      <router-link class="new-project" to="/portal/dashboard">
+        開始新製作
         <span aria-hidden="true">→</span>
       </router-link>
     </div>
@@ -37,7 +36,6 @@
           {{ loading || loadError ? '—' : summary.completed }}
           <small>件</small>
         </strong>
-        <p>每一件，都是想法的實現</p>
       </div>
       <div class="points-stat">
         <span>可用會員點數</span>
@@ -50,7 +48,6 @@
     </section>
     <div class="section-heading">
       <div>
-        <h2>{{ currentSection.label }}</h2>
         <p>{{ currentSection.description }}</p>
       </div>
       <button class="refresh-button" :disabled="loading" @click="load">{{ loading ? '更新中…' : '重新整理 ↻' }}</button>
@@ -92,9 +89,9 @@
           </div>
           <div v-if="!cases.length" class="empty-hint">
             <span class="empty-index">01 / 開始製作</span>
-            <h3>第一件作品，從這裡開始。</h3>
+            <h3>還沒有付費案件</h3>
             <p>上傳模型，使用自動估價確認製作需求。送出後就能在這裡追蹤案件。</p>
-            <router-link to="/quote">上傳模型並估價 →</router-link>
+            <router-link to="/portal/print">上傳模型並估價 →</router-link>
           </div>
         </el-card>
       </el-tab-pane>
@@ -196,7 +193,7 @@
             <span class="empty-index">02 / 討論需求</span>
             <h3>把想法交給我們，一起確認細節。</h3>
             <p>報價內容與專員訊息會保留在這裡，方便您隨時接著討論。</p>
-            <router-link to="/quote">開始自動估價 →</router-link>
+            <router-link to="/portal/print">開始自動估價 →</router-link>
           </div>
         </el-card>
       </el-tab-pane>
@@ -248,7 +245,7 @@
           <span class="empty-index">03 / 安心交付</span>
           <h3>目前還沒有訂單。</h3>
           <p>訂單建立後，您可以在這裡付款、查詢物流與再次訂購。</p>
-          <router-link to="/quote">開始新的製作計畫 →</router-link>
+          <router-link to="/portal/dashboard">開始新的製作計畫 →</router-link>
         </div>
       </el-tab-pane>
 
@@ -581,7 +578,7 @@
       async startReorder(order) {
         if (order.caseId) {
           const result = await workspace(`/cases/${order.caseId}/reorder-draft`, 'post', {})
-          await this.$router.push({ path: '/quote', query: { draft: result.draft.id } })
+          await this.$router.push({ path: '/portal/print', query: { draft: result.draft.id } })
           return
         }
         const created = await reorder(order.id)

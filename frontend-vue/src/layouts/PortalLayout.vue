@@ -2,15 +2,16 @@
   <div class="portal-layout brand-surface">
     <a class="portal-skip" href="#member-content" @click.prevent="$refs.content.focus()">跳至主要內容</a>
     <aside class="portal-sidebar">
-      <router-link to="/" class="portal-brand" aria-label="3DRFM，回到官網">
+      <router-link to="/portal/dashboard" class="portal-brand" aria-label="3DRFM，回到工作台">
         <brand-mark subtitle="會員工作台" />
       </router-link>
       <p class="nav-caption">我的製作計畫</p>
-      <nav aria-label="會員導覽">
+      <button class="member-mobile-menu" :aria-expanded="mobileMenu" aria-controls="member-navigation" @click="mobileMenu = !mobileMenu">{{ mobileMenu ? '收起選單' : '功能選單' }}</button>
+      <nav id="member-navigation" aria-label="會員導覽" :class="{ 'mobile-open': mobileMenu }" @click="mobileMenu = false">
         <router-link
           v-for="item in sections"
           :key="item.id"
-          :to="item.path ? { path: item.path, query: { section: item.id } } : { path: '/portal/dashboard', query: { tab: item.id } }"
+          :to="item.to"
           :class="{ selected: activeSection === item.id }"
           :aria-current="activeSection === item.id ? 'page' : undefined"
         >
@@ -20,14 +21,9 @@
         </router-link>
       </nav>
       <div class="sidebar-support">
-        <span class="support-label">需要一起確認細節？</span>
-        <p>
-          材料、尺寸或交期，
-          <br />
-          都可以先和我們聊聊。
-        </p>
-        <router-link to="/contact">
-          聯絡專員
+        <span class="support-label">操作遇到問題？</span>
+        <router-link to="/portal/workspace?section=support">
+          詢問專員
           <span aria-hidden="true">→</span>
         </router-link>
       </div>
@@ -46,10 +42,10 @@
           <button class="logout-button" @click="logout">登出</button>
         </div>
       </header>
-      <main id="member-content" ref="content" class="portal-main" tabindex="-1"><router-view /></main>
+      <main id="member-content" ref="content" class="portal-main" tabindex="-1"><router-view v-if="$store.getters['customerAuth/accessToken']" /></main>
       <footer class="portal-footer">
         <span>3DRFM · 讓設計，進入製造。</span>
-        <router-link to="/faq">常見問題 →</router-link>
+        <router-link to="/portal/workspace?section=support">服務與協助</router-link>
       </footer>
     </div>
   </div>
@@ -57,32 +53,39 @@
 
 <script>
   import { mapGetters } from 'vuex'
-  import { logoutCustomer } from '@/api/customerAuth'
-  import { portalSections, portalSection } from '@/utils/portal-presentation.mjs'
+  import { logoutCustomer, fetchCustomerMe } from '@/api/customerAuth'
+  import { portalSection } from '@/utils/portal-presentation.mjs'
   import BrandMark from '@/components/public/BrandMark.vue'
 
   export default {
     name: 'PortalLayout',
     components: { BrandMark },
     data: () => ({
+      mobileMenu: false,
       sections: [
-        ...portalSections.slice(0, 1),
-        { id: 'models', number: '02', label: '模型與草稿', path: '/portal/workspace' },
-        ...portalSections.slice(1, 3),
-        portalSections[3],
-        { id: 'projects', number: '05', label: '專案協作', path: '/portal/workspace' },
-        { id: 'notifications', number: '06', label: '通知中心', path: '/portal/workspace' },
-        { id: 'settings', number: '07', label: '帳號與服務', path: '/portal/workspace' },
+        { id: 'home', label: '工作台首頁', to: '/portal/dashboard' },
+        { id: 'print', label: '付費代印', to: '/portal/print' },
+        { id: 'free', label: '免費列印', to: '/portal/free-slicer' },
+        { id: 'station', label: '排隊與到站操作', to: '/portal/free-print' },
+        { id: 'agent', label: '建模工具', to: '/portal/workspace?section=agent' },
+        { id: 'models', label: '模型與下載', to: '/portal/workspace?section=models' },
+        { id: 'drafts', label: '繼續草稿', to: '/portal/workspace?section=drafts' },
+        { id: 'cases', label: '案件進度', to: '/portal/dashboard?tab=cases' },
+        { id: 'orders', label: '訂單與付款', to: '/portal/dashboard?tab=orders' },
+        { id: 'notifications', label: '通知中心', to: '/portal/workspace?section=notifications' },
+        { id: 'settings', label: '帳號與其他服務', to: '/portal/workspace?section=settings' },
       ].map((item, index) => ({ ...item, number: String(index + 1).padStart(2, '0') })),
     }),
     computed: {
       ...mapGetters({ customer: 'customerAuth/customer' }),
       activeSection() {
+        if (this.$route.path === '/portal/print') return 'print'
+        if (this.$route.path === '/portal/free-slicer') return 'free'
+        if (this.$route.path === '/portal/free-print') return 'station'
+        if (this.$route.path === '/portal/dashboard' && !this.$route.query.tab) return 'home'
         if (this.$route.path === '/portal/workspace') {
           const section = this.$route.query.section || 'models'
-          return ['drafts'].includes(section)
-            ? 'models'
-            : ['billing', 'support', 'rewards', 'free-print'].includes(section)
+          return ['billing', 'support', 'rewards', 'free-print'].includes(section)
             ? 'settings'
             : section === 'case'
             ? 'cases'
@@ -91,9 +94,15 @@
         return portalSection(this.$route.query.tab).id
       },
       sectionTitle() {
-        if (this.$route.path === '/portal/workspace') return this.sections.find((s) => s.id === this.activeSection)?.label || '會員工作台'
-        return portalSection(this.$route.query.tab).label
+        return this.sections.find((s) => s.id === this.activeSection)?.label || portalSection(this.$route.query.tab).label
       },
+    },
+    async created() {
+      if (!this.$store.getters['customerAuth/accessToken']) {
+        await this.$router.replace({ path: '/portal/login', query: { redirect: this.$route.fullPath } })
+        return
+      }
+      try { const result = await fetchCustomerMe(); this.$store.commit('customerAuth/setCustomer', result.customer) } catch { /* API 顯示重試／登入提示 */ }
     },
     methods: {
       async logout() {
@@ -110,6 +119,7 @@
 </script>
 
 <style lang="scss">
+  .member-mobile-menu { display: none; }
   .portal-layout {
     --member-ink: var(--rfm-ink);
     --member-muted: var(--rfm-muted);
@@ -339,6 +349,13 @@
     }
   }
   @media (max-width: 700px) {
+    .portal-layout .portal-sidebar { width:100%; padding:18px 16px; height:auto; position:static; }
+    .portal-layout .portal-main { padding:24px 16px; }
+    .portal-layout .portal-header { padding:12px 16px; }
+    .portal-layout .member-mobile-menu { display:block; align-self:flex-end; margin-top:-30px; background:white; border:1px solid var(--member-line); padding:8px 12px; border-radius:8px; color:inherit; }
+    .portal-layout .portal-sidebar nav { display:none; }
+    .portal-layout .portal-sidebar nav.mobile-open { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .portal-layout .portal-sidebar nav a { padding:12px; justify-content:flex-start; font-size:14px; }
     .portal-layout {
       display: block;
     }
