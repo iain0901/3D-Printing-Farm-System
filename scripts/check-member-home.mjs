@@ -57,6 +57,37 @@ try {
   await page.reload();
   await page.goto(`${base}/#/portal/dashboard`);
   await page.getByText("從第一個模型開始", { exact: true }).waitFor();
+  // Header utilities and keyboard interaction use the existing Element Plus dropdown.
+  assert.equal(await page.locator('#member-navigation').getByText('通知中心', {exact:true}).count(), 0);
+  assert.equal(await page.locator('#member-navigation').getByText('帳號與其他服務', {exact:true}).count(), 0);
+  await page.getByRole('link', {name:'通知',exact:true}).click();
+  await page.waitForURL('**/portal/workspace?section=notifications');
+  assert.equal(await page.locator('.portal-breadcrumb b').innerText(), '通知中心');
+  for (const [label, suffix] of [['帳號設定','/portal/workspace?section=settings'],['收件地址','/portal/dashboard?tab=addresses'],['付款與單據','/portal/workspace?section=billing'],['點數與優惠','/portal/workspace?section=rewards'],['服務與協助','/portal/workspace?section=support']]) {
+    await page.getByRole('button',{name:'會員選單',exact:true}).click();
+    await page.getByRole('menuitem',{name:label,exact:true}).click();
+    await page.waitForURL(`**/#${suffix}`);
+    assert.equal(await page.getByRole('button',{name:'會員選單',exact:true}).getAttribute('aria-expanded'), 'false');
+  }
+  await page.goto(`${base}/#/portal/dashboard`);
+  const accountButton = page.getByRole('button',{name:'會員選單',exact:true});
+  await accountButton.focus(); await page.keyboard.press('Enter');
+  await page.getByRole('menuitem',{name:'帳號設定',exact:true}).waitFor();
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => document.querySelector('.account-menu-trigger').getAttribute('aria-expanded') === 'false');
+  for (const width of [1440,320]) {
+    await page.setViewportSize({width,height:1000});
+    await accountButton.click();
+    await page.getByRole('menuitem',{name:'帳號設定',exact:true}).waitFor();
+    // Teleported Element Plus poppers animate outside the reduced-motion layout.
+    await page.waitForTimeout(350);
+    await page.screenshot({path:path.join(directory,`header-menu-${width}.png`),fullPage:true});
+    const box = await page.locator('.member-account-dropdown:visible').boundingBox();
+    assert.ok(box.x >= 0 && box.x + box.width <= width + 1);
+    await page.getByRole('heading',{name:'今天想做什麼？',exact:true}).click();
+    await page.waitForFunction(() => document.querySelector('.account-menu-trigger').getAttribute('aria-expanded') === 'false');
+  }
+  console.log('PASS header notification, all account destinations, keyboard Escape, outside click and 320px menu bounds');
   console.log(
     "PASS anonymous member route returns to login; real member sees empty-state guidance"
   );
@@ -145,6 +176,10 @@ try {
     .waitFor();
   await page.getByRole("link", { name: "取件與交棒" }).waitFor();
   assert.deepEqual(errors, []);
+  await page.getByRole('button',{name:'會員選單',exact:true}).click();
+  await page.getByRole('menuitem',{name:'登出',exact:true}).click();
+  await page.waitForURL('**/#/portal/login');
+  assert.equal(await page.evaluate(() => localStorage.getItem('layerpilot-customer-token')), null);
   console.log(
     `PASS actionable statuses, per-source error recovery and no JS errors. Screenshots: ${directory}`
   );

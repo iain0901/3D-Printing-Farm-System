@@ -5,20 +5,21 @@
       <router-link to="/portal/dashboard" class="portal-brand" aria-label="3DRFM，回到工作台">
         <brand-mark subtitle="會員工作台" />
       </router-link>
-      <p class="nav-caption">我的製作計畫</p>
       <button class="member-mobile-menu" :aria-expanded="mobileMenu" aria-controls="member-navigation" @click="mobileMenu = !mobileMenu">{{ mobileMenu ? '收起選單' : '功能選單' }}</button>
       <nav id="member-navigation" aria-label="會員導覽" :class="{ 'mobile-open': mobileMenu }" @click="mobileMenu = false">
+        <template v-for="group in navGroups" :key="group.label">
+        <p class="nav-group-label">{{ group.label }}</p>
         <router-link
-          v-for="item in sections"
+          v-for="item in group.items"
           :key="item.id"
           :to="item.to"
           :class="{ selected: activeSection === item.id }"
           :aria-current="activeSection === item.id ? 'page' : undefined"
         >
-          <span class="nav-number" aria-hidden="true">{{ item.number }}</span>
+          <el-icon aria-hidden="true"><component :is="item.icon" /></el-icon>
           {{ item.label }}
-          <span class="nav-arrow" aria-hidden="true">→</span>
         </router-link>
+        </template>
       </nav>
       <div class="sidebar-support">
         <span class="support-label">操作遇到問題？</span>
@@ -32,14 +33,30 @@
     <div class="portal-workspace">
       <header class="portal-header">
         <span class="portal-breadcrumb">
-          會員中心
-          <span aria-hidden="true">／</span>
+          <span class="breadcrumb-root">會員中心 ／</span>
           <b>{{ sectionTitle }}</b>
         </span>
         <div class="portal-account">
-          <span class="account-avatar" aria-hidden="true">{{ ((customer && customer.name) || '會').slice(0, 1) }}</span>
-          <span class="account-name">{{ (customer && customer.name) || '會員' }}</span>
-          <button class="logout-button" @click="logout">登出</button>
+          <router-link class="header-notifications" to="/portal/workspace?section=notifications" :aria-current="$route.query.section === 'notifications' ? 'page' : undefined">
+            <el-icon aria-hidden="true"><Bell /></el-icon><span>通知</span>
+          </router-link>
+          <el-dropdown ref="accountDropdown" trigger="click" placement="bottom-end" @command="accountCommand" @visible-change="accountMenuOpen = $event">
+            <button ref="accountTrigger" class="account-menu-trigger" aria-label="會員選單" aria-haspopup="menu" :aria-expanded="accountMenuOpen" :disabled="loggingOut" @keydown.esc.stop.prevent="closeAccountMenu">
+              <span class="account-avatar" aria-hidden="true">{{ ((customer && customer.name) || '會').slice(0, 1) }}</span>
+              <span class="account-name">{{ (customer && customer.name) || '會員' }}</span>
+              <el-icon aria-hidden="true"><ArrowDown /></el-icon>
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu class="member-account-dropdown" @keydown.esc.stop.prevent="closeAccountMenu">
+                <el-dropdown-item command="settings">帳號設定</el-dropdown-item>
+                <el-dropdown-item command="addresses">收件地址</el-dropdown-item>
+                <el-dropdown-item command="billing">付款與單據</el-dropdown-item>
+                <el-dropdown-item command="rewards">點數與優惠</el-dropdown-item>
+                <el-dropdown-item command="support" divided>服務與協助</el-dropdown-item>
+                <el-dropdown-item command="logout" divided :disabled="loggingOut">{{ loggingOut ? '登出中…' : '登出' }}</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </header>
       <main id="member-content" ref="content" class="portal-main" tabindex="-1"><router-view v-if="$store.getters['customerAuth/accessToken']" /></main>
@@ -56,28 +73,31 @@
   import { logoutCustomer, fetchCustomerMe } from '@/api/customerAuth'
   import { portalSection } from '@/utils/portal-presentation.mjs'
   import BrandMark from '@/components/public/BrandMark.vue'
+  import { Bell, ArrowDown, House, Printer, Timer, MagicStick, Files, FolderOpened, Document, ShoppingBag, Connection } from '@element-plus/icons-vue'
 
   export default {
     name: 'PortalLayout',
-    components: { BrandMark },
+    components: { BrandMark, Bell, ArrowDown, House, Printer, Timer, MagicStick, Files, FolderOpened, Document, ShoppingBag, Connection },
     data: () => ({
       mobileMenu: false,
+      accountMenuOpen: false,
+      loggingOut: false,
       sections: [
-        { id: 'home', label: '工作台首頁', to: '/portal/dashboard' },
-        { id: 'print', label: '付費代印', to: '/portal/print' },
-        { id: 'free', label: '免費列印', to: '/portal/free-slicer' },
-        { id: 'station', label: '排隊與到站操作', to: '/portal/free-print' },
-        { id: 'agent', label: '建模工具', to: '/portal/workspace?section=agent' },
-        { id: 'models', label: '模型與下載', to: '/portal/workspace?section=models' },
-        { id: 'drafts', label: '繼續草稿', to: '/portal/workspace?section=drafts' },
-        { id: 'cases', label: '案件進度', to: '/portal/dashboard?tab=cases' },
-        { id: 'orders', label: '訂單與付款', to: '/portal/dashboard?tab=orders' },
-        { id: 'notifications', label: '通知中心', to: '/portal/workspace?section=notifications' },
-        { id: 'settings', label: '帳號與其他服務', to: '/portal/workspace?section=settings' },
-      ].map((item, index) => ({ ...item, number: String(index + 1).padStart(2, '0') })),
+        { id: 'home', label: '工作台首頁', to: '/portal/dashboard', group: '製作', icon: 'House' },
+        { id: 'print', label: '付費代印', to: '/portal/print', group: '製作', icon: 'Printer' },
+        { id: 'free', label: '免費列印', to: '/portal/free-slicer', group: '製作', icon: 'Printer' },
+        { id: 'station', label: '排隊與到站操作', to: '/portal/free-print', group: '製作', icon: 'Timer' },
+        { id: 'agent', label: '建模工具', to: '/portal/workspace?section=agent', group: '模型', icon: 'MagicStick' },
+        { id: 'models', label: '模型與下載', to: '/portal/workspace?section=models', group: '模型', icon: 'Files' },
+        { id: 'drafts', label: '繼續草稿', to: '/portal/workspace?section=drafts', group: '模型', icon: 'FolderOpened' },
+        { id: 'projects', label: '專案協作', to: '/portal/workspace?section=projects', group: '模型', icon: 'Connection' },
+        { id: 'cases', label: '案件進度', to: '/portal/dashboard?tab=cases', group: '紀錄', icon: 'Document' },
+        { id: 'orders', label: '訂單與付款', to: '/portal/dashboard?tab=orders', group: '紀錄', icon: 'ShoppingBag' },
+      ],
     }),
     computed: {
       ...mapGetters({ customer: 'customerAuth/customer' }),
+      navGroups() { return ['製作', '模型', '紀錄'].map(label => ({ label, items: this.sections.filter(item => item.group === label) })) },
       activeSection() {
         if (this.$route.path === '/portal/print') return 'print'
         if (this.$route.path === '/portal/free-slicer') return 'free'
@@ -94,6 +114,10 @@
         return portalSection(this.$route.query.tab).id
       },
       sectionTitle() {
+        if (this.$route.path === '/portal/workspace') {
+          const titles = { notifications: '通知中心', settings: '帳號設定', billing: '付款與單據', support: '服務與協助', rewards: '點數與優惠', 'free-print': '免費列印申請', case: '案件詳情' }
+          if (titles[this.$route.query.section]) return titles[this.$route.query.section]
+        }
         return this.sections.find((s) => s.id === this.activeSection)?.label || portalSection(this.$route.query.tab).label
       },
     },
@@ -105,7 +129,15 @@
       try { const result = await fetchCustomerMe(); this.$store.commit('customerAuth/setCustomer', result.customer) } catch { /* API 顯示重試／登入提示 */ }
     },
     methods: {
+      closeAccountMenu() { this.$refs.accountDropdown?.handleClose(); this.$refs.accountTrigger?.focus() },
+      accountCommand(command) {
+        if (command === 'logout') return this.logout()
+        if (command === 'addresses') return this.$router.push('/portal/dashboard?tab=addresses')
+        if (['settings', 'billing', 'rewards', 'support'].includes(command)) return this.$router.push({ path: '/portal/workspace', query: { section: command } })
+      },
       async logout() {
+        if (this.loggingOut) return
+        this.loggingOut = true
         try {
           await logoutCustomer()
         } catch {
@@ -113,12 +145,22 @@
         }
         await this.$store.dispatch('customerAuth/resetAccessToken')
         this.$router.push('/portal/login')
+        this.loggingOut = false
       },
     },
   }
 </script>
 
 <style lang="scss">
+  .nav-group-label { margin:22px 12px 4px; color:var(--rfm-muted); font-size:11px; letter-spacing:.12em; grid-column:1/-1; }
+  .portal-sidebar nav { margin-top:24px; }
+  .portal-sidebar nav .el-icon { flex-shrink:0; font-size:18px; }
+  .header-notifications, .account-menu-trigger { display:flex; align-items:center; gap:8px; min-height:44px; padding:6px 10px; border:1px solid transparent; border-radius:8px; background:transparent; color:var(--rfm-ink); font:inherit; cursor:pointer; white-space:nowrap; }
+  .header-notifications:hover, .header-notifications[aria-current="page"], .account-menu-trigger:hover, .account-menu-trigger[aria-expanded="true"] { background:var(--rfm-selected); }
+  .header-notifications .el-icon { font-size:20px; }
+  .account-menu-trigger { border-color:var(--rfm-line); }
+  .member-account-dropdown { min-width:190px; padding:8px!important; }
+  .member-account-dropdown .el-dropdown-menu__item { min-height:42px; border-radius:6px; font-family:var(--rfm-font); }
   .member-mobile-menu { display: none; }
   .portal-layout {
     --member-ink: var(--rfm-ink);
@@ -266,6 +308,9 @@
     flex-direction: column;
   }
   .portal-header {
+    position: sticky;
+    top: 0;
+    z-index: 30;
     min-height: 80px;
     padding: 16px 40px;
     border-bottom: 1px solid var(--member-line);
@@ -349,6 +394,11 @@
     }
   }
   @media (max-width: 700px) {
+    .portal-layout .breadcrumb-root { display:none; }
+    .portal-layout .portal-breadcrumb { min-width:0; }
+    .portal-layout .portal-account { flex-shrink:0; gap:6px; }
+    .portal-layout .account-menu-trigger { padding:4px 8px; }
+    .portal-layout .nav-group-label { margin:16px 12px 2px; }
     .portal-layout .portal-sidebar { width:100%; padding:18px 16px; height:auto; position:static; }
     .portal-layout .portal-main { padding:24px 16px; }
     .portal-layout .portal-header { padding:12px 16px; }
