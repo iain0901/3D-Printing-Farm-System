@@ -2,6 +2,13 @@
 
 更新日期：2026-11-04（Asia/Taipei）。只記錄尚需接手、協調或確認的事項；已解決的事項保留結論與依據，不直接刪掉歷史。
 
+## H-012：非硬體後端正式服務驗收
+
+- BACKEND-20261104-05／D-010：保留 LINE Pay、人工發票／收據及物流單號流程。新增會員通知背景投遞與有限重試、未確認寄送的人工重排、密碼重設寄信狀態、LINE Pay 確認異常記錄、管理員設定與問題診斷，補 Compose 設定傳入；正式環境禁止模擬列印進度。沒有更動正式設定、profiles 或 UI 版型。
+- 新一般通知佇列僅支援單一 API 寫入者；不是多副本分散式 queue。既有 quote／free-print 獨立通知管道不重送。`uncertain` 必須先確認再重排，還原前停止 API／投遞，避免從舊資料重送。
+- 維護者依 [非硬體驗收清單及可轉貼訊息](../docs/nonhardware-launch.md) 檢查 env 傳入、SMTP／Google／LINE Pay sandbox／OpenAI／真切片、PostgreSQL 與儲存恢復；缺憑證只回報名稱不輸出值。新增管理員 GET `/api/member-service/launch-readiness` 只查設定，不是外部健康證明。LINE Pay 尚無自動商家對帳／退款，使用既有人工營運流程，不明交易勿要求再付一次。
+- 本輪未部署、未寄真信／收真款／呼叫 OpenAI／操作機台。測試與版本見 [修改紀錄](changes/2026-11-04-codex-nonhardware-launch.md)。部署另行取得批准，保留 H-007 的唯讀設定包與 H-009 的 Google 設定。
+
 ## H-011：管理工作台與時段控制更新
 
 - ADMIN-20261104-04：管理總覽／分組導覽、新站點與 MCP 入口；會員本次檔案選取、有效時段才出現控制與影像、錯誤時收權。發布須更新 API 與前端同版，否則缺 printFile 會安全阻擋開始。保留正式 profiles、.env、Telegram 與機台配置。

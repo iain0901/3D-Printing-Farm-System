@@ -2,6 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { createCaseFromIntake, publicCase, publicSlicingQuote } from "./cases-module.mjs";
 import { advancedSlicerSchema } from "./studio-settings.mjs";
+import { createMemberNotificationDelivery } from "./member-notification-delivery.mjs";
+import { launchServices } from "./launch-services.mjs";
 import { printingPolicy } from '../frontend-vue/src/utils/printing-policy.mjs';
 import {
   caseIntakeSchema,
@@ -109,6 +111,7 @@ function notify(data, customer, title, body, link = "/portal/workspace") {
     link,
     createdAt: stamp(),
     readAt: null,
+    delivery: { email: { status: "pending", attempts: 0 }, line: { status: "pending", attempts: 0 } },
   });
 }
 const vec = z.object({ x: z.number().finite(), y: z.number().finite() });
@@ -286,6 +289,68 @@ export async function registerMemberWorkspace(
   for (const name of MEMBER_COLLECTIONS) data[name] ||= [];
   // Serialize member writes, including quota checks, optimistic revisions, and duplicate requests.
   let tail = Promise.resolve();
+  const delivery = createMemberNotificationDelivery({ database, emailClient, lineClient });
+  let deliveryTimer;
+  let deliveryTick = Promise.resolve();
+  let closing = false;
+  let ticking = false;
+  app.get("/api/member-service/launch-readiness", async (request, reply) => {
+    if (!["Owner", "Admin"].includes(request.user?.role)) return reply.code(403).send({ error: "沒有管理服務的權限" });
+    const workspaceId = request.user.workspaceId || "ws-default";
+    return { ...launchServices(process.env, { emailConfigured: !!emailClient }),
+      passwordResetDeliveryIssues: (data.customers || []).filter(c => (c.workspaceId || "ws-default") === workspaceId && ["sending", "uncertain"].includes(c.resetDelivery?.status)).length,
+      paymentsNeedingReview: (data.orders || []).filter(o => (o.workspaceId || "ws-default") === workspaceId && o.payment?.provider === "linepay" && o.payment.status === "pending" && (o.payment.confirmation?.status === "needs_review" || o.payment.confirmation?.status === "processing" && Date.parse(o.payment.confirmation.attemptedAt) < Date.now() - 60000 || Date.parse(o.payment.updatedAt) < Date.now() - 15 * 60 * 1000)).map(o => ({ orderId: o.id, caseId: o.caseId || null, transactionId: o.payment.transactionId, amount: o.payment.amount, currency: o.payment.currency, confirmation: o.payment.confirmation || null })).slice(0, 200),
+    };
+  });
+  app.addHook("onReady", async () => {
+    // Establish a baseline without emailing historical orders when this feature is first enabled.
+    const before = data.memberNotifications.length;
+    data.dataMeta ||= {};
+    const initialized = data.dataMeta.memberNotificationDeliveryVersion === 1;
+    for (const customer of data.customers || []) syncNotifications(customer, initialized);
+    data.dataMeta.memberNotificationDeliveryVersion = 1;
+    if (!initialized || before !== data.memberNotifications.length) await database.write();
+    await delivery.recover();
+    deliveryTimer = setInterval(() => {
+      if (closing || ticking) return;
+      ticking = true;
+      // A single API process owns persistence and delivery; workers only call its API.
+      deliveryTick = deliveryTick.then(async () => {
+        if (closing) return;
+        const sync = tail.then(async () => {
+          const before = data.memberNotifications.length;
+          for (const customer of data.customers || []) syncNotifications(customer);
+          if (before !== data.memberNotifications.length) await database.write();
+        });
+        tail = sync.catch(() => {});
+        await sync;
+        await delivery.tick();
+      }).catch(() => app.log.error("會員通知背景投遞失敗；請檢查儲存與服務狀態")).finally(() => { ticking = false; });
+    }, 15000);
+    deliveryTimer.unref();
+  });
+  app.addHook("onClose", async () => {
+    closing = true;
+    clearInterval(deliveryTimer);
+    delivery.stop();
+    await deliveryTick;
+  });
+  app.get("/api/member-service/notification-deliveries", async (request, reply) => {
+    if (!["Owner", "Admin"].includes(request.user?.role)) return reply.code(403).send({ error: "沒有管理通知的權限" });
+    const workspaceId = request.user.workspaceId || "ws-default";
+    const notifications = data.memberNotifications.filter(n => (n.workspaceId || "ws-default") === workspaceId && !/^(quote:|free-print:)/.test(n.sourceKey || ""));
+    const counts = {};
+    for (const n of notifications) for (const d of Object.values(n.delivery || {})) counts[d.status] = (counts[d.status] || 0) + 1;
+    return { counts, notifications: notifications.filter(n => Object.values(n.delivery || {}).some(d => ["pending", "retry", "failed", "uncertain"].includes(d.status))).slice(0, 200).map(n => ({ id: n.id, title: n.title, createdAt: n.createdAt, delivery: n.delivery })) };
+  });
+  app.post("/api/member-service/notification-deliveries/:id/retry", { config: { rateLimit: sensitiveRateLimit } }, async (request, reply) => {
+    if (!["Owner", "Admin"].includes(request.user?.role)) return reply.code(403).send({ error: "沒有管理通知的權限" });
+    const parsed = z.object({ channel: z.enum(["email", "line"]), acknowledgeDuplicateRisk: z.literal(true) }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "請選擇通知管道，並確認重送可能造成重複通知" });
+    const ok = await delivery.retry(request.params.id, parsed.data.channel, request.user.workspaceId || "ws-default", request.user.id);
+    if (!ok) return reply.code(409).send({ error: "找不到可重送的失敗或未確認通知" });
+    return { queued: true };
+  });
   function route(method, suffix, handler, options = {}) {
     app.route({
       method,
@@ -417,7 +482,7 @@ export async function registerMemberWorkspace(
     }
     return { payload, uploads, total };
   }
-  function syncNotifications(customer) {
+  function syncNotifications(customer, queueDelivery = true) {
     const states = [
       ...(data.cases || [])
         .filter((i) => scope(i, customer))
@@ -452,6 +517,7 @@ export async function registerMemberWorkspace(
       ) {
         notify(data, customer, state.title, state.body, state.link);
         data.memberNotifications[0].sourceKey = state.key;
+        if (!queueDelivery) for (const d of Object.values(data.memberNotifications[0].delivery)) Object.assign(d, { status: "skipped", reason: "historical_baseline" });
       }
   }
   route("GET", "", async (request, reply, customer) => {
@@ -1134,6 +1200,7 @@ export async function registerMemberWorkspace(
       customer.passwordHash = createPasswordHash(input.newPassword);
       customer.resetTokenHash = "";
       customer.resetTokenExpiresAt = "";
+      delete customer.resetDelivery;
       data.customerSessions = data.customerSessions.filter(
         (s) => s.customerId !== customer.id || s.id === auth.session.id
       );
@@ -1739,65 +1806,6 @@ export async function registerMemberWorkspace(
       const customer = (data.customers || []).find((c) => c.id === customerId);
       if (!customer) continue;
       syncNotifications(customer);
-      const prefs = preferences(customer);
-      for (const notification of scoped(
-        data,
-        "memberNotifications",
-        customer
-      ).slice(0, 50)) {
-        notification.delivery ||= {};
-        const channels = [
-          {
-            id: "email",
-            enabled:
-              prefs.notifications.email && !!emailClient && !!customer.email,
-            send: () =>
-              emailClient.send({
-                to: customer.email,
-                subject: `3DRFM｜${notification.title}`,
-                text: `${notification.body}\n\n請登入 3DRFM 會員中心查看完整內容。`,
-              }),
-          },
-          {
-            id: "line",
-            enabled:
-              prefs.notifications.line &&
-              !!lineClient?.configured &&
-              /^U[0-9a-f]{32}$/i.test(customer.lineUserId || ""),
-            send: async () => {
-              const result = await lineClient.push(
-                customer.lineUserId,
-                `3DRFM｜${notification.title}\n${notification.body}`
-              );
-              if (!result.sent) throw new Error("send_failed");
-            },
-          },
-        ];
-        for (const channel of channels) {
-          // Legacy quote-ready/message notifications already have their own transactional delivery.
-          if (
-            notification.sourceKey?.startsWith("quote:") ||
-            notification.sourceKey?.startsWith("free-print:")
-          )
-            continue;
-          if (!channel.enabled || notification.delivery[channel.id]) continue;
-          // Claim before asynchronous delivery: concurrent requests must not send the same notification twice.
-          notification.delivery[channel.id] = {
-            status: "sending",
-            at: stamp(),
-          };
-          await database.write();
-          try {
-            await channel.send();
-            notification.delivery[channel.id] = { status: "sent", at: stamp() };
-          } catch {
-            notification.delivery[channel.id] = {
-              status: "failed",
-              at: stamp(),
-            };
-          }
-        }
-      }
     }
     await database.write();
     return payload;

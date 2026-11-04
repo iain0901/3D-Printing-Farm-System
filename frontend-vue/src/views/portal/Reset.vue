@@ -45,7 +45,7 @@
         this.loading = true
         try {
           await requestPasswordReset(this.email)
-          this.$baseMessage('若該電子郵件已註冊，重設連結已寄出', 'success')
+          this.$baseMessage('已收到申請；若此信箱已註冊，請留意重設郵件。未收到請聯絡客服。', 'success')
         } catch {
           // customerRequest 已顯示錯誤訊息，保留輸入內容以便重試。
         } finally {

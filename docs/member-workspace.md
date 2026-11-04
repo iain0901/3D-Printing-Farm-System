@@ -1,5 +1,7 @@
 # 3DRFM 會員工作台
 
+2026-11-04 補充：本期上線依 [非硬體驗收與伺服器交接](nonhardware-launch.md)，採 LINE Pay、人工上傳已開立發票／收據及物流單號查詢。一般會員通知已改背景持久投遞／有限重試／人工查核不明結果，免費站點仍使用自己的投遞流程。下列早期「製作需求／免費列印」描述指人工申請路徑；目前另有已實作的公開真切片報價及免費站點時段流程，見 [切片設定包契約](server-bot-slicer-handoff.md)、[站點流程](free-print-sessions.md)。程式實作不代表正式機台或外部服務已驗收。
+
 會員入口 `/portal/workspace`，沿用獨立 customer token；員工服務入口 `/member-service`，僅 Owner、Admin、Operator 可存取。所有新會員資料以 customerId + workspaceId 授權，不以使用者自行提供的 email 判斷檔案所有權。
 
 ## 已接上的流程

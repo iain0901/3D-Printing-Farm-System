@@ -3114,7 +3114,7 @@ function sanitizeQuoteRequest(quote) {
 
 function sanitizeCustomer(customer) {
   if (!customer) return null;
-  const { passwordHash, resetTokenHash, resetTokenExpiresAt, googleSubject, ...safeCustomer } = customer;
+  const { passwordHash, resetTokenHash, resetTokenExpiresAt, resetDelivery, googleSubject, ...safeCustomer } = customer;
   return {
     ...safeCustomer,
     hasPortalAccount: Boolean(passwordHash || googleSubject),
@@ -4721,8 +4721,8 @@ function createEmailClient(env = process.env) {
   });
   return {
     from: config.from,
-    async send({ to, subject, text, html }) {
-      return transporter.sendMail({ from: config.from, to, subject, text, html });
+    async send({ to, subject, text, html, messageId }) {
+      return transporter.sendMail({ from: config.from, to, subject, text, html, messageId });
     }
   };
 }
@@ -6827,6 +6827,8 @@ function applyTodoActions(todos, actions) {
 }
 
 export async function runTelemetryTick(database, options = {}) {
+  // This is a demo simulator, never evidence of actual hardware progress.
+  if (process.env.NODE_ENV === "production") return { changed: false, skipped: true, reason: "simulation_disabled_in_production", changedPrinters: [], completedJobs: [] };
   const increment = Number(options.increment ?? 2);
   const scopeWorkspaceId = options.workspaceId || "";
   const changedPrinters = [];
@@ -7367,6 +7369,8 @@ export async function buildServer({ db, googleAuth = {}, enableTelemetry = false
   app.post("/api/customer-auth/request-reset", { config: { rateLimit: customerAuthRateLimit } }, async (request, reply) => {
     const parsed = customerResetRequestSchema.safeParse(request.body || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid request", issues: parsed.error.issues });
+    // Service availability must not reveal whether an email address is registered.
+    if (!emailClient) return reply.code(503).send({ error: "密碼重設寄信服務尚未設定，請聯絡客服" });
     const email = parsed.data.email.trim().toLowerCase();
     const customer = (database.data.customers || []).find((item) => itemInWorkspace(item, DEFAULT_WORKSPACE_ID) && String(item.email || "").toLowerCase() === email && (item.passwordHash || item.googleSubject));
     if (customer) {
@@ -7374,11 +7378,16 @@ export async function buildServer({ db, googleAuth = {}, enableTelemetry = false
       customer.resetTokenHash = createPasswordHash(resetToken);
       customer.resetTokenExpiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
       const resetUrl = customerPortalUrl(request, { resetEmail: email, resetToken });
-      await sendTransactionalEmail(emailClient, {
+      customer.resetDelivery = { status: "sending", at: new Date().toISOString() };
+      // Persist the token hash before sending so the received link is usable after a restart.
+      await database.write();
+      const result = await sendTransactionalEmail(emailClient, {
         to: customer.email,
-        subject: "Reset your customer portal password",
-        text: `Hi ${customer.name},\n\nUse this link to reset your customer portal password: ${resetUrl}\n\nThis link expires in 1 hour. If you did not request this, you can safely ignore this email.`
+        subject: "3DRFM｜重設會員密碼",
+        text: `${customer.name} 您好：\n\n請使用此連結重設會員密碼：${resetUrl}\n\n連結於 1 小時後失效。如果您沒有申請重設密碼，請忽略這封信。`
       });
+      customer.resetDelivery = { status: result.sent ? "sent" : "uncertain", at: new Date().toISOString() };
+      if (!result.sent) request.log.error("會員密碼重設郵件未確認送達；請檢查寄信服務");
       await dispatchEvent(database, "customer.portal_reset_requested", `Password reset requested for ${customer.email}`, { workspaceId: customer.workspaceId, customerId: customer.id });
       await database.write();
     }
@@ -7389,13 +7398,14 @@ export async function buildServer({ db, googleAuth = {}, enableTelemetry = false
     const parsed = customerResetConfirmSchema.safeParse(request.body || {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid reset payload", issues: parsed.error.issues });
     const customer = (database.data.customers || []).find((item) => item.resetTokenHash && verifyPassword(parsed.data.token, item.resetTokenHash));
-    if (!customer || !customer.resetTokenExpiresAt || Date.parse(customer.resetTokenExpiresAt) < Date.now()) {
+    if (!customer || !(Date.parse(customer.resetTokenExpiresAt) > Date.now())) {
       return reply.code(400).send({ error: "Reset link is invalid or has expired" });
     }
     const now = new Date().toISOString();
     customer.passwordHash = createPasswordHash(parsed.data.password);
     customer.resetTokenHash = "";
     customer.resetTokenExpiresAt = "";
+    delete customer.resetDelivery;
     customer.updatedAt = now;
     database.data.customerSessions = (database.data.customerSessions || []).filter((session) => session.customerId !== customer.id);
     await dispatchEvent(database, "customer.portal_reset_completed", `${customer.name} reset their portal password`, { workspaceId: customer.workspaceId, customerId: customer.id });
@@ -7452,8 +7462,7 @@ export async function buildServer({ db, googleAuth = {}, enableTelemetry = false
     return (database.data.orders || []).filter((order) => itemInWorkspace(order, customer.workspaceId) && (order.customerId === customer.id || quoteOrderIds.has(order.id)));
   });
 
-  // 三個金流供應商（街口支付/LINE Pay/PayUni）目前都是「已備妥串接點但無正式商店憑證」的狀態，
-  // 見 api/payment-providers.mjs 開頭註解。configured=false 代表對應的 env 變數還沒設，前端應顯示為「即將推出」。
+  // LINE Pay 已實作並由商家設定啟用；街口／PayUni 本期不開放。
   app.get("/api/customer/payment-methods", async (request, reply) => {
     const { customer } = customerFromRequest(database, request);
     if (!customer) return reply.code(401).send({ error: "Authentication required" });
@@ -7527,8 +7536,15 @@ export async function buildServer({ db, googleAuth = {}, enableTelemetry = false
     }
     paymentLocks.add(order.id);
     try {
+      order.payment.confirmation = { status: "processing", attemptedAt: new Date().toISOString(), attempts: (order.payment.confirmation?.attempts || 0) + 1 };
+      await database.write();
       const result = await createPaymentProvider("linepay").verifyCallback({ transactionId: input.data.transactionId, orderId: order.id, amount: order.payment.amount });
-      if (!result.ok) return reply.code(409).send({ error: result.message || "尚無已驗證付款紀錄" });
+      if (!result.ok) {
+        Object.assign(order.payment.confirmation, { status: "needs_review", updatedAt: new Date().toISOString() });
+        await database.write();
+        return reply.code(409).send({ error: result.message || "尚無已驗證付款紀錄" });
+      }
+      Object.assign(order.payment.confirmation, { status: "verified", updatedAt: new Date().toISOString() });
       Object.assign(order.payment, result, { paidAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
       if (order.caseId) {
         const item = (database.data.cases || []).find(c => c.id === order.caseId && c.workspaceId === order.workspaceId);
