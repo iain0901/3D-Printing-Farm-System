@@ -1,5 +1,5 @@
 <template>
-  <div :class="classObj" class="vue-admin-better-wrapper">
+  <div :class="classObj" class="vue-admin-better-wrapper brand-surface">
     <div
       v-if="'horizontal' === layout"
       :class="{
@@ -134,6 +134,8 @@
     },
   }
 </script>
+
+<style src="@/styles/admin-workspace.css"></style>
 
 <style lang="scss" scoped>
   @mixin fix-header {

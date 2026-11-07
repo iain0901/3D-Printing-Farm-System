@@ -1,5 +1,6 @@
 <template>
   <div class="maintenance-container">
+    <header class="maintenance-heading"><div><h1>維修與保養管理</h1><p>處理維護任務，追溯日誌與顧問建議。</p></div><router-link to="/operations/maintenance">開啟保養日曆展示</router-link></header>
     <div class="quickbar">
       <el-button v-permissions="['maintenance:write']" type="primary" icon="CirclePlus" @click="dialogVisible = true">新增維護任務</el-button>
     </div>
@@ -103,6 +104,10 @@
 </script>
 
 <style lang="scss" scoped>
+  .maintenance-heading { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px; margin-bottom:24px; }
+  .maintenance-heading h1 { font-size:28px; margin:0 0 8px; color:var(--rfm-ink); }
+  .maintenance-heading p { color:var(--rfm-muted); }
+  .maintenance-heading a { color:var(--rfm-ink); border:1px solid var(--rfm-line); padding:12px; border-radius:6px; }
   .maintenance-container {
     padding: 20px;
   }

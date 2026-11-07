@@ -1,4 +1,7 @@
 export const adminTools = [
+  { title: '機台監控展示', note: '影像、溫度、進度與異常事件', to: '/operations/monitor', group: '生產與設備' },
+  { title: '保養預測與日曆', note: '追溯日誌、比較歷史並安排檢查', to: '/operations/maintenance', group: 'AI 與整合' },
+  { title: '多角度品管', note: '模型參考、外觀缺陷與人工複核', to: '/operations/quality', group: 'AI 與整合' },
   { title: '案件與報價', note: '審查需求、補件與報價', to: '/cases/index', group: '接單與服務', scope: 'orders:write' },
   { title: '訂單與付款', note: '追蹤訂單、付款與交付', to: '/orders/index', group: '接單與服務' },
   { title: '會員服務', note: '處理申請、訊息與單據', to: '/member-service', group: '接單與服務', scope: 'orders:write' },
@@ -12,6 +15,11 @@ export const adminTools = [
   { title: 'AI 知識庫', note: '維護助理使用的服務知識', to: '/ai-knowledge/index', group: 'AI 與整合', scope: 'ai:write' },
   { title: '外部服務整合', note: '檢查既有服務與連線設定', to: '/integrations/index', group: 'AI 與整合' },
 ]
+export const adminGroups = [
+  { label: '工作總覽', icon: 'compass' }, { label: '接單與服務', icon: 'handshake' },
+  { label: '生產與設備', icon: 'industry' }, { label: '檔案與材料', icon: 'warehouse' },
+  { label: 'AI 與整合', icon: 'brain' }, { label: '營運與設定', icon: 'briefcase' },
+]
 export function visibleAdminTools(permissions = []) {
   return adminTools.filter((t) => !t.scope || permissions.includes('*') || permissions.includes(t.scope))
 }
@@ -20,7 +28,7 @@ export function adminNavGroup(path) {
   if (['/cases', '/orders', '/customers', '/member-service'].includes(path)) return '接單與服務'
   if (['/printers', '/queue', '/scheduler', '/todos', '/slicer', '/free-print-admin'].includes(path)) return '生產與設備'
   if (['/files', '/products', '/filament', '/profiles'].includes(path)) return '檔案與材料'
-  if (['/maintenance', '/agent-tools', '/ai-knowledge', '/integrations'].includes(path)) return 'AI 與整合'
+  if (['/operations', '/maintenance', '/agent-tools', '/ai-knowledge', '/integrations'].includes(path)) return 'AI 與整合'
   return '營運與設定'
 }
 export function stationControlAllowed(item, now = Date.now(), stale = false) {

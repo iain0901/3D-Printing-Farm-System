@@ -14,9 +14,10 @@
             menu-trigger="hover"
             mode="horizontal"
           >
-            <template v-for="route in routes">
-              <vab-side-item v-if="!route.hidden" :key="route.path" :full-path="route.path" :item="route" />
-            </template>
+            <el-sub-menu v-for="group in groupedRoutes" :key="group.label" :index="group.label">
+              <template #title><vab-icon :icon="group.icon" /> <span>{{ group.label }}</span></template>
+              <vab-side-item v-for="route in group.items" :key="route.path" :full-path="route.path" :item="route" />
+            </el-sub-menu>
           </el-menu>
         </el-col>
         <el-col :lg="5" :md="5" :sm="5" :xl="5" :xs="5">
@@ -38,6 +39,7 @@
 <script>
   import variables from '@/styles/variables.scss'
   import { mapGetters } from 'vuex'
+  import { adminGroups, adminNavGroup } from '@/utils/admin-workspace.mjs'
 
   export default {
     name: 'VabTop',
@@ -48,6 +50,10 @@
       }
     },
     computed: {
+      groupedRoutes() {
+        const visible = this.routes.filter(r => !r.hidden && (!r.children || r.children.length))
+        return adminGroups.map(g => ({ ...g, items: visible.filter(r => adminNavGroup(r.path) === g.label) })).filter(g => g.items.length)
+      },
       ...mapGetters({
         routes: 'routes/routes',
         visitedRoutes: 'tabsBar/visitedRoutes',

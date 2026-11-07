@@ -184,12 +184,21 @@ export const constantRoutes = [
 
 export const asyncRoutes = [
   {
+    path: '/operations', component: Layout, redirect: '/operations/monitor',
+    meta: { title: '智慧工場展示', icon: 'microchip' },
+    children: [
+      { path: 'monitor', name: 'OperationsMonitor', component: () => import('@/views/operations/index.vue'), meta: { title: '機台監控', icon: 'satellite-dish', noKeepAlive: true } },
+      { path: 'maintenance', name: 'OperationsMaintenance', component: () => import('@/views/operations/index.vue'), meta: { title: '保養預測與日曆', icon: 'calendar-check', noKeepAlive: true } },
+      { path: 'quality', name: 'OperationsQuality', component: () => import('@/views/operations/index.vue'), meta: { title: '多角度品管', icon: 'magnifying-glass', noKeepAlive: true } },
+    ],
+  },
+  {
     path: '/free-print-admin', component: Layout,
-    children: [{ path: '', name: 'FreePrintAdmin', component: () => import('@/views/dashboard/Station.vue'), meta: { title: '免費列印站', icon: 'print', permissions: ['*'] } }],
+    children: [{ path: '', name: 'FreePrintAdmin', component: () => import('@/views/dashboard/Station.vue'), meta: { title: '免費列印站', icon: 'location-dot', permissions: ['*'] } }],
   },
   {
     path: '/agent-tools', component: Layout,
-    children: [{ path: '', name: 'StaffAgentTools', component: () => import('@/views/dashboard/AgentTools.vue'), meta: { title: 'MCP 與 Skill', icon: 'plug' } }],
+    children: [{ path: '', name: 'StaffAgentTools', component: () => import('@/views/dashboard/AgentTools.vue'), meta: { title: 'MCP 與 Skill', icon: 'robot' } }],
   },
   {
     path: '/cases',
@@ -538,7 +547,7 @@ export const asyncRoutes = [
         path: '',
         name: 'MemberService',
         component: () => import('@/views/portal/MemberService.vue'),
-        meta: { title: '會員服務', icon: 'comment-dots', permissions: ['orders:write'] },
+        meta: { title: '會員服務', icon: 'headset', permissions: ['orders:write'] },
       },
     ],
   },

@@ -1,0 +1,39 @@
+import { describe, it, expect } from 'vitest'
+import { makeOperationsDemo, forecastMachine, scheduleMaintenance, inspectionCases, inspectionResult, replayEvent } from '../frontend-vue/src/utils/operations-demo.mjs'
+describe('isolated operations presentation', () => {
+  it('ties explanations to real fixture histories and reacts to new event counts', () => {
+    const state = makeOperationsDemo('2026-11-07'), p = state.machines[0]
+    const f = forecastMachine(p, state.today)
+    expect(f.median).toBe(89); expect(f.elapsed).toBe(82); expect(f.remaining).toBe(0)
+    expect(f.evidence).toEqual(p.history.map(h => h.id))
+    expect(forecastMachine({ ...p, events: 0 }, state.today).remaining).toBe(7)
+    expect(forecastMachine(state.machines[4], state.today).status).toBe('insufficient')
+  })
+  it('prevents duplicate bookings, shared engineer conflicts and ongoing print conflicts', () => {
+    const s = makeOperationsDemo('2026-11-07')
+    const task = { printerId: 'DEMO-HI-03', date: '2026-11-08', time: '14:00', duration: 60, owner: '測試工程師' }
+    const created = scheduleMaintenance(s, task)
+    expect(created.evidence).toHaveLength(3)
+    expect(() => scheduleMaintenance(s, task)).toThrow(/重疊/)
+    expect(() => scheduleMaintenance(s, { ...task, printerId: 'DEMO-HI-02', time: '14:30' })).toThrow(/重疊/)
+    expect(() => scheduleMaintenance(s, { ...task, printerId: 'DEMO-HI-01', date: s.today })).toThrow(/列印/)
+    expect(() => scheduleMaintenance(s, { ...task, date: '2026-11-06' })).toThrow(/今天/)
+    expect(() => scheduleMaintenance(s, { ...task, duration: -1 })).toThrow(/分鐘/)
+    expect(() => scheduleMaintenance(s, { ...task, date: '2027-02-31' })).toThrow(/有效日期/)
+    expect(scheduleMaintenance(s, { ...task, time: '15:00' }).status).toBe('scheduled')
+  })
+  it('keeps insufficient images separate from pass and defects', () => {
+    expect(inspectionResult(inspectionCases[0], [0,1,2,3]).result).toBe('hold')
+    expect(inspectionResult(inspectionCases[1], [0,1,2,3]).result).toBe('pass')
+    expect(inspectionResult(inspectionCases[1], [0,1]).result).toBe('review')
+    expect(inspectionResult(inspectionCases[2], [0,1]).result).toBe('review')
+  })
+  it('bounds replay without completing or starting a job and does not share state', () => {
+    const s = makeOperationsDemo('2026-11-07')
+    for (let i=0; i<200; i++) replayEvent(s)
+    expect(s.logs).toHaveLength(40)
+    expect(s.machines[0].progress).toBe(99)
+    expect(s.machines[2].status).toBe('error')
+    expect(makeOperationsDemo('2026-11-07').tick).toBe(0)
+  })
+})

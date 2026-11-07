@@ -1,5 +1,6 @@
 <template>
   <div class="printers-container">
+    <header class="printers-heading"><div><h1>設備與連線</h1><p>管理機台設定與實際連線狀態。</p></div><router-link to="/operations/monitor">開啟監控展示</router-link></header>
     <div class="quickbar">
       <el-button v-permissions="['printers:control']" type="primary" icon="CirclePlus" @click="addDialogVisible = true">新增打印機</el-button>
       <el-radio-group v-model="mode" size="small">
@@ -195,6 +196,10 @@
 </script>
 
 <style lang="scss" scoped>
+  .printers-heading { display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:24px; }
+  .printers-heading h1 { color:var(--rfm-ink); font-size:28px; margin:0 0 8px; }
+  .printers-heading p { color:var(--rfm-muted); }
+  .printers-heading a { color:var(--rfm-ink); border:1px solid var(--rfm-line); padding:12px; border-radius:6px; }
   .printers-container {
     padding: 20px;
   }

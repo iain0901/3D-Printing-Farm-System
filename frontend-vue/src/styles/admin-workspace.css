@@ -1,0 +1,16 @@
+/* Admin-only visual contract. Public and member layouts are intentionally outside this scope. */
+.vue-admin-better-wrapper .app-main-container { color: var(--rfm-ink); }
+.vue-admin-better-wrapper .quickbar { display:flex; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:20px; }
+.vue-admin-better-wrapper .quickbar .el-button + .el-button { margin-left:0; }
+.vue-admin-better-wrapper .el-table { --el-table-header-bg-color:var(--rfm-workspace); --el-table-header-text-color:var(--rfm-ink); --el-table-border-color:var(--rfm-line); --el-table-row-hover-bg-color:#f1f4f1; border:1px solid var(--rfm-line); border-radius:8px; }
+.vue-admin-better-wrapper .el-table th.el-table__cell { padding:14px 0; font-weight:600; }
+.vue-admin-better-wrapper .el-table td.el-table__cell { padding:12px 0; }
+.vue-admin-better-wrapper .side-container .el-sub-menu__title { font-size:13px; }
+.vue-admin-better-wrapper .side-container .el-menu-item { font-size:13px; }
+.vue-admin-better-wrapper .side-container .el-menu-item .vab-fas-icon { width:20px; text-align:center; margin-right:10px; }
+.vue-admin-better-wrapper .side-container .el-sub-menu .el-menu { background:#192b40; }
+.vue-admin-better-wrapper .side-container .el-sub-menu__title:hover { background:#253e5b; }
+.vue-admin-better-wrapper .app-main-container h2 { letter-spacing:-.02em; }
+.vue-admin-better-wrapper .tabs-container .tabs-content .el-tabs__item { color:var(--rfm-muted); border-color:var(--rfm-line); background:var(--rfm-surface); box-shadow:none; }
+.vue-admin-better-wrapper .tabs-container .tabs-content .el-tabs__item.is-active { color:white; background:var(--rfm-ink); border-color:var(--rfm-ink); box-shadow:none; }
+.vue-admin-better-wrapper .side-container .el-menu-item.is-active { background:#355773 !important; }

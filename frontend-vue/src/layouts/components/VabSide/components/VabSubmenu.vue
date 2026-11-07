@@ -1,12 +1,12 @@
 <template>
-  <el-submenu ref="subMenu" :index="handlePath(item.path)" :popper-append-to-body="false">
+  <el-sub-menu ref="subMenu" :index="fullPath">
     <template #title>
       <vab-icon v-if="item.meta && item.meta.icon" :icon="['fas', item.meta.icon]" class="vab-fas-icon" />
       <vab-remix-icon v-if="item.meta && item.meta.remixIcon" :icon-class="item.meta.remixIcon" class="vab-remix-icon" />
       <span>{{ item.meta.title }}</span>
     </template>
     <slot />
-  </el-submenu>
+  </el-sub-menu>
 </template>
 
 <script>

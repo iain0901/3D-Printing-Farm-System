@@ -11,6 +11,10 @@
     <p v-if="backendStatus !== 'connected'" class="connection-alert" role="alert">
       資料連線尚未確認，以下可能是上次狀態；請確認連線後再安排生產。
     </p>
+    <section class="operations-panel demo-entry">
+      <div><p class="overline">智慧工場 · 互動展示</p><h2>從發現異常，到保養與品管。</h2><p class="muted">五台展示設備、歷史保養依據、多角度檢查；不連動真實機台。</p></div>
+      <div class="demo-entry-links"><router-link to="/operations/monitor"><vab-icon icon="satellite-dish" /> 機台監控</router-link><router-link to="/operations/maintenance"><vab-icon icon="calendar-check" /> 保養日曆</router-link><router-link to="/operations/quality"><vab-icon icon="magnifying-glass" /> 多角度品管</router-link></div>
+    </section>
     <section class="operations-metrics" aria-label="營運摘要">
       <router-link v-for="metric in metrics" :key="metric.label" :to="metric.to" :class="{ urgent: metric.urgent }">
         <span>{{ metric.label }}</span>
@@ -190,6 +194,9 @@
   }
 </script>
 <style scoped>
+  .demo-entry { display:flex; justify-content:space-between; align-items:center; gap:20px; flex-wrap:wrap; }
+  .demo-entry-links { display:flex; gap:10px; flex-wrap:wrap; }
+  .demo-entry-links a { padding:12px; border:1px solid var(--rfm-line); border-radius:6px; font-size:13px; }
   .operations-home {
     padding: 32px;
     color: var(--rfm-ink);

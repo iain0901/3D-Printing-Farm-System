@@ -12,30 +12,29 @@
       :unique-opened="uniqueOpened"
       mode="vertical"
     >
-      <template v-for="group in groupedRoutes" :key="group.label">
-        <li v-if="!collapse" class="admin-nav-label" role="presentation">{{ group.label }}</li>
+      <el-sub-menu v-for="group in groupedRoutes" :key="group.label" :index="group.label">
+        <template #title><vab-icon :icon="group.icon" class="admin-group-icon" /><span>{{ group.label }}</span></template>
         <vab-side-item v-for="route in group.items" :key="route.path" :full-path="route.path" :item="route" />
-      </template>
+      </el-sub-menu>
     </el-menu>
   </el-scrollbar>
 </template>
 <script>
   import variables from '@/styles/variables.scss'
   import { mapGetters } from 'vuex'
-  import { defaultOopeneds, uniqueOpened } from '@/config'
-  import { adminNavGroup } from '@/utils/admin-workspace.mjs'
+  import { adminNavGroup, adminGroups } from '@/utils/admin-workspace.mjs'
 
   export default {
     name: 'VabSide',
     data() {
       return {
-        uniqueOpened,
+        uniqueOpened: true,
       }
     },
     computed: {
       groupedRoutes() {
         const visible = this.routes.filter(r => !r.hidden && (!r.children || r.children.length))
-        return ['工作總覽', '接單與服務', '生產與設備', '檔案與材料', 'AI 與整合', '營運與設定'].map(label => ({ label, items: visible.filter(r => adminNavGroup(r.path) === label) })).filter(g => g.items.length)
+        return adminGroups.map(group => ({ ...group, items: visible.filter(r => adminNavGroup(r.path) === group.label) })).filter(g => g.items.length)
       },
       ...mapGetters({
         collapse: 'settings/collapse',
@@ -44,7 +43,7 @@
       defaultOpens() {
         if (this.collapse) {
         }
-        return defaultOopeneds
+        return [adminNavGroup('/' + this.$route.path.split('/')[1]), ...(this.$route.path.startsWith('/operations/') ? ['/operations'] : [])]
       },
       activeMenu() {
         const route = this.$route
@@ -61,6 +60,7 @@
   }
 </script>
 <style lang="scss" scoped>
+  .admin-group-icon { width: 20px; margin-right: 12px; text-align: center; }
   .admin-nav-label { padding:20px 20px 6px; font-size:11px; letter-spacing:.1em; color:#a9b8cf; line-height:1.4; list-style:none; }
   @mixin active {
     &:hover {
