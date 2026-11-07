@@ -5,6 +5,7 @@ export const freePrintStations = [
     name: '水木書苑',
     institution: '國立清華大學',
     category: '校園站點',
+    city: '新竹市',
     description: '從校園裡的一個想法開始，讓你的模型有機會成為實體。',
     path: '/free-print/nthu-shuimu',
   },

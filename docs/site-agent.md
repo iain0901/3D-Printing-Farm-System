@@ -1,5 +1,11 @@
 # OpenAI 網站助理、MCP 與模型 skills
 
+> 2026-11-07 更新：聊天框語音已改為 OpenAI 語音辨識 → 共用 `/chat` 對話／操作 → OpenAI 語音合成。下方 Realtime 描述為歷史接線，舊 endpoint 保留相容，但現行聊天框不再使用另一套語音推理。導覽與可還原參數直接執行，外部 MCP 提案及敏感動作保留確認。
+
+現行語音變數為 `SITE_AGENT_TRANSCRIBE_MODEL=gpt-4o-mini-transcribe`、`SITE_AGENT_SPEECH_MODEL=gpt-4o-mini-tts`，共用 `OPENAI_API_KEY`。文字／視覺模型以 `.env.example` 及 `api/openai-models.mjs` 為準。文字及語音共用最近十段脈絡，語音逐句辨識，說完停頓約 1.1 秒送出，也可按「說完送出」。語音輸出是 AI 合成。
+
+據點資料來源為 `freePrintStations.mjs`，目前清華大學水木書苑位於新竹市；推薦不代表當下開放。`go:free-upload` 導覽至會員免費切片頁，等待載入並聚焦匯入模型按鈕。選擇本機檔案由使用者完成。助理自己導覽保留通話與對話，手動換頁／換登入／關閉視窗取消舊操作。一般填充／壁數等先用原欄位限制驗證；送單、付款、帳號、刪除及硬體沒有開放自動執行。
+
 日期：2026-10-24（Asia/Taipei）。會員入口 `/#/portal/workspace?section=agent`；右下角「詢問列印助理」提供文字、圖片及語音操作提案。員工登入後也可從助理的「MCP 與 skills」管理自己的連線，沿用員工端驗證與 2FA 規則。
 
 ## 設定

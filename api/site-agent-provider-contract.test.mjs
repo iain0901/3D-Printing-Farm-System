@@ -43,6 +43,41 @@ const textOutput = (value) => ({
   output: [{ content: [{ type: "output_text", text: JSON.stringify(value) }] }],
 });
 describe("site Agent provider contracts (synthetic transport)", () => {
+  it('provides verified station geography and shared conversation history for follow-up navigation', async () => {
+    const f = await fixture(textOutput({ message: '帶你到水木書苑上傳模型。', actions: [{ target: 'go:free-upload', operation: 'click', value: '' }] }));
+    const response = await f.request('/chat', { message: '確定', history: [{ role: 'user', text: '新竹哪裡有免費列印？' }, { role: 'assistant', text: '清華大學水木書苑，需要帶你過去嗎？' }], context: { page: '#/portal/dashboard', controls: [{ id: 'go:free-upload', label: '前往上傳', type: 'navigation' }] } });
+    expect(response.statusCode).toBe(200);
+    const request = JSON.parse(f.fetchImpl.mock.calls[0][1].body);
+    const input = JSON.parse(request.input[0].content[0].text);
+    expect(input.stationDirectory[0]).toMatchObject({ city: '新竹市', name: '水木書苑', institution: '國立清華大學' });
+    expect(input.history[0].text).toContain('新竹');
+    expect(input.navigation['go:free-upload'].path).toBe('/portal/free-slicer');
+    expect(request.instructions).toContain('不要再要求重複確認');
+  });
+  it('transcribes audio through OpenAI without using a separate reasoning agent', async () => {
+    const f = await fixture({ text: '我要免費列印' });
+    const response = await f.request('/transcribe', { audio: 'ZmFrZQ==', mime: 'audio/webm' });
+    expect(response.json().text).toBe('我要免費列印');
+    const [url, request] = f.fetchImpl.mock.calls[0];
+    expect(url).toBe('https://api.openai.com/v1/audio/transcriptions');
+    expect(request.body.get('model')).toBe('gpt-4o-mini-transcribe');
+    expect(request.body.get('file').type).toBe('audio/webm');
+    expect((await f.request('/transcribe', { audio: 'ZmFrZQ==', mime: 'application/javascript' })).statusCode).toBe(400);
+    expect((await f.request('/transcribe', { audio: 'ZmFrZQ==', mime: 'audio/webm' }, false)).statusCode).toBe(401);
+  });
+  it('speaks the shared answer as binary audio and refuses unconfigured speech requests', async () => {
+    const f = await fixture({});
+    f.fetchImpl.mockResolvedValueOnce({ ok: true, arrayBuffer: async () => Buffer.from('synthetic-audio') });
+    const response = await f.request('/speak', { text: '已到模型上傳區' });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-type']).toBe('audio/mpeg');
+    expect(response.body).toBe('synthetic-audio');
+    expect(f.fetchImpl.mock.calls[0][0]).toBe('https://api.openai.com/v1/audio/speech');
+    expect(JSON.parse(f.fetchImpl.mock.calls[0][1].body)).toMatchObject({ input: '已到模型上傳區', model: 'gpt-4o-mini-tts' });
+    const missing = await fixture({}, { OPENAI_API_KEY: '' });
+    expect((await missing.request('/speak', { text: '測試' })).statusCode).toBe(503);
+    expect(missing.fetchImpl).not.toHaveBeenCalled();
+  });
   it('routes text to the economical model and attached images to the vision model', async () => {
     const f = await fixture(textOutput({ message: '請先選擇模型', actions: [] }));
     const input = { message: '這個模型可以怎麼改？', context: { page: '#/portal/print', controls: [] } };

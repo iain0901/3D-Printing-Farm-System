@@ -43,17 +43,18 @@
               <input type="file" accept="image/png,image/jpeg,image/webp" @change="attach" />
             </label>
             <button :disabled="busy || !text.trim()">{{ busy ? '處理中…' : '傳送' }}</button>
-            <button type="button" :disabled="busy" @click="calling || voiceConnecting ? hangup() : call()">
+            <button type="button" :disabled="busy && !calling && !voiceConnecting" @click="calling || voiceConnecting ? hangup() : call()">
               {{ calling || voiceConnecting ? '掛斷' : '語音通話' }}
             </button>
           </div>
         </form>
         <div v-if="calling">
-          <p role="status">語音通話中 · {{ micMuted ? '麥克風已靜音' : '麥克風開啟' }}</p>
+          <p role="status">語音通話中 · {{ recognizing ? '正在辨識…' : busy ? '助理正在處理…' : micMuted ? '麥克風已靜音' : '請說話，停頓後會自動送出' }}</p>
           <button type="button" :aria-pressed="micMuted" @click="toggleMicrophone">{{ micMuted ? '開啟麥克風' : '麥克風靜音' }}</button>
+          <button type="button" :disabled="busy || micMuted" @click="voiceSession?.flush()">說完送出</button>
           <button v-if="audioBlocked" type="button" @click="resumeAudio">恢復語音播放</button>
         </div>
-        <p class="agent-note">操作會在畫面標示並執行。文字與語音提出的修改都會先顯示確認卡。</p>
+        <p class="agent-note">文字與語音使用相同助理。導覽與一般參數會直接操作；送單、付款與機台控制仍需確認。語音由 AI 生成，說完稍停即可傳送。</p>
       </template>
     </section>
   </aside>
@@ -61,13 +62,16 @@
 <script setup>
   import { ref, computed, watch, onBeforeUnmount } from 'vue'
   import { useStore } from 'vuex'
-  import { useRoute } from 'vue-router'
+  import { useRoute, useRouter } from 'vue-router'
   import customerRequest from '@/utils/customerRequest'
   import staffRequest from '@/utils/request'
   import AgentConnections from './AgentConnections.vue'
   import { siteContext, performSiteAction } from '@/utils/siteAgent'
+  import { agentDestinations, mayAutoExecute } from '@/utils/agent-destinations.mjs'
+  import { startAgentVoice } from '@/utils/agent-voice'
   const route = useRoute(),
-    store = useStore()
+    store = useStore(), router = useRouter()
+  let agentNavigating = false, voiceSession, speechUrl
   const staffMode = computed(() => !(route.meta.publicService || route.path === '/' || /^\/(portal|customer|quote)(\/|$)/.test(route.path)))
   const token = computed(() => store.getters[staffMode.value ? 'user/accessToken' : 'customerAuth/accessToken'])
   const connectionsOpen = ref(false)
@@ -90,25 +94,22 @@
     messages = ref([]),
     calling = ref(false)
   let timer,
-    pc,
-    stream,
     audio,
     callTimer,
     voiceEpoch = 0,
     voiceAbort,
     generation = 0
   const voiceConnecting = ref(false)
+  const recognizing = ref(false)
   const reviewBusy = ref(false),
-    busy = computed(() => actionBusy.value || reviewBusy.value)
+    busy = computed(() => actionBusy.value || reviewBusy.value || recognizing.value)
   let reviewEpoch = 0
   const review = ref(null)
   const micMuted = ref(false),
     audioBlocked = ref(false)
   function toggleMicrophone() {
     micMuted.value = !micMuted.value
-    stream?.getTracks().forEach((t) => {
-      t.enabled = !micMuted.value
-    })
+    voiceSession?.setMuted(micMuted.value)
   }
   async function resumeAudio() {
     const speaker = audio,
@@ -186,13 +187,17 @@
     return c
   }
   async function send() {
+    return sendMessage(text.value)
+  }
+  async function sendMessage(message, spoken = false) {
+    if (!message?.trim()) return
     if (busy.value) return
     const key = generation,
-      message = text.value
+      voiceId = voiceEpoch
     actionBusy.value = true
     error.value = ''
     messages.value.push({ role: '你', text: message })
-    text.value = ''
+    if (!spoken) text.value = ''
     try {
       const value = await workspace(
         '/../agent/chat',
@@ -209,15 +214,46 @@
         },
         { timeout: 70000 }
       )
-      if (key !== generation) return
+      if (key !== generation || (spoken && voiceId !== voiceEpoch)) return
       messages.value.push({ role: '助理', text: value.message })
-      actions.value = value.actions
+      const outcomes = []
+      actions.value = []
+      for (const action of value.actions) {
+        if (key !== generation || (spoken && voiceId !== voiceEpoch)) break
+        if (mayAutoExecute(action, labels.value[action.target])) {
+          const result = await executeAction(action, () => key === generation && (!spoken || voiceId === voiceEpoch))
+          outcomes.push(result)
+          if (key === generation) messages.value.push({ role: '操作', text: result })
+        } else actions.value.push(action)
+      }
       image.value = ''
+      if (spoken && calling.value && voiceId === voiceEpoch && key === generation) await speak([value.message, ...outcomes].join(' '), voiceId)
     } catch (e) {
-      error.value = e.response?.data?.error || '助理暫時無法回應，請稍後重試。'
+      if (key === generation && (!spoken || voiceId === voiceEpoch)) error.value = e.response?.data?.error || '助理暫時無法回應，請稍後重試。'
     } finally {
       actionBusy.value = false
     }
+  }
+  async function executeAction(action, current) {
+    const destination = agentDestinations[action.target]
+    if (!destination || action.operation !== 'click') {
+      await performSiteAction(action, current)
+      return `已${action.operation === 'fill' ? '修改' : '操作'}：${labels.value[action.target] || '目前欄位'}。`
+    }
+    if (!current()) throw new Error('對話已變更，已取消操作。')
+    agentNavigating = true
+    try { await router.push(destination.path) } finally { agentNavigating = false }
+    if (!current()) throw new Error('登入狀態已變更，已取消操作。')
+    if (destination.upload) {
+      for (let n = 0; n < 40; n++) {
+        if (!current()) throw new Error('已取消操作。')
+        const button = [...document.querySelectorAll('button')].find(el => !el.closest('[data-site-agent]') && /匯入模型|上傳 STL/.test(el.textContent) && el.getClientRects().length)
+        if (button) { button.scrollIntoView({ behavior: 'smooth', block: 'center' }); button.focus(); return '已選擇清華大學水木書苑，並到達模型上傳區。請按「匯入模型」選擇電腦中的 STL。' }
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+      throw new Error('已前往工作台，但上傳區尚未載入，請稍後再試。')
+    }
+    return `已${destination.label}。`
   }
   async function apply(action, index) {
     actionBusy.value = true
@@ -227,7 +263,7 @@
     try {
       if (action.page && action.page !== location.hash) throw new Error('操作所屬頁面已變更')
       if (action.commandId) await workspace(`/../agent/commands/${action.commandId}/claim`, 'post', {})
-      await performSiteAction(action, () => key === generation)
+      await executeAction(action, () => key === generation)
       if (action.commandId)
         await workspace(`/../agent/commands/${action.commandId}/result`, 'post', { state: 'completed', message: '前端已執行' })
       actions.value.splice(index, 1)
@@ -262,139 +298,74 @@
     })
   }
   function hangup() {
+    voiceSession?.stop()
+    voiceSession = null
+    if (speechUrl) URL.revokeObjectURL(speechUrl)
+    speechUrl = null
     voiceEpoch++
     voiceAbort?.abort()
     voiceConnecting.value = false
     clearTimeout(callTimer)
-    pc?.close()
-    stream?.getTracks().forEach((t) => t.stop())
     if (audio) {
       audio.pause()
       audio.srcObject = null
     }
-    pc = null
-    stream = null
+    recognizing.value = false
     calling.value = false
     micMuted.value = false
     audioBlocked.value = false
+  }
+  async function speak(reply, owner) {
+    const result = await workspace('/speak', 'post', { text: reply.slice(0, 3000) }, { responseType: 'blob', signal: voiceAbort?.signal, timeout: 65000 })
+    if (owner !== voiceEpoch || !calling.value) return
+    if (speechUrl) URL.revokeObjectURL(speechUrl)
+    speechUrl = URL.createObjectURL(result)
+    audio = new Audio(speechUrl)
+    const speaker = audio, signal = voiceAbort.signal
+    await new Promise(async resolve => {
+      const done = () => { clearTimeout(timeout); signal.removeEventListener('abort', done); resolve() }
+      const timeout = setTimeout(done, 90000)
+      speaker.onended = done
+      speaker.onerror = () => { error.value = '語音播放失敗，文字回覆仍可查看。'; done() }
+      signal.addEventListener('abort', done, { once: true })
+      try { await speaker.play() } catch { audioBlocked.value = true; done() }
+    })
   }
   async function call() {
     if (voiceConnecting.value || calling.value) return
     voiceConnecting.value = true
     error.value = ''
-    const key = generation
-    const voiceId = ++voiceEpoch,
-      controller = new AbortController()
-    voiceAbort = controller
-    const owns = () => voiceId === voiceEpoch && key === generation
-    const current = () => owns() && !controller.signal.aborted
+    const owner = ++voiceEpoch
+    voiceAbort = new AbortController()
     try {
-      const secret = await workspace('/../agent/realtime-session', 'post', {}, { signal: controller.signal })
-      if (!current()) return
-      const microphone = await navigator.mediaDevices.getUserMedia({ audio: true })
-      if (!current()) {
-        microphone.getTracks().forEach((t) => t.stop())
-        return
-      }
-      stream = microphone
-      pc = new RTCPeerConnection()
-      const connection = pc
-      audio = new Audio()
-      audio.autoplay = true
-      pc.ontrack = (e) => {
-        if (!current() || pc !== connection) return
-        audio.srcObject = e.streams[0]
-        resumeAudio()
-      }
-      pc.onconnectionstatechange = () => {
-        if (owns() && pc === connection && ['failed', 'closed', 'disconnected'].includes(connection.connectionState)) hangup()
-      }
-      stream.getTracks().forEach((track) => pc.addTrack(track, stream))
-      const channel = pc.createDataChannel('oai-events')
-      channel.onopen = () => {
-        if (!current() || pc !== connection) return
-        channel.send(
-          JSON.stringify({
-            type: 'session.update',
-            session: {
-              type: 'realtime',
-              tools: [
-                {
-                  type: 'function',
-                  name: 'get_page_context',
-                  description: '讀取目前網站可操作欄位。操作前先讀取。',
-                  parameters: { type: 'object', properties: {}, additionalProperties: false },
-                },
-                {
-                  type: 'function',
-                  name: 'propose_ui_action',
-                  description: '向會員提出一項網站操作，等待畫面確認，不代表已完成。',
-                  parameters: {
-                    type: 'object',
-                    properties: {
-                      target: { type: 'string' },
-                      operation: { type: 'string', enum: ['fill', 'click'] },
-                      value: { type: 'string' },
-                    },
-                    required: ['target', 'operation', 'value'],
-                    additionalProperties: false,
-                  },
-                },
-              ],
-              tool_choice: 'auto',
-            },
+      const session = await startAgentVoice({
+        isMuted: () => micMuted.value,
+        isBusy: () => busy.value,
+        onError: e => { if (owner === voiceEpoch) error.value = e.response?.data?.error || e.message || '語音處理失敗，請重試。' },
+        onAudio: async (blob, mime) => {
+          if (owner !== voiceEpoch || !calling.value || busy.value) return
+          const encoded = await new Promise((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = () => resolve(reader.result.split(',')[1])
+            reader.onerror = reject
+            reader.readAsDataURL(blob)
           })
-        )
-      }
-      channel.onmessage = (event) => {
-        if (!current() || pc !== connection) return
-        try {
-          const item = JSON.parse(event.data)
-          if (item.type !== 'response.function_call_arguments.done') return
-          let output
-          if (item.name === 'get_page_context') output = context()
-          else if (item.name === 'propose_ui_action') {
-            const proposal = JSON.parse(item.arguments)
-            if (!['fill', 'click'].includes(proposal.operation) || typeof proposal.value !== 'string' || !labels.value[proposal.target])
-              throw new Error('操作目標無效')
-            actions.value.push(proposal)
-            output = { state: 'pending', message: '已顯示確認卡，等待會員確認。尚未執行。' }
-          } else throw new Error('不支援的工具')
-          channel.send(
-            JSON.stringify({
-              type: 'conversation.item.create',
-              item: { type: 'function_call_output', call_id: item.call_id, output: JSON.stringify(output) },
-            })
-          )
-          channel.send(JSON.stringify({ type: 'response.create' }))
-        } catch {
-          error.value = '語音操作無法確認，請改用文字或手動操作。'
-        }
-      }
-      const offer = await connection.createOffer()
-      if (!current()) return
-      await connection.setLocalDescription(offer)
-      if (!current()) return
-      const response = await fetch('https://api.openai.com/v1/realtime/calls', {
-        method: 'POST',
-        headers: { authorization: `Bearer ${secret.value}`, 'content-type': 'application/sdp' },
-        body: offer.sdp,
-        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20000)]),
+          if (owner !== voiceEpoch || !calling.value) return
+          recognizing.value = true
+          let value
+          try { value = await workspace('/transcribe', 'post', { audio: encoded, mime }, { signal: voiceAbort.signal, timeout: 65000 }) }
+          finally { if (owner === voiceEpoch) recognizing.value = false }
+          if (owner === voiceEpoch && calling.value) await sendMessage(value.text, true)
+        },
       })
-      if (!response.ok) throw new Error('無法建立通話')
-      const sdp = await response.text()
-      if (!current()) return
-      await connection.setRemoteDescription({ type: 'answer', sdp })
-      if (!current()) return
+      if (owner !== voiceEpoch) { session.stop(); return }
+      voiceSession = session
       calling.value = true
       callTimer = setTimeout(hangup, 10 * 60 * 1000)
-    } catch {
-      if (owns()) {
-        hangup()
-        error.value = '通話未建立，請確認麥克風權限與服務設定。'
-      }
+    } catch (e) {
+      if (owner === voiceEpoch) { hangup(); error.value = '無法開啟語音，請確認麥克風權限或改用文字。' }
     } finally {
-      if (owns()) voiceConnecting.value = false
+      if (owner === voiceEpoch) voiceConnecting.value = false
     }
   }
   async function poll() {
@@ -433,6 +404,7 @@
   watch(
     () => route.fullPath,
     () => {
+      if (agentNavigating) return
       generation++
       finishReview(false)
       actions.value = []

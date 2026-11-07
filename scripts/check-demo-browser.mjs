@@ -25,7 +25,7 @@ try {
     objectStorageAdapter: createObjectStorage({ provider: 'local', root: join(dir, 'data/storage') }),
     emailClient: null, lineClient: null, stripeClient: null, chatwootClient: { configured: false } });
   const base = await app.listen({ host: '127.0.0.1', port: 0 });
-  browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', headless: true, args: ['--no-sandbox', '--enable-unsafe-swiftshader'] });
+  browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', headless: true, args: ['--no-sandbox', '--enable-unsafe-swiftshader', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] });
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   const page = await context.newPage();
   page.on('pageerror', e => errors.push(e.message));
@@ -70,6 +70,41 @@ try {
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2), '會員手機版橫向溢位');
   checks.push('390px 會員頁無橫向溢位與展示標示');
   await page.setViewportSize({ width: 1440, height: 1000 });
+  // Synthetic OpenAI transport only; actual UI, microphone recording and navigation are exercised.
+  const chatInputs = [];
+  await page.route('**/api/customer/agent/chat', async route => {
+    const input = route.request().postDataJSON(); chatInputs.push(input);
+    await route.fulfill({ json: input.message.includes('新竹')
+      ? { message: '新竹市可參考清華大學水木書苑，使用 3DSTU_PETG。要帶你到上傳模型嗎？', actions: [] }
+      : { message: '帶你到水木書苑準備模型。', actions: [{ target: 'go:free-upload', operation: 'click', value: '' }] } });
+  });
+  await page.route('**/api/customer/agent/transcribe', async route => {
+    const input = route.request().postDataJSON(); assert.ok(input.audio.length > 0); assert.match(input.mime, /^audio\//);
+    await route.fulfill({ json: { text: '確定' } });
+  });
+  await page.route('**/api/customer/agent/speak', async route => {
+    const wav = Buffer.alloc(1644); wav.write('RIFF', 0); wav.writeUInt32LE(1636, 4); wav.write('WAVEfmt ', 8); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(8000, 24); wav.writeUInt32LE(16000, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(1600, 40);
+    await route.fulfill({ contentType: 'audio/wav', body: wav });
+  });
+  await page.getByRole('button', { name: '詢問列印助理', exact: true }).click();
+  await page.getByLabel('給助理的訊息').fill('新竹有推薦的免費列印據點嗎？');
+  await page.getByRole('button', { name: '傳送', exact: true }).click();
+  await page.getByText('新竹市可參考清華大學水木書苑', { exact: false }).waitFor();
+  await page.getByRole('button', { name: '語音通話', exact: true }).click();
+  await page.getByRole('button', { name: '說完送出', exact: true }).waitFor();
+  await page.getByRole('button', { name: '說完送出', exact: true }).click();
+  await page.waitForURL('**/#/portal/free-slicer');
+  await page.getByText('已選擇清華大學水木書苑，並到達模型上傳區。', { exact: false }).waitFor();
+  assert.equal(chatInputs[1].message, '確定');
+  assert.ok(chatInputs[1].history.some(m => m.text.includes('新竹')));
+  assert.equal(await page.getByRole('button', { name: '確認操作', exact: true }).count(), 0);
+  await page.getByRole('button', { name: '掛斷', exact: true }).click();
+  await page.getByLabel('給助理的訊息').fill('我要免費列印');
+  await page.getByRole('button', { name: '傳送', exact: true }).click();
+  await page.waitForFunction(() => document.activeElement?.textContent.includes('匯入模型'));
+  await page.screenshot({ path: join(evidence, 'shared-voice-chat.png'), fullPage: true });
+  checks.push('文字推薦→語音確定共用歷史、自動前往上傳；文字同樣直接操作，無重複確認');
+  await page.getByRole('button', { name: '關閉列印助理', exact: true }).click();
   await page.goto(base + '/#/login');
   await page.locator('input[type=email]').fill('operator@demo.invalid');
   await page.locator('input[type=password]').fill(password);

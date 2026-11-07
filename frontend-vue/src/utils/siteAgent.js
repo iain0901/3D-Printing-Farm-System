@@ -1,3 +1,4 @@
+import { agentDestinations } from './agent-destinations.mjs'
 const nodes = new Map()
 let nextId = 0
 export function siteContext() {
@@ -37,7 +38,7 @@ export function siteContext() {
     })
     if (controls.length >= 150) break
   }
-  return { page: location.hash, controls }
+  return { page: location.hash, controls: [...controls.slice(0, 140), ...Object.entries(agentDestinations).map(([id, destination]) => ({ id, label: destination.label, type: 'navigation' }))] }
 }
 export async function performSiteAction(action, isCurrent = () => true) {
   const el = nodes.get(action.target)
