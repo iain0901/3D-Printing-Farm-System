@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, rm, writeFile, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { randomBytes } from 'node:crypto'
@@ -66,13 +66,21 @@ try {
   await page.getByText('四個角度展示完成', { exact: false }).waitFor()
   await page.getByRole('button', { name: '判讀展示結果', exact: true }).click()
   await page.locator('.defect-marker').waitFor()
+  assert.equal(await page.locator('.pair-row').count(), 4)
+  await page.getByText('Clef 決策明細', { exact: false }).waitFor()
+  await page.locator('.decision-detail').getByText('94%', { exact: true }).waitFor()
   await page.getByRole('button', { name: '退回重印', exact: true }).click()
   await page.getByText('請填寫複核理由', { exact: false }).waitFor()
   await page.getByPlaceholder('記錄判定依據或補拍原因').fill('展示：底部裂縫需重印，先檢查送料路徑。')
   await page.getByRole('button', { name: '退回重印', exact: true }).click()
   const download = page.waitForEvent('download')
   await page.getByRole('button', { name: '下載展示報告', exact: true }).click()
-  assert.equal((await download).suggestedFilename(), '3drfm-demo-inspections.json')
+  const reportDownload = await download
+  assert.equal(reportDownload.suggestedFilename(), '3drfm-demo-inspections.json')
+  const exported = JSON.parse(await readFile(await reportDownload.path(), 'utf8'))
+  assert.equal(exported.reviews[0].comparison.provider, 'simulation')
+  assert.equal(exported.reviews[0].comparison.targetModel, '@cf/cloudflare/clef-flash')
+  assert.equal(exported.reviews[0].comparison.batches.length, 2)
   await shot('quality-desktop.png')
   await page.getByRole('button', { name: /支架・影像不足/ }).click()
   await page.getByRole('button', { name: '開始轉盤拍攝展示', exact: true }).click()
@@ -86,6 +94,15 @@ try {
   await page.getByRole('button', { name: '開始轉盤拍攝展示', exact: true }).click()
   await page.getByText('四個角度展示完成', { exact: false }).waitFor()
   await page.getByRole('button', { name: '判讀展示結果', exact: true }).click()
+  await page.getByRole('button', { name: '取消比對', exact: true }).click()
+  assert.equal(await page.locator('.pair-results').count(), 0)
+  await page.getByRole('slider').focus()
+  await page.getByRole('slider').press('End')
+  await page.getByRole('button', { name: '判讀展示結果', exact: true }).click()
+  await page.getByText('部分角度的決策信心低於目前展示門檻', { exact: false }).waitFor()
+  await page.getByRole('slider').press('Home')
+  assert.equal(await page.locator('.pair-results').count(), 0)
+  await page.getByRole('button', { name: '判讀展示結果', exact: true }).click()
   await page.getByPlaceholder('記錄判定依據或補拍原因').fill('展示外觀複核完成')
   await page.getByRole('button', { name: '人工確認通過', exact: true }).click()
   await page.reload()
@@ -93,6 +110,7 @@ try {
   await page.locator('.review-row').first().waitFor()
   assert.equal(await page.locator('.review-row').count(), 2)
   checks.push('良品流程、跨物件切換清除舊判斷、複核紀錄刷新仍在')
+  checks.push('Clef choice／noul 模擬、四圖分批、信心門檻重判、取消不留舊結果及報告來源')
   await page.setViewportSize({ width: 390, height: 844 })
   for (const section of ['monitor','maintenance','quality']) {
     await page.goto(base + '/#/operations/' + section)

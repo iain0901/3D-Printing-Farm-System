@@ -35,12 +35,21 @@
     </template>
 
     <template v-else>
-      <div class="quality-intro"><div><h2>每件不同，也能有依據地檢查。</h2><p>對齊模型與拍攝角度 → 檢查可見缺陷 → 人工複核</p></div><span class="demo-badge">預設情境結果 · 未呼叫 AI</span></div>
+      <div class="quality-intro"><div><h2>模型預覽與實拍，逐面配對比對。</h2><p>Cloudflare Clef-flash · 視覺決策流程展示</p></div><span class="demo-badge">本機模擬 · 未呼叫 Cloudflare</span></div>
       <div class="factory-columns quality-layout"><section class="factory-panel"><h2>待驗物件</h2><button v-for="item in inspectionCases" :key="item.id" class="risk-row" :class="{ selected: caseId === item.id }" @click="selectCase(item.id)"><span><b>{{ item.title }}</b><small>{{ item.order }} · {{ item.printerId }}</small></span><vab-icon icon="chevron-right" /></button><h3>檢查條件</h3><p>模型：L 型支架 v1（展示幾何）</p><p>材料：3DSTU_PETG<br />層高：0.20 mm · 噴嘴：0.4 mm<br />範圍：缺料、分層、拉絲、輪廓</p><p class="muted">不評估內部填充、強度或精密尺寸。</p></section>
       <section class="factory-panel"><div class="section-heading"><h2>{{ currentCase.id }} · 多角度檢查</h2><span>{{ stageText }}</span></div><ol class="inspection-steps"><li :class="{ active: captured.length === 0 }">1 準備模型</li><li :class="{ active: captured.length > 0 && !result }">2 拍攝四面</li><li :class="{ active: !!result }">3 複核結果</li></ol>
         <div class="inspection-view"><div class="reference-view"><BracketReference :key="currentCase.scenario" :variant="currentCase.scenario" :angle="angle * 90" /><span>3D 幾何參考 · 尚未相機校正</span></div><div class="photo inspection-photo" :style="sprite(qualityImage, angle)"><span>AI 生成示意 · {{ angle * 90 }}°</span><div v-for="finding in (result?.findings || []).filter(f => f.angle === angle)" :key="finding.label" class="defect-marker" :style="{ left: finding.x + '%', top: finding.y + '%' }"><b>{{ finding.label }}</b></div></div></div>
         <div class="angle-tabs"><button v-for="a in [0, 1, 2, 3]" :key="a" :class="{ selected: angle === a }" @click="angle = a">{{ a * 90 }}° <span>{{ captured.includes(a) ? '✓' : '待拍' }}</span></button></div>
-        <div class="actions"><button class="primary" :disabled="busy" @click="capture">{{ captured.length ? '重新回放拍攝' : '開始轉盤拍攝展示' }}</button><button :disabled="busy || !captured.length" @click="analyze">判讀展示結果</button></div><progress v-if="busy" :value="captured.length" max="4" aria-label="拍攝進度" />
+        <section class="pair-settings"><label for="comparison-threshold">決策信心門檻 <strong>{{ threshold.toFixed(2) }}</strong></label><input id="comparison-threshold" v-model.number="threshold" type="range" min="0.70" max="0.99" step="0.01" :disabled="busy" /><small>低於門檻交人工複核。以下機率為展示數值，不是真實推論或品管準確率。</small></section>
+        <div class="actions"><button class="primary" :disabled="busy" @click="capture">{{ captured.length ? '重新回放拍攝' : '開始轉盤拍攝展示' }}</button><button :disabled="busy || !captured.length" @click="analyze">判讀展示結果</button><button v-if="comparing" @click="cancelComparison">取消比對</button></div><progress v-if="busy" :value="comparing ? compared : captured.length" max="4" :aria-label="comparing ? '雙圖比對進度' : '拍攝進度'" />
+        <p v-if="comparing" role="status">正在模擬第 {{ Math.floor(compared / 2) + 1 }} 批，角度 {{ compared * 90 }}°：雙圖輸入 → Clef 決策 → 信心門檻</p>
+        <section v-if="result?.comparisons" class="pair-results" aria-label="逐角度雙圖比對結果">
+          <h3>Clef 決策明細 <small>{{ result.batches.length }} 批 · 每批最多 4 張圖 · 模擬</small></h3>
+          <button v-for="pair in result.comparisons" :key="pair.angle" class="pair-row" @click="angle = pair.angle / 90"><b>{{ pair.angle }}°</b><span>{{ pair.photoId ? '模型預覽 ↔ 實拍示意' : '模型預覽 ↔ 缺少照片' }}<small>{{ pair.referenceId }}<br />{{ pair.photoId || '待補拍' }}</small></span><span><small>決策信心</small>{{ pair.answer ? pair.answer.confidence.toFixed(2) : '—' }}</span><span class="status" :class="pair.status === 'pass' ? 'planned' : 'urgent'">{{ { pass: '外觀可接受', defect: '疑似瑕疵', review: '需複核', missing: '缺圖' }[pair.status] }}</span></button>
+          <div v-if="result.comparisons[angle]?.answer" class="decision-detail"><h4>{{ angle * 90 }}° · 結構化判斷（示範機率）</h4><div v-for="(probability, label) in result.comparisons[angle].answer.probabilities" :key="label"><span>{{ { pass: '外觀可接受', defect: '有可見瑕疵', review: '需要複核' }[label] }}</span><meter :value="probability" min="0" max="1" :aria-label="label + '示範機率'" /><b>{{ (probability * 100).toFixed(0) }}%</b></div><p>分層：{{ (result.comparisons[angle].checks.layer_split.noul * 100).toFixed(0) }}% · 缺料：{{ (result.comparisons[angle].checks.missing_material.noul * 100).toFixed(0) }}% · 需補拍：{{ (result.comparisons[angle].checks.recapture.noul * 100).toFixed(0) }}%</p></div>
+          <details><summary>查看模型問題與圖片配對規劃</summary><p>以下是模擬接線規劃；imageRefs 是展示識別碼，正式呼叫須以實際圖片的 Base64 填入 images。</p><pre>{{ JSON.stringify(result.batches, null, 2) }}</pre></details>
+          <p class="muted">點選角度查看對應圖片。缺陷框為獨立示意標註；Clef 的分類輸出不包含缺陷定位框。</p>
+        </section>
         <section v-if="result" class="inspection-result" :class="result.result"><h3>{{ resultLabels[result.result] }}</h3><p>{{ result.summary }}</p><p v-for="f in result.findings" :key="f.label">{{ f.angle * 90 }}° · {{ f.label }}：{{ f.action }}</p><small>此框位置與判斷是展示標註，不是模型實際推論。</small><label>複核紀錄<textarea v-model="reviewNote" rows="2" placeholder="記錄判定依據或補拍原因" /></label><div class="actions"><button @click="review('pass')">人工確認通過</button><button @click="review('hold')">退回重印</button><button @click="review('review')">要求補拍</button></div></section>
       </section></div>
       <section class="factory-panel"><div class="section-heading"><h2>複核紀錄</h2><button :disabled="!state.reviews.length" @click="exportReport">下載展示報告</button></div><p v-if="!state.reviews.length" class="muted">完成判讀與人工複核後，這裡會留下物件、機台、結果與原因。</p><article v-for="r in state.reviews" :key="r.id" class="review-row"><b>{{ r.caseId }} · {{ r.printerId }}</b><span>{{ resultLabels[r.decision] }}</span><p>{{ r.note }}</p><small>{{ r.time }} · 展示操作員</small><router-link v-if="r.decision === 'hold'" :to="'/operations/maintenance?printer=' + r.printerId">追查機台保養</router-link></article></section>
@@ -83,7 +92,7 @@ function toggleReplay() { if (replaying.value) return stopReplay(); replaying.va
 function visibilityChanged() { if (document.hidden) stopReplay() }
 onMounted(() => document.addEventListener('visibilitychange', visibilityChanged))
 onBeforeUnmount(() => { stopReplay(); clearInterval(captureTimer); document.removeEventListener('visibilitychange', visibilityChanged) })
-watch(section, () => { stopReplay(); clearInterval(captureTimer); busy.value = false })
+watch(section, () => { stopReplay(); clearInterval(captureTimer); busy.value = false; comparing.value = false })
 const forecasts = computed(() => state.value.machines.map(p => forecastMachine(p, state.value.today)))
 const forecast = computed(() => forecastMachine(selected.value, state.value.today))
 const riskLabel = f => f.status === 'insufficient' ? '資料不足' : f.status === 'urgent' ? '優先檢查' : `${f.remaining} 天後檢查`
@@ -95,14 +104,28 @@ function openSchedule() { scheduleError.value = ''; schedule.value = { date: for
 function saveSchedule() { try { const task = scheduleMaintenance(state.value, { ...schedule.value, printerId: selected.value.id }); persist(); scheduleVisible.value = false; weekOffset.value = Math.floor((Date.parse(task.date) - Date.parse(days.value[0])) / 604800000) * 7 + weekOffset.value; notice.value = `已安排 ${selected.value.name}，${task.date} ${task.time}；僅寫入展示日曆。` } catch (e) { scheduleError.value = e.message } }
 function completeTask(task) { task.status = 'done'; persist(); notice.value = `${task.id} 已標記展示完成；未改動真實機台。` }
 const caseId = ref('QC-023'), angle = ref(0), captured = ref([]), busy = ref(false), result = ref(null), reviewNote = ref('')
+const threshold = ref(0.85), comparing = ref(false), compared = ref(0)
+watch(threshold, () => { result.value = null; reviewNote.value = ''; notice.value = '門檻已變更，請重新比對。' })
 const currentCase = computed(() => inspectionCases.find(c => c.id === caseId.value))
 const qualityImage = computed(() => currentCase.value.scenario === 'defect' ? '/images/operations/inspection-defect.webp' : '/images/operations/inspection-clean.webp')
-const stageText = computed(() => busy.value ? `拍攝 ${captured.value.length} / 4` : result.value ? '等待人工決定' : '準備就緒')
+const stageText = computed(() => comparing.value ? `比對 ${compared.value} / 4` : busy.value ? `拍攝 ${captured.value.length} / 4` : result.value ? '等待人工決定' : '準備就緒')
 const resultLabels = { pass: '可見外觀通過', hold: '退回檢查／重印', review: '待補拍／複核' }
-function selectCase(id) { clearInterval(captureTimer); busy.value = false; caseId.value = id; angle.value = 0; captured.value = []; result.value = null; reviewNote.value = ''; notice.value = ''; error.value = '' }
+function selectCase(id) { clearInterval(captureTimer); busy.value = false; comparing.value = false; compared.value = 0; caseId.value = id; angle.value = 0; captured.value = []; result.value = null; reviewNote.value = ''; notice.value = ''; error.value = '' }
 function capture() { clearInterval(captureTimer); captured.value = []; result.value = null; busy.value = true; angle.value = 0; captureTimer = setInterval(() => { const n = captured.value.length; captured.value.push(n); angle.value = n; if (captured.value.length === (currentCase.value.scenario === 'missing' ? 2 : 4)) { clearInterval(captureTimer); busy.value = false; notice.value = currentCase.value.scenario === 'missing' ? '展示情境：只收到兩面影像，判讀應要求補拍。' : '四個角度展示完成，可查看判讀。' } }, 650) }
-function analyze() { result.value = inspectionResult(currentCase.value, captured.value); if (result.value.findings.length) angle.value = result.value.findings[0].angle }
-function review(decision) { error.value = ''; if (!reviewNote.value.trim()) { error.value = '請填寫複核理由，讓下一位同事知道判斷依據。'; return } if (decision === 'pass' && (captured.value.length < 4 || result.value?.result === 'review')) { error.value = '影像不足，請先補拍；此情境不能直接標為通過。'; return } state.value.reviews.unshift({ id: crypto.randomUUID(), caseId: caseId.value, printerId: currentCase.value.printerId, decision, note: reviewNote.value.trim(), time: new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' }), source: 'synthetic-demo', automatedResult: result.value.result }); persist(); notice.value = '人工複核已保存在此瀏覽器；未修改正式訂單。' }
+function cancelComparison() { clearInterval(captureTimer); busy.value = false; comparing.value = false; result.value = null; notice.value = '已取消比對，未保存判斷。' }
+function analyze() {
+  if (busy.value || !captured.value.length) return
+  result.value = null; reviewNote.value = ''; notice.value = ''; error.value = ''; compared.value = 0; busy.value = true; comparing.value = true
+  captureTimer = setInterval(() => {
+    angle.value = compared.value; compared.value += 1
+    if (compared.value === 4) {
+      clearInterval(captureTimer); busy.value = false; comparing.value = false
+      result.value = inspectionResult(currentCase.value, captured.value, threshold.value)
+      if (result.value.findings.length) angle.value = result.value.findings[0].angle
+    }
+  }, 450)
+}
+function review(decision) { error.value = ''; if (!result.value || busy.value) return; if (!reviewNote.value.trim()) { error.value = '請填寫複核理由，讓下一位同事知道判斷依據。'; return } if (decision === 'pass' && result.value.comparisons.some(p => p.status === 'missing')) { error.value = '影像不足，請先補拍；此情境不能直接標為通過。'; return } state.value.reviews.unshift({ id: crypto.randomUUID(), caseId: caseId.value, printerId: currentCase.value.printerId, decision, note: reviewNote.value.trim(), time: new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' }), source: 'synthetic-demo', automatedResult: result.value.result, comparison: result.value }); persist(); notice.value = '人工複核已保存在此瀏覽器；未修改正式訂單。' }
 function exportReport() { const blob = new Blob([JSON.stringify({ source: 'synthetic-demo-not-real-inspection', reviews: state.value.reviews }, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = '3drfm-demo-inspections.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000) }
 function reset() { stopReplay(); state.value = makeOperationsDemo(); selectCase('QC-023'); selectedId.value = 'DEMO-HI-01'; weekOffset.value = 0; persist(); resetVisible.value = false; notice.value = '展示已重設。' }
 </script>

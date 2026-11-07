@@ -27,11 +27,25 @@
 
 ## 品管技術核對
 
-使用者提及的 J 開頭名稱無法從描述確定。若指 **JEPA**，Meta 官方 I-JEPA 是自監督影像表徵學習架構，不是開箱即用的「好／壞品管 API」。不能將 JEPA、低價二分類與 OpenAI 服務視為同一產品。
+補充更正（2026-11-07）：使用者提供 [Cloudflare Clef 官方文章](https://blog.cloudflare.com/clef-decision-models/) 後，已確認其指定的是 Clef 決策模型，文章提及的 J 開頭產品是 Typesafe 的 Jev。先前依描述猜測 JEPA 不適用於本次選型；Clef 不是 CLIP 相似度模型。
 
 更貼近需求的領域是 **visual anomaly detection（視覺異常檢測）**、zero/few-shot anomaly classification（零／少樣本異常分類）以及參考影像條件的視覺判讀。WinCLIP 論文確實研究少量正常圖片的異常分類與分割，但其資料集成績不能當成客製 FDM 的準確率。每件不同且沒有正常實拍時，僅靠一般工業異常模型不一定可行。
 
 沿用使用者的 OpenAI 選擇，可將每個角度的實拍、相同角度的模型渲染、材料與檢查規則送入視覺模型，要求結構化 `pass / hold / review`、照片引用、缺陷類別、需人工檢查事項。先做便宜的完整性／清晰度守門，僅於拍攝完成觸發推論；需要細節時才提高影像解析度或升級模型。**限定回答三個分類並不會自動變成專用低價模型**，成本仍取決於模型、影像尺寸、張數及 token。
+
+上述 OpenAI 是前輪方案；本輪品管展示改以使用者指定的 Cloudflare Clef-flash 為接線目標，不改其他 OpenAI 聊天／語音服務。
+
+### Clef 雙圖決策展示（本輪續作）
+
+- 官方已確認視覺輸入：Clef／Clef-flash 均支援圖片。`questions` 支援 `noul`（是的機率）、`choice`（選項、機率分布及 confidence）、`score`（有序評分），不是自由生成檢查報告。
+- 模擬每個角度同時提供模型預覽＋實拍，詢問外觀分類、分層、缺料及補拍。四個角度共八張圖，按官方每次最多四張圖片拆兩批；缺少照片的角度不偽造結果，直接待補拍。
+- 介面可調決策信心門檻 0.70～0.99，變更後舊結果失效；有信心的瑕疵轉退回，低信心轉複核，缺圖不准直接通過。取消、換物件、離頁停止模擬，既有人工複核理由必填。
+- `clef-inspection-demo.mjs` 的 probabilities／confidence／noul 全是固定 fixture；沒有讀取圖片像素或呼叫模型。缺陷框仍是獨立示意標註，Clef 官方分類輸出不提供 bounding box，不能把它當缺陷定位模型。
+- 展示報告包含每對 referenceId／photoId、決策問題、機率、門檻、分批及 `provider: simulation`、`model: null`、`targetModel: @cf/cloudflare/clef-flash`、`usage: null`；不編造 token 使用量或實測延遲。
+- 畫面的 imageRefs 只是接線規劃識別碼，**不是可直接送出的圖片參數**。正式 adapter 必須從真模型渲染與實拍檔讀取 bytes，按 imageOrder 填入 `images` 的 data URL 或 `{ content_type, base64 }`；官方不接受遠端 URL。需伺服器端 Cloudflare Account ID／Token，不能放前端。
+- 官方 input schema 限制：最多四張，單張 4 MiB／16 MP、總 decoded 8 MiB、整個 body 13 MiB；正式接線必須驗證。輸出也需驗證分類值、機率及完整欄位，任何缺失／服務錯誤應進複核，不回退成展示成功。
+- 2026-11-07 查核價格：Clef-flash 每百萬輸入 token US$0.038；Clef US$0.24，不收輸出 token。圖片會轉成輸入 token，另有 state／questions；這不是固定每件價格。未測 FDM 品管準確率、延遲或實際費用。
+- 官方依據：[Clef](https://developers.cloudflare.com/workers-ai/models/clef/)、[Clef-flash](https://developers.cloudflare.com/workers-ai/models/clef-flash/)、[輸入 schema](https://developers.cloudflare.com/workers-ai/models/clef/schema-input.json)、[輸出 schema](https://developers.cloudflare.com/workers-ai/models/clef/schema-output.json)。
 
 OpenAI 官方明列視覺的精確空間定位限制，因此缺陷框必須驗證，不能依未校準照片放行尺寸、公差、內部填充或承載強度。轉盤看不到的底面／遮蔽面要補拍，透明／反光料需獨立測試。正式上線前應以真實件建立各缺陷標註集，按零件而非照片分割測試集，衡量漏檢、誤退與人工複核率、延遲及單件費用。不能宣稱只填 key 即完成生產品管。
 

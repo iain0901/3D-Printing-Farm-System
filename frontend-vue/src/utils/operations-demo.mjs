@@ -1,4 +1,5 @@
 // Explicit synthetic presentation data. Never merged into API state or machine commands.
+import { simulateClefInspection } from './clef-inspection-demo.mjs'
 export const DEMO_VERSION = 1
 export const isoDay = (date) => new Date(date).toISOString().slice(0, 10)
 export const addDays = (date, days) => isoDay(Date.parse(date.slice(0, 10) + 'T12:00:00Z') + days * 86400000)
@@ -52,9 +53,8 @@ export const inspectionCases = [
   { id: 'QC-021', order: '展示訂單 021', printerId: 'DEMO-HI-01', title: '支架・可見外觀檢查', scenario: 'clear', result: 'pass', summary: '四個可見角度未標註明顯外觀缺陷；底面未拍攝，仍需人工確認。', findings: [] },
   { id: 'QC-024', order: '展示訂單 024', printerId: 'DEMO-HI-02', title: '支架・影像不足', scenario: 'missing', result: 'review', summary: '缺少背面與底部影像，無法判定；請補拍。', findings: [] },
 ]
-export function inspectionResult(item, angles) {
-  if (item.scenario === 'missing' || angles.length < 4) return { result: 'review', summary: '影像不足，請補拍四個角度後再送人工複核。', findings: [] }
-  return { result: item.result, summary: item.summary, findings: item.findings }
+export function inspectionResult(item, angles, threshold = 0.85) {
+  return simulateClefInspection(item, angles, threshold)
 }
 export function replayEvent(state) {
   state.tick += 1
