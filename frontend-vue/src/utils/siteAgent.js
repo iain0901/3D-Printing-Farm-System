@@ -1,7 +1,7 @@
 import { agentDestinations } from './agent-destinations.mjs'
 const nodes = new Map()
 let nextId = 0
-export function siteContext() {
+export function siteContext({ staff = false } = {}) {
   nodes.clear()
   const controls = []
   for (const el of document.querySelectorAll(
@@ -38,7 +38,9 @@ export function siteContext() {
     })
     if (controls.length >= 150) break
   }
-  return { page: location.hash, controls: [...controls.slice(0, 140), ...Object.entries(agentDestinations).map(([id, destination]) => ({ id, label: destination.label, type: 'navigation' }))] }
+  const summary = [...document.querySelectorAll('h1, h2, [role="alert"]')].filter(el => !el.closest('[data-site-agent]') && el.getClientRects().length).map(el => el.textContent.trim()).join('；').slice(0, 1600)
+  const destinations = Object.entries(agentDestinations).filter(([, destination]) => Boolean(destination.staff) === staff)
+  return { page: location.hash, summary, controls: [...controls.slice(0, 150 - destinations.length), ...destinations.map(([id, destination]) => ({ id, label: destination.label, type: 'navigation' }))] }
 }
 export async function performSiteAction(action, isCurrent = () => true) {
   const el = nodes.get(action.target)

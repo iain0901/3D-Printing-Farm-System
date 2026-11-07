@@ -72,8 +72,17 @@ try {
   await page.setViewportSize({ width: 1440, height: 1000 });
   // Synthetic OpenAI transport only; actual UI, microphone recording and navigation are exercised.
   const chatInputs = [];
+  let resolveDelayed, retryAttempts = 0;
+  let notifyDelayed;
+  const delayedStarted = new Promise(resolve => { notifyDelayed = resolve; });
   await page.route('**/api/customer/agent/chat', async route => {
     const input = route.request().postDataJSON(); chatInputs.push(input);
+    if (input.message === '測試停止') {
+      await new Promise(resolve => { resolveDelayed = resolve; notifyDelayed(); });
+      await route.fulfill({ json: { message: '前往訂單', actions: [{ target: 'go:orders', operation: 'click', value: '' }] } }).catch(() => {});
+      return;
+    }
+    if (input.message === '測試重試' && ++retryAttempts === 1) { await route.fulfill({ status: 503, json: { error: '測試暫時離線' } }); return; }
     await route.fulfill({ json: input.message.includes('新竹')
       ? { message: '新竹市可參考清華大學水木書苑，使用 3DSTU_PETG。要帶你到上傳模型嗎？', actions: [] }
       : { message: '帶你到水木書苑準備模型。', actions: [{ target: 'go:free-upload', operation: 'click', value: '' }] } });
@@ -83,7 +92,7 @@ try {
     await route.fulfill({ json: { text: '確定' } });
   });
   await page.route('**/api/customer/agent/speak', async route => {
-    const wav = Buffer.alloc(1644); wav.write('RIFF', 0); wav.writeUInt32LE(1636, 4); wav.write('WAVEfmt ', 8); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(8000, 24); wav.writeUInt32LE(16000, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(1600, 40);
+    const wav = Buffer.alloc(80044); wav.write('RIFF', 0); wav.writeUInt32LE(80036, 4); wav.write('WAVEfmt ', 8); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(8000, 24); wav.writeUInt32LE(16000, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(80000, 40);
     await route.fulfill({ contentType: 'audio/wav', body: wav });
   });
   await page.getByRole('button', { name: '詢問列印助理', exact: true }).click();
@@ -91,6 +100,11 @@ try {
   await page.getByRole('button', { name: '傳送', exact: true }).click();
   await page.getByText('新竹市可參考清華大學水木書苑', { exact: false }).waitFor();
   await page.getByRole('button', { name: '語音通話', exact: true }).click();
+  await page.getByRole('button', { name: '提示音開啟', exact: true }).click();
+  await page.getByRole('button', { name: '提示音關閉', exact: true }).click();
+  await page.getByRole('button', { name: '麥克風靜音', exact: true }).click();
+  await page.getByText('麥克風已靜音', { exact: false }).waitFor();
+  await page.getByRole('button', { name: '開啟麥克風', exact: true }).click();
   await page.getByRole('button', { name: '說完送出', exact: true }).waitFor();
   await page.getByRole('button', { name: '說完送出', exact: true }).click();
   await page.waitForURL('**/#/portal/free-slicer');
@@ -98,12 +112,35 @@ try {
   assert.equal(chatInputs[1].message, '確定');
   assert.ok(chatInputs[1].history.some(m => m.text.includes('新竹')));
   assert.equal(await page.getByRole('button', { name: '確認操作', exact: true }).count(), 0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('.agent-window').screenshot({ path: join(evidence, 'call-mobile.png') });
+  assert.ok((await page.locator('.agent-window').boundingBox()).width <= 390);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.getByRole('button', { name: '打斷，換我說', exact: true }).click();
+  await page.getByRole('button', { name: '說完送出', exact: true }).waitFor();
   await page.getByRole('button', { name: '掛斷', exact: true }).click();
   await page.getByLabel('給助理的訊息').fill('我要免費列印');
   await page.getByRole('button', { name: '傳送', exact: true }).click();
   await page.waitForFunction(() => document.activeElement?.textContent.includes('匯入模型'));
   await page.screenshot({ path: join(evidence, 'shared-voice-chat.png'), fullPage: true });
   checks.push('文字推薦→語音確定共用歷史、自動前往上傳；文字同樣直接操作，無重複確認');
+  assert.ok(chatInputs.at(-1).history.some(m => m.text.startsWith('實際執行結果：')));
+  checks.push('通話提示音切換、靜音／解除、打斷播放、掛斷及後續對話取得實際結果');
+  const beforeStop = page.url();
+  await page.getByLabel('給助理的訊息').fill('測試停止');
+  await page.getByRole('button', { name: '傳送', exact: true }).click();
+  await delayedStarted;
+  await page.getByRole('button', { name: '停止這次操作', exact: true }).click();
+  resolveDelayed?.();
+  await page.getByText('已停止後續操作；已完成的變更仍保留。', { exact: false }).waitFor();
+  assert.equal(page.url(), beforeStop);
+  await page.getByLabel('給助理的訊息').fill('測試重試');
+  await page.getByRole('button', { name: '傳送', exact: true }).click();
+  await page.getByRole('button', { name: '重試上一則', exact: true }).click();
+  await page.getByText('已選擇清華大學水木書苑，並到達模型上傳區。', { exact: false }).last().waitFor();
+  assert.equal(retryAttempts, 2);
+  assert.deepEqual(httpErrors.splice(0), [{ status: 503, path: '/api/customer/agent/chat' }]);
+  checks.push('取消請求後晚到回覆不導覽、暫時錯誤可明確重試');
   await page.getByRole('button', { name: '關閉列印助理', exact: true }).click();
   await page.goto(base + '/#/login');
   await page.locator('input[type=email]').fill('operator@demo.invalid');

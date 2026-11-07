@@ -22,7 +22,9 @@
           <button @click="finishReview(false)">返回修改</button>
         </div>
         <p v-if="error" role="alert">{{ error }}</p>
-        <div class="agent-messages" aria-live="polite">
+        <button v-if="lastFailed && !busy" type="button" @click="retryLast">重試上一則</button>
+        <button v-if="actionBusy && !speaking" type="button" @click="cancelTurn">停止這次操作</button>
+        <div ref="messagePanel" class="agent-messages" aria-live="polite">
           <p v-for="(item, i) in messages" :key="i">
             <b>{{ item.role }}：</b>
             {{ item.text }}
@@ -48,11 +50,16 @@
             </button>
           </div>
         </form>
-        <div v-if="calling">
-          <p role="status">語音通話中 · {{ recognizing ? '正在辨識…' : busy ? '助理正在處理…' : micMuted ? '麥克風已靜音' : '請說話，停頓後會自動送出' }}</p>
+        <div v-if="calling || voiceConnecting" class="call-status">
+          <p role="status">{{ callStatus }}</p><time v-if="calling" aria-label="通話時間">{{ callDuration }}</time>
+          <p v-if="voiceConnecting">請允許瀏覽器使用麥克風；接通後會有短提示音。</p>
+          <button type="button" :aria-pressed="soundEnabled" @click="toggleSounds">{{ soundEnabled ? '提示音開啟' : '提示音關閉' }}</button>
+          <button v-if="speaking" type="button" @click="interruptSpeech">打斷，換我說</button>
+          <template v-if="calling">
           <button type="button" :aria-pressed="micMuted" @click="toggleMicrophone">{{ micMuted ? '開啟麥克風' : '麥克風靜音' }}</button>
-          <button type="button" :disabled="busy || micMuted" @click="voiceSession?.flush()">說完送出</button>
+          <button type="button" :disabled="busy || micMuted || voiceState === 'waiting'" @click="voiceSession?.flush()">說完送出</button>
           <button v-if="audioBlocked" type="button" @click="resumeAudio">恢復語音播放</button>
+          </template>
         </div>
         <p class="agent-note">文字與語音使用相同助理。導覽與一般參數會直接操作；送單、付款與機台控制仍需確認。語音由 AI 生成，說完稍停即可傳送。</p>
       </template>
@@ -60,7 +67,7 @@
   </aside>
 </template>
 <script setup>
-  import { ref, computed, watch, onBeforeUnmount } from 'vue'
+  import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
   import { useStore } from 'vuex'
   import { useRoute, useRouter } from 'vue-router'
   import customerRequest from '@/utils/customerRequest'
@@ -69,9 +76,25 @@
   import { siteContext, performSiteAction } from '@/utils/siteAgent'
   import { agentDestinations, mayAutoExecute } from '@/utils/agent-destinations.mjs'
   import { startAgentVoice } from '@/utils/agent-voice'
+  import { createCallCues } from '@/utils/agent-call-cues'
   const route = useRoute(),
     store = useStore(), router = useRouter()
   let agentNavigating = false, voiceSession, speechUrl
+  let turnAbort, turnEpoch = 0, finishPlayback, durationTimer, speechAbort, inputReadyAt = 0, currentTurnSpoken = false
+  const messagePanel = ref(null), lastFailed = ref(null), speaking = ref(false), voiceState = ref('listening'), elapsed = ref(0)
+  const soundEnabled = ref(true)
+  try { soundEnabled.value = localStorage.getItem('3drfm-agent-cues') !== 'off' } catch {}
+  const cues = createCallCues(() => soundEnabled.value)
+  const callDuration = computed(() => `${Math.floor(elapsed.value / 60)}:${String(elapsed.value % 60).padStart(2, '0')}`)
+  const callStatus = computed(() => voiceConnecting.value ? '正在接通…' : speaking.value ? (audioBlocked.value ? '請點恢復語音播放' : '助理正在說話') : recognizing.value ? '正在辨識你的話…' : actionBusy.value ? '正在理解並處理…' : micMuted.value ? '麥克風已靜音' : voiceState.value === 'waiting' ? '正在準備聆聽…' : voiceState.value === 'recording' ? '正在聆聽，說完稍停即可' : '已接通，請說話')
+  function toggleSounds() { soundEnabled.value = !soundEnabled.value; try { localStorage.setItem('3drfm-agent-cues', soundEnabled.value ? 'on' : 'off') } catch {}; if (soundEnabled.value) cues.play('listening') }
+  function interruptSpeech() { speechAbort?.abort(); audio?.pause(); finishPlayback?.(); audioBlocked.value = false }
+  function cancelTurn() { turnEpoch++; turnAbort?.abort(); interruptSpeech(); currentTurnSpoken = false; actionBusy.value = false; actions.value = []; messages.value.push({ role: '操作', text: '已停止後續操作；已完成的變更仍保留。' }) }
+  function retryLast() { const failed = lastFailed.value; if (failed) sendMessage(failed.message, failed.spoken && calling.value, true) }
+  function disconnected() { if (calling.value || voiceConnecting.value) { hangup(); error.value = '網路已離線，通話已結束；恢復連線後可重新撥打或繼續文字對話。' } }
+  window.addEventListener('offline', disconnected)
+  window.addEventListener('pagehide', hangup)
+  watch(() => messages.value.length, async () => { await nextTick(); const panel = messagePanel.value; if (panel) panel.scrollTop = panel.scrollHeight })
   const staffMode = computed(() => !(route.meta.publicService || route.path === '/' || /^\/(portal|customer|quote)(\/|$)/.test(route.path)))
   const token = computed(() => store.getters[staffMode.value ? 'user/accessToken' : 'customerAuth/accessToken'])
   const connectionsOpen = ref(false)
@@ -91,6 +114,7 @@
     image = ref(''),
     actions = ref([]),
     labels = ref({}),
+    controlValues = ref({}),
     messages = ref([]),
     calling = ref(false)
   let timer,
@@ -109,7 +133,9 @@
     audioBlocked = ref(false)
   function toggleMicrophone() {
     micMuted.value = !micMuted.value
+    if (!micMuted.value) inputReadyAt = Date.now() + 350
     voiceSession?.setMuted(micMuted.value)
+    cues.play(micMuted.value ? 'muted' : 'unmuted')
   }
   async function resumeAudio() {
     const speaker = audio,
@@ -123,6 +149,7 @@
   }
   const reviewCache = new Map()
   function closeAssistant() {
+    turnEpoch++; turnAbort?.abort()
     generation++
     opened.value = false
     hangup()
@@ -182,21 +209,27 @@
   window.addEventListener('3drfm:slicer-enter', entered)
   window.addEventListener('3drfm:before-slice', beforeSlice)
   function context() {
-    const c = siteContext()
+    const c = siteContext({ staff: staffMode.value })
     labels.value = Object.fromEntries(c.controls.map((x) => [x.id, x.label]))
+    controlValues.value = Object.fromEntries(c.controls.map((x) => [x.id, x.value]))
     return c
   }
   async function send() {
     return sendMessage(text.value)
   }
-  async function sendMessage(message, spoken = false) {
+  async function sendMessage(message, spoken = false, retry = false) {
     if (!message?.trim()) return
     if (busy.value) return
     const key = generation,
       voiceId = voiceEpoch
+    const turn = ++turnEpoch
+    currentTurnSpoken = spoken
+    turnAbort = new AbortController()
+    const current = () => key === generation && turn === turnEpoch && (!spoken || voiceId === voiceEpoch)
     actionBusy.value = true
     error.value = ''
-    messages.value.push({ role: '你', text: message })
+    lastFailed.value = null
+    if (!retry || messages.value.at(-1)?.role !== '你' || messages.value.at(-1)?.text !== message) messages.value.push({ role: '你', text: message })
     if (!spoken) text.value = ''
     try {
       const value = await workspace(
@@ -206,39 +239,44 @@
           message,
           history: messages.value
             .slice(0, -1)
-            .filter((m) => ['你', '助理'].includes(m.role))
+            .filter((m) => ['你', '助理', '操作'].includes(m.role))
             .slice(-10)
-            .map((m) => ({ role: m.role === '你' ? 'user' : 'assistant', text: m.text.slice(0, 1500) })),
+            .map((m) => ({ role: m.role === '你' ? 'user' : 'assistant', text: `${m.role === '操作' ? '實際執行結果：' : ''}${m.text}`.slice(0, 1500) })),
           ...(image.value ? { image: image.value } : {}),
           context: context(),
         },
-        { timeout: 70000 }
+        { timeout: 70000, signal: turnAbort.signal }
       )
-      if (key !== generation || (spoken && voiceId !== voiceEpoch)) return
+      if (!current()) return
       messages.value.push({ role: '助理', text: value.message })
       const outcomes = []
       actions.value = []
       for (const action of value.actions) {
-        if (key !== generation || (spoken && voiceId !== voiceEpoch)) break
+        if (!current()) break
         if (mayAutoExecute(action, labels.value[action.target])) {
-          const result = await executeAction(action, () => key === generation && (!spoken || voiceId === voiceEpoch))
+          const result = await executeAction(action, current)
           outcomes.push(result)
           if (key === generation) messages.value.push({ role: '操作', text: result })
         } else actions.value.push(action)
       }
       image.value = ''
-      if (spoken && calling.value && voiceId === voiceEpoch && key === generation) await speak([value.message, ...outcomes].join(' '), voiceId)
+      if (spoken && calling.value && current()) {
+        try { await speak([value.message, ...outcomes].join(' '), voiceId) }
+        catch { if (current()) error.value = '文字回覆與操作已完成，但語音暫時無法播放，可繼續使用文字。' }
+      }
     } catch (e) {
-      if (key === generation && (!spoken || voiceId === voiceEpoch)) error.value = e.response?.data?.error || '助理暫時無法回應，請稍後重試。'
+      if (current()) { error.value = e.response?.data?.error || e.message || '助理暫時無法回應，請稍後重試。'; messages.value.push({ role: '操作', text: `未完成這次要求：${error.value}` }); lastFailed.value = { message, spoken }; if (calling.value) cues.play('error') }
     } finally {
-      actionBusy.value = false
+      if (turn === turnEpoch) { actionBusy.value = false; currentTurnSpoken = false }
     }
   }
   async function executeAction(action, current) {
     const destination = agentDestinations[action.target]
     if (!destination || action.operation !== 'click') {
+      const previous = controlValues.value[action.target]
       await performSiteAction(action, current)
-      return `已${action.operation === 'fill' ? '修改' : '操作'}：${labels.value[action.target] || '目前欄位'}。`
+      if (action.operation === 'fill') return `已修改欄位「${labels.value[action.target] || '目前欄位'}」：${String(previous ?? '未填').slice(0, 300)} → ${String(action.value).slice(0, 300)}。`
+      return `已操作：${labels.value[action.target] || '目前按鈕'}；請以頁面實際結果確認是否完成。`
     }
     if (!current()) throw new Error('對話已變更，已取消操作。')
     agentNavigating = true
@@ -298,6 +336,11 @@
     })
   }
   function hangup() {
+    if (actionBusy.value && currentTurnSpoken) cancelTurn()
+    const wasActive = calling.value || voiceConnecting.value
+    cues.stopRinging()
+    clearInterval(durationTimer)
+    interruptSpeech()
     voiceSession?.stop()
     voiceSession = null
     if (speechUrl) URL.revokeObjectURL(speechUrl)
@@ -314,34 +357,54 @@
     calling.value = false
     micMuted.value = false
     audioBlocked.value = false
+    if (wasActive) { cues.play('ended'); messages.value.push({ role: '通話', text: '通話已結束，仍可繼續打字。' }) }
   }
   async function speak(reply, owner) {
-    const result = await workspace('/speak', 'post', { text: reply.slice(0, 3000) }, { responseType: 'blob', signal: voiceAbort?.signal, timeout: 65000 })
-    if (owner !== voiceEpoch || !calling.value) return
-    if (speechUrl) URL.revokeObjectURL(speechUrl)
-    speechUrl = URL.createObjectURL(result)
-    audio = new Audio(speechUrl)
-    const speaker = audio, signal = voiceAbort.signal
-    await new Promise(async resolve => {
-      const done = () => { clearTimeout(timeout); signal.removeEventListener('abort', done); resolve() }
-      const timeout = setTimeout(done, 90000)
-      speaker.onended = done
-      speaker.onerror = () => { error.value = '語音播放失敗，文字回覆仍可查看。'; done() }
-      signal.addEventListener('abort', done, { once: true })
-      try { await speaker.play() } catch { audioBlocked.value = true; done() }
-    })
+    speaking.value = true
+    const controller = new AbortController()
+    speechAbort = controller
+    try {
+      const result = await workspace('/speak', 'post', { text: reply.slice(0, 3000) }, { responseType: 'blob', signal: controller.signal, timeout: 65000 })
+      if (owner !== voiceEpoch || !calling.value || controller.signal.aborted) return
+      if (speechUrl) URL.revokeObjectURL(speechUrl)
+      speechUrl = URL.createObjectURL(result)
+      audio = new Audio(speechUrl)
+      const speaker = audio, signal = controller.signal
+      await new Promise(resolve => {
+        let settled = false
+        const done = () => {
+          if (settled) return
+          settled = true; clearTimeout(timeout); signal.removeEventListener('abort', done)
+          speaker.pause(); finishPlayback = null; resolve()
+        }
+        const timeout = setTimeout(done, 90000)
+        finishPlayback = done
+        speaker.onended = done
+        speaker.onerror = () => { if (!settled && owner === voiceEpoch) error.value = '語音播放失敗，文字回覆仍可查看。'; done() }
+        signal.addEventListener('abort', done, { once: true })
+        if (signal.aborted) { done(); return }
+        speaker.play().catch(() => { if (!settled) audioBlocked.value = true })
+      })
+    } catch (e) { if (!controller.signal.aborted) throw e }
+    finally {
+      if (speechAbort === controller) { speaking.value = false; speechAbort = null; audioBlocked.value = false }
+    }
   }
   async function call() {
     if (voiceConnecting.value || calling.value) return
     voiceConnecting.value = true
+    voiceState.value = 'waiting'
+    cues.ring()
     error.value = ''
     const owner = ++voiceEpoch
     voiceAbort = new AbortController()
     try {
       const session = await startAgentVoice({
+        signal: voiceAbort.signal,
         isMuted: () => micMuted.value,
-        isBusy: () => busy.value,
-        onError: e => { if (owner === voiceEpoch) error.value = e.response?.data?.error || e.message || '語音處理失敗，請重試。' },
+        isBusy: () => busy.value || voiceConnecting.value || Date.now() < inputReadyAt,
+        onState: state => { if (owner === voiceEpoch) { voiceState.value = state; if (state === 'sent') cues.play('sent') } },
+        onError: e => { if (owner === voiceEpoch) { const message = e.response?.data?.error || e.message || '語音處理失敗，請重試。'; if ([401, 403, 429, 503].includes(e.response?.status)) hangup(); error.value = message; cues.play('error') } },
         onAudio: async (blob, mime) => {
           if (owner !== voiceEpoch || !calling.value || busy.value) return
           const encoded = await new Promise((resolve, reject) => {
@@ -355,15 +418,21 @@
           let value
           try { value = await workspace('/transcribe', 'post', { audio: encoded, mime }, { signal: voiceAbort.signal, timeout: 65000 }) }
           finally { if (owner === voiceEpoch) recognizing.value = false }
+          if (owner === voiceEpoch && !value.text?.trim()) { error.value = '沒有辨識到內容，請再說一次，或使用文字。'; cues.play('error'); return }
           if (owner === voiceEpoch && calling.value) await sendMessage(value.text, true)
         },
       })
       if (owner !== voiceEpoch) { session.stop(); return }
       voiceSession = session
       calling.value = true
+      inputReadyAt = Date.now() + 350
+      cues.stopRinging(); cues.play('connected')
+      elapsed.value = 0
+      const started = Date.now()
+      durationTimer = setInterval(() => { elapsed.value = Math.floor((Date.now() - started) / 1000) }, 1000)
       callTimer = setTimeout(hangup, 10 * 60 * 1000)
     } catch (e) {
-      if (owner === voiceEpoch) { hangup(); error.value = '無法開啟語音，請確認麥克風權限或改用文字。' }
+      if (owner === voiceEpoch) { hangup(); cues.play('error'); error.value = e.name === 'NotAllowedError' ? '麥克風權限未開啟，請在網址列允許麥克風後重試。' : e.name === 'NotFoundError' ? '找不到麥克風，請確認裝置已連接，或改用文字。' : '無法開啟語音，請確認瀏覽器支援錄音與 HTTPS，或改用文字。' }
     } finally {
       if (owner === voiceEpoch) voiceConnecting.value = false
     }
@@ -389,6 +458,7 @@
   }
   watch([opened, token], (value, previous) => {
     if (value[1] !== previous?.[1]) {
+      turnEpoch++; turnAbort?.abort(); lastFailed.value = null; actionBusy.value = false
       generation++
       hangup()
       finishReview(false)
@@ -405,6 +475,7 @@
     () => route.fullPath,
     () => {
       if (agentNavigating) return
+      turnEpoch++; turnAbort?.abort(); actionBusy.value = false; lastFailed.value = null
       generation++
       finishReview(false)
       actions.value = []
@@ -412,9 +483,13 @@
     }
   )
   onBeforeUnmount(() => {
+    turnEpoch++; turnAbort?.abort()
     generation++
     clearTimeout(timer)
     hangup()
+    cues.dispose()
+    window.removeEventListener('offline', disconnected)
+    window.removeEventListener('pagehide', hangup)
     finishReview(false)
     window.removeEventListener('3drfm:slicer-enter', entered)
     window.removeEventListener('3drfm:before-slice', beforeSlice)

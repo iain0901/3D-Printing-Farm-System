@@ -53,6 +53,8 @@ describe("site Agent provider contracts (synthetic transport)", () => {
     expect(input.history[0].text).toContain('新竹');
     expect(input.navigation['go:free-upload'].path).toBe('/portal/free-slicer');
     expect(request.instructions).toContain('不要再要求重複確認');
+    expect(request.instructions).toContain('肯定回覆只延續最近明確提案');
+    expect(request.instructions).toContain('不能一律導向免費列印');
   });
   it('transcribes audio through OpenAI without using a separate reasoning agent', async () => {
     const f = await fixture({ text: '我要免費列印' });
