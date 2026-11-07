@@ -1561,7 +1561,7 @@ export async function registerMemberWorkspace(
           Math.max(0, Number(order.value || 0) - Number(order.discount || 0)),
         paidAt: order.payment.paidAt,
         transactionId: order.payment.transactionId,
-        notice: "本文件為付款紀錄，非統一發票。",
+        notice: data.demoManifest ? "展示資料：非實際交易、非付款證明、非統一發票。" : "本文件為付款紀錄，非統一發票。",
       };
     }
     fail(404, "找不到文件");

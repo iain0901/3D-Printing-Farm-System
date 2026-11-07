@@ -31,6 +31,8 @@
     "start": "node api/server.mjs",
     "build": "npm --prefix frontend-vue run build",
     "test": "vitest run",
+    "demo:prepare": "node demo/prepare.mjs",
+    "demo:start": "node demo/start.mjs",
     "smoke": "npm run build",
     "smoke:prod": "node scripts/prod-smoke.mjs",
     "migrate:postgres": "node scripts/migrate-to-postgres.mjs",

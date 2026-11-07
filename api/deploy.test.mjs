@@ -72,7 +72,11 @@ describe("3DSTU FarmFlow deployment packaging", () => {
     expect(envExample).toContain("DATABASE_URL=postgresql://farmflow:");
     expect(envExample).toContain("ORCA_SLICER_VERSION=2.4.2");
     expect(envExample).toContain("CHATWOOT_BASE_URL=");
-    expect(envExample).toContain("AI_PROVIDER=disabled");
+    expect(envExample).toContain("AI_PROVIDER=openai");
+    for (const key of ['SITE_AGENT_VISION_MODEL', 'SITE_AGENT_IMAGE_MODEL', 'MAINTENANCE_AI_MODEL']) {
+      expect(envExample).toContain(`${key}=`);
+      expect(compose).toContain(`${key}:`);
+    }
     expect(compose).toContain("postgres:17-alpine");
     expect(compose).toContain("orca-worker:");
     expect(envExample).toContain("LAYERPILOT_DISABLE_DEFAULT_USERS=true");

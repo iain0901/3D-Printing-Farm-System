@@ -25,6 +25,9 @@
       <label>觀測 JSON<textarea v-model="observations" rows="5" :disabled="busy" aria-label="跨機保養觀測 JSON" /></label>
       <button :disabled="busy || !observations.trim()" @click="importObservations">驗證並保存觀測</button>
       <button :disabled="busy || !printerId" @click="forecast">重新推估保養區間</button>
+      <p>運算視窗最多 200 筆。滿額時先下載完整歷史，再封存並匯入整理後的近期資料；保留每台最近保養基準及完整比較間隔。</p>
+      <button :disabled="busy" @click="exportObservations">下載完整觀測</button>
+      <button :disabled="busy || !exportDigest" @click="archiveObservations">封存已下載的觀測</button>
     </details>
     <p v-if="busy" role="status">正在處理，請稍候…</p>
     <p v-if="error" role="alert">{{ error }}</p>
@@ -61,6 +64,7 @@
   const emit = defineEmits(['task-created'])
   const printerId = ref(''), logs = ref(''), photos = ref([]), consent = ref(false), observations = ref('')
   const busy = ref(false), error = ref(''), notice = ref(''), reports = ref([])
+  const exportDigest = ref('')
   const api = (path, method = 'get', data) => request({ url: '/api/maintenance/advisor' + path, method, data, timeout: 65000 })
   async function load() { reports.value = await api('/reports') }
   async function run(fn) {
@@ -86,7 +90,18 @@
     await api('/diagnose', 'post', { printerId: printerId.value, consent: consent.value, logs: [{ id: 'L1', text: logs.value }], photos: photos.value })
     notice.value = '判讀已保存；請核對引用依據後再決定人工處理。'
   })
-  const importObservations = () => run(async () => { await api('/observations', 'post', JSON.parse(observations.value)); observations.value = ''; notice.value = '觀測已保存，請重新推估。' })
+  const importObservations = () => run(async () => { await api('/observations', 'post', JSON.parse(observations.value)); observations.value = ''; exportDigest.value = ''; notice.value = '觀測已保存，請重新推估。' })
+  const exportObservations = () => run(async () => {
+    const value = await api('/observations/export')
+    const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' }))
+    const a = document.createElement('a'); a.href = url; a.download = '3drfm-maintenance-observations.json'; a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+    exportDigest.value = value.activeDigest; notice.value = '下載已開始，請確認檔案保存成功後才封存。'
+  })
+  const archiveObservations = () => {
+    if (!window.confirm('已確認下載檔案完整保存？封存不會刪除歷史，但舊推估失效；需要重新匯入含保養基準的觀測才能推估。確定封存？')) return
+    return run(async () => { const result = await api('/observations/archive', 'post', { confirm: true, activeDigest: exportDigest.value }); exportDigest.value = ''; notice.value = result.notice })
+  }
   const forecast = () => run(async () => { await api('/forecast', 'post', { printerId: printerId.value }); notice.value = '已依最新跨機資料重新計算。' })
   const createTask = (report) => {
     if (!window.confirm('只建立人工檢查任務，不會控制機台。確定建立？')) return

@@ -43,6 +43,15 @@ const textOutput = (value) => ({
   output: [{ content: [{ type: "output_text", text: JSON.stringify(value) }] }],
 });
 describe("site Agent provider contracts (synthetic transport)", () => {
+  it('routes text to the economical model and attached images to the vision model', async () => {
+    const f = await fixture(textOutput({ message: '請先選擇模型', actions: [] }));
+    const input = { message: '這個模型可以怎麼改？', context: { page: '#/portal/print', controls: [] } };
+    expect((await f.request('/chat', input)).statusCode).toBe(200);
+    expect(JSON.parse(f.fetchImpl.mock.calls[0][1].body).model).toBe('gpt-6-luna');
+    expect((await f.request('/chat', { ...input, image: 'data:image/png;base64,ZmFrZQ==' })).statusCode).toBe(200);
+    expect(JSON.parse(f.fetchImpl.mock.calls[1][1].body).model).toBe('gpt-6.1-terra');
+    expect(JSON.parse(f.fetchImpl.mock.calls[1][1].body).reasoning).toEqual({ effort: 'none' });
+  });
   it("sends purpose, dimensions and settings to the configured review model, without claiming mechanical safety", async () => {
     const answer = {
       verdict: "insufficient_information",
@@ -84,7 +93,7 @@ describe("site Agent provider contracts (synthetic transport)", () => {
   });
 
   it("passes the supplied model capture to image generation, preserves illustration limitations and enforces image quota", async () => {
-    const f = await fixture({ output: [{ type: "image_generation_call", result: "ZmFrZQ==" }] });
+    const f = await fixture({ data: [{ b64_json: "ZmFrZQ==" }] });
     const input = { image: "data:image/png;base64,ZmFrZQ==", material: "PETG" };
     for (let index = 0; index < 3; index++) {
       const response = await f.request("/illustration", input);
@@ -93,11 +102,15 @@ describe("site Agent provider contracts (synthetic transport)", () => {
     }
     expect((await f.request("/illustration", input)).statusCode).toBe(429);
     expect(f.fetchImpl).toHaveBeenCalledTimes(3);
-    const body = JSON.parse(f.fetchImpl.mock.calls[0][1].body);
-    expect(body.store).toBe(false);
-    expect(body.tools[0].type).toBe("image_generation");
-    expect(body.input[0].content[1].image_url).toBe(input.image);
-    expect(body.input[0].content[0].text).toContain("not a dimensional or strength prediction");
+    const [url, init] = f.fetchImpl.mock.calls[0];
+    const body = init.body;
+    expect(url).toBe('https://api.openai.com/v1/images/edits');
+    expect(init.headers['content-type']).toBeUndefined();
+    expect(body.get('model')).toBe('gpt-image-2.6-flare');
+    expect(body.get('complexity')).toBe('low');
+    expect(body.get('safety_identifier')).toMatch(/^[a-f0-9]{64}$/);
+    expect(Buffer.from(await body.get('image').arrayBuffer()).toString('base64')).toBe(input.image.split(',')[1]);
+    expect(body.get('prompt')).toContain("not a dimensional or strength prediction");
   });
 
   it("does not call a provider when unauthenticated, unconfigured or when review input is outside bounds", async () => {

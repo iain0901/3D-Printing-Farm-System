@@ -60,6 +60,28 @@ describe("maintenance advisor: evidence and safety", () => {
   });
 });
 describe("empirical fleet maintenance forecasting, not trained AI", () => {
+  it('exports only its workspace, archives without deletion and rejects stale export/forecast inputs', async () => {
+    const f = await fixture();
+    const rows = [...peers, observation('a', 1, 0, 0), observation('a', 2, 40, 0, false)];
+    await f.request('POST', '/observations', rows);
+    const forecast = (await f.request('POST', '/forecast', { printerId: 'a' })).json();
+    const first = (await f.request('GET', '/observations/export')).json();
+    expect(first.active).toHaveLength(rows.length);
+    expect((await f.request('GET', '/observations/export', undefined, { 'x-user': 'staff', 'x-workspace': 'other' })).json().records).toEqual([]);
+    expect((await f.request('POST', '/observations/archive', { activeDigest: first.activeDigest })).statusCode).toBe(400);
+    await f.request('POST', '/observations', [observation('a', 3, 50, 1, false)]);
+    expect((await f.request('POST', '/observations/archive', { confirm: true, activeDigest: first.activeDigest })).statusCode).toBe(409);
+    const latest = (await f.request('GET', '/observations/export')).json();
+    expect((await f.request('POST', '/observations/archive', { confirm: true, activeDigest: latest.activeDigest })).json().archivedCount).toBe(rows.length + 1);
+    const archived = (await f.request('GET', '/observations/export')).json();
+    expect(archived.active).toEqual([]); expect(archived.records).toHaveLength(2);
+    expect(archived.records.every(r => r.archivedAt)).toBe(true);
+    expect((await f.request('POST', `/reports/${forecast.id}/task`, { confirm: true })).statusCode).toBe(409);
+    expect((await f.request('POST', '/forecast', { printerId: 'a' })).json().forecast.status).toBe('insufficient_data');
+    expect((await f.request('POST', '/observations', rows)).statusCode).toBe(200);
+    expect((await f.request('POST', '/forecast', { printerId: 'a' })).json().forecast.status).toBe('estimate');
+    expect(f.fetchImpl).not.toHaveBeenCalled();
+  });
   it("requires multiple peer printers and complete intervals rather than a fixed timetable", () => {
     const rows = [observation("a", 1, 0, 0), observation("a", 2, 40, 0, false)];
     expect(forecastFleetMaintenance(rows, "a").status).toBe("insufficient_data");

@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
+import { openAIModels, economicalReasoning } from "./openai-models.mjs";
 import { nameBadgeSource } from "./name-badge.mjs";
 import { buildModelSkillPackage } from "./model-skill-package.mjs";
 
@@ -73,6 +74,7 @@ export async function registerSiteAgent(
 ) {
   for (const key of AGENT_COLLECTIONS) database.data[key] ||= [];
   const data = () => database.data;
+  const models = openAIModels(env);
   route("POST", "/badge", async (req, reply) =>
     reply.type("text/plain; charset=utf-8").send(nameBadgeSource(req.body))
   );
@@ -129,9 +131,9 @@ export async function registerSiteAgent(
       method: "POST",
       headers: {
         authorization: `Bearer ${env.OPENAI_API_KEY}`,
-        "content-type": "application/json",
+        ...(body instanceof FormData ? {} : { "content-type": "application/json" }),
       },
-      body: JSON.stringify(body),
+      body: body instanceof FormData ? body : JSON.stringify(body),
       signal: AbortSignal.timeout(60000),
     });
     if (!response.ok)
@@ -143,6 +145,7 @@ export async function registerSiteAgent(
   }
   route("GET", "/status", async (_, __, c) => ({
     configured: configured(),
+    models,
     tokens: data()
       .agentTokens.filter((r) => own(r, c))
       .map(({ id, name, expiresAt, revokedAt }) => ({
@@ -312,7 +315,8 @@ description: 根據用途與實際尺寸建立可編輯的 FDM 模型，並交�
         detail: "low",
       });
     const result = await openai(c, "responses", {
-      model: env.SITE_AGENT_MODEL || "gpt-4.1-mini",
+      model: input.image ? models.vision : models.chat,
+      ...economicalReasoning(input.image ? models.vision : models.chat),
       store: false,
       max_output_tokens: 1600,
       instructions:
@@ -347,7 +351,7 @@ description: 根據用途與實際尺寸建立可編輯的 FDM 模型，並交�
     const result = await openai(c, "realtime/client_secrets", {
       session: {
         type: "realtime",
-        model: env.SITE_AGENT_REALTIME_MODEL || "gpt-realtime",
+        model: models.realtime,
         instructions:
           "你是3DRFM繁體中文列印助理，協助說明列印與網站操作。沒有工具執行結果時，不得宣稱已修改網站。",
         audio: { output: { voice: "marin" } },
@@ -408,7 +412,8 @@ description: 根據用途與實際尺寸建立可編輯的 FDM 模型，並交�
       required: ["verdict", "message", "suggestedInfill", "suggestedWalls"],
     };
     const result = await openai(c, "responses", {
-      model: env.SITE_AGENT_REVIEW_MODEL || "gpt-4.1-nano",
+      model: models.review,
+      ...economicalReasoning(models.review),
       store: false,
       max_output_tokens: 500,
       instructions:
@@ -443,7 +448,7 @@ description: 根據用途與實際尺寸建立可編輯的 FDM 模型，並交�
       .parse(JSON.parse(text));
     const record = { id: randomUUID(), customerId: c.id, workspaceId: c.workspaceId || "ws-default",
       createdAt: new Date().toISOString(), input, modelEvidence, answer,
-      inputDigest: hash(JSON.stringify(input)), model: env.SITE_AGENT_REVIEW_MODEL || "gpt-4.1-nano" };
+      inputDigest: hash(JSON.stringify(input)), model: models.review };
     data().agentReviews.push(record);
     data().agentReviews = data().agentReviews.filter((r) => !own(r, c)).concat(data().agentReviews.filter((r) => own(r, c)).slice(-20));
     await database.write();
@@ -476,26 +481,17 @@ description: 根據用途與實際尺寸建立可編輯的 FDM 模型，並交�
         images: 1,
       });
     await database.write();
-    const result = await openai(c, "responses", {
-      model: env.SITE_AGENT_MODEL || "gpt-4.1-mini",
-      store: false,
-      input: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "input_text",
-              text: `Generate a photorealistic FDM printed-object illustration matching the reference model silhouette, proportions, holes and colors. Material: ${input.material}. Current slicer settings: ${JSON.stringify(input.settings || {})}. Show plausible visible layer lines for the layer height; do not invent visible internal infill or strength. Neutral studio background. No added geometry, no labels. An illustrative visualization only, not a dimensional or strength prediction.`,
-            },
-            { type: "input_image", image_url: input.image },
-          ],
-        },
-      ],
-      tools: [{ type: "image_generation", quality: "low", size: "1024x1024" }],
-    });
-    const image = result.output?.find(
-      (x) => x.type === "image_generation_call"
-    )?.result;
+    const form = new FormData();
+    form.set("model", models.image);
+    form.set("image", new Blob([Buffer.from(input.image.split(",")[1], "base64")], { type: "image/png" }), "model.png");
+    form.set("prompt", `Generate a photorealistic FDM printed-object illustration matching the reference model silhouette, proportions, holes and colors. Material: ${input.material}. Current slicer settings: ${JSON.stringify(input.settings || {})}. Show plausible visible layer lines; do not invent visible internal infill or strength. Neutral studio background. No added geometry or labels. Illustrative only, not a dimensional or strength prediction.`);
+    form.set("quality", "low");
+    form.set("size", "1024x1024");
+    form.set("n", "1");
+    form.set("safety_identifier", hash(`${c.workspaceId || "ws-default"}:${c.id}`));
+    if (/^gpt-image-2\.6-/.test(models.image)) form.set("complexity", "low");
+    const result = await openai(c, "images/edits", form);
+    const image = result.data?.[0]?.b64_json;
     if (!image) error(502, "尚未取得成品示意圖，請稍後重試。");
     return { image: `data:image/png;base64,${image}` };
   });

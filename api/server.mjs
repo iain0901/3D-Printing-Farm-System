@@ -31,6 +31,7 @@ import { registerMemberWorkspace, MEMBER_COLLECTIONS } from "./member-workspace.
 import { registerGoogleAuth } from "./google-auth.mjs";
 import { registerSiteAgent, AGENT_COLLECTIONS } from "./site-agent.mjs";
 import { registerMaintenanceAdvisor } from "./maintenance-advisor.mjs";
+import { registerDemoSafety } from "./demo-safety.mjs";
 import { registerFreePrintStation, FREE_PRINT_COLLECTIONS, freePrintOwnsPrinter } from "./free-print-station.mjs";
 import { createAiEngine } from "./ai-engine.mjs";
 import { findRelevantAiKnowledge } from "./ai-knowledge.mjs";
@@ -2965,6 +2966,11 @@ function createAuditEvent(database, type, message, data = {}, options = {}) {
 
 async function dispatchEvent(database, type, message, data = {}, options = {}) {
   const event = createAuditEvent(database, type, message, data, options);
+  if (database.data.demoManifest) {
+    const result = { event, deliveries: [], notificationDeliveries: [], mqttDeliveries: [] };
+    broadcastRealtime(database, 'event', result);
+    return result;
+  }
   const workspaceId = event.workspaceId;
   const matching = (database.data.webhooks || []).filter((webhook) => itemInWorkspace(webhook, workspaceId) && webhookMatches(webhook, type));
   const deliveries = [];
@@ -6871,8 +6877,13 @@ export async function runTelemetryTick(database, options = {}) {
   return { changed: true, changedPrinters, completedJobs, todos: deriveTodos(stateData) };
 }
 
-export async function buildServer({ db, googleAuth = {}, enableTelemetry = false, telemetryIntervalMs = 5000, enableBridgePolling = false, bridgePollingIntervalMs = 10000, serveStatic = process.env.LAYERPILOT_SERVE_STATIC === "true", authRateLimit = defaultAuthRateLimit, sensitiveRateLimit = defaultSensitiveRateLimit, mqttPublisher = null, stripeClient = saasBillingEnabled() ? createStripeClient() : null, objectStorageAdapter = createObjectStorage(), emailClient = createEmailClient(), lineClient = createLineClient(), aiEngine = createAiEngine(), chatwootClient = createChatwootClient() } = {}) {
+export async function buildServer({ db, demoMode = false, googleAuth = {}, enableTelemetry = false, telemetryIntervalMs = 5000, enableBridgePolling = false, bridgePollingIntervalMs = 10000, serveStatic = process.env.LAYERPILOT_SERVE_STATIC === "true", authRateLimit = defaultAuthRateLimit, sensitiveRateLimit = defaultSensitiveRateLimit, mqttPublisher = null, stripeClient = saasBillingEnabled() ? createStripeClient() : null, objectStorageAdapter = createObjectStorage(), emailClient = createEmailClient(), lineClient = createLineClient(), aiEngine = createAiEngine(), chatwootClient = createChatwootClient() } = {}) {
   const database = db || await openDatabase();
+  if (demoMode) {
+    enableTelemetry = enableBridgePolling = false;
+    emailClient = lineClient = stripeClient = mqttPublisher = null;
+    chatwootClient = { configured: false };
+  }
   activeObjectStorage = objectStorageAdapter;
   database.realtimeClients ||= new Set();
   database.realtimeTickets ||= new Map();
@@ -6880,6 +6891,8 @@ export async function buildServer({ db, googleAuth = {}, enableTelemetry = false
   const startedAt = new Date();
   const paymentLocks = new Set();
   const app = Fastify({ logger: false });
+  registerDemoSafety(app, database, demoMode);
+  app.get('/api/demo/status', async () => ({ active: demoMode, label: demoMode ? database.data.demoManifest.label : null }));
   app.removeContentTypeParser("application/json");
   app.addContentTypeParser("application/json", { parseAs: "string" }, (request, body, done) => {
     request.rawBody = body;
@@ -6923,7 +6936,7 @@ export async function buildServer({ db, googleAuth = {}, enableTelemetry = false
   if (farmflowTestSite) app.addHook("onRequest", async (req, reply) => { reply.header("X-Robots-Tag", "noindex, nofollow, noarchive"); });
   if (serveStatic) {
     await app.register(fastifyStatic, {
-      root: path.join(process.cwd(), "dist"),
+      root: typeof serveStatic === 'string' ? path.resolve(serveStatic) : path.join(process.cwd(), "dist"),
       prefix: "/",
       wildcard: false
     });
@@ -6954,7 +6967,7 @@ export async function buildServer({ db, googleAuth = {}, enableTelemetry = false
     if (routePath === '/api/internal/worker-cycle' && hasValidWorkerToken(request)) return;
     if (request.method === "GET" && /^\/api\/quote-messages\/[^/]+\/[^/]+\/attachments\/\d+$/.test(routePath) && customerFromRequest(database, request).customer) return;
     const publicRoute = routePath === "/api/health" || routePath === "/api/readiness" || routePath === "/api/metrics" && hasValidMetricsToken(request) || routePath === "/api/internal/worker-broadcast" && hasValidWorkerToken(request) || routePath.startsWith("/api/internal/orca/") || routePath === "/api/integrations/chatwoot/webhook" || routePath === "/api/integrations/chatwoot/context" || routePath === "/api/billing/webhook/stripe" || routePath === "/api/public/quoteRequests" || routePath.startsWith("/api/public/quoteRequests/") || routePath === "/api/public/slicing-quotes" || routePath.startsWith("/api/public/slicing-quotes/") || routePath === "/api/public/cases" || routePath.startsWith("/api/public/cases/") || routePath === "/api/public/pricing-estimate" || routePath === "/api/public/model-preview" || routePath.startsWith("/api/auth/") || routePath.startsWith("/api/customer-auth/") || routePath.startsWith("/api/customer/") || routePath === "/api/events/stream" || routePath === "/api/events/ws" || serveStatic && !routePath.startsWith("/api/");
-    if (publicRoute) return;
+    if (publicRoute || routePath === '/api/demo/status') return;
     if (await replayCommittedRestoreRequest(database, request, reply)) return reply;
     const { session, user, apiKey } = userFromRequest(database, request);
     if (!user) return reply.code(401).send({ error: "Authentication required" });

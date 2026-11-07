@@ -1,0 +1,104 @@
+// Local synthetic accounts only. Browser dependency is supplied by the test environment.
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { randomBytes } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
+import assert from 'node:assert/strict';
+import { prepareDemo } from '../demo/prepare.mjs';
+import { openDatabase, buildServer } from '../api/server.mjs';
+import { createObjectStorage } from '../api/object-storage.mjs';
+
+if (!process.env.PLAYWRIGHT_MODULE) throw new Error('設定 PLAYWRIGHT_MODULE 指向已安裝的 playwright/index.mjs');
+const { chromium } = await import(pathToFileURL(resolve(process.env.PLAYWRIGHT_MODULE)).href);
+const dir = await mkdtemp(join(tmpdir(), '3drfm-demo-browser-'));
+const evidence = resolve(process.env.DEMO_EVIDENCE_DIR || '/tmp/3drfm-demo-evidence');
+await mkdir(evidence, { recursive: true });
+const password = randomBytes(24).toString('base64url');
+let app, browser;
+const errors = [], checks = [], httpErrors = [];
+try {
+  const report = await prepareDemo(join(dir, 'data'), password);
+  const db = await openDatabase(join(dir, 'data/state.json'), { adapter: 'json' });
+  db.data.users = db.data.users.filter(u => ['demo-owner', 'demo-operator'].includes(u.id));
+  app = await buildServer({ db, demoMode: true, serveStatic: resolve('frontend-vue/dist'),
+    objectStorageAdapter: createObjectStorage({ provider: 'local', root: join(dir, 'data/storage') }),
+    emailClient: null, lineClient: null, stripeClient: null, chatwootClient: { configured: false } });
+  const base = await app.listen({ host: '127.0.0.1', port: 0 });
+  browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', headless: true, args: ['--no-sandbox', '--enable-unsafe-swiftshader'] });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  const page = await context.newPage();
+  page.on('pageerror', e => errors.push(e.message));
+  page.on('response', response => {
+    if (response.status() >= 400 && new URL(response.url()).pathname.startsWith('/api/'))
+      httpErrors.push({ status: response.status(), path: new URL(response.url()).pathname });
+  });
+  await page.goto(base + '/#/portal/login');
+  await page.locator('input[type=email]').fill('lab@demo.invalid');
+  await page.locator('input[type=password]').fill(password);
+  await page.getByRole('button', { name: '登入會員中心', exact: true }).click();
+  await page.waitForURL('**/#/portal/dashboard');
+  await page.getByText('吳助教（展示）', { exact: false }).first().waitFor();
+  await page.screenshot({ path: join(evidence, 'member-desktop.png'), fullPage: true });
+  checks.push('會員表單真實登入與資料儀表板');
+  await page.goto(base + '/#/portal/workspace?section=models');
+  await page.locator('.model-card').first().waitFor();
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: '下載', exact: true }).first().click();
+  const download = await downloadPromise;
+  assert.match(download.suggestedFilename(), /\.stl$/i);
+  checks.push('模型庫顯示與實際 STL 下載');
+  await page.goto(base + '/#/portal/workspace?section=drafts');
+  await page.getByText('Prusa MINI 料架底座｜可繼續編輯', { exact: true }).waitFor();
+  await page.screenshot({ path: join(evidence, 'draft-desktop.png'), fullPage: true });
+  checks.push('雲端草稿資料可見');
+  await page.getByRole('link', { name: '繼續編輯 →', exact: true }).click();
+  await page.waitForURL('**/#/portal/print?draft=*');
+  await page.getByText('MINI-base-spoolholder.stl', { exact: false }).first().waitFor();
+  await page.locator('canvas').first().waitFor();
+  await page.waitForFunction(() => [...document.querySelectorAll('button')].some(b => b.textContent.trim() === '立即自動排版' && !b.disabled), null, { timeout: 60000 });
+  await page.getByRole('button', { name: '立即自動排版', exact: true }).click();
+  await page.waitForFunction(() => [...document.querySelectorAll('button')].some(b => b.textContent.trim() === '立即自動排版' && !b.disabled));
+  await page.getByText('正在準備 3D 模型…', { exact: true }).waitFor({ state: 'hidden', timeout: 60000 });
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await page.locator('#quote-models').screenshot({ path: join(evidence, 'draft-model.png') });
+  checks.push('草稿實際重開到 3D 編輯器');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(base + '/#/portal/dashboard');
+  await page.getByRole('heading', { name: '今天想做什麼？' }).waitFor();
+  await page.screenshot({ path: join(evidence, 'member-mobile.png'), fullPage: true });
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2), '會員手機版橫向溢位');
+  checks.push('390px 會員頁無橫向溢位與展示標示');
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(base + '/#/login');
+  await page.locator('input[type=email]').fill('operator@demo.invalid');
+  await page.locator('input[type=password]').fill(password);
+  await page.getByRole('button', { name: '登入管理系統', exact: true }).click();
+  await page.waitForURL('**/#/dashboard');
+  await page.goto(base + '/#/cases/index');
+  await page.getByText('Prusa MINI', { exact: false }).first().waitFor();
+  await page.screenshot({ path: join(evidence, 'staff-cases.png'), fullPage: true });
+  checks.push('員工登入與案件列表');
+  await page.goto(base + '/#/scheduler/index');
+  await page.getByText('多維排產', { exact: false }).first().waitFor();
+  await page.getByRole('button', { name: '執行最佳化', exact: true }).click();
+  await page.getByText('上次結果', { exact: true }).waitFor();
+  await page.screenshot({ path: join(evidence, 'scheduler.png'), fullPage: true });
+  checks.push('既有排程介面實際執行最佳化並顯示結果');
+  await page.goto(base + '/#/maintenance/index');
+  await page.getByLabel('顧問機台').selectOption('demo-hi-1');
+  await page.getByText('跨機保養資料與推估', { exact: true }).click();
+  await page.getByRole('button', { name: '重新推估保養區間', exact: true }).click();
+  await page.getByText('距人工保養檢查參考：', { exact: false }).waitFor();
+  const observationDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: '下載完整觀測', exact: true }).click();
+  assert.equal((await observationDownload).suggestedFilename(), '3drfm-maintenance-observations.json');
+  await page.screenshot({ path: join(evidence, 'maintenance.png'), fullPage: true });
+  checks.push('跨機推估與觀測匯出，不呼叫 OpenAI');
+  assert.deepEqual(errors, []);
+  assert.deepEqual(httpErrors, [], '展示主流程不應產生 HTTP 錯誤');
+  await writeFile(join(evidence, 'result.json'), JSON.stringify({ checks, pageErrors: errors, counts: report.counts, liveServices: false }, null, 2));
+  console.log(JSON.stringify({ checks, pageErrors: errors, evidence, counts: report.counts }));
+} finally {
+  await browser?.close(); await app?.close(); await rm(dir, { recursive: true });
+}

@@ -1,6 +1,14 @@
 # 交接與待確認
 
-更新日期：2026-11-04（Asia/Taipei）。只記錄尚需接手、協調或確認的事項；已解決的事項保留結論與依據，不直接刪掉歷史。
+更新日期：2026-11-07（Asia/Taipei）。只記錄尚需接手、協調或確認的事項；已解決的事項保留結論與依據，不直接刪掉歷史。
+
+## H-013：farmflow 展示資料發布與 OpenAI 真實驗收
+
+- 使用者已指定 farmflow.3dstu.com。本輪公開 GET /api/health 證實是 PostgreSQL；目前工作區沒有 SSH／部署管理通道，未寫入遠端，不能說網站已出現資料。依 [伺服器 BOT 訊息](../demo/SERVER_BOT_HANDOFF.md) 發佈獨立 demo 程序，保留原服務、資料庫、storage 及 Orca profile；不要把本地絕對 storagePath 的 JSON 直接灌進正式／測試 PostgreSQL。
+- 用主機安全方式設定展示密碼，執行 demo:prepare／demo:start；所有來源檔和 GPL 對應來源隨 repo 保存。只綁 localhost；測試站 upstream 切換須先確認共用主機／網域影響及回復點。原 demo@layerpilot.test 帳號在新流程啟動時移除；操作員可示範流程，管理員照常要求 2FA。
+- 模型／用途檢查、圖片、語音及維修診斷採新 OpenAI 預設（可覆寫），未配置真 key、未計費呼叫。展示模式預設移除 OPENAI_API_KEY；專用低預算 env＋DEMO_ALLOW_OPENAI=true 才開啟，請按 [AI 矩陣](../docs/openai-demo-readiness.md) 真實驗收，不以 key 存在當通過。
+- 保養觀測的 200 筆運算上限不再是死路：新增匯出全部歷史→確認 digest 封存→人工整理完整間隔重新匯入。歷史不刪除；舊預估失效。自動採集、強度驗證、全畫布 Agent 操作與外部 MCP 客戶端互通仍不可宣稱全部完成。
+- 免費排隊／已完成為明示合成情境，沒有 G-code、實機租約／控制權；現場通知、金流、攝影機及實體列印未測。既有 H-012 非硬體上線問題不因展示包建立而視為解決。
 
 ## H-012：非硬體後端正式服務驗收
 
